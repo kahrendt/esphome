@@ -46,7 +46,7 @@ void FS3000Component::update() {
 }
 
 void FS3000Component::dump_config() {
-  ESP_LOGD(TAG, "FS3000:");
+  ESP_LOGCONFIG(TAG, "FS3000:");
   LOG_I2C_DEVICE(this);
 }
 
