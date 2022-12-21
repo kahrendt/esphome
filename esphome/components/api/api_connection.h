@@ -53,7 +53,7 @@ class APIConnection : public APIServerConnection {
   void switch_command(const SwitchCommandRequest &msg) override;
 #endif
 #ifdef USE_TEXT_SENSOR
-  bool send_text_sensor_state(text_sensor::TextSensor *text_sensor, const std::string& state);
+  bool send_text_sensor_state(text_sensor::TextSensor *text_sensor, std::string state);
   bool send_text_sensor_info(text_sensor::TextSensor *text_sensor);
 #endif
 #ifdef USE_ESP32_CAMERA
@@ -72,7 +72,7 @@ class APIConnection : public APIServerConnection {
   void number_command(const NumberCommandRequest &msg) override;
 #endif
 #ifdef USE_SELECT
-  bool send_select_state(select::Select *select, const std::string& state);
+  bool send_select_state(select::Select *select, std::string state);
   bool send_select_info(select::Select *select);
   void select_command(const SelectCommandRequest &msg) override;
 #endif

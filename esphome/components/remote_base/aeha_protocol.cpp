@@ -83,7 +83,7 @@ optional<AEHAData> AEHAProtocol::decode(RemoteReceiveData src) {
   return {};
 }
 
-std::string AEHAProtocol::format_data(const std::vector<uint8_t> &data) {
+std::string AEHAProtocol::format_data_(const std::vector<uint8_t> &data) {
   std::string out;
   for (uint8_t byte : data) {
     char buf[6];
