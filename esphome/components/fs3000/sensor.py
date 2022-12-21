@@ -37,7 +37,7 @@ CONFIG_SCHEMA = cv.All(
     .extend(
         {
             cv.GenerateID(): cv.declare_id(FS3000Component),
-            cv.Optional(CONF_SUBTYPE, default="1005"): cv.enum(
+            cv.Required(CONF_SUBTYPE): cv.enum(
                 SUBTYPE_OPTIONS, lower=True
             ),
         }
