@@ -1200,7 +1200,12 @@ sensor:
     pressure:
       name: "MPL3115A2 Pressure"
     update_interval: 10s
-
+  - platform: fs3000
+    name: "Velocity"
+    id: velocity_mps
+    i2c_id: stemma_bus
+    subtype: 1005
+    update_interval: 1s
 esp32_touch:
   setup_mode: false
   iir_filter: 10ms
