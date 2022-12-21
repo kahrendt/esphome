@@ -97,7 +97,7 @@ float FS3000Component::fit_raw_(uint16_t raw_value) {
         float slope = (this->mps_data_points_[i] - this->mps_data_points_[i-1])/(this->raw_data_points_[i] - this->raw_data_points_[i-1]);
 
         // return the interpolated value for the reading
-        return (this->raw_value-this->raw_data_points_[i-1])*slope;
+        return (raw_value-raw_data_points_[i-1])*slope;
     }
 }
 
