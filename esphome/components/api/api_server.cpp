@@ -365,7 +365,7 @@ void APIServer::send_bluetooth_gatt_error(uint64_t address, uint16_t handle, esp
 
 #endif
 APIServer::APIServer() { global_api_server = this; }
-void APIServer::subscribe_home_assistant_state(const std::string& entity_id, optional<std::string> attribute,
+void APIServer::subscribe_home_assistant_state(std::string entity_id, optional<std::string> attribute,
                                                std::function<void(std::string)> f) {
   this->state_subs_.push_back(HomeAssistantStateSubscription{
       .entity_id = std::move(entity_id),

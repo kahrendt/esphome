@@ -86,8 +86,12 @@ bool MopekaListener::parse_device(const esp32_ble_tracker::ESPBTDevice &device) 
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 bool MopekaListener::parse_sync_button(const std::vector<uint8_t> &message) { return (message[2] & 0x80) != 0; }
+=======
+bool MopekaListener::parse_sync_button_(const std::vector<uint8_t> &message) { return (message[2] & 0x80) != 0; }
+>>>>>>> 4b295b57 (Revert "Change subtype parameters to be required.")
 
 >>>>>>> 3d10d689 (Change subtype parameters to be required.)
 }  // namespace mopeka_ble

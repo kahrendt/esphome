@@ -87,7 +87,11 @@ bool BedJetFan::update_status_() {
 
   auto *status = this->parent_->get_status_packet();
 
-  return !;
+  if (status == nullptr)
+    return false;
+
+  this->on_status(status);
+  return true;
 }
 
 void BedJetFan::update() {
