@@ -80,13 +80,7 @@ void BLEClient::set_state(espbt::ClientState state) {
 }
 
 bool BLEClient::all_nodes_established_() {
-  if (this->state() != espbt::ClientState::ESTABLISHED)
-    return false;
-  for (auto &node : nodes_) {
-    if (node->node_state != espbt::ClientState::ESTABLISHED)
-      return false;
-  }
-  return true;
+  return static_cast<bool>(this->state() == espbt::ClientState::ESTABLISHED);
 }
 
 }  // namespace ble_client
