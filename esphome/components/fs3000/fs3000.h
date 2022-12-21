@@ -15,9 +15,9 @@ enum FS3000Subtype {FIVE, FIFTEEN};
 class FS3000Component : public PollingComponent, public i2c::I2CDevice, public sensor::Sensor {
     public:
         void update() override;
-        
+
         void dump_config() override;
-        float get_setup_priority() const { return setup_priority::DATA; }
+        float get_setup_priority() const override { return setup_priority::DATA; }
 
         void set_subtype(FS3000Subtype subtype);
 

@@ -28,7 +28,7 @@ FS3000Component = fs3000_ns.class_(
 
 CONFIG_SCHEMA = cv.All(
     sensor.sensor_schema(
-        FS3000Component, 
+        FS3000Component,
         unit_of_measurement="m/s",
         accuracy_decimals=2,
         device_class=DEVICE_CLASS_WIND_SPEED,
@@ -38,13 +38,14 @@ CONFIG_SCHEMA = cv.All(
         {
             cv.GenerateID(): cv.declare_id(FS3000Component),
             cv.Optional(CONF_SUBTYPE, default="1005"): cv.enum(
-                SUBTYPE_OPTIONS, lower = True
+                SUBTYPE_OPTIONS, lower=True
             ),
-      }
+        }
     )
     .extend(cv.polling_component_schema("60s"))
     .extend(i2c.i2c_device_schema(0x28))
 )
+
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
