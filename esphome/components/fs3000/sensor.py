@@ -5,6 +5,7 @@ import esphome.config_validation as cv
 from esphome.components import i2c, sensor
 from esphome.const import (
     CONF_ID,
+    CONF_MODEL,
     DEVICE_CLASS_WIND_SPEED,
     STATE_CLASS_MEASUREMENT,
 )
@@ -14,7 +15,7 @@ CODEOWNERS = ["@kahrendt"]
 
 fs3000_ns = cg.esphome_ns.namespace("fs3000")
 
-CONF_FS3000_MODEL = "model"
+# CONF_MODEL = "model"
 
 FS3000Model = fs3000_ns.enum("MODEL")
 FS3000_MODEL_OPTIONS = {
@@ -28,7 +29,7 @@ FS3000Component = fs3000_ns.class_(
 
 CONFIG_SCHEMA = cv.All(
     sensor.sensor_schema(
-        FS3000Component, 
+        FS3000Component,
         unit_of_measurement="m/s",
         accuracy_decimals=2,
         device_class=DEVICE_CLASS_WIND_SPEED,
@@ -37,14 +38,13 @@ CONFIG_SCHEMA = cv.All(
     .extend(
         {
             cv.GenerateID(): cv.declare_id(FS3000Component),
-            cv.Required(CONF_FS3000_MODEL): cv.enum(
-                FS3000_MODEL_OPTIONS, lower = True
-            ),
-      }
+            cv.Required(CONF_MODEL): cv.enum(FS3000_MODEL_OPTIONS, lower=True),
+        }
     )
     .extend(cv.polling_component_schema("60s"))
     .extend(i2c.i2c_device_schema(0x28))
 )
+
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
@@ -52,4 +52,4 @@ async def to_code(config):
     await i2c.register_i2c_device(var, config)
     await sensor.register_sensor(var, config)
 
-    cg.add(var.set_model(config[CONF_FS3000_MODEL]))
+    cg.add(var.set_model(config[CONF_MODEL]))
