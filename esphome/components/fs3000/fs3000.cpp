@@ -50,24 +50,24 @@ void FS3000Component::dump_config() {
   LOG_I2C_DEVICE(this);
 }
 
-void FS3000Component::set_subtype(FS3000Subtype subtype) {
-    subtype_ = subtype;
+void FS3000Component::set_model(FS3000Model model) {
+    this->model_ = model;
 
-    if (subtype_ == FIVE) {
+    if (model_ == FIVE) {
         // datasheet gives 9 points to extrapolate from for the 1005 model
         static const uint16_t RAW_DATA_POINTS_1005[9] = {409, 915, 1522, 2066, 2523, 2908, 3256, 3572, 3686};
         static const float MPS_DATA_POINTS_1005[9] = {0.0, 1.07, 2.01, 3.0, 3.97, 4.96, 5.98, 6.99, 7.23};
 
-        std::copy(RAW_DATA_POINTS_1005, RAW_DATA_POINTS_1005+9, raw_data_points_);
-        std::copy(MPS_DATA_POINTS_1005, MPS_DATA_POINTS_1005+9, mps_data_points_);
+        std::copy(RAW_DATA_POINTS_1005, RAW_DATA_POINTS_1005+9, this->raw_data_points_);
+        std::copy(MPS_DATA_POINTS_1005, MPS_DATA_POINTS_1005+9, this->mps_data_points_);
     }
-    else if (subtype_ == FIFTEEN) {
+    else if (model_ == FIFTEEN) {
         // datasheet gives 13 points to extrapolate form for the 1015 model
         static const uint16_t RAW_DATA_POINTS_1015[13] = {409, 1203, 1597, 1908, 2187, 2400, 2629, 2801, 3006, 3178, 3309, 3563, 3686};
         static const float MPS_DATA_POINTS_1015[13] = {0.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 13.0, 15.0};
 
-        std::copy(RAW_DATA_POINTS_1015, RAW_DATA_POINTS_1015+13, raw_data_points_);
-        std::copy(MPS_DATA_POINTS_1015, MPS_DATA_POINTS_1015+13, mps_data_points_);
+        std::copy(RAW_DATA_POINTS_1015, RAW_DATA_POINTS_1015+13, this->raw_data_points_);
+        std::copy(MPS_DATA_POINTS_1015, MPS_DATA_POINTS_1015+13, this->mps_data_points_);
     }
 }
 
@@ -76,28 +76,28 @@ float FS3000Component::fit_raw_(uint16_t raw_value) {
     // reference data points given in the datasheet
     // fits raw reading using a linear interpolation between each data point
 
-    uint8_t end = 8;                                // assume subtype 1005, which has 9 data points
-    if (subtype_ == FIFTEEN)
-        end = 12;                                   // subtype 1015 has 13 data points
+    uint8_t end = 8;                                // assume model 1005, which has 9 data points
+    if (this->model_ == FIFTEEN)
+        end = 12;                                   // model 1015 has 13 data points
 
 
-    if (raw_value <= raw_data_points_[0]) {           // less than smallest data point returns 0
-        return mps_data_points_[0];
-    } else if (raw_value >= raw_data_points_[end]) {    // greater than largest data point returns max speed
-        return mps_data_points_[end];
+    if (raw_value <= this->raw_data_points_[0]) {           // less than smallest data point returns first data point
+        return this->mps_data_points_[0];
+    } else if (raw_value >= this->raw_data_points_[end]) {    // greater than largest data point returns max speed
+        return this->mps_data_points_[end];
     } else {
         uint8_t i = 0;
 
         // determine between which data points does the reading fall, i-1 and i
-        while (raw_value > raw_data_points_[i]) {
+        while (raw_value > this->raw_data_points_[i]) {
             ++i;
         }
 
         // calculate the slope of the secant line between the two data points that surrounds the reading
-        float slope = (mps_data_points_[i] - mps_data_points_[i-1])/(raw_data_points_[i] - raw_data_points_[i-1]);
+        float slope = (this->mps_data_points_[i] - this->mps_data_points_[i-1])/(this->raw_data_points_[i] - this->raw_data_points_[i-1]);
 
         // return the interpolated value for the reading
-        return (raw_value-raw_data_points_[i-1])*slope;
+        return (this->raw_value-this->raw_data_points_[i-1])*slope;
     }
 }
 

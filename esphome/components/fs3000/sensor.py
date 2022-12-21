@@ -14,12 +14,12 @@ CODEOWNERS = ["@kahrendt"]
 
 fs3000_ns = cg.esphome_ns.namespace("fs3000")
 
-CONF_SUBTYPE = "subtype"
+CONF_MODEL = "model"
 
-FS3000Subtype = fs3000_ns.enum("SUBTYPE")
-SUBTYPE_OPTIONS = {
-    "1005": FS3000Subtype.FIVE,
-    "1015": FS3000Subtype.FIFTEEN,
+FS3000Model = fs3000_ns.enum("MODEL")
+MODEL_OPTIONS = {
+    "1005": FS3000Model.FIVE,
+    "1015": FS3000Model.FIFTEEN,
 }
 
 FS3000Component = fs3000_ns.class_(
@@ -37,8 +37,8 @@ CONFIG_SCHEMA = cv.All(
     .extend(
         {
             cv.GenerateID(): cv.declare_id(FS3000Component),
-            cv.Optional(CONF_SUBTYPE, default="1005"): cv.enum(
-                SUBTYPE_OPTIONS, lower = True
+            cv.Optional(CONF_MODEL, default="1005"): cv.enum(
+                MODEL_OPTIONS, lower = True
             ),
       }
     )
@@ -52,4 +52,4 @@ async def to_code(config):
     await i2c.register_i2c_device(var, config)
     await sensor.register_sensor(var, config)
 
-    cg.add(var.set_subtype(config[CONF_SUBTYPE]))
+    cg.add(var.set_model(config[CONF_MODEL]))
