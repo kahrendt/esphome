@@ -23,9 +23,9 @@ void FS3000Component::update() {
         return;
     }
 
-    // checksum is passed if the modulo 256 sum of the five bytes is 0
+    // checksum passes if the modulo 256 sum of the five bytes is 0
     uint8_t checksum = 0;
-    for (unsigned char i : data){
+    for (uint8_t i : data){
         checksum += i;
     }
 
@@ -56,7 +56,7 @@ void FS3000Component::set_model(FS3000Model model) {
     this->model_ = model;
 
     if (model_ == FIVE) {
-        // datasheet gives 9 points to extrapolate from for the 1005 model
+        // datasheet gives 9 points to interpolate from for the 1005 model
         static const uint16_t RAW_DATA_POINTS_1005[9] = {409, 915, 1522, 2066, 2523, 2908, 3256, 3572, 3686};
         static const float MPS_DATA_POINTS_1005[9] = {0.0, 1.07, 2.01, 3.0, 3.97, 4.96, 5.98, 6.99, 7.23};
 
@@ -99,7 +99,7 @@ float FS3000Component::fit_raw_(uint16_t raw_value) {
         float slope = (this->mps_data_points_[i] - this->mps_data_points_[i-1])/(this->raw_data_points_[i] - this->raw_data_points_[i-1]);
 
         // return the interpolated value for the reading
-        return (raw_value-raw_data_points_[i-1])*slope;
+        return (float (raw_value-this->raw_data_points_[i-1]))*slope + this->mps_data_points_[i-1];
     }
 }
 
