@@ -48,6 +48,8 @@ void FS3000Component::update() {
 void FS3000Component::dump_config() {
   ESP_LOGCONFIG(TAG, "FS3000:");
   LOG_I2C_DEVICE(this);
+  LOG_UPDATE_INTERVAL(this);
+  LOG_SENSOR("  ", "Air Velocity", this);
 }
 
 void FS3000Component::set_model(FS3000Model model) {
