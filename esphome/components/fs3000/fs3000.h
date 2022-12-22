@@ -24,7 +24,7 @@ class FS3000Component : public PollingComponent, public i2c::I2CDevice, public s
     protected:
         FS3000Model model_{FIVE};
 
-        float raw_data_points_[13];
+        uint16_t raw_data_points_[13];
         float mps_data_points_[13];
 
         float fit_raw_(uint16_t raw_value);
