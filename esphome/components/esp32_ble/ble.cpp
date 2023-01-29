@@ -174,7 +174,7 @@ void ESP32BLE::gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_pa
   global_ble->ble_events_.push(new_event);
 }  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
-void ESP32BLE::real_gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
+void ESP32BLE::real_gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
   ESP_LOGV(TAG, "(BLE) gap_event_handler - %d", event);
   for (auto *gap_handler : this->gap_event_handlers_) {
     gap_handler->gap_event_handler(event, param);
@@ -187,7 +187,7 @@ void ESP32BLE::gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gat
   global_ble->ble_events_.push(new_event);
 }  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
 
-void ESP32BLE::real_gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
+void ESP32BLE::real_gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
                                          esp_ble_gatts_cb_param_t *param) {
   ESP_LOGV(TAG, "(BLE) gatts_event [esp_gatt_if: %d] - %d", gatts_if, event);
   for (auto *gatts_handler : this->gatts_event_handlers_) {
@@ -195,6 +195,7 @@ void ESP32BLE::real_gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_if
   }
 }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 void ESP32BLE::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
@@ -210,6 +211,9 @@ void ESP32BLE::real_gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_
 =======
 void ESP32BLE::real_gattc_event_handler_(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
 >>>>>>> 191fe6e6 (Revert "Change subtype parameters to be required.")
+=======
+void ESP32BLE::real_gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
+>>>>>>> 6c682d9f (rebasing)
                                          esp_ble_gattc_cb_param_t *param) {
   ESP_LOGV(TAG, "(BLE) gattc_event [esp_gatt_if: %d] - %d", gattc_if, event);
   for (auto *gattc_handler : this->gattc_event_handlers_) {
