@@ -88,7 +88,7 @@ void PIDController::calculate_derivative_term_() {
   }
 }
 
-float PIDController::weighted_average_(std::deque<float> &list, float new_value, int samples) {
+float PIDController::weighted_average(std::deque<float> &list, float new_value, int samples) {
   // if only 1 sample needed, clear the list and return
   if (samples == 1) {
     list.clear();
