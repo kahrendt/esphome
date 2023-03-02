@@ -88,6 +88,7 @@ bool MopekaListener::parse_device(const esp32_ble_tracker::ESPBTDevice &device) 
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 bool MopekaListener::parse_sync_button(const std::vector<uint8_t> &message) { return (message[2] & 0x80) != 0; }
 =======
@@ -96,6 +97,9 @@ bool MopekaListener::parse_sync_button_(const std::vector<uint8_t> &message) { r
 =======
 bool MopekaListener::parse_sync_button(const std::vector<uint8_t> &message) { return (message[2] & 0x80) != 0; }
 >>>>>>> 067e63d8 (rebasing)
+=======
+bool MopekaListener::parse_sync_button(const std::vector<uint8_t> &message) { return (message[2] & 0x80) != 0; }
+>>>>>>> 067e63d8dde906c43026fb7c62d001e1beeb2624
 
 >>>>>>> 3d10d689 (Change subtype parameters to be required.)
 }  // namespace mopeka_ble

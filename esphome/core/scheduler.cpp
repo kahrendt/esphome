@@ -300,6 +300,7 @@ void HOT Scheduler::pop_raw_() {
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 void HOT Scheduler::push_(std::unique_ptr<Scheduler::SchedulerItem> item) {
   LockGuard guard{this->lock_};
   this->to_add_.push_back(std::move(item));
@@ -313,6 +314,9 @@ void HOT Scheduler::push_(std::unique_ptr<Scheduler::SchedulerItem> item) { this
 =======
 void HOT Scheduler::push(std::unique_ptr<Scheduler::SchedulerItem> item) { this->to_add_.push_back(std::move(item)); }
 >>>>>>> 067e63d8 (rebasing)
+=======
+void HOT Scheduler::push(std::unique_ptr<Scheduler::SchedulerItem> item) { this->to_add_.push_back(std::move(item)); }
+>>>>>>> 067e63d8dde906c43026fb7c62d001e1beeb2624
 bool HOT Scheduler::cancel_item_(Component *component, const std::string &name, Scheduler::SchedulerItem::Type type) {
   // obtain lock because this function iterates and can be called from non-loop task context
   LockGuard guard{this->lock_};
