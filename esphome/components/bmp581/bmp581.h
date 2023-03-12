@@ -58,7 +58,7 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
   void set_iir_filter_config(IIRFilter iir_level) { this->iir_level_ = iir_level; }
 
 
-  void dump_config() override {};
+  void dump_config() override;
 
   float get_setup_priority() const override { return setup_priority::DATA; }
 
