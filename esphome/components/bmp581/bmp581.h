@@ -18,6 +18,7 @@ enum {
   BMP581_MEASUREMENT_DATA = 0x1D,
   BMP581_INT_STATUS = 0x27,
   BMP581_STATUS = 0x28,
+  BMP581_DSP = 0x30,
   BMP581_DSP_IIR = 0x31,
   BMP581_OSR = 0x36,
   BMP581_ODR = 0x37,
@@ -140,7 +141,21 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
     uint8_t reg;
   } status_ = {.reg = 0};
 
-  // BMP581's iir register (address 0x36) to configure iir filtering(page 62 of datasheet)
+  // BMP581's dsp register (address 0x30) to configure data registers iir selection (page 61 of datasheet)
+  union {  
+    struct {
+      uint8_t comp_pt_en : 2;               // enable temperature and pressure compensation
+      uint8_t iir_flush_forced_en : 1;      // IIR filter is flushed in forced mode
+      uint8_t shdw_sel_iir_t : 1;           // temperature data register's iir selection
+      uint8_t fifo_sel_iir_t : 1;           // FIFO temperature data register's iir selection
+      uint8_t shdw_sel_iir_p : 1;           // pressure data register's iir selection
+      uint8_t fifo_sel_iir_p : 1;           // FIFO pressure data register's iir selection
+      uint8_t oor_sel_iir_p : 1;            // pressure out-of-range's iir selection
+    } bit;
+    uint8_t reg;
+  } dsp_config_ = {.reg = 0};
+
+  // BMP581's iir register (address 0x31) to configure iir filtering(page 62 of datasheet)
   union {  
     struct {
       uint8_t set_iir_t : 3;          // Temperature IIR filter coefficient

@@ -40,58 +40,84 @@ void BMP581Component::setup() {
 
     // set output data rate and power mode
     this->odr_config_.bit.pwr_mode = STANDBY_MODE;  // standby mode to start
-    this->odr_config_.bit.odr = 0x1C;       // 1 Hz output data rate
-    // this->odr_config_.bit.pwr_mode = NORMAL_MODE;
-    // this->odr_config_.bit.odr = 0x18; // 5 hz output data rate
+    this->odr_config_.bit.odr = 0x19;               // 4 Hz data out rate; shouldn't matter as we are in forced mode (though allows deep standby?)
     
     if (!this->bmp581_set_odr_register_(odr_config_.reg)) {
-    this->mark_failed();
-    return;
+        this->mark_failed();
+        return;
     }
-
     delay(10);
 
 
     // set up oversampling
-    this->osr_config_.bit.osr_t = this->temperature_oversampling_;
-    this->osr_config_.bit.osr_p = this->pressure_oversampling_;
-    this->osr_config_.bit.press_en = 0x1;               // enable pressure readings
+    // Disable pressure readings/oversampling if no sensor is defined
+    if (this->pressure_sensor_ == nullptr) {
+        this->osr_config_.bit.osr_p = OVERSAMPLING_NONE;
+        this->osr_config_.bit.press_en = false;
+    }
+    else {
+        this->osr_config_.bit.osr_p = this->pressure_oversampling_;
+        this->osr_config_.bit.press_en = true;
+    }
+
+    // Disable temperature oversampling if no sensor is defined (sensor still internally compensates)
+    if (this->temperature_sensor_ == nullptr) {
+        this->osr_config_.bit.osr_t = OVERSAMPLING_NONE;
+    }
+    else {
+        this->osr_config_.bit.osr_t = this->temperature_oversampling_;
+    }
     
+    // set oversampling register
     if (!this->bmp581_set_osr_register_(osr_config_.reg)) {
-    this->mark_failed();
-    return;
+        this->mark_failed();
+        return;
     }
     delay(10);
 
-    // // set iir config, dsp register is 0x30, 0x31 is dsp iir register (default is no iir filter)
-    // iir_config_.bit.set_iir_t = IIR_FILTER_128;
-    // iir_config_.bit.set_iir_p = IIR_FILTER_128;
-    // this->write_byte(BMP581_DSP_IIR, this->iir_config_.reg);
+    // If an IIR filter is enabled, set it all up
+    if ((this->iir_temperature_level_ != IIR_FILTER_OFF) || (this->iir_pressure_level_ != IIR_FILTER_OFF)) {
+        // read in one data point to prime the IIR filter
+        this->bmp581_set_mode_(FORCED_MODE);
+                
+        // set IIR level for temperature and pressure
+        this->iir_config_.bit.set_iir_t = this->iir_temperature_level_;
+        this->iir_config_.bit.set_iir_p = this->iir_pressure_level_;
+        if (!this->write_byte(BMP581_DSP_IIR, this->iir_config_.reg)) {
+            ESP_LOGE(TAG, "Failed to set IIR register");
+            this->mark_failed();
+            return;
+        }
+        delay(10);
 
-    // delay(10);
+        // set data registers to store IIR filtered values
+        this->dsp_config_.bit.shdw_sel_iir_t = (this->iir_temperature_level_ != IIR_FILTER_OFF);
+        this->dsp_config_.bit.shdw_sel_iir_p = (this->iir_pressure_level_ != IIR_FILTER_OFF);
+        
+        this->dsp_config_.bit.comp_pt_en = 0x3; // enable pressure temperature compensation
 
-    // this->write_byte(0x30, 0b101011);
-    // delay(10);
 
-    // set interrupts
+        if (!this->write_byte(BMP581_DSP, this->dsp_config_.reg)) {
+            ESP_LOGE(TAG, "Failed to set data register's IIR source");
+            this->mark_failed();
+            return;
+        }
+        delay(10);
+    }
+
+    // set up interrupts
     int_source_.bit.drdy_data_reg_en = 0x1;   // enable data ready interrupt
     
     if (!this->bmp581_set_interrupt_source_register_(int_source_.reg)) {
-    this->mark_failed();
-    return;
+        this->mark_failed();
+        return;
     }
-
     delay(10);
 }
 
 void BMP581Component::update() {
     uint8_t data[6];
 
-    int32_t raw_temp = 0;
-    int32_t raw_press = 0;
-
-    // if in standby, then switch to forced mode to get a reading
-    // if (odr_config_.bit.pwr_mode == STANDBY_MODE) {
     if (!bmp581_set_mode_(FORCED_MODE)) {
         ESP_LOGD("bmpt81.sensor", "Forced reading request failed");
         return;
@@ -101,21 +127,31 @@ void BMP581Component::update() {
         ESP_LOGD(TAG, "Data isn't ready, skipping update.");
         return;
     }
-    // }
-    // otherwise we are in normal or continuosu mode, so just read
-    if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], 6)){    // read 6 bytes of data starting at register 0x1D (temperature xlsb) through 0x22 (pressure MSB)
-    ESP_LOGE(TAG, "Failed to read sensor data");
-    return;
+
+    if (this->pressure_sensor_ == nullptr) {    // only read temperature data if no pressure sensor is defined
+        if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], 3)){    // read 3 bytes of data starting at register 0x1D (temperature xlsb) through 0x1F (temperature MSB)
+            ESP_LOGE(TAG, "Failed to read sensor data");
+            return;
+        }
+    }
+    else {  // pressure sensor is defined
+        if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], 6)){    // read 6 bytes of data starting at register 0x1D (temperature xlsb) through 0x22 (pressure MSB)
+            ESP_LOGE(TAG, "Failed to read sensor data");
+            return;
+        }
+
+        int32_t raw_press = (int32_t) data[5] << 16 | (int32_t) data[4] << 8 | (int32_t) data[3];
+        float pressure = (float) ((raw_press/64.0)/100.0);      // Divide by 2^6=64 for Pa, divide by 100 to get hPA
+        
+        this->pressure_sensor_->publish_state(pressure);
     }
 
-    raw_temp = (int32_t) data[2] << 16 | (int32_t) data[1] << 8 | (int32_t) data[0];
-    raw_press = (int32_t) data[5] << 16 | (int32_t) data[4] << 8 | (int32_t) data[3];
+    if (this->temperature_sensor_ != nullptr) {      // update temperature sensor only if defined
+        int32_t raw_temp = (int32_t) data[2] << 16 | (int32_t) data[1] << 8 | (int32_t) data[0];
+        float temperature = (float) (raw_temp/65536.0);
 
-    float temperature = (float) (raw_temp/65536.0);
-    float pressure = (float) ((raw_press/64.0)/100.0);
-
-    this->temperature_sensor_->publish_state(temperature);
-    this->pressure_sensor_->publish_state(pressure);
+        this->temperature_sensor_->publish_state(temperature);
+    }
 }
 
 bool BMP581Component::bmp581_verify_chip_id_() {
