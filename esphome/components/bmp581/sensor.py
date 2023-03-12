@@ -61,6 +61,9 @@ CONFIG_SCHEMA = (
                     cv.Optional(CONF_OVERSAMPLING, default="128X"): cv.enum(
                         OVERSAMPLING_OPTIONS, upper=True
                     ),
+                    cv.Optional(CONF_IIR_FILTER, default="OFF"): cv.enum(
+                        IIR_FILTER_OPTIONS, upper=True
+                    ),
                 }
             ),
             cv.Optional(CONF_PRESSURE): sensor.sensor_schema(
@@ -73,11 +76,12 @@ CONFIG_SCHEMA = (
                     cv.Optional(CONF_OVERSAMPLING, default="128X"): cv.enum(
                         OVERSAMPLING_OPTIONS, upper=True
                     ),
+                    cv.Optional(CONF_IIR_FILTER, default="OFF"): cv.enum(
+                        IIR_FILTER_OPTIONS, upper=True
+                    ),
                 }
             ),
-            cv.Optional(CONF_IIR_FILTER, default="OFF"): cv.enum(
-                IIR_FILTER_OPTIONS, upper=True
-            ),
+
         }
     )
     .extend(cv.polling_component_schema("60s"))
@@ -89,15 +93,16 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await i2c.register_i2c_device(var, config)
-    cg.add(var.set_iir_filter_config(config[CONF_IIR_FILTER]))
     if CONF_TEMPERATURE in config:
         conf = config[CONF_TEMPERATURE]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_temperature_sensor(sens))
         cg.add(var.set_temperature_oversampling_config(conf[CONF_OVERSAMPLING]))
+        cg.add(var.set_temperature_iir_filter_config(conf[CONF_IIR_FILTER]))
 
     if CONF_PRESSURE in config:
         conf = config[CONF_PRESSURE]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_pressure_sensor(sens))
         cg.add(var.set_pressure_oversampling_config(conf[CONF_OVERSAMPLING]))
+        cg.add(var.set_temperature_iir_filter_config(conf[CONF_IIR_FILTER]))

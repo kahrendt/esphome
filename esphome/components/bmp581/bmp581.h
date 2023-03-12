@@ -55,7 +55,9 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
 
   void set_temperature_oversampling_config(Oversampling temperature_oversampling) { this->temperature_oversampling_ = temperature_oversampling; }
   void set_pressure_oversampling_config(Oversampling pressure_oversampling) { this->pressure_oversampling_ = pressure_oversampling; }
-  void set_iir_filter_config(IIRFilter iir_level) { this->iir_level_ = iir_level; }
+
+  void set_temperature_iir_filter_config(IIRFilter iir_temperature_level) { this->iir_temperature_level_ = iir_temperature_level; }
+  void set_pressure_iir_filter_config(IIRFilter iir_pressure_level) { this->iir_pressure_level_ = iir_pressure_level; }
 
 
   void dump_config() override;
@@ -74,7 +76,8 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
   Oversampling temperature_oversampling_{};
   Oversampling pressure_oversampling_{};
 
-  IIRFilter iir_level_{};
+  IIRFilter iir_temperature_level_{};
+  IIRFilter iir_pressure_level_{};
 
   // get the chip id from device and verify it matches the known id
   bool bmp581_verify_chip_id_();
