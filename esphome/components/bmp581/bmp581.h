@@ -5,7 +5,6 @@
 #include "esphome/components/sensor/sensor.h"
 #include "esphome.h"
 
-
 namespace esphome {
 namespace bmp581 {
 
@@ -54,12 +53,17 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
   void set_temperature_sensor(sensor::Sensor *temperature_sensor) { this->temperature_sensor_ = temperature_sensor; }
   void set_pressure_sensor(sensor::Sensor *pressure_sensor) { this->pressure_sensor_ = pressure_sensor; }
 
-  void set_temperature_oversampling_config(Oversampling temperature_oversampling) { this->temperature_oversampling_ = temperature_oversampling; }
-  void set_pressure_oversampling_config(Oversampling pressure_oversampling) { this->pressure_oversampling_ = pressure_oversampling; }
+  void set_temperature_oversampling_config(Oversampling temperature_oversampling) {
+    this->temperature_oversampling_ = temperature_oversampling;
+  }
+  void set_pressure_oversampling_config(Oversampling pressure_oversampling) {
+    this->pressure_oversampling_ = pressure_oversampling;
+  }
 
-  void set_temperature_iir_filter_config(IIRFilter iir_temperature_level) { this->iir_temperature_level_ = iir_temperature_level; }
+  void set_temperature_iir_filter_config(IIRFilter iir_temperature_level) {
+    this->iir_temperature_level_ = iir_temperature_level;
+  }
   void set_pressure_iir_filter_config(IIRFilter iir_pressure_level) { this->iir_pressure_level_ = iir_pressure_level; }
-
 
   void dump_config() override;
 
@@ -70,7 +74,6 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
   void update() override;
 
  protected:
-  
   sensor::Sensor *temperature_sensor_{nullptr};
   sensor::Sensor *pressure_sensor_{nullptr};
 
@@ -105,86 +108,85 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
   bool bmp581_get_data_ready_status_();
 
   // BMP581's interrupt source register (address 0x15) to configure which interrupts are enabled (page 54 of datasheet)
-  union {  
+  union {
     struct {
-      uint8_t drdy_data_reg_en : 1;    // Data ready interrupt enable
-      uint8_t fifo_full_en : 1;        // FIFO full interrupt enable
-      uint8_t fifo_ths_en : 1;         // FIFO threshold/watermark interrupt enable
-      uint8_t oor_p_en : 1;            // Pressure data out-of-range interrupt enable
+      uint8_t drdy_data_reg_en : 1;  // Data ready interrupt enable
+      uint8_t fifo_full_en : 1;      // FIFO full interrupt enable
+      uint8_t fifo_ths_en : 1;       // FIFO threshold/watermark interrupt enable
+      uint8_t oor_p_en : 1;          // Pressure data out-of-range interrupt enable
     } bit;
     uint8_t reg;
   } int_source_ = {.reg = 0};
 
   // BMP581's interrupt status register (address 0x27) to determine ensor's current state (page 58 of datasheet)
-  union {  
+  union {
     struct {
-      uint8_t drdy_data_reg : 1;    // Data ready
-      uint8_t fifo_full : 1;        // FIFO full
-      uint8_t fifo_ths : 1;         // FIFO fhreshold/watermark
-      uint8_t oor_p : 1;            // Pressure data out-of-range
-      uint8_t por : 1;              // POR or software reset complete
+      uint8_t drdy_data_reg : 1;  // Data ready
+      uint8_t fifo_full : 1;      // FIFO full
+      uint8_t fifo_ths : 1;       // FIFO fhreshold/watermark
+      uint8_t oor_p : 1;          // Pressure data out-of-range
+      uint8_t por : 1;            // POR or software reset complete
     } bit;
     uint8_t reg;
   } int_status_ = {.reg = 0};
 
   // BMP581's status register (address 0x28) to determine if sensor has setup correctly (page 58 of datasheet)
-  union {  
+  union {
     struct {
       uint8_t status_core_rdy : 1;
       uint8_t status_nvm_rdy : 1;             // NVM is ready of operations
       uint8_t status_nvm_err : 1;             // NVM error
       uint8_t status_nvm_cmd_err : 1;         // Indiciates boot command error
-      uint8_t status_boot_err_corrected : 1;  // Indiciates a boot error ahs been corrected     
+      uint8_t status_boot_err_corrected : 1;  // Indiciates a boot error ahs been corrected
       uint8_t : 2;
-      uint8_t st_crack_pass : 1;              // Indicates crack check has executed without error
+      uint8_t st_crack_pass : 1;  // Indicates crack check has executed without error
     } bit;
     uint8_t reg;
   } status_ = {.reg = 0};
 
   // BMP581's dsp register (address 0x30) to configure data registers iir selection (page 61 of datasheet)
-  union {  
+  union {
     struct {
-      uint8_t comp_pt_en : 2;               // enable temperature and pressure compensation
-      uint8_t iir_flush_forced_en : 1;      // IIR filter is flushed in forced mode
-      uint8_t shdw_sel_iir_t : 1;           // temperature data register's iir selection
-      uint8_t fifo_sel_iir_t : 1;           // FIFO temperature data register's iir selection
-      uint8_t shdw_sel_iir_p : 1;           // pressure data register's iir selection
-      uint8_t fifo_sel_iir_p : 1;           // FIFO pressure data register's iir selection
-      uint8_t oor_sel_iir_p : 1;            // pressure out-of-range's iir selection
+      uint8_t comp_pt_en : 2;           // enable temperature and pressure compensation
+      uint8_t iir_flush_forced_en : 1;  // IIR filter is flushed in forced mode
+      uint8_t shdw_sel_iir_t : 1;       // temperature data register's iir selection
+      uint8_t fifo_sel_iir_t : 1;       // FIFO temperature data register's iir selection
+      uint8_t shdw_sel_iir_p : 1;       // pressure data register's iir selection
+      uint8_t fifo_sel_iir_p : 1;       // FIFO pressure data register's iir selection
+      uint8_t oor_sel_iir_p : 1;        // pressure out-of-range's iir selection
     } bit;
     uint8_t reg;
   } dsp_config_ = {.reg = 0};
 
   // BMP581's iir register (address 0x31) to configure iir filtering(page 62 of datasheet)
-  union {  
+  union {
     struct {
-      uint8_t set_iir_t : 3;          // Temperature IIR filter coefficient
-      uint8_t set_iir_p : 3;          // Pressure IIR filter coefficient
+      uint8_t set_iir_t : 3;  // Temperature IIR filter coefficient
+      uint8_t set_iir_p : 3;  // Pressure IIR filter coefficient
     } bit;
     uint8_t reg;
   } iir_config_ = {.reg = 0};
 
-
   // BMP581's osr register (address 0x36) to configure oversampling (page 64 of datasheet)
-  union {  
+  union {
     struct {
-      uint8_t osr_t : 3;          // Temperature oversampling
-      uint8_t osr_p : 3;          // Pressure oversampling
-      uint8_t press_en : 1;       // Enables pressure measurement 
+      uint8_t osr_t : 3;     // Temperature oversampling
+      uint8_t osr_p : 3;     // Pressure oversampling
+      uint8_t press_en : 1;  // Enables pressure measurement
     } bit;
     uint8_t reg;
   } osr_config_ = {.reg = 0};
 
   // BMP581's odr register (address 0x37) to configure output data rate and power mode (page 64 of datasheet)
-  union {  
+  union {
     struct {
-      uint8_t pwr_mode : 2;       // power mode of sensor
-      uint8_t odr : 5;            // output data rate
-      uint8_t deep_dis : 1;       // disables deep standby  
+      uint8_t pwr_mode : 2;  // power mode of sensor
+      uint8_t odr : 5;       // output data rate
+      uint8_t deep_dis : 1;  // disables deep standby
     } bit;
     uint8_t reg;
   } odr_config_ = {.reg = 0};
 };
 
-}   // namespace bmp581
-}   // namespace esphome
+}  // namespace bmp581
+}  // namespace esphome
