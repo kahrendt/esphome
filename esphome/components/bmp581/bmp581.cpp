@@ -77,6 +77,9 @@ void BMP581Component::dump_config() {
     case ERROR_SENSOR_RESET:
       ESP_LOGE(TAG, "  BMP581 failed to reset");
       break;
+    case ERROR_SENSOR_STATUS:
+      ESP_LOGE(TAG, "  BMP581 sensor status failed, there were NVM problems");
+      break;
     default:
       ESP_LOGE(TAG, "  BMP581 error code %d", (int) this->error_code_);
       break;
