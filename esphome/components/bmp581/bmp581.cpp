@@ -438,7 +438,7 @@ bool BMP581Component::set_power_mode_(OperationMode mode) {
   this->odr_config_.bit.pwr_mode = mode;
 
   // write odr register
-  return this->write_byte(BMP581_ODR, this->osr_config_.reg);
+  return this->write_byte(BMP581_ODR, this->odr_config_.reg);
 }
 
 }  // namespace bmp581
