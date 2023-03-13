@@ -1,3 +1,5 @@
+// All datasheet page references refer to Bosch Document Number BST-BMP581-DS004-04 (revision number 1.4)
+
 #pragma once
 
 #include "esphome/core/component.h"

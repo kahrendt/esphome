@@ -1,11 +1,13 @@
 /*
   Adds support for BMP581 high accuracy pressure and temperature sensor
-    - Based on ESPHome's BMP3XX component
+    - Component structure based on ESPHome's BMP3XX component
       - Implementation is easier as the sensor itself performs the temperature compensation
         - Temperature and pressure data is converted via simple divison operations
+      - IIR filter level can be applied to temperature and pressure sensors independently
     - Bosch's BMP5-Sensor-API was consulted to verify that sensor configuration is done correctly
       - Copyright (c) 2022 Bosch Sensortec Gmbh, SPDX-License-Identifier: BSD-3-Clause
-    - This component uses forced power mode only so it follows host synchronization
+    - This component uses forced power mode only so measurements follow host synchronization
+    - All datasheet page references refer to Bosch Document Number BST-BMP581-DS004-04 (revision number 1.4)
 */
 
 #include "bmp581.h"
@@ -288,7 +290,7 @@ void BMP581Component::setup() {
     this->dsp_config_.bit.shdw_sel_iir_t = (this->iir_temperature_level_ != IIR_FILTER_OFF);
     this->dsp_config_.bit.shdw_sel_iir_p = (this->iir_pressure_level_ != IIR_FILTER_OFF);
 
-    this->dsp_config_.bit.comp_pt_en = 0x3;  // enable pressure temperature compensation
+    this->dsp_config_.bit.comp_pt_en = 0x3;  // enable pressure temperature compensation (page 61 of datasheet)
 
     // write data register's IIR source register
     if (!this->write_byte(BMP581_DSP, this->dsp_config_.reg)) {
@@ -325,8 +327,8 @@ void BMP581Component::update() {
     1) Set forced power mode to request sensor readings
     2) Verify sensor has data ready
     3) Read data registers for temperature and pressure if applicable
-    4) Compute and publish pressure measurement if sensor is defined
-    5) Compute and publish temmperature measurement if sensor is defined
+    4) Compute and publish temperature measurement if sensor is defined
+    5) Compute and publish pressure measurement if sensor is defined
   */
 
   /////////////////////////////////////////////////////////////////////////////
@@ -359,34 +361,19 @@ void BMP581Component::update() {
   // 3) Read data registers for temperature and pressure if applicable //
   ///////////////////////////////////////////////////////////////////////
   uint8_t data[6];
+  uint8_t bytes_to_read = 3;  // temperature only measurement only needs 3 bytes
 
-  // only read 3 bytes of temperature data if pressure sensor is not defined
-  if (this->pressure_sensor_ == nullptr) {
-    if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], 3)) {
-      ESP_LOGE(TAG, "Failed to read sensor data");
-      return;
-    }
+  if (this->pressure_sensor_) {
+    bytes_to_read = 6;  // pressure measurement requires 6 bytes
   }
-  // read 6 bytes of temperature and pressure data if pressure sensor is defined
-  else {
-    if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], 6)) {
-      ESP_LOGE(TAG, "Failed to read sensor data");
-      return;
-    }
 
-    //////////////////////////////////////////////////////////////////////
-    // 4) Compute and publish pressure measurement if sensor is defined //
-    //////////////////////////////////////////////////////////////////////
-
-    // pressure MSB is in data[5], LSB is in data[4], XLSB is in data[3]
-    int32_t raw_press = (int32_t) data[5] << 16 | (int32_t) data[4] << 8 | (int32_t) data[3];
-    float pressure = (float) ((raw_press / 64.0) / 100.0);  // Divide by 2^6=64 for Pa, divide by 100 to get hPA
-
-    this->pressure_sensor_->publish_state(pressure);
+  if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], bytes_to_read)) {
+    ESP_LOGE(TAG, "Failed to read sensor measurement data");
+    return;
   }
 
   //////////////////////////////////////////////////////////////////////////
-  // 5) Compute and publish temmperature measurement if sensor is defined //
+  // 4) Compute and publish temmperature measurement if sensor is defined //
   //////////////////////////////////////////////////////////////////////////
 
   if (this->temperature_sensor_) {
@@ -395,6 +382,18 @@ void BMP581Component::update() {
     float temperature = (float) (raw_temp / 65536.0);
 
     this->temperature_sensor_->publish_state(temperature);
+  }
+
+  //////////////////////////////////////////////////////////////////////
+  // 5) Compute and publish pressure measurement if sensor is defined //
+  //////////////////////////////////////////////////////////////////////
+
+  if (this->pressure_sensor_) {
+    // pressure MSB is in data[5], LSB is in data[4], XLSB is in data[3]
+    int32_t raw_press = (int32_t) data[5] << 16 | (int32_t) data[4] << 8 | (int32_t) data[3];
+    float pressure = (float) ((raw_press / 64.0) / 100.0);  // Divide by 2^6=64 for Pa, divide by 100 to get hPA
+
+    this->pressure_sensor_->publish_state(pressure);
   }
 }
 
