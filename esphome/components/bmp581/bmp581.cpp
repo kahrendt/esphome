@@ -1,3 +1,12 @@
+/*
+  Adds support for BMP581 high accuracy pressure and temperature sensor
+    - Based on ESPHome's BMP3XX component
+      - Implementation is easier as the sensor itself performs the temperature compensation.
+    - Bosch's BMP5-Sensor-API was consulted to verify that sensor configuration is done correctly
+      - Copyright (c) 2022 Bosch Sensortec Gmbh, SPDX-License-Identifier: BSD-3-Clause
+    - This component uses forced power mode only so it follows host synchronization
+*/
+
 #include "bmp581.h"
 #include "esphome/core/log.h"
 #include "esphome/core/hal.h"
@@ -7,47 +16,116 @@ namespace bmp581 {
 
 static const char *const TAG = "bmp581";
 
+static const LogString *oversampling_to_str(Oversampling oversampling) {
+  switch (oversampling) {
+    case Oversampling::OVERSAMPLING_NONE:
+      return LOG_STR("None");
+    case Oversampling::OVERSAMPLING_X2:
+      return LOG_STR("2x");
+    case Oversampling::OVERSAMPLING_X4:
+      return LOG_STR("4x");
+    case Oversampling::OVERSAMPLING_X8:
+      return LOG_STR("8x");
+    case Oversampling::OVERSAMPLING_X16:
+      return LOG_STR("16x");
+    case Oversampling::OVERSAMPLING_X32:
+      return LOG_STR("32x");
+    case Oversampling::OVERSAMPLING_X64:
+      return LOG_STR("64x");
+    case Oversampling::OVERSAMPLING_X128:
+      return LOG_STR("128x");
+    default:
+      return LOG_STR("");
+  }
+}
+
+static const LogString *iir_filter_to_str(IIRFilter filter) {
+  switch (filter) {
+    case IIRFilter::IIR_FILTER_OFF:
+      return LOG_STR("OFF");
+    case IIRFilter::IIR_FILTER_2:
+      return LOG_STR("2x");
+    case IIRFilter::IIR_FILTER_4:
+      return LOG_STR("4x");
+    case IIRFilter::IIR_FILTER_8:
+      return LOG_STR("8x");
+    case IIRFilter::IIR_FILTER_16:
+      return LOG_STR("16x");
+    case IIRFilter::IIR_FILTER_32:
+      return LOG_STR("32x");
+    case IIRFilter::IIR_FILTER_64:
+      return LOG_STR("64x");
+    case IIRFilter::IIR_FILTER_128:
+      return LOG_STR("128x");
+    default:
+      return LOG_STR("");
+  }
+}
+
 void BMP581Component::dump_config() {
   ESP_LOGCONFIG(TAG, "BMP581:");
+
   LOG_I2C_DEVICE(this);
   LOG_UPDATE_INTERVAL(this);
+
+  if (this->temperature_sensor_) {
+    LOG_SENSOR("  ", "Temperature", this->temperature_sensor_);
+    ESP_LOGCONFIG(TAG, "    IIR Temperature Filter: %s", LOG_STR_ARG(iir_filter_to_str(this->iir_temperature_level_)));
+    ESP_LOGCONFIG(TAG, "    Temperature Oversampling: %s",
+                  LOG_STR_ARG(oversampling_to_str(this->temperature_oversampling_)));
+  }
+
+  if (this->pressure_sensor_) {
+    LOG_SENSOR("  ", "Pressure", this->pressure_sensor_);
+    ESP_LOGCONFIG(TAG, "    IIR Temperature Filter: %s", LOG_STR_ARG(iir_filter_to_str(this->iir_pressure_level_)));
+    ESP_LOGCONFIG(TAG, "    Temperature Oversampling: %s",
+                  LOG_STR_ARG(oversampling_to_str(this->pressure_oversampling_)));
+  }
 }
 
 void BMP581Component::setup() {
-  // page 18 of data sheet has a post-power up procedure
-  // read chip_id
-  // read status register (0x28) and check status_nvm_rdy==1, status_nvm_err == 0
-  // read int_status.por (0x27) register and check it is 1
+  /*
+  Setup goes through several stages
+    1) Soft reboot
+    2) Verify ASIC chip ID matches BMP581
+    3) Verify sensor status (NVM is okay)
+    4) Set output data rate and power  mode
+    5) Set oversampling rate
+    6) If configured, set IIR filter level
+    7) Enable data ready interrupt
+  */
 
+  // 1) Soft reboot
   if (!this->reset_()) {
     this->mark_failed();
     return;
   }
 
+  // 2) Verify ASIC chip ID matches BMP581
   if (!this->verify_chip_id_()) {
     this->mark_failed();
     return;
   }
 
-  // read and verify device status
+  // 3) Verify sensor status (NVM is okay)
   if (!this->verify_status_()) {
     this->mark_failed();
     return;
   }
 
-  // set output data rate and power mode
+  // 4) Set output data rate and power  mode
   this->odr_config_.bit.pwr_mode = STANDBY_MODE;  // standby mode to start
   this->odr_config_.bit.odr =
       0x19;  // 4 Hz data out rate; shouldn't matter as we are in forced mode (though allows deep standby?)
 
-  if (!this->set_odr_register_(odr_config_.reg)) {
+  if (!this->set_odr_register_(this->odr_config_.reg)) {
     this->mark_failed();
     return;
   }
-  delay(10);
+  delay(4);
 
-  // set up oversampling
-  // Disable pressure readings/oversampling if no sensor is defined
+  // 5) Set oversampling rate
+  // disable pressure readings and oversampling if no sensor is defined, otherwise set up appropriately
   if (this->pressure_sensor_ == nullptr) {
     this->osr_config_.bit.osr_p = OVERSAMPLING_NONE;
     this->osr_config_.bit.press_en = false;
@@ -56,7 +134,7 @@ void BMP581Component::setup() {
     this->osr_config_.bit.press_en = true;
   }
 
-  // Disable temperature oversampling if no sensor is defined (sensor still internally compensates)
+  // disable temperature oversampling if no sensor is defined (sensor still internally compensates regardless)
   if (this->temperature_sensor_ == nullptr) {
     this->osr_config_.bit.osr_t = OVERSAMPLING_NONE;
   } else {
@@ -64,13 +142,15 @@ void BMP581Component::setup() {
   }
 
   // set oversampling register
-  if (!this->set_osr_register_(osr_config_.reg)) {
+  if (!this->write_byte(BMP581_OSR, this->osr_config_.reg)) {
+    ESP_LOGE(TAG, "Failed to write oversampling register");
+
     this->mark_failed();
     return;
   }
-  delay(10);
+  delay(4);
 
-  // If an IIR filter is enabled, set it all up
+  // 6) If configured, set IIR filter level
   if ((this->iir_temperature_level_ != IIR_FILTER_OFF) || (this->iir_pressure_level_ != IIR_FILTER_OFF)) {
     // read in one data point to prime the IIR filter
     this->set_mode_(FORCED_MODE);
@@ -79,71 +159,90 @@ void BMP581Component::setup() {
     this->iir_config_.bit.set_iir_t = this->iir_temperature_level_;
     this->iir_config_.bit.set_iir_p = this->iir_pressure_level_;
     if (!this->write_byte(BMP581_DSP_IIR, this->iir_config_.reg)) {
-      ESP_LOGE(TAG, "Failed to set IIR register");
+      ESP_LOGE(TAG, "Failed to write IIR configuration register");
       this->mark_failed();
       return;
     }
-    delay(10);
+    delay(4);
 
-    // set data registers to store IIR filtered values
+    // set data registers to store IIR filtered values if filter is enabled
     this->dsp_config_.bit.shdw_sel_iir_t = (this->iir_temperature_level_ != IIR_FILTER_OFF);
     this->dsp_config_.bit.shdw_sel_iir_p = (this->iir_pressure_level_ != IIR_FILTER_OFF);
 
     this->dsp_config_.bit.comp_pt_en = 0x3;  // enable pressure temperature compensation
 
     if (!this->write_byte(BMP581_DSP, this->dsp_config_.reg)) {
-      ESP_LOGE(TAG, "Failed to set data register's IIR source");
+      ESP_LOGE(TAG, "Failed to write data register's IIR source register");
       this->mark_failed();
       return;
     }
-    delay(10);
+    delay(4);
   }
 
-  // set up interrupts
-  int_source_.bit.drdy_data_reg_en = 0x1;  // enable data ready interrupt
+  // 7) Enable data ready interrupt
+  this->int_source_.bit.drdy_data_reg_en = 0x1;  // enable data ready interrupt
 
-  if (!this->set_interrupt_source_register_(int_source_.reg)) {
+  if (!this->write_byte(BMP581_INT_SOURCE, this->int_source_.reg)) {
+    ESP_LOGE(TAG, "Failed to set interrupt enable register");
     this->mark_failed();
     return;
   }
-  delay(10);
 }
 
 void BMP581Component::update() {
-  uint8_t data[6];
+  /*
+  Each update goes through several stages
+    0) Verify a temperature or pressure sensor is defined befor proceeding
+    1) Set forced power mode to request sensor readings
+    2) Verify sensor has data ready
+    3) Read data registers for temperature and pressure if applicable
+    4) Compute and publish pressure if sensor is defined
+    5) Compute and publish temmperature if sensor is defined
+  */
 
-  if (!set_mode_(FORCED_MODE)) {
-    ESP_LOGD("bmpt81.sensor", "Forced reading request failed");
+  // 0) Verify a temperature or pressure sensor is defined before proceeding
+  if ((this->temperature_sensor_ == nullptr) && (this->pressure_sensor_ == nullptr)) {
     return;
   }
 
+  // 1) Set forced power mode to request sensor readings
+  if (!this->set_mode_(FORCED_MODE)) {
+    ESP_LOGD(TAG, "Forced reading request failed");
+    return;
+  }
+
+  // 2) Verify sensor has data ready
   if (!this->get_data_ready_status_()) {
     ESP_LOGD(TAG, "Data isn't ready, skipping update.");
     return;
   }
 
-  if (this->pressure_sensor_ == nullptr) {  // only read temperature data if no pressure sensor is defined
-    if (!this->read_bytes(
-            BMP581_MEASUREMENT_DATA, &data[0],
-            3)) {  // read 3 bytes of data starting at register 0x1D (temperature xlsb) through 0x1F (temperature MSB)
+  // 3) Read data registers for temperature and pressure if applicable
+  uint8_t data[6];
+
+  // only read 3 bytes of temperature data if pressure sensor is not defined
+  if (this->pressure_sensor_ == nullptr) {
+    if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], 3)) {
       ESP_LOGE(TAG, "Failed to read sensor data");
       return;
     }
-  } else {  // pressure sensor is defined
-    if (!this->read_bytes(
-            BMP581_MEASUREMENT_DATA, &data[0],
-            6)) {  // read 6 bytes of data starting at register 0x1D (temperature xlsb) through 0x22 (pressure MSB)
+  }
+  // read 6 bytes of temperature and pressure data if pressure sensor is defined
+  else {
+    if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], 6)) {
       ESP_LOGE(TAG, "Failed to read sensor data");
       return;
     }
 
+    // 4) Compute and publish pressure if sensor is defined
     int32_t raw_press = (int32_t) data[5] << 16 | (int32_t) data[4] << 8 | (int32_t) data[3];
     float pressure = (float) ((raw_press / 64.0) / 100.0);  // Divide by 2^6=64 for Pa, divide by 100 to get hPA
 
     this->pressure_sensor_->publish_state(pressure);
   }
 
-  if (this->temperature_sensor_ != nullptr) {  // update temperature sensor only if defined
+  // 5) Compute and publish temmperature if sensor is defined
+  if (this->temperature_sensor_) {
     int32_t raw_temp = (int32_t) data[2] << 16 | (int32_t) data[1] << 8 | (int32_t) data[0];
     float temperature = (float) (raw_temp / 65536.0);
 
@@ -151,9 +250,9 @@ void BMP581Component::update() {
   }
 }
 
-// returns if the sensor has data able to be read in
+// returns if the sensor has data ready to be read
 bool BMP581Component::get_data_ready_status_() {
-  if (odr_config_.bit.pwr_mode == STANDBY_MODE) {
+  if (this->odr_config_.bit.pwr_mode == STANDBY_MODE) {
     ESP_LOGD(TAG, "Data not ready, sensor is in standby mode");
     return false;
   }
@@ -167,10 +266,10 @@ bool BMP581Component::get_data_ready_status_() {
 
   this->int_status_.reg = status;
 
-  if (int_status_.bit.drdy_data_reg) {
-    // check if in forced mode, put sensor to sleep if so
-    if (odr_config_.bit.pwr_mode == FORCED_MODE) {
-      odr_config_.bit.pwr_mode = STANDBY_MODE;
+  if (this->int_status_.bit.drdy_data_reg) {
+    // if in forced mode, the put our record of the power mode to standby
+    if (this->odr_config_.bit.pwr_mode == FORCED_MODE) {
+      this->odr_config_.bit.pwr_mode = STANDBY_MODE;
     }
 
     return true;
@@ -179,32 +278,10 @@ bool BMP581Component::get_data_ready_status_() {
   return false;
 }
 
-// configure interrupts by writing to interrupt source register and return success
-bool BMP581Component::set_interrupt_source_register_(uint8_t reg_value) {
-  if (!this->write_byte(BMP581_INT_SOURCE, reg_value)) {
-    ESP_LOGE(TAG, "Failed to set interrupt source register");
-
-    return false;
-  }
-
-  return true;
-}
-
 // configure output data rate and power mode by writing to ODR register and return success
 bool BMP581Component::set_odr_register_(uint8_t reg_value) {
   if (!this->write_byte(BMP581_ODR, reg_value)) {
-    ESP_LOGE(TAG, "Failed to set ODR register/power mode");
-
-    return false;
-  }
-
-  return true;
-}
-
-// configure oversampling by writing to OSR register and return success
-bool BMP581Component::set_osr_register_(uint8_t reg_value) {
-  if (!this->write_byte(BMP581_OSR, reg_value)) {
-    ESP_LOGE(TAG, "Failed to set oversampling register");
+    ESP_LOGE(TAG, "Failed to write ODR register/power mode");
 
     return false;
   }
@@ -222,8 +299,7 @@ bool BMP581Component::verify_chip_id_() {
   }
 
   if (chip_id != BMP581_ID) {
-    ESP_LOGE(TAG, "Unknown chip id, is this a BMP581?");
-    this->mark_failed();
+    ESP_LOGE(TAG, "Unknown chip ID, is this a BMP581?");
     return false;
   }
 
@@ -233,7 +309,7 @@ bool BMP581Component::verify_chip_id_() {
 // get the status and check for readiness & errors and return success
 bool BMP581Component::verify_status_() {
   if (!this->read_byte(BMP581_STATUS, &this->status_.reg)) {
-    ESP_LOGE(TAG, "Failed to get status register");
+    ESP_LOGE(TAG, "Failed to read status register");
 
     return false;
   }
@@ -262,18 +338,18 @@ bool BMP581Component::set_mode_(OperationMode mode) {
 // reset the sensor by writing to the command register and return success
 bool BMP581Component::reset_() {
   if (!this->write_byte(BMP581_COMMAND, RESET_COMMAND)) {
-    ESP_LOGE(TAG, "Failed to send reset command");
+    ESP_LOGE(TAG, "Failed to write reset command");
     return false;
   }
-  delay(5);  // t_{soft_res} is 2ms (page 11 of datasheet))
+  delay(4);  // t_{soft_res} is 2ms (page 11 of datasheet))
 
   if (!this->read_byte(BMP581_INT_STATUS, &this->int_status_.reg)) {
-    ESP_LOGE(TAG, "Failed to get interrupt status");
+    ESP_LOGE(TAG, "Failed to read interrupt status register");
     return false;
   }
 
   // POR bit returns if reboot was successful or not
-  return int_status_.bit.por;
+  return this->int_status_.bit.por;
 }
 
 }  // namespace bmp581

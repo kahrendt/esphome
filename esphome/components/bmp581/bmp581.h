@@ -92,9 +92,7 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
 
   bool get_data_ready_status_();
 
-  bool set_interrupt_source_register_(uint8_t reg_value);
   bool set_odr_register_(uint8_t reg_value);
-  bool set_osr_register_(uint8_t reg_value);
 
   bool verify_chip_id_();
   bool verify_status_();
