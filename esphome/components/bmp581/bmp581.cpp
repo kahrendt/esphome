@@ -1,7 +1,6 @@
-#include "esphome/core/component.h"
-#include "esphome/components/i2c/i2c.h"
-#include "esphome/components/sensor/sensor.h"
 #include "bmp581.h"
+#include "esphome/core/log.h"
+#include "esphome/core/hal.h"
 
 namespace esphome {
 namespace bmp581 {
@@ -117,7 +116,7 @@ void BMP581Component::update() {
     ESP_LOGD("bmpt81.sensor", "Forced reading request failed");
     return;
   }
-  delay(100);
+
   if (!this->bmp581_get_data_ready_status_()) {
     ESP_LOGD(TAG, "Data isn't ready, skipping update.");
     return;

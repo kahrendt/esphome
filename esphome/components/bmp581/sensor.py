@@ -81,7 +81,6 @@ CONFIG_SCHEMA = (
                     ),
                 }
             ),
-
         }
     )
     .extend(cv.polling_component_schema("60s"))
