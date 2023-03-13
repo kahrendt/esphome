@@ -90,9 +90,9 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
   IIRFilter iir_temperature_level_{IIR_FILTER_OFF};
   IIRFilter iir_pressure_level_{IIR_FILTER_OFF};
 
-  bool get_data_ready_status_();
+  bool check_data_readiness_();
 
-  bool set_mode_(OperationMode mode);
+  bool set_power_mode_(OperationMode mode);
   bool reset_();
 
   enum ErrorCode {

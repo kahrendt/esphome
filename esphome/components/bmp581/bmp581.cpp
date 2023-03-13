@@ -117,7 +117,7 @@ void BMP581Component::setup() {
   ESP_LOGCONFIG(TAG, "Setting up BMP581...");
 
   ////////////////////
-  // 1) Soft reboot
+  // 1) Soft reboot //
   ////////////////////
 
   if (!this->reset_()) {
@@ -128,7 +128,7 @@ void BMP581Component::setup() {
   }
 
   ///////////////////////////////////////////
-  // 2) Verify ASIC chip ID matches BMP581
+  // 2) Verify ASIC chip ID matches BMP581 //
   ///////////////////////////////////////////
 
   uint8_t chip_id;
@@ -152,7 +152,7 @@ void BMP581Component::setup() {
   }
 
   ////////////////////////////////////////////////////
-  // 3) Verify sensor status (check if NVM is okay)
+  // 3) Verify sensor status (check if NVM is okay) //
   ////////////////////////////////////////////////////
 
   if (!this->read_byte(BMP581_STATUS, &this->status_.reg)) {
@@ -185,7 +185,7 @@ void BMP581Component::setup() {
   }
 
   ////////////////////////////////////////////
-  // 4) Set output data rate and power mode
+  // 4) Set output data rate and power mode //
   ////////////////////////////////////////////
 
   this->odr_config_.bit.pwr_mode = STANDBY_MODE;  // standby mode to start
@@ -203,7 +203,7 @@ void BMP581Component::setup() {
   }
 
   //////////////////////////////
-  // 5) Set oversampling rate
+  // 5) Set oversampling rate //
   //////////////////////////////
 
   // disable pressure readings and oversampling if no sensor is defined, otherwise set up appropriately
@@ -233,12 +233,12 @@ void BMP581Component::setup() {
   }
 
   ////////////////////////////////////////////
-  // 6) If configured, set IIR filter level
+  // 6) If configured, set IIR filter level //
   ////////////////////////////////////////////
 
   if ((this->iir_temperature_level_ != IIR_FILTER_OFF) || (this->iir_pressure_level_ != IIR_FILTER_OFF)) {
     // read in one data point to prime the IIR filter, otherwise its first previous value is 0 for both sensors
-    if (!this->set_mode_(FORCED_MODE)) {
+    if (!this->set_power_mode_(FORCED_MODE)) {
       this->error_code_ = ERROR_COMMUNICATION_FAILED;
       this->mark_failed();
 
@@ -274,7 +274,7 @@ void BMP581Component::setup() {
   }
 
   ////////////////////////////////////
-  // 7) Enable data ready interrupt
+  // 7) Enable data ready interrupt //
   ////////////////////////////////////
 
   this->int_source_.bit.drdy_data_reg_en = true;  // enable data ready interrupt
@@ -296,28 +296,39 @@ void BMP581Component::update() {
     1) Set forced power mode to request sensor readings
     2) Verify sensor has data ready
     3) Read data registers for temperature and pressure if applicable
-    4) Compute and publish pressure if sensor is defined
-    5) Compute and publish temmperature if sensor is defined
+    4) Compute and publish pressure measurement if sensor is defined
+    5) Compute and publish temmperature measurement if sensor is defined
   */
 
-  // 0) Verify a temperature or pressure sensor is defined before proceeding
+  /////////////////////////////////////////////////////////////////////////////
+  // 0) Verify a temperature or pressure sensor is defined before proceeding //
+  /////////////////////////////////////////////////////////////////////////////
+
   if ((this->temperature_sensor_ == nullptr) && (this->pressure_sensor_ == nullptr)) {
     return;
   }
 
-  // 1) Set forced power mode to request sensor readings
-  if (!this->set_mode_(FORCED_MODE)) {
+  /////////////////////////////////////////////////////////
+  // 1) Set forced power mode to request sensor readings //
+  /////////////////////////////////////////////////////////
+
+  if (!this->set_power_mode_(FORCED_MODE)) {
     ESP_LOGD(TAG, "Forced reading request failed");
     return;
   }
 
-  // 2) Verify sensor has data ready
-  if (!this->get_data_ready_status_()) {
+  /////////////////////////////////////
+  // 2) Verify sensor has data ready //
+  /////////////////////////////////////
+
+  if (!this->check_data_readiness_()) {
     ESP_LOGD(TAG, "Data isn't ready, skipping update.");
     return;
   }
 
-  // 3) Read data registers for temperature and pressure if applicable
+  ///////////////////////////////////////////////////////////////////////
+  // 3) Read data registers for temperature and pressure if applicable //
+  ///////////////////////////////////////////////////////////////////////
   uint8_t data[6];
 
   // only read 3 bytes of temperature data if pressure sensor is not defined
@@ -334,14 +345,20 @@ void BMP581Component::update() {
       return;
     }
 
-    // 4) Compute and publish pressure if sensor is defined
+    //////////////////////////////////////////////////////////////////////
+    // 4) Compute and publish pressure measurement if sensor is defined //
+    //////////////////////////////////////////////////////////////////////
+
     int32_t raw_press = (int32_t) data[5] << 16 | (int32_t) data[4] << 8 | (int32_t) data[3];
     float pressure = (float) ((raw_press / 64.0) / 100.0);  // Divide by 2^6=64 for Pa, divide by 100 to get hPA
 
     this->pressure_sensor_->publish_state(pressure);
   }
 
-  // 5) Compute and publish temmperature if sensor is defined
+  //////////////////////////////////////////////////////////////////////////
+  // 5) Compute and publish temmperature measurement if sensor is defined //
+  //////////////////////////////////////////////////////////////////////////
+
   if (this->temperature_sensor_) {
     int32_t raw_temp = (int32_t) data[2] << 16 | (int32_t) data[1] << 8 | (int32_t) data[0];
     float temperature = (float) (raw_temp / 65536.0);
@@ -351,7 +368,7 @@ void BMP581Component::update() {
 }
 
 // returns if the sensor has data ready to be read
-bool BMP581Component::get_data_ready_status_() {
+bool BMP581Component::check_data_readiness_() {
   if (this->odr_config_.bit.pwr_mode == STANDBY_MODE) {
     ESP_LOGD(TAG, "Data not ready, sensor is in standby mode");
     return false;
@@ -379,7 +396,7 @@ bool BMP581Component::get_data_ready_status_() {
 }
 
 // set the power mode on sensor by writing to ODR register and return success
-bool BMP581Component::set_mode_(OperationMode mode) {
+bool BMP581Component::set_power_mode_(OperationMode mode) {
   this->odr_config_.bit.pwr_mode = mode;
 
   // write odr register
