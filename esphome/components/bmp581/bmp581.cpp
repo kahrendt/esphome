@@ -367,7 +367,12 @@ void BMP581Component::update() {
   }
 }
 
-// returns if the sensor has data ready to be read
+// Returns if the sensor has data ready to be read
+//   - verifies sensor is not in standby mode
+//   - reads interrupt status register
+//   - checks if data ready bit is asserted
+//      - internally sets component to standby mode
+//   - returns readiness state
 bool BMP581Component::check_data_readiness_() {
   if (this->odr_config_.bit.pwr_mode == STANDBY_MODE) {
     ESP_LOGD(TAG, "Data not ready, sensor is in standby mode");
@@ -384,7 +389,7 @@ bool BMP581Component::check_data_readiness_() {
   this->int_status_.reg = status;
 
   if (this->int_status_.bit.drdy_data_reg) {
-    // if in forced mode, the put our record of the power mode to standby
+    // if in forced mode, the set internal record of the power mode to standby
     if (this->odr_config_.bit.pwr_mode == FORCED_MODE) {
       this->odr_config_.bit.pwr_mode = STANDBY_MODE;
     }
@@ -395,7 +400,10 @@ bool BMP581Component::check_data_readiness_() {
   return false;
 }
 
-// set the power mode on sensor by writing to ODR register and return success
+// Writes the power mode to the sensor
+//   - updates internal power mode record
+//   - write odr register
+//   - returns success or failure of write
 bool BMP581Component::set_power_mode_(OperationMode mode) {
   this->odr_config_.bit.pwr_mode = mode;
 
@@ -403,7 +411,11 @@ bool BMP581Component::set_power_mode_(OperationMode mode) {
   return this->write_byte(BMP581_ODR, this->osr_config_.reg);
 }
 
-// reset the sensor by writing to the command register and return success
+// Resets the sensor
+//    - writes reset command to sensor's command register
+//    - delay for soft reboot to complete
+//    - reads interrupts status
+//    - returns the interrupt's power-on-reboot bit which indicates a successful reboot
 bool BMP581Component::reset_() {
   if (!this->write_byte(BMP581_COMMAND, RESET_COMMAND)) {
     ESP_LOGE(TAG, "Failed to write reset command");
