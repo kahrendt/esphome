@@ -7,24 +7,33 @@
 namespace esphome {
 namespace bmp581 {
 
-static const uint8_t BMP581_ID = 0x50;
-static const uint8_t RESET_COMMAND = 0xB6;
+static const uint8_t BMP581_ID = 0x50;      // BMP581's ASIC chip ID
+static const uint8_t RESET_COMMAND = 0xB6;  // Soft reset command
 
+// BMP581 Registers
 enum {
-  BMP581_CHIP_ID = 0x01,
-  BMP581_INT_SOURCE = 0x15,
-  BMP581_MEASUREMENT_DATA = 0x1D,
-  BMP581_INT_STATUS = 0x27,
-  BMP581_STATUS = 0x28,
-  BMP581_DSP = 0x30,
-  BMP581_DSP_IIR = 0x31,
-  BMP581_OSR = 0x36,
-  BMP581_ODR = 0x37,
-  BMP581_COMMAND = 0x7E
+  BMP581_CHIP_ID = 0x01,     // read chip ID
+  BMP581_INT_SOURCE = 0x15,  // write interrupt sources
+  BMP581_MEASUREMENT_DATA =
+      0x1D,  // read measurement registers, 0x1D-0x1F are temperature XLSB to MSB and 0x20-0x22 are pressure XLSB to MSB
+  BMP581_INT_STATUS = 0x27,  // read interrupt statuses
+  BMP581_STATUS = 0x28,      // read sensor status
+  BMP581_DSP = 0x30,         // write sensor configuration
+  BMP581_DSP_IIR = 0x31,     // write IIR filter configuration
+  BMP581_OSR = 0x36,         // write oversampling configuration
+  BMP581_ODR = 0x37,         // write data rate and power mode configuration
+  BMP581_COMMAND = 0x7E      // write sensor command
 };
 
-enum OperationMode { STANDBY_MODE = 0x0, NORMAL_MODE = 0x1, FORCED_MODE = 0x2, NONSTOP_MODE = 0x3 };
+// BMP581 Power mode operations
+enum OperationMode {
+  STANDBY_MODE = 0x0,  // no active readings
+  NORMAL_MODE = 0x1,   // read continuously at ODR configured rate and standby between
+  FORCED_MODE = 0x2,   // read sensor once (only reading mode used by this component)
+  NONSTOP_MODE = 0x3   // read continuously with no standby
+};
 
+// Temperature and pressure sensors can be oversampled to reduce noise
 enum Oversampling {
   OVERSAMPLING_NONE = 0x0,
   OVERSAMPLING_X2 = 0x1,
@@ -36,6 +45,7 @@ enum Oversampling {
   OVERSAMPLING_X128 = 0x7
 };
 
+// Infinite Impulse Response filter reduces noise caused by ambient disturbances
 enum IIRFilter {
   IIR_FILTER_OFF = 0x0,
   IIR_FILTER_2 = 0x1,
@@ -49,6 +59,12 @@ enum IIRFilter {
 
 class BMP581Component : public PollingComponent, public i2c::I2CDevice, public sensor::Sensor {
  public:
+  void setup() override;
+  void update() override;
+
+  void dump_config() override;
+  float get_setup_priority() const override { return setup_priority::DATA; }
+
   void set_temperature_sensor(sensor::Sensor *temperature_sensor) { this->temperature_sensor_ = temperature_sensor; }
   void set_pressure_sensor(sensor::Sensor *pressure_sensor) { this->pressure_sensor_ = pressure_sensor; }
 
@@ -64,14 +80,6 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
   }
   void set_pressure_iir_filter_config(IIRFilter iir_pressure_level) { this->iir_pressure_level_ = iir_pressure_level; }
 
-  void dump_config() override;
-
-  float get_setup_priority() const override { return setup_priority::DATA; }
-
-  void setup() override;
-
-  void update() override;
-
  protected:
   sensor::Sensor *temperature_sensor_{nullptr};
   sensor::Sensor *pressure_sensor_{nullptr};
@@ -82,29 +90,17 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
   IIRFilter iir_temperature_level_{};
   IIRFilter iir_pressure_level_{};
 
-  // get the chip id from device and verify it matches the known id
-  bool bmp581_verify_chip_id_();
+  bool get_data_ready_status_();
 
-  // get the status and check for readiness & errors and return success
-  bool bmp581_verify_status_();
+  bool set_interrupt_source_register_(uint8_t reg_value);
+  bool set_odr_register_(uint8_t reg_value);
+  bool set_osr_register_(uint8_t reg_value);
 
-  // set the power mode on sensor by writing to ODR register and return success
-  bool bmp581_set_mode_(OperationMode mode);
+  bool verify_chip_id_();
+  bool verify_status_();
 
-  // configure interrupts by writing to interrupt source register and return success
-  bool bmp581_set_interrupt_source_register_(uint8_t reg_value);
-
-  // configure output data rate and power mode by writing to ODR register and return success
-  bool bmp581_set_odr_register_(uint8_t reg_value);
-
-  // configure oversampling by writing to OSR register and return success
-  bool bmp581_set_osr_register_(uint8_t reg_value);
-
-  // reset the sensor by writing to the command register and return success
-  bool bmp581_reset_();
-
-  // returns if the sensor has data able to be read in
-  bool bmp581_get_data_ready_status_();
+  bool set_mode_(OperationMode mode);
+  bool reset_();
 
   // BMP581's interrupt source register (address 0x15) to configure which interrupts are enabled (page 54 of datasheet)
   union {
@@ -124,7 +120,7 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
       uint8_t fifo_full : 1;      // FIFO full
       uint8_t fifo_ths : 1;       // FIFO fhreshold/watermark
       uint8_t oor_p : 1;          // Pressure data out-of-range
-      uint8_t por : 1;            // POR or software reset complete
+      uint8_t por : 1;            // Power-On-Reset complete
     } bit;
     uint8_t reg;
   } int_status_ = {.reg = 0};
@@ -181,7 +177,7 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
     struct {
       uint8_t pwr_mode : 2;  // power mode of sensor
       uint8_t odr : 5;       // output data rate
-      uint8_t deep_dis : 1;  // disables deep standby
+      uint8_t deep_dis : 1;  // deep standby disable
     } bit;
     uint8_t reg;
   } odr_config_ = {.reg = 0};

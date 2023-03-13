@@ -19,18 +19,18 @@ void BMP581Component::setup() {
   // read status register (0x28) and check status_nvm_rdy==1, status_nvm_err == 0
   // read int_status.por (0x27) register and check it is 1
 
-  if (!this->bmp581_reset_()) {
+  if (!this->reset_()) {
     this->mark_failed();
     return;
   }
 
-  if (!this->bmp581_verify_chip_id_()) {
+  if (!this->verify_chip_id_()) {
     this->mark_failed();
     return;
   }
 
   // read and verify device status
-  if (!this->bmp581_verify_status_()) {
+  if (!this->verify_status_()) {
     this->mark_failed();
     return;
   }
@@ -40,7 +40,7 @@ void BMP581Component::setup() {
   this->odr_config_.bit.odr =
       0x19;  // 4 Hz data out rate; shouldn't matter as we are in forced mode (though allows deep standby?)
 
-  if (!this->bmp581_set_odr_register_(odr_config_.reg)) {
+  if (!this->set_odr_register_(odr_config_.reg)) {
     this->mark_failed();
     return;
   }
@@ -64,7 +64,7 @@ void BMP581Component::setup() {
   }
 
   // set oversampling register
-  if (!this->bmp581_set_osr_register_(osr_config_.reg)) {
+  if (!this->set_osr_register_(osr_config_.reg)) {
     this->mark_failed();
     return;
   }
@@ -73,7 +73,7 @@ void BMP581Component::setup() {
   // If an IIR filter is enabled, set it all up
   if ((this->iir_temperature_level_ != IIR_FILTER_OFF) || (this->iir_pressure_level_ != IIR_FILTER_OFF)) {
     // read in one data point to prime the IIR filter
-    this->bmp581_set_mode_(FORCED_MODE);
+    this->set_mode_(FORCED_MODE);
 
     // set IIR level for temperature and pressure
     this->iir_config_.bit.set_iir_t = this->iir_temperature_level_;
@@ -102,7 +102,7 @@ void BMP581Component::setup() {
   // set up interrupts
   int_source_.bit.drdy_data_reg_en = 0x1;  // enable data ready interrupt
 
-  if (!this->bmp581_set_interrupt_source_register_(int_source_.reg)) {
+  if (!this->set_interrupt_source_register_(int_source_.reg)) {
     this->mark_failed();
     return;
   }
@@ -112,12 +112,12 @@ void BMP581Component::setup() {
 void BMP581Component::update() {
   uint8_t data[6];
 
-  if (!bmp581_set_mode_(FORCED_MODE)) {
+  if (!set_mode_(FORCED_MODE)) {
     ESP_LOGD("bmpt81.sensor", "Forced reading request failed");
     return;
   }
 
-  if (!this->bmp581_get_data_ready_status_()) {
+  if (!this->get_data_ready_status_()) {
     ESP_LOGD(TAG, "Data isn't ready, skipping update.");
     return;
   }
@@ -151,97 +151,8 @@ void BMP581Component::update() {
   }
 }
 
-bool BMP581Component::bmp581_verify_chip_id_() {
-  uint8_t chip_id;
-  if (!this->read_byte(BMP581_CHIP_ID, &chip_id))  // read chip id
-  {
-    ESP_LOGE(TAG, "Failed to read chip id");
-    return false;
-  }
-
-  if (chip_id != BMP581_ID) {
-    ESP_LOGE(TAG, "Unknown chip id, is this a BMP581?");
-    this->mark_failed();
-    return false;
-  }
-
-  return true;
-}
-
-bool BMP581Component::bmp581_verify_status_() {
-  if (!this->read_byte(BMP581_STATUS, &this->status_.reg)) {
-    ESP_LOGE(TAG, "Failed to get status register");
-
-    return false;
-  }
-
-  if (!(this->status_.bit.status_nvm_rdy))  // check status_nvm_rdy bit (should be 1 if okay)
-  {
-    ESP_LOGE(TAG, "NVM not ready");
-    return false;
-  }
-
-  if (this->status_.bit.status_nvm_err)  // check status_nvm_err bit (should be 0 if okay)
-  {
-    ESP_LOGE(TAG, "NVM error detected");
-    return false;
-  }
-
-  return true;
-}
-
-bool BMP581Component::bmp581_set_mode_(OperationMode mode) {
-  this->odr_config_.bit.pwr_mode = mode;
-  return this->bmp581_set_odr_register_(this->odr_config_.reg);
-}
-
-bool BMP581Component::bmp581_set_interrupt_source_register_(uint8_t reg_value) {
-  if (!this->write_byte(BMP581_INT_SOURCE, reg_value)) {
-    ESP_LOGE(TAG, "Failed to set interrupt source register");
-
-    return false;
-  }
-
-  return true;
-}
-
-bool BMP581Component::bmp581_set_odr_register_(uint8_t reg_value) {
-  if (!this->write_byte(BMP581_ODR, reg_value)) {
-    ESP_LOGE(TAG, "Failed to set ODR register/power mode");
-
-    return false;
-  }
-
-  return true;
-}
-
-bool BMP581Component::bmp581_set_osr_register_(uint8_t reg_value) {
-  if (!this->write_byte(BMP581_OSR, reg_value)) {
-    ESP_LOGE(TAG, "Failed to set oversampling register");
-
-    return false;
-  }
-
-  return true;
-}
-
-bool BMP581Component::bmp581_reset_() {
-  if (!this->write_byte(BMP581_COMMAND, RESET_COMMAND)) {
-    ESP_LOGE(TAG, "Failed to send reset command");
-    return false;
-  }
-  delay(5);  // t_{soft_res} is 2ms (page 11 of datasheet))
-
-  if (!this->read_byte(BMP581_INT_STATUS, &this->int_status_.reg)) {
-    ESP_LOGE(TAG, "Failed to get interrupt status");
-    return false;
-  }
-
-  // POR bit returns if reboot was successful or not
-  return int_status_.bit.por;
-}
-
-bool BMP581Component::bmp581_get_data_ready_status_() {
+// returns if the sensor has data able to be read in
+bool BMP581Component::get_data_ready_status_() {
   if (odr_config_.bit.pwr_mode == STANDBY_MODE) {
     ESP_LOGD(TAG, "Data not ready, sensor is in standby mode");
     return false;
@@ -266,6 +177,103 @@ bool BMP581Component::bmp581_get_data_ready_status_() {
   }
 
   return false;
+}
+
+// configure interrupts by writing to interrupt source register and return success
+bool BMP581Component::set_interrupt_source_register_(uint8_t reg_value) {
+  if (!this->write_byte(BMP581_INT_SOURCE, reg_value)) {
+    ESP_LOGE(TAG, "Failed to set interrupt source register");
+
+    return false;
+  }
+
+  return true;
+}
+
+// configure output data rate and power mode by writing to ODR register and return success
+bool BMP581Component::set_odr_register_(uint8_t reg_value) {
+  if (!this->write_byte(BMP581_ODR, reg_value)) {
+    ESP_LOGE(TAG, "Failed to set ODR register/power mode");
+
+    return false;
+  }
+
+  return true;
+}
+
+// configure oversampling by writing to OSR register and return success
+bool BMP581Component::set_osr_register_(uint8_t reg_value) {
+  if (!this->write_byte(BMP581_OSR, reg_value)) {
+    ESP_LOGE(TAG, "Failed to set oversampling register");
+
+    return false;
+  }
+
+  return true;
+}
+
+// get the chip id from device and verify it matches the known id
+bool BMP581Component::verify_chip_id_() {
+  uint8_t chip_id;
+  if (!this->read_byte(BMP581_CHIP_ID, &chip_id))  // read chip id
+  {
+    ESP_LOGE(TAG, "Failed to read chip id");
+    return false;
+  }
+
+  if (chip_id != BMP581_ID) {
+    ESP_LOGE(TAG, "Unknown chip id, is this a BMP581?");
+    this->mark_failed();
+    return false;
+  }
+
+  return true;
+}
+
+// get the status and check for readiness & errors and return success
+bool BMP581Component::verify_status_() {
+  if (!this->read_byte(BMP581_STATUS, &this->status_.reg)) {
+    ESP_LOGE(TAG, "Failed to get status register");
+
+    return false;
+  }
+
+  if (!(this->status_.bit.status_nvm_rdy))  // check status_nvm_rdy bit (should be 1 if okay)
+  {
+    ESP_LOGE(TAG, "NVM not ready");
+    return false;
+  }
+
+  if (this->status_.bit.status_nvm_err)  // check status_nvm_err bit (should be 0 if okay)
+  {
+    ESP_LOGE(TAG, "NVM error detected");
+    return false;
+  }
+
+  return true;
+}
+
+// set the power mode on sensor by writing to ODR register and return success
+bool BMP581Component::set_mode_(OperationMode mode) {
+  this->odr_config_.bit.pwr_mode = mode;
+  return this->set_odr_register_(this->odr_config_.reg);
+}
+
+// reset the sensor by writing to the command register and return success
+bool BMP581Component::reset_() {
+  if (!this->write_byte(BMP581_COMMAND, RESET_COMMAND)) {
+    ESP_LOGE(TAG, "Failed to send reset command");
+    return false;
+  }
+  delay(5);  // t_{soft_res} is 2ms (page 11 of datasheet))
+
+  if (!this->read_byte(BMP581_INT_STATUS, &this->int_status_.reg)) {
+    ESP_LOGE(TAG, "Failed to get interrupt status");
+    return false;
+  }
+
+  // POR bit returns if reboot was successful or not
+  return int_status_.bit.por;
 }
 
 }  // namespace bmp581
