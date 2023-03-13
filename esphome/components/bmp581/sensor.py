@@ -18,8 +18,8 @@ CODEOWNERS = ["@kahrendt"]
 DEPENDENCIES = ["i2c"]
 
 bmp581_ns = cg.esphome_ns.namespace("bmp581")
-Oversampling = bmp581_ns.enum("Oversampling")
 
+Oversampling = bmp581_ns.enum("Oversampling")
 OVERSAMPLING_OPTIONS = {
     "NONE": Oversampling.OVERSAMPLING_NONE,
     "2X": Oversampling.OVERSAMPLING_X2,
