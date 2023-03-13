@@ -267,7 +267,11 @@ void BMP581Component::setup() {
   ////////////////////////////////////////////
 
   if ((this->iir_temperature_level_ != IIR_FILTER_OFF) || (this->iir_pressure_level_ != IIR_FILTER_OFF)) {
+    // disable deep standby mode which clears IIR filter
+    this->odr_config_.bit.deep_dis = true;
+
     // read in one data point to prime the IIR filter, otherwise its first previous value is 0 for both sensors
+    // also pushes the deep standby disable configuration
     if (!this->set_power_mode_(FORCED_MODE)) {
       ESP_LOGE(TAG, "Failed to request forced measurement");
 
