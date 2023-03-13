@@ -10,7 +10,7 @@ namespace bmp581 {
 static const uint8_t BMP581_ID = 0x50;      // BMP581's ASIC chip ID
 static const uint8_t RESET_COMMAND = 0xB6;  // Soft reset command
 
-// BMP581 Registers
+// BMP581 Register Addresses
 enum {
   BMP581_CHIP_ID = 0x01,     // read chip ID
   BMP581_INT_SOURCE = 0x15,  // write interrupt sources
@@ -84,21 +84,24 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
   sensor::Sensor *temperature_sensor_{nullptr};
   sensor::Sensor *pressure_sensor_{nullptr};
 
-  Oversampling temperature_oversampling_{};
-  Oversampling pressure_oversampling_{};
+  Oversampling temperature_oversampling_{OVERSAMPLING_NONE};
+  Oversampling pressure_oversampling_{OVERSAMPLING_NONE};
 
-  IIRFilter iir_temperature_level_{};
-  IIRFilter iir_pressure_level_{};
+  IIRFilter iir_temperature_level_{IIR_FILTER_OFF};
+  IIRFilter iir_pressure_level_{IIR_FILTER_OFF};
 
   bool get_data_ready_status_();
 
-  bool set_odr_register_(uint8_t reg_value);
-
-  bool verify_chip_id_();
-  bool verify_status_();
-
   bool set_mode_(OperationMode mode);
   bool reset_();
+
+  enum ErrorCode {
+    NONE = 0,
+    ERROR_COMMUNICATION_FAILED,
+    ERROR_WRONG_CHIP_ID,
+    ERROR_SENSOR_STATUS,
+    ERROR_SENSOR_RESET,
+  } error_code_{NONE};
 
   // BMP581's interrupt source register (address 0x15) to configure which interrupts are enabled (page 54 of datasheet)
   union {
