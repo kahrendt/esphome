@@ -58,7 +58,7 @@ CONFIG_SCHEMA = (
                 state_class=STATE_CLASS_MEASUREMENT,
             ).extend(
                 {
-                    cv.Optional(CONF_OVERSAMPLING, default="128X"): cv.enum(
+                    cv.Optional(CONF_OVERSAMPLING, default="NONE"): cv.enum(
                         OVERSAMPLING_OPTIONS, upper=True
                     ),
                     cv.Optional(CONF_IIR_FILTER, default="OFF"): cv.enum(
@@ -73,7 +73,7 @@ CONFIG_SCHEMA = (
                 state_class=STATE_CLASS_MEASUREMENT,
             ).extend(
                 {
-                    cv.Optional(CONF_OVERSAMPLING, default="128X"): cv.enum(
+                    cv.Optional(CONF_OVERSAMPLING, default="16X"): cv.enum(
                         OVERSAMPLING_OPTIONS, upper=True
                     ),
                     cv.Optional(CONF_IIR_FILTER, default="OFF"): cv.enum(

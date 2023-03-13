@@ -85,7 +85,7 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice, public s
   sensor::Sensor *pressure_sensor_{nullptr};
 
   Oversampling temperature_oversampling_{OVERSAMPLING_NONE};
-  Oversampling pressure_oversampling_{OVERSAMPLING_NONE};
+  Oversampling pressure_oversampling_{OVERSAMPLING_X16};
 
   IIRFilter iir_temperature_level_{IIR_FILTER_OFF};
   IIRFilter iir_pressure_level_{IIR_FILTER_OFF};
