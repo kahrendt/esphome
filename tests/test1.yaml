@@ -1259,6 +1259,11 @@ sensor:
     name: DHT Absolute Humidity
     temperature: dht_temperature
     humidity: dht_humidity
+  - platform: bmp581
+    temperature:
+      name: "BMP581 Temperature"
+    pressure:
+      name: "BMP581 Pressure"
 
 esp32_touch:
   setup_mode: false
