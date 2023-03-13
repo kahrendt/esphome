@@ -1264,6 +1264,7 @@ sensor:
       name: "BMP581 Temperature"
     pressure:
       name: "BMP581 Pressure"
+    i2c_id: i2c_bus
 
 esp32_touch:
   setup_mode: false
