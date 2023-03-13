@@ -1,14 +1,14 @@
 /*
-  Adds support for BMP581 high accuracy pressure and temperature sensor
-    - Component structure based on ESPHome's BMP3XX component
-      - Implementation is easier as the sensor itself performs the temperature compensation
-        - Temperature and pressure data is converted via simple divison operations
-      - IIR filter level can be applied to temperature and pressure sensors independently
-    - Bosch's BMP5-Sensor-API was consulted to verify that sensor configuration is done correctly
-      - Copyright (c) 2022 Bosch Sensortec Gmbh, SPDX-License-Identifier: BSD-3-Clause
-    - This component uses forced power mode only so measurements follow host synchronization
-    - All datasheet page references refer to Bosch Document Number BST-BMP581-DS004-04 (revision number 1.4)
-*/
+ * Adds support for BMP581 high accuracy pressure and temperature sensor
+ *  - Component structure based on ESPHome's BMP3XX component
+ *    - Implementation is easier as the sensor itself performs the temperature compensation
+ *      - Temperature and pressure data is converted via simple divison operations
+ *    - IIR filter level can be applied to temperature and pressure sensors independently
+ *  - Bosch's BMP5-Sensor-API was consulted to verify that sensor configuration is done correctly
+ *    - Copyright (c) 2022 Bosch Sensortec Gmbh, SPDX-License-Identifier: BSD-3-Clause
+ *  - This component uses forced power mode only so measurements follow host synchronization
+ *  - All datasheet page references refer to Bosch Document Number BST-BMP581-DS004-04 (revision number 1.4)
+ */
 
 #include "bmp581.h"
 #include "esphome/core/log.h"
@@ -106,11 +106,16 @@ void BMP581Component::dump_config() {
 
 void BMP581Component::setup() {
   /*
-  Setup goes through several stages, which follows the post-power-up procedure (page 18 of datasheet) and then sets
-  configuration options 1) Soft reboot 2) Verify ASIC chip ID matches BMP581 3) Verify sensor status (check if NVM is
-  okay) 4) Set output data rate and power  mode 5) Set oversampling rate 6) If configured, set IIR filter level 7)
-  Enable data ready interrupt
-  */
+   * Setup goes through several stages, which follows the post-power-up procedure (page 18 of datasheet) and then sets
+   * configuration options
+   *  1) Soft reboot
+   *  2) Verify ASIC chip ID matches BMP581
+   *  3) Verify sensor status (check if NVM is okay)
+   *  4) Set output data rate and power mode
+   *  5) Set oversampling rate
+   *  6) If configured, set IIR filter level
+   *  7) Enable data ready interrupt
+   */
 
   this->error_code_ = NONE;
   ESP_LOGCONFIG(TAG, "Setting up BMP581...");
@@ -322,14 +327,14 @@ void BMP581Component::setup() {
 
 void BMP581Component::update() {
   /*
-  Each update goes through several stages
-    0) Verify a temperature or pressure sensor is defined befor proceeding
-    1) Set forced power mode to request sensor readings
-    2) Verify sensor has data ready
-    3) Read data registers for temperature and pressure if applicable
-    4) Compute and publish temperature measurement if sensor is defined
-    5) Compute and publish pressure measurement if sensor is defined
-  */
+   * Each update goes through several stages
+   *  0) Verify a temperature or pressure sensor is defined befor proceeding
+   *  1) Set forced power mode to request sensor readings
+   *  2) Verify sensor has data ready
+   *  3) Read data registers for temperature and pressure if applicable
+   *  4) Compute and publish temperature measurement if sensor is defined
+   *  5) Compute and publish pressure measurement if sensor is defined
+   */
 
   /////////////////////////////////////////////////////////////////////////////
   // 0) Verify a temperature or pressure sensor is defined before proceeding //
