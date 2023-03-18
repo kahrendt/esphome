@@ -9,7 +9,7 @@
 namespace esphome {
 namespace bmp581 {
 
-static const uint8_t BMP581_ID = 0x50;      // BMP581's ASIC chip ID
+static const uint8_t BMP581_ID = 0x50;      // BMP581's ASIC chip ID (page 51 of datasheet)
 static const uint8_t RESET_COMMAND = 0xB6;  // Soft reset command
 
 // BMP581 Register Addresses
@@ -132,12 +132,12 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
   union {
     struct {
       uint8_t status_core_rdy : 1;
-      uint8_t status_nvm_rdy : 1;             // NVM is ready of operations
-      uint8_t status_nvm_err : 1;             // NVM error
-      uint8_t status_nvm_cmd_err : 1;         // Indiciates boot command error
-      uint8_t status_boot_err_corrected : 1;  // Indiciates a boot error ahs been corrected
+      uint8_t status_nvm_rdy : 1;             // asserted if NVM is ready of operations
+      uint8_t status_nvm_err : 1;             // asserted if NVM error
+      uint8_t status_nvm_cmd_err : 1;         // asserted if boot command error
+      uint8_t status_boot_err_corrected : 1;  // asserted if a boot error has been corrected
       uint8_t : 2;
-      uint8_t st_crack_pass : 1;  // Indicates crack check has executed without error
+      uint8_t st_crack_pass : 1;  // asserted if crack check has executed without detecting a crack
     } bit;
     uint8_t reg;
   } status_ = {.reg = 0};
@@ -147,11 +147,11 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
     struct {
       uint8_t comp_pt_en : 2;           // enable temperature and pressure compensation
       uint8_t iir_flush_forced_en : 1;  // IIR filter is flushed in forced mode
-      uint8_t shdw_sel_iir_t : 1;       // temperature data register's iir selection
-      uint8_t fifo_sel_iir_t : 1;       // FIFO temperature data register's iir selection
-      uint8_t shdw_sel_iir_p : 1;       // pressure data register's iir selection
-      uint8_t fifo_sel_iir_p : 1;       // FIFO pressure data register's iir selection
-      uint8_t oor_sel_iir_p : 1;        // pressure out-of-range's iir selection
+      uint8_t shdw_sel_iir_t : 1;       // temperature data register value selected before or after iir
+      uint8_t fifo_sel_iir_t : 1;       // FIFO temperature data register value secected before or after iir
+      uint8_t shdw_sel_iir_p : 1;       // pressure data register value selected before or after iir
+      uint8_t fifo_sel_iir_p : 1;       // FIFO pressure data register value selected before or after iir
+      uint8_t oor_sel_iir_p : 1;        // pressure out-of-range value selected before or after iir
     } bit;
     uint8_t reg;
   } dsp_config_ = {.reg = 0};
@@ -180,7 +180,7 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
     struct {
       uint8_t pwr_mode : 2;  // power mode of sensor
       uint8_t odr : 5;       // output data rate
-      uint8_t deep_dis : 1;  // deep standby disable
+      uint8_t deep_dis : 1;  // deep standby disabled if asserted
     } bit;
     uint8_t reg;
   } odr_config_ = {.reg = 0};

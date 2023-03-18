@@ -107,14 +107,13 @@ void BMP581Component::dump_config() {
 void BMP581Component::setup() {
   /*
    * Setup goes through several stages, which follows the post-power-up procedure (page 18 of datasheet) and then sets
-   * configuration options
+   * configured options
    *  1) Soft reboot
    *  2) Verify ASIC chip ID matches BMP581
    *  3) Verify sensor status (check if NVM is okay)
-   *  4) Set output data rate and power mode
-   *  5) Set oversampling rate
-   *  6) If configured, set IIR filter level
-   *  7) Enable data ready interrupt
+   *  4) Enable data ready interrupt
+   *  5) Set initial configuration values and write IIR settings if configured
+   *  6) Set ESPHome configured oversampling rate for all future measurements
    */
 
   this->error_code_ = NONE;
@@ -213,65 +212,100 @@ void BMP581Component::setup() {
     return;
   }
 
-  ////////////////////////////////////////////
-  // 4) Set output data rate and power mode //
-  ////////////////////////////////////////////
+  ////////////////////////////////////
+  // 4) Enable data ready interrupt //
+  ////////////////////////////////////
 
-  this->odr_config_.bit.pwr_mode = STANDBY_MODE;  // standby mode to start
+  this->int_source_.bit.drdy_data_reg_en = true;  // enable data ready interrupt
+
+  // write interrupt source register
+  if (!this->write_byte(BMP581_INT_SOURCE, this->int_source_.reg)) {
+    ESP_LOGE(TAG, "Failed to write interrupt enable register");
+
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
+    this->mark_failed();
+
+    return;
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // 5) Set initial configuration values and write IIR settings if configured //
+  //////////////////////////////////////////////////////////////////////////////
+
+  // Configure pressure readings if sensor is defined
+  if (this->pressure_sensor_ != nullptr) {
+    // Enable pressure readings (temperature readings are permanently configured on the BMP581 to compensate for
+    // pressure readings)
+    this->osr_config_.bit.press_en = true;
+
+    // Temporarily set no pressure oversampling so forced reading to prime IIR fitler is fast
+    this->osr_config_.bit.osr_p = OVERSAMPLING_NONE;
+
+    // If the pressure IIR filter is configured, then ensure data registers store filtered measurement
+    this->dsp_config_.bit.shdw_sel_iir_p = (this->iir_pressure_level_ != IIR_FILTER_OFF);
+
+    // Set pressure IIR filter level
+    this->iir_config_.bit.set_iir_p = this->iir_pressure_level_;
+  }
+
+  // Configure temperature readings if sensor is defined
+  if (this->temperature_sensor_ != nullptr) {
+    // Temporarily set no temperature oversampling so forced reading to prime IIR fitler is fast
+    this->osr_config_.bit.osr_t = OVERSAMPLING_NONE;
+
+    // If the temperature IIR filter is configured, then ensure data registers store filtered measurement
+    this->dsp_config_.bit.shdw_sel_iir_t = (this->iir_temperature_level_ != IIR_FILTER_OFF);
+
+    // Set temperature IIR filter level
+    this->iir_config_.bit.set_iir_t = this->iir_temperature_level_;
+  }
+
+  // enable pressure and temperature compensation (page 61 of datasheet)
+  this->dsp_config_.bit.comp_pt_en = 0x3;
+
+  // Flush the IIR filter with forced measurements
+  this->dsp_config_.bit.iir_flush_forced_en = true;
+
+  // write data register's IIR source register
+  if (!this->write_byte(BMP581_DSP, this->dsp_config_.reg)) {
+    ESP_LOGE(TAG, "Failed to write data register's IIR source register");
+
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
+    this->mark_failed();
+
+    return;
+  }
+
+  // write IIR configuration register
+  if (!this->write_byte(BMP581_DSP_IIR, this->iir_config_.reg)) {
+    ESP_LOGE(TAG, "Failed to write IIR configuration register");
+
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
+    this->mark_failed();
+
+    return;
+  }
+
   this->odr_config_.bit.odr = 0x19;  // 4 Hz output data rate; shouldn't matter as we are in forced mode (should still
                                      // allow deep standby for powersaving)
 
-  // write odr register
-  if (!this->write_byte(BMP581_ODR, this->odr_config_.reg)) {
-    ESP_LOGE(TAG, "Failed to write ODR register/power mode");
-
-    this->error_code_ = ERROR_COMMUNICATION_FAILED;
-    this->mark_failed();
-
-    return;
-  }
-
-  //////////////////////////////
-  // 5) Set oversampling rate //
-  //////////////////////////////
-
-  // disable pressure readings and oversampling if no pressure sensor is defined, otherwise set up appropriately
-  if (this->pressure_sensor_ == nullptr) {
-    this->osr_config_.bit.osr_p = OVERSAMPLING_NONE;
-    this->osr_config_.bit.press_en = false;
-  } else {
-    this->osr_config_.bit.osr_p = this->pressure_oversampling_;
-    this->osr_config_.bit.press_en = true;
-  }
-
-  // disable temperature oversampling if no temperature sensor is defined (sensor will still internally compensate for
-  // temperature)
-  if (this->temperature_sensor_ == nullptr) {
-    this->osr_config_.bit.osr_t = OVERSAMPLING_NONE;
-  } else {
-    this->osr_config_.bit.osr_t = this->temperature_oversampling_;
-  }
-
-  // write oversampling register
-  if (!this->write_byte(BMP581_OSR, this->osr_config_.reg)) {
-    ESP_LOGE(TAG, "Failed to write oversampling register");
-
-    this->error_code_ = ERROR_COMMUNICATION_FAILED;
-    this->mark_failed();
-
-    return;
-  }
-
-  ////////////////////////////////////////////
-  // 6) If configured, set IIR filter level //
-  ////////////////////////////////////////////
-
+  // If IIR filter is configured, then
+  //  - write the above temporary oversampling settings for a quick measurement
+  //  - force a measurement to prime IIR filter register
+  //  - return to standby mode
+  //  - disable IIR filter flushing for future forced readings
   if ((this->iir_temperature_level_ != IIR_FILTER_OFF) || (this->iir_pressure_level_ != IIR_FILTER_OFF)) {
-    // disable deep standby mode which clears IIR filter
-    this->odr_config_.bit.deep_dis = true;
+    // write temporary oversampling settings to register
+    if (!this->write_byte(BMP581_OSR, this->osr_config_.reg)) {
+      ESP_LOGE(TAG, "Failed to write oversampling register");
 
-    // read in one data point to prime the IIR filter, otherwise its first previous value is 0 for both sensors
-    // also pushes the deep standby disable configuration
+      this->error_code_ = ERROR_COMMUNICATION_FAILED;
+      this->mark_failed();
+
+      return;
+    }
+
+    // write ODR setting and force an initial reading, flushing the IIR filter
     if (!this->set_power_mode_(FORCED_MODE)) {
       ESP_LOGE(TAG, "Failed to request forced measurement");
 
@@ -280,28 +314,23 @@ void BMP581Component::setup() {
 
       return;
     }
+    delay(3);  // With no oversampling, a measurement can be completed at a rate of 498 Hz (page 19 of datasheet)
 
-    // set IIR level for temperature and pressure
-    this->iir_config_.bit.set_iir_t = this->iir_temperature_level_;
-    this->iir_config_.bit.set_iir_p = this->iir_pressure_level_;
-
-    // write IIR configuration register
-    if (!this->write_byte(BMP581_DSP_IIR, this->iir_config_.reg)) {
-      ESP_LOGE(TAG, "Failed to write IIR configuration register");
+    // switch to standby mode so future settings can be configured on sensor
+    if (!this->set_power_mode_(STANDBY_MODE)) {
+      ESP_LOGE(TAG, "Failed to set standby mode");
 
       this->error_code_ = ERROR_COMMUNICATION_FAILED;
       this->mark_failed();
 
       return;
     }
+    delay(3);  // t_standby = 2.5 (page 11 of datasheet); time it takes from forced mode to go to standby (IIR registers
+               // can only be configured in standby mode)
 
-    // set data registers to store IIR filtered values if filter is enabled
-    this->dsp_config_.bit.shdw_sel_iir_t = (this->iir_temperature_level_ != IIR_FILTER_OFF);
-    this->dsp_config_.bit.shdw_sel_iir_p = (this->iir_pressure_level_ != IIR_FILTER_OFF);
+    // disable IIR filter flushing for future readings; i.e., allow the IIR filter to work
+    this->dsp_config_.bit.iir_flush_forced_en = false;
 
-    this->dsp_config_.bit.comp_pt_en = 0x3;  // enable pressure and temperature compensation (page 61 of datasheet)
-
-    // write data register's IIR source register
     if (!this->write_byte(BMP581_DSP, this->dsp_config_.reg)) {
       ESP_LOGE(TAG, "Failed to write data register's IIR source register");
 
@@ -312,15 +341,24 @@ void BMP581Component::setup() {
     }
   }
 
-  ////////////////////////////////////
-  // 7) Enable data ready interrupt //
-  ////////////////////////////////////
+  /////////////////////////////////////////////////////////////////////////////
+  // 6) Set ESPHome configured oversampling rate for all future measurements //
+  /////////////////////////////////////////////////////////////////////////////
 
-  this->int_source_.bit.drdy_data_reg_en = true;  // enable data ready interrupt
+  // If pressure sensor is configured, then set configured oversampling rate
+  if (this->pressure_sensor_ != nullptr) {
+    this->osr_config_.bit.osr_p = this->pressure_oversampling_;
+  }
 
-  // write interrupt source register
-  if (!this->write_byte(BMP581_INT_SOURCE, this->int_source_.reg)) {
-    ESP_LOGE(TAG, "Failed to write interrupt enable register");
+  // If temperature sensor is configured, then set configured oversampling rate
+  // (Note the BMP will always measure temperature to help compensate for pressure readings)
+  if (this->temperature_sensor_ != nullptr) {
+    this->osr_config_.bit.osr_t = this->temperature_oversampling_;
+  }
+
+  // write settings to oversampling register
+  if (!this->write_byte(BMP581_OSR, this->osr_config_.reg)) {
+    ESP_LOGE(TAG, "Failed to write oversampling register");
 
     this->error_code_ = ERROR_COMMUNICATION_FAILED;
     this->mark_failed();
@@ -378,7 +416,7 @@ void BMP581Component::update() {
   }
 
   if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], bytes_to_read)) {
-    ESP_LOGE(TAG, "Failed to read sensors measurement data");
+    ESP_LOGE(TAG, "Failed to read sensor's measurement data");
     return;
   }
 
@@ -389,7 +427,7 @@ void BMP581Component::update() {
   if (this->temperature_sensor_) {
     // temperature MSB is in data[2], LSB is in data[1], XLSB in data[0]
     int32_t raw_temp = (int32_t) data[2] << 16 | (int32_t) data[1] << 8 | (int32_t) data[0];
-    float temperature = (float) (raw_temp / 65536.0);   // converts to degrees celsius
+    float temperature = (float) (raw_temp / 65536.0);  // converts to degrees celsius
 
     this->temperature_sensor_->publish_state(temperature);
   }
@@ -405,6 +443,34 @@ void BMP581Component::update() {
 
     this->pressure_sensor_->publish_state(pressure);
   }
+
+  // /// verify things a really working...
+  // uint8_t effective_osr = 0x0;
+
+  // this->read_byte(0x30, &effective_osr);
+  // ESP_LOGD(TAG, "dsp %d", effective_osr);
+  //     if (!this->set_power_mode_(STANDBY_MODE)) {
+  //     ESP_LOGE(TAG, "Failed to request forced measurement");
+
+  //     this->error_code_ = ERROR_COMMUNICATION_FAILED;
+  //     this->mark_failed();
+
+  //     return;
+  //   }
+  //   delay(3);   // t_standby = 2.5 (page 11 of datasheet); time it takes from forced mode to go to standby (IIR can
+  //   only be configured in standby mode)
+
+  //   this->dsp_config_.bit.iir_flush_forced_en = false;
+
+  //   // write data register's IIR source register
+  //   if (!this->write_byte(BMP581_DSP, this->dsp_config_.reg)) {
+  //     ESP_LOGE(TAG, "Failed to write data register's IIR source register");
+
+  //     this->error_code_ = ERROR_COMMUNICATION_FAILED;
+  //     this->mark_failed();
+
+  //     return;
+  //   }
 }
 
 // Check if the BMP581 has measurement data ready to be read
