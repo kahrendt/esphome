@@ -401,7 +401,9 @@ void BMP581Component::update() {
   //////////////////////////////////////////////////////////////
 
   if (!this->set_power_mode_(FORCED_MODE)) {
-    ESP_LOGD(TAG, "Failed to request forced measurement of sensors");
+    ESP_LOGW(TAG, "Failed to request forced measurement of sensors");
+    this->status_set_warning();
+
     return;
   }
 
@@ -410,7 +412,9 @@ void BMP581Component::update() {
   /////////////////////////////////////
 
   if (!this->check_data_readiness_()) {
-    ESP_LOGD(TAG, "Data from sensor isn't ready, skipping this update");
+    ESP_LOGW(TAG, "Data from sensor isn't ready, skipping this update");
+    this->status_set_warning();
+
     return;
   }
 
@@ -426,7 +430,9 @@ void BMP581Component::update() {
   }
 
   if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], bytes_to_read)) {
-    ESP_LOGE(TAG, "Failed to read sensor's measurement data");
+    ESP_LOGW(TAG, "Failed to read sensor's measurement data");
+    this->status_set_warning();
+
     return;
   }
 
@@ -453,6 +459,8 @@ void BMP581Component::update() {
 
     this->pressure_sensor_->publish_state(pressure);
   }
+
+  this->status_clear_warning();
 }
 
 // Check if the BMP581 has measurement data ready to be read
