@@ -22,8 +22,9 @@ enum {
   BMP581_STATUS = 0x28,      // read sensor status
   BMP581_DSP = 0x30,         // write sensor configuration
   BMP581_DSP_IIR = 0x31,     // write IIR filter configuration
-  BMP581_OSR = 0x36,         // write oversampling configuration
+  BMP581_OSR = 0x36,         // write over-sampling configuration
   BMP581_ODR = 0x37,         // write data rate and power mode configuration
+  BMP581_EFF_OSR = 0x38,     // read effective over-sampling configuration
   BMP581_COMMAND = 0x7E      // write sensor command
 };
 
@@ -165,11 +166,11 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
     uint8_t reg;
   } iir_config_ = {.reg = 0};
 
-  // BMP581's osr register (address 0x36) to configure oversampling (page 64 of datasheet)
+  // BMP581's osr register (address 0x36) to configure over-sampling (page 64 of datasheet)
   union {
     struct {
-      uint8_t osr_t : 3;     // Temperature oversampling
-      uint8_t osr_p : 3;     // Pressure oversampling
+      uint8_t osr_t : 3;     // Temperature over-sampling
+      uint8_t osr_p : 3;     // Pressure over-sampling
       uint8_t press_en : 1;  // Enables pressure measurement
     } bit;
     uint8_t reg;
