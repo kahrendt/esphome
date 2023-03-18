@@ -1,12 +1,12 @@
 /*
  * Adds support for BMP581 high accuracy pressure and temperature sensor
- *  - Component structure based on ESPHome's BMP3XX component
- *    - Implementation is easier as the sensor itself performs the temperature compensation
+ *  - Component code/structure based on ESPHome's BMP3XX component
+ *    - Implementation is easier as this sensor itself automatically compensates for the temperature
  *      - Temperature and pressure data is converted via simple divison operations
- *    - IIR filter level can be applied to temperature and pressure sensors independently
+ *    - IIR filter level can independently be applied to temperature and pressure sensors
  *  - Bosch's BMP5-Sensor-API was consulted to verify that sensor configuration is done correctly
  *    - Copyright (c) 2022 Bosch Sensortec Gmbh, SPDX-License-Identifier: BSD-3-Clause
- *  - This component uses forced power mode only so measurements follow host synchronization
+ *  - This component uses forced power mode only so measurements are synchronized by the host
  *  - All datasheet page references refer to Bosch Document Number BST-BMP581-DS004-04 (revision number 1.4)
  */
 
@@ -299,7 +299,7 @@ void BMP581Component::setup() {
     this->dsp_config_.bit.shdw_sel_iir_t = (this->iir_temperature_level_ != IIR_FILTER_OFF);
     this->dsp_config_.bit.shdw_sel_iir_p = (this->iir_pressure_level_ != IIR_FILTER_OFF);
 
-    this->dsp_config_.bit.comp_pt_en = 0x3;  // enable pressure temperature compensation (page 61 of datasheet)
+    this->dsp_config_.bit.comp_pt_en = 0x3;  // enable pressure and temperature compensation (page 61 of datasheet)
 
     // write data register's IIR source register
     if (!this->write_byte(BMP581_DSP, this->dsp_config_.reg)) {
@@ -362,13 +362,14 @@ void BMP581Component::update() {
   /////////////////////////////////////
 
   if (!this->check_data_readiness_()) {
-    ESP_LOGD(TAG, "Data isn't ready, skipping update");
+    ESP_LOGD(TAG, "Data from sensor isn't ready, skipping this update");
     return;
   }
 
   ///////////////////////////////////////////////////////////////////////
   // 3) Read data registers for temperature and pressure if applicable //
   ///////////////////////////////////////////////////////////////////////
+
   uint8_t data[6];
   uint8_t bytes_to_read = 3;  // temperature only measurement only needs 3 bytes
 
@@ -377,7 +378,7 @@ void BMP581Component::update() {
   }
 
   if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], bytes_to_read)) {
-    ESP_LOGE(TAG, "Failed to read sensor measurement data");
+    ESP_LOGE(TAG, "Failed to read sensors measurement data");
     return;
   }
 
@@ -388,7 +389,7 @@ void BMP581Component::update() {
   if (this->temperature_sensor_) {
     // temperature MSB is in data[2], LSB is in data[1], XLSB in data[0]
     int32_t raw_temp = (int32_t) data[2] << 16 | (int32_t) data[1] << 8 | (int32_t) data[0];
-    float temperature = (float) (raw_temp / 65536.0);
+    float temperature = (float) (raw_temp / 65536.0);   // converts to degrees celsius
 
     this->temperature_sensor_->publish_state(temperature);
   }
@@ -428,7 +429,7 @@ bool BMP581Component::check_data_readiness_() {
   this->int_status_.reg = status;
 
   if (this->int_status_.bit.drdy_data_reg) {
-    // if in forced mode, the set internal record of the power mode to standby
+    // if in forced mode, then set internal record of the power mode to standby
     if (this->odr_config_.bit.pwr_mode == FORCED_MODE) {
       this->odr_config_.bit.pwr_mode = STANDBY_MODE;
     }
@@ -439,7 +440,7 @@ bool BMP581Component::check_data_readiness_() {
   return false;
 }
 
-// Writes the power mode to the BMP581
+// Sets the power mode on the BMP581
 //   - updates internal power mode
 //   - write odr register on BMP
 //   - returns success or failure of write
