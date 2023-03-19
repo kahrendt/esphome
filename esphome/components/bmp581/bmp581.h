@@ -93,11 +93,21 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
   IIRFilter iir_temperature_level_{IIR_FILTER_OFF};
   IIRFilter iir_pressure_level_{IIR_FILTER_OFF};
 
+  uint16_t measurement_time_{0};
+
   bool check_data_readiness_();
+
+  uint16_t determine_conversion_time_(Oversampling temperature_oversampling, Oversampling pressure_oversampling);
 
   bool prime_iir_filter_();
 
+  bool read_temperature_and_pressure_(float &temperature, float &pressure);
+  bool read_temperature_(float &temperature);
+  bool read_pressure_(float &pressure);
+
   bool reset_();
+
+  bool start_measurement_();
 
   bool write_iir_(IIRFilter temperature_iir, IIRFilter pressure_iir);
 
