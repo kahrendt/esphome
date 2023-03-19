@@ -95,7 +95,11 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
 
   bool check_data_readiness_();
 
-  bool set_power_mode_(OperationMode mode);
+  bool reset_();
+
+  bool write_oversampling_(Oversampling temperature_oversampling, Oversampling pressure_oversampling);
+
+  bool write_power_mode_(OperationMode mode);
 
   enum ErrorCode {
     NONE = 0,

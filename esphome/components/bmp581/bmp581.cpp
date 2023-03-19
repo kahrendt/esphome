@@ -123,32 +123,8 @@ void BMP581Component::setup() {
   // 1) Soft reboot //
   ////////////////////
 
-  // writes reset command to BMP's command register
-  if (!this->write_byte(BMP581_COMMAND, RESET_COMMAND)) {
-    ESP_LOGE(TAG, "Failed to write reset command");
-
-    this->error_code_ = ERROR_COMMUNICATION_FAILED;
-    this->mark_failed();
-
-    return;
-  }
-
-  // t_{soft_res} = 2ms (page 11 of datasheet); time it takes to enter standby mode
-  //  - round up to 3 ms
-  delay(3);
-
-  // read interrupt status register
-  if (!this->read_byte(BMP581_INT_STATUS, &this->int_status_.reg)) {
-    ESP_LOGE(TAG, "Failed to read interrupt status register");
-
-    this->error_code_ = ERROR_COMMUNICATION_FAILED;
-    this->mark_failed();
-
-    return;
-  }
-
   // Power-On-Reboot bit is asserted if sensor successfully reset
-  if (!this->int_status_.bit.por) {
+  if (!this->reset_()) {
     ESP_LOGE(TAG, "BMP581 failed to reset");
 
     this->error_code_ = ERROR_SENSOR_RESET;
@@ -247,9 +223,6 @@ void BMP581Component::setup() {
     // pressure readings)
     this->osr_config_.bit.press_en = true;
 
-    // temporarily disable pressure over-sampling, so the forced reading to prime the IIR filter is fast
-    this->osr_config_.bit.osr_p = OVERSAMPLING_NONE;
-
     // If the pressure IIR filter is configured, then ensure data registers on the sensor store the filtered measurement
     this->dsp_config_.bit.shdw_sel_iir_p = (this->iir_pressure_level_ != IIR_FILTER_OFF);
 
@@ -259,9 +232,6 @@ void BMP581Component::setup() {
 
   // configure temperature readings, if sensor is defined
   if (this->temperature_sensor_ != nullptr) {
-    // temporarily disable temperature over-sampling, so the forced reading to prime the IIR filter is fast
-    this->osr_config_.bit.osr_t = OVERSAMPLING_NONE;
-
     // If the temperature IIR filter is configured, then ensure data registers store the filtered measurement
     this->dsp_config_.bit.shdw_sel_iir_t = (this->iir_temperature_level_ != IIR_FILTER_OFF);
 
@@ -298,13 +268,13 @@ void BMP581Component::setup() {
   }
 
   // If an IIR filter is configured, then
-  //  - write the temporary over-sampling settings to sensor for a fast initial measurement
+  //  - temporarily disable over-sampling settings for a fast initial measurement
   //  - force a measurement to prime IIR filter
   //  - return to standby mode
   //  - disable IIR filter flushing for future forced readings
   if ((this->iir_temperature_level_ != IIR_FILTER_OFF) || (this->iir_pressure_level_ != IIR_FILTER_OFF)) {
-    // write temporary over-sampling settings to register
-    if (!this->write_byte(BMP581_OSR, this->osr_config_.reg)) {
+    // temporarily disable over-sampling for temperature and pressure for a fast initial measurement
+    if (!this->write_oversampling_(OVERSAMPLING_NONE, OVERSAMPLING_NONE)) {
       ESP_LOGE(TAG, "Failed to write over-sampling register");
 
       this->error_code_ = ERROR_COMMUNICATION_FAILED;
@@ -317,7 +287,7 @@ void BMP581Component::setup() {
     //  - this measurements flushes the IIR filter reflecting the DSP settings
     //  - flushing with this initial reading avoids having the internal previous data aquisition being 0, which
     //    (I)nfinitely affects future values
-    if (!this->set_power_mode_(FORCED_MODE)) {
+    if (!this->write_power_mode_(FORCED_MODE)) {
       ESP_LOGE(TAG, "Failed to request a forced measurement");
 
       this->error_code_ = ERROR_COMMUNICATION_FAILED;
@@ -330,7 +300,7 @@ void BMP581Component::setup() {
     delay(3);
 
     // switch to standby mode so future IIR and OSR settings can be set
-    if (!this->set_power_mode_(STANDBY_MODE)) {
+    if (!this->write_power_mode_(STANDBY_MODE)) {
       ESP_LOGE(TAG, "Failed to set standby mode");
 
       this->error_code_ = ERROR_COMMUNICATION_FAILED;
@@ -360,19 +330,20 @@ void BMP581Component::setup() {
   // 6) Write the configured over-sampling rates for all future measurements //
   /////////////////////////////////////////////////////////////////////////////
 
-  // If pressure sensor is configured, then set configured over-sampling rate
-  if (this->pressure_sensor_ != nullptr) {
-    this->osr_config_.bit.osr_p = this->pressure_oversampling_;
-  }
+  // // If pressure sensor is configured, then set configured over-sampling rate
+  // if (this->pressure_sensor_ != nullptr) {
+  //   this->osr_config_.bit.osr_p = this->pressure_oversampling_;
+  // }
 
-  // If temperature sensor is configured, then set configured over-sampling rate
-  // (Note, the BMP will always measure temperature to help compensate for pressure readings)
-  if (this->temperature_sensor_ != nullptr) {
-    this->osr_config_.bit.osr_t = this->temperature_oversampling_;
-  }
+  // // If temperature sensor is configured, then set configured over-sampling rate
+  // // (Note, the BMP will always measure temperature to help compensate for pressure readings)
+  // if (this->temperature_sensor_ != nullptr) {
+  //   this->osr_config_.bit.osr_t = this->temperature_oversampling_;
+  // }
 
   // write settings to over-sampling register
-  if (!this->write_byte(BMP581_OSR, this->osr_config_.reg)) {
+  if (!this->write_oversampling_(this->temperature_oversampling_, this->pressure_oversampling_)) {
+    // if (!this->write_byte(BMP581_OSR, this->osr_config_.reg)) {
     ESP_LOGE(TAG, "Failed to write over-sampling register");
 
     this->error_code_ = ERROR_COMMUNICATION_FAILED;
@@ -405,7 +376,7 @@ void BMP581Component::update() {
   // 1) Set forced power mode to initiate sensor measurements //
   //////////////////////////////////////////////////////////////
 
-  if (!this->set_power_mode_(FORCED_MODE)) {
+  if (!this->write_power_mode_(FORCED_MODE)) {
     ESP_LOGW(TAG, "Failed to request forced measurement of sensors");
     this->status_set_warning();
 
@@ -504,11 +475,48 @@ bool BMP581Component::check_data_readiness_() {
   return false;
 }
 
-// Sets the power mode on the BMP581
+// Soft reset the BMP581
+//  - writes reset command to command
+//  - waits for sensor to complete reset
+//  - returns the Power-On-Reboot interrupt status, which is asserted if successful
+bool BMP581Component::reset_() {
+  // writes reset command to BMP's command register
+  if (!this->write_byte(BMP581_COMMAND, RESET_COMMAND)) {
+    ESP_LOGE(TAG, "Failed to write reset command");
+
+    return false;
+  }
+
+  // t_{soft_res} = 2ms (page 11 of datasheet); time it takes to enter standby mode
+  //  - round up to 3 ms
+  delay(3);
+
+  // read interrupt status register
+  if (!this->read_byte(BMP581_INT_STATUS, &this->int_status_.reg)) {
+    ESP_LOGE(TAG, "Failed to read interrupt status register");
+
+    return false;
+  }
+
+  // Power-On-Reboot bit is asserted if sensor successfully reset
+  return this->int_status_.bit.por;
+}
+
+// Set the over-sampling settings on the BMP581
+//  - updates component's internal setting
+//  - returns success or failure of write to Over-Sampling Rate register
+bool BMP581Component::write_oversampling_(Oversampling temperature_oversampling, Oversampling pressure_oversampling) {
+  this->osr_config_.bit.osr_t = temperature_oversampling;
+  this->osr_config_.bit.osr_p = pressure_oversampling;
+
+  return this->write_byte(BMP581_OSR, osr_config_.reg);
+}
+
+// Set the power mode on the BMP581
 //   - updates the component's internal power mode
 //   - writes odr register on BMP
-//   - returns success or failure of write
-bool BMP581Component::set_power_mode_(OperationMode mode) {
+//   - returns success or failure of write to Output Data Rate register
+bool BMP581Component::write_power_mode_(OperationMode mode) {
   this->odr_config_.bit.pwr_mode = mode;
 
   // write odr register
