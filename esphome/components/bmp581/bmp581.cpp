@@ -1,9 +1,9 @@
 /*
- * Adds support for BMP581 high accuracy pressure and temperature sensor
- *  - Component code/structure based on ESPHome's BMP3XX component
- *    - Implementation is easier as this sensor itself automatically compensates for the temperature
- *      - Temperature and pressure data is converted via simple divison operations
- *    - IIR filter level can independently be applied to temperature and pressure sensors
+ * Adds support for Bosch's BMP581 high accuracy pressure and temperature sensor
+ *  - Component structure based on ESPHome's BMP3XX component (as of March, 2023)
+ *    - Implementation is easier as the sensor itself automatically compensates pressure for the temperature
+ *      - Temperature and pressure data is converted via simple divison operations in this component
+ *    - IIR filter level can independently be applied to temperature and pressure measurements
  *  - Bosch's BMP5-Sensor-API was consulted to verify that sensor configuration is done correctly
  *    - Copyright (c) 2022 Bosch Sensortec Gmbh, SPDX-License-Identifier: BSD-3-Clause
  *  - This component uses forced power mode only so measurements are synchronized by the host
@@ -112,8 +112,8 @@ void BMP581Component::setup() {
    *  2) Verify ASIC chip ID matches BMP581
    *  3) Verify sensor status (check if NVM is okay)
    *  4) Enable data ready interrupt
-   *  5) Write initial configuration values, and write IIR settings if configured
-   *  6) Write the configured ESPHome over-sampling rates for all future measurements
+   *  5) Write initial configuration values and write IIR settings, if configured
+   *  6) Write the configured over-sampling rates for all future measurements
    */
 
   this->error_code_ = NONE;
@@ -133,7 +133,9 @@ void BMP581Component::setup() {
     return;
   }
 
-  delay(4);  // t_{soft_res} is 2ms, so delay to ensure enough time for full reboot (page 11 of datasheet))
+  // t_{soft_res} = 2ms (page 11 of datasheet); time it takes to enter standby mode
+  //  - round up to 3 ms
+  delay(3);
 
   // read interrupt status register
   if (!this->read_byte(BMP581_INT_STATUS, &this->int_status_.reg)) {
@@ -160,8 +162,9 @@ void BMP581Component::setup() {
   ///////////////////////////////////////////
 
   uint8_t chip_id;
-  if (!this->read_byte(BMP581_CHIP_ID, &chip_id))  // read chip id
-  {
+
+  // read chip id from sensor
+  if (!this->read_byte(BMP581_CHIP_ID, &chip_id)) {
     ESP_LOGE(TAG, "Failed to read chip id");
 
     this->error_code_ = ERROR_COMMUNICATION_FAILED;
@@ -170,7 +173,8 @@ void BMP581Component::setup() {
     return;
   }
 
-  if (chip_id != BMP581_ID) {
+  // verify id
+  if (chip_id != BMP581_ASIC_ID) {
     ESP_LOGE(TAG, "Unknown chip ID, is this a BMP581?");
 
     this->error_code_ = ERROR_WRONG_CHIP_ID;
@@ -192,8 +196,8 @@ void BMP581Component::setup() {
     return;
   }
 
-  if (!(this->status_.bit.status_nvm_rdy))  // check status_nvm_rdy bit (should be 1 if okay)
-  {
+  // verify status_nvm_rdy bit (it is asserted if boot was successful)
+  if (!(this->status_.bit.status_nvm_rdy)) {
     ESP_LOGE(TAG, "NVM not ready after boot");
 
     this->error_code_ = ERROR_SENSOR_STATUS;
@@ -202,8 +206,8 @@ void BMP581Component::setup() {
     return;
   }
 
-  if (this->status_.bit.status_nvm_err)  // check status_nvm_err bit (should be 0 if okay)
-  {
+  // verify status_nvm_err bit (it is asserted if an error is detected)
+  if (this->status_.bit.status_nvm_err) {
     ESP_LOGE(TAG, "NVM error detected on boot");
 
     this->error_code_ = ERROR_SENSOR_STATUS;
@@ -220,7 +224,7 @@ void BMP581Component::setup() {
 
   // write interrupt source register
   if (!this->write_byte(BMP581_INT_SOURCE, this->int_source_.reg)) {
-    ESP_LOGE(TAG, "Failed to write interrupt enable register");
+    ESP_LOGE(TAG, "Failed to write interrupt source register");
 
     this->error_code_ = ERROR_COMMUNICATION_FAILED;
     this->mark_failed();
@@ -229,7 +233,7 @@ void BMP581Component::setup() {
   }
 
   /////////////////////////////////////////////////////////////////////////////////
-  // 5) Write initial configuration values, and write IIR settings if configured //
+  // 5) Write initial configuration values and write IIR settings, if configured //
   /////////////////////////////////////////////////////////////////////////////////
 
   // set output data rate to 4 Hz=0x19 (page 65 of datasheet)
@@ -240,13 +244,13 @@ void BMP581Component::setup() {
   // configure pressure readings, if sensor is defined
   if (this->pressure_sensor_ != nullptr) {
     // enable pressure readings (Note, temperature readings are always enabled on the BMP581 to interally compensate
-    // pressure readings.)
+    // pressure readings)
     this->osr_config_.bit.press_en = true;
 
     // temporarily disable pressure over-sampling, so the forced reading to prime the IIR filter is fast
     this->osr_config_.bit.osr_p = OVERSAMPLING_NONE;
 
-    // If the pressure IIR filter is configured, then ensure data registers store the filtered measurement
+    // If the pressure IIR filter is configured, then ensure data registers on the sensor store the filtered measurement
     this->dsp_config_.bit.shdw_sel_iir_p = (this->iir_pressure_level_ != IIR_FILTER_OFF);
 
     // set pressure IIR filter level to configured value
@@ -275,7 +279,7 @@ void BMP581Component::setup() {
 
   // write data register's IIR source register
   if (!this->write_byte(BMP581_DSP, this->dsp_config_.reg)) {
-    ESP_LOGE(TAG, "Failed to write data register's IIR source register");
+    ESP_LOGE(TAG, "Failed to write IIR source register");
 
     this->error_code_ = ERROR_COMMUNICATION_FAILED;
     this->mark_failed();
@@ -293,8 +297,8 @@ void BMP581Component::setup() {
     return;
   }
 
-  // If the IIR filter is configured, then
-  //  - write the temporary over-sampling settings for a fast initial measurement
+  // If an IIR filter is configured, then
+  //  - write the temporary over-sampling settings to sensor for a fast initial measurement
   //  - force a measurement to prime IIR filter
   //  - return to standby mode
   //  - disable IIR filter flushing for future forced readings
@@ -309,19 +313,20 @@ void BMP581Component::setup() {
       return;
     }
 
-    // write output data rate setting and force an initial reading, while flushing the IIR filter reflecting DSP setting
-    //  - flushing this initial reading avoids having the internal previous data aquisition being 0, which (I)nfinitely
-    //  affects future values
+    // forces an intial measurement by writing to the output data rate register
+    //  - this measurements flushes the IIR filter reflecting the DSP settings
+    //  - flushing with this initial reading avoids having the internal previous data aquisition being 0, which
+    //    (I)nfinitely affects future values
     if (!this->set_power_mode_(FORCED_MODE)) {
-      ESP_LOGE(TAG, "Failed to request forced measurement");
+      ESP_LOGE(TAG, "Failed to request a forced measurement");
 
       this->error_code_ = ERROR_COMMUNICATION_FAILED;
       this->mark_failed();
 
       return;
     }
-    // with no over-sampling as set, measurements can be made at a rate of 498 Hz (page 19 of datasheet)
-    //  - round up to 1/498 Hz to 3 ms
+    // with no over-sampling, cas configured, measurements can be made at a rate of 498 Hz (page 19 of datasheet)
+    //  - round up 1/498 Hz to 3 ms
     delay(3);
 
     // switch to standby mode so future IIR and OSR settings can be set
@@ -342,7 +347,7 @@ void BMP581Component::setup() {
     this->dsp_config_.bit.iir_flush_forced_en = false;
 
     if (!this->write_byte(BMP581_DSP, this->dsp_config_.reg)) {
-      ESP_LOGE(TAG, "Failed to write data register's IIR source register");
+      ESP_LOGE(TAG, "Failed to write IIR source register");
 
       this->error_code_ = ERROR_COMMUNICATION_FAILED;
       this->mark_failed();
@@ -351,9 +356,9 @@ void BMP581Component::setup() {
     }
   }
 
-  /////////////////////////////////////////////////////////////////////////////////////
-  // 6) Write the configured ESPHome over-sampling rates for all future measurements //
-  /////////////////////////////////////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////////////////////////////
+  // 6) Write the configured over-sampling rates for all future measurements //
+  /////////////////////////////////////////////////////////////////////////////
 
   // If pressure sensor is configured, then set configured over-sampling rate
   if (this->pressure_sensor_ != nullptr) {
@@ -361,7 +366,7 @@ void BMP581Component::setup() {
   }
 
   // If temperature sensor is configured, then set configured over-sampling rate
-  // (Note the BMP will always measure temperature to help compensate for pressure readings)
+  // (Note, the BMP will always measure temperature to help compensate for pressure readings)
   if (this->temperature_sensor_ != nullptr) {
     this->osr_config_.bit.osr_t = this->temperature_oversampling_;
   }
@@ -384,8 +389,8 @@ void BMP581Component::update() {
    *  1) Set forced power mode to initiate sensor measurements
    *  2) Verify sensor has data ready
    *  3) Read data registers for temperature and pressure, if applicable
-   *  4) Compute and publish temperature measurement, if sensor is defined
-   *  5) Compute and publish pressure measurement, if sensor is defined
+   *  4) Convert and publish temperature measurement, if sensor is defined
+   *  5) Convert and publish pressure measurement, if sensor is defined
    */
 
   ////////////////////////////////////////////////////////////////////////////////////
@@ -426,7 +431,7 @@ void BMP581Component::update() {
   uint8_t bytes_to_read = 3;  // temperature measurement only needs 3 bytes
 
   if (this->pressure_sensor_) {
-    bytes_to_read = 6;  // temperature and pressure measurement requires 6 bytes
+    bytes_to_read = 6;  // temperature and pressure measurements require 6 bytes
   }
 
   if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], bytes_to_read)) {
@@ -436,26 +441,28 @@ void BMP581Component::update() {
     return;
   }
 
-  ///////////////////////////////////////////////////////////////////////////
-  // 4) Compute and publish temmperature measurement, if sensor is defined //
-  ///////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////
+  // 4) Convert and publish temperature measurement, if sensor is defined //
+  //////////////////////////////////////////////////////////////////////////
 
   if (this->temperature_sensor_) {
     // temperature MSB is in data[2], LSB is in data[1], XLSB in data[0]
     int32_t raw_temp = (int32_t) data[2] << 16 | (int32_t) data[1] << 8 | (int32_t) data[0];
-    float temperature = (float) (raw_temp / 65536.0);  // convert measurement to degrees Celsius
+    float temperature = (float) (raw_temp / 65536.0);  // convert measurement to degrees Celsius (page 22 of datasheet)
 
     this->temperature_sensor_->publish_state(temperature);
   }
 
   ///////////////////////////////////////////////////////////////////////
-  // 5) Compute and publish pressure measurement, if sensor is defined //
+  // 5) Convert and publish pressure measurement, if sensor is defined //
   ///////////////////////////////////////////////////////////////////////
 
   if (this->pressure_sensor_) {
     // pressure MSB is in data[5], LSB is in data[4], XLSB is in data[3]
     int32_t raw_press = (int32_t) data[5] << 16 | (int32_t) data[4] << 8 | (int32_t) data[3];
-    float pressure = (float) ((raw_press / 64.0) / 100.0);  // Divide by 2^6=64 for Pa, divide by 100 to convert to hPA
+    float pressure =
+        (float) ((raw_press / 64.0) /
+                 100.0);  // Divide by 2^6=64 for Pa (page 22 of datasheet), divide by 100 to convert to hPa
 
     this->pressure_sensor_->publish_state(pressure);
   }
@@ -463,8 +470,8 @@ void BMP581Component::update() {
   this->status_clear_warning();
 }
 
-// Check if the BMP581 has measurement data ready to be read
-//   - verifies sensor is not internally in standby mode
+// Check if the BMP581 has measurement data ready
+//   - verifies component is not internally in standby mode
 //   - reads interrupt status register
 //   - checks if data ready bit is asserted
 //      - If true, then internally sets component to standby mode if in forced mode
@@ -485,7 +492,8 @@ bool BMP581Component::check_data_readiness_() {
   this->int_status_.reg = status;
 
   if (this->int_status_.bit.drdy_data_reg) {
-    // if in forced mode, then set internal record of the power mode to standby
+    // If in forced mode, then set internal record of the power mode to standby
+    //  - sensor automatically returns to standby mode after completing a forced measurement
     if (this->odr_config_.bit.pwr_mode == FORCED_MODE) {
       this->odr_config_.bit.pwr_mode = STANDBY_MODE;
     }
@@ -497,8 +505,8 @@ bool BMP581Component::check_data_readiness_() {
 }
 
 // Sets the power mode on the BMP581
-//   - updates internal power mode
-//   - write odr register on BMP
+//   - updates the component's internal power mode
+//   - writes odr register on BMP
 //   - returns success or failure of write
 bool BMP581Component::set_power_mode_(OperationMode mode) {
   this->odr_config_.bit.pwr_mode = mode;

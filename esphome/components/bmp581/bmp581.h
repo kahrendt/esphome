@@ -9,8 +9,8 @@
 namespace esphome {
 namespace bmp581 {
 
-static const uint8_t BMP581_ID = 0x50;      // BMP581's ASIC chip ID (page 51 of datasheet)
-static const uint8_t RESET_COMMAND = 0xB6;  // Soft reset command
+static const uint8_t BMP581_ASIC_ID = 0x50;  // BMP581's ASIC chip ID (page 51 of datasheet)
+static const uint8_t RESET_COMMAND = 0xB6;   // Soft reset command
 
 // BMP581 Register Addresses
 enum {
@@ -24,7 +24,6 @@ enum {
   BMP581_DSP_IIR = 0x31,     // write IIR filter configuration
   BMP581_OSR = 0x36,         // write over-sampling configuration
   BMP581_ODR = 0x37,         // write data rate and power mode configuration
-  BMP581_EFF_OSR = 0x38,     // read effective over-sampling configuration
   BMP581_COMMAND = 0x7E      // write sensor command
 };
 
@@ -103,7 +102,7 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
     ERROR_COMMUNICATION_FAILED,
     ERROR_WRONG_CHIP_ID,
     ERROR_SENSOR_STATUS,
-    ERROR_SENSOR_RESET,
+    ERROR_SENSOR_RESET
   } error_code_{NONE};
 
   // BMP581's interrupt source register (address 0x15) to configure which interrupts are enabled (page 54 of datasheet)
