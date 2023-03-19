@@ -95,7 +95,11 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
 
   bool check_data_readiness_();
 
+  bool prime_iir_filter_();
+
   bool reset_();
+
+  bool write_iir_(IIRFilter temperature_iir, IIRFilter pressure_iir);
 
   bool write_oversampling_(Oversampling temperature_oversampling, Oversampling pressure_oversampling);
 
@@ -106,7 +110,8 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
     ERROR_COMMUNICATION_FAILED,
     ERROR_WRONG_CHIP_ID,
     ERROR_SENSOR_STATUS,
-    ERROR_SENSOR_RESET
+    ERROR_SENSOR_RESET,
+    ERROR_PRIME_IIR_FAILED
   } error_code_{NONE};
 
   // BMP581's interrupt source register (address 0x15) to configure which interrupts are enabled (page 54 of datasheet)
