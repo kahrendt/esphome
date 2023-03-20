@@ -22,7 +22,7 @@ enum {
   BMP581_STATUS = 0x28,      // read sensor status
   BMP581_DSP = 0x30,         // write sensor configuration
   BMP581_DSP_IIR = 0x31,     // write IIR filter configuration
-  BMP581_OSR = 0x36,         // write over-sampling configuration
+  BMP581_OSR = 0x36,         // write oversampling configuration
   BMP581_ODR = 0x37,         // write data rate and power mode configuration
   BMP581_COMMAND = 0x7E      // write sensor command
 };
@@ -98,7 +98,7 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
   // Checks if the BMP581 has measurement data ready
   bool check_data_readiness_();
 
-  // Determines the sensor's conversion time needed for a measurement based on over-sampling settings
+  // Determines the sensor's conversion time needed for a measurement based on oversampling settings
   uint16_t determine_conversion_time_(Oversampling temperature_oversampling, Oversampling pressure_oversampling);
 
   // Prime the IIR filter with an initial reading
@@ -120,10 +120,10 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
   // Writes the IIR filter configuration to sensor
   bool write_iir_settings_(IIRFilter temperature_iir, IIRFilter pressure_iir);
 
-  // Writes the over-sampling settings to sensor
+  // Writes the oversampling settings to sensor
   bool write_oversampling_settings_(Oversampling temperature_oversampling, Oversampling pressure_oversampling);
 
-  // Set the power mode on the BMP581
+  // Sets the power mode on the BMP581
   bool write_power_mode_(OperationMode mode);
 
   enum ErrorCode {
@@ -195,11 +195,11 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
     uint8_t reg;
   } iir_config_ = {.reg = 0};
 
-  // BMP581's osr register (address 0x36) to configure over-sampling (page 64 of datasheet)
+  // BMP581's OSR register (address 0x36) to configure Over-Sampling Rates (page 64 of datasheet)
   union {
     struct {
-      uint8_t osr_t : 3;     // Temperature over-sampling
-      uint8_t osr_p : 3;     // Pressure over-sampling
+      uint8_t osr_t : 3;     // Temperature oversampling
+      uint8_t osr_p : 3;     // Pressure oversampling
       uint8_t press_en : 1;  // Enables pressure measurement
     } bit;
     uint8_t reg;

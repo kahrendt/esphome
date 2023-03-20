@@ -97,13 +97,13 @@ void BMP581Component::dump_config() {
   if (this->temperature_sensor_) {
     LOG_SENSOR("  ", "Temperature", this->temperature_sensor_);
     ESP_LOGCONFIG(TAG, "    IIR Filter: %s", LOG_STR_ARG(iir_filter_to_str(this->iir_temperature_level_)));
-    ESP_LOGCONFIG(TAG, "    Over-sampling: %s", LOG_STR_ARG(oversampling_to_str(this->temperature_oversampling_)));
+    ESP_LOGCONFIG(TAG, "    Oversampling: %s", LOG_STR_ARG(oversampling_to_str(this->temperature_oversampling_)));
   }
 
   if (this->pressure_sensor_) {
     LOG_SENSOR("  ", "Pressure", this->pressure_sensor_);
     ESP_LOGCONFIG(TAG, "    IIR Filter: %s", LOG_STR_ARG(iir_filter_to_str(this->iir_pressure_level_)));
-    ESP_LOGCONFIG(TAG, "    Over-sampling: %s", LOG_STR_ARG(oversampling_to_str(this->pressure_oversampling_)));
+    ESP_LOGCONFIG(TAG, "    Oversampling: %s", LOG_STR_ARG(oversampling_to_str(this->pressure_oversampling_)));
   }
 }
 
@@ -117,7 +117,7 @@ void BMP581Component::setup() {
    *  4) Enable data ready interrupt
    *  5) Set initial configuration values internally
    *  6) Configure and prime IIR Filter(s), if enabled
-   *  7) Write configured over-sampling rates for all future measurements
+   *  7) Write configured oversampling rates for all future measurements
    */
 
   this->error_code_ = NONE;
@@ -252,17 +252,17 @@ void BMP581Component::setup() {
   }
 
   /////////////////////////////////////////////////////////////////////////
-  // 7) Write configured over-sampling rates for all future measurements //
+  // 7) Write configured oversampling rates for all future measurements //
   /////////////////////////////////////////////////////////////////////////
 
-  // set the measurement timeout for readings based on the current over-sampling rates
+  // set the measurement timeout for readings based on the current oversampling rates
   this->measurement_time_ =
       this->determine_conversion_time_(this->temperature_oversampling_, this->pressure_oversampling_);
 
-  // write settings to over-sampling register
+  // write settings to oversampling register
   if (!this->write_oversampling_settings_(this->temperature_oversampling_, this->pressure_oversampling_)) {
     // if (!this->write_byte(BMP581_OSR, this->osr_config_.reg)) {
-    ESP_LOGE(TAG, "Failed to write over-sampling register");
+    ESP_LOGE(TAG, "Failed to write oversampling register");
 
     this->error_code_ = ERROR_COMMUNICATION_FAILED;
     this->mark_failed();
@@ -276,7 +276,7 @@ void BMP581Component::update() {
    * Each update goes through several stages
    *  0) Verify either a temperature or pressure sensor is defined before proceeding
    *  1) Request a measurement
-   *  2) Wait for measurement to finish (based on over-sampling rates)
+   *  2) Wait for measurement to finish (based on oversampling rates)
    *  3) Read data registers for temperature and pressure, if applicable
    *  4) Publish measurements to sensor(s), if applicable
    */
@@ -303,7 +303,7 @@ void BMP581Component::update() {
   }
 
   //////////////////////////////////////////////////////////////////////
-  // 2) Wait for measurement to finish (based on over-sampling rates) //
+  // 2) Wait for measurement to finish (based on oversampling rates) //
   //////////////////////////////////////////////////////////////////////
 
   ESP_LOGVV(TAG, "Measurement expected to take %d ms", this->measurement_time_);
@@ -404,9 +404,9 @@ bool BMP581Component::prime_iir_filter_() {
   // - disable IIR filter flushing with forced measurements
   // - returns success of priming
 
-  // disable over-sampling for temperature and pressure for a fast priming measurement
+  // disable oversampling for temperature and pressure for a fast priming measurement
   if (!this->write_oversampling_settings_(OVERSAMPLING_NONE, OVERSAMPLING_NONE)) {
-    ESP_LOGE(TAG, "Failed to write over-sampling register");
+    ESP_LOGE(TAG, "Failed to write oversampling register");
 
     return false;
   }
@@ -429,7 +429,7 @@ bool BMP581Component::prime_iir_filter_() {
     return false;
   }
 
-  // with over-sampling disabled, the conversion time for one measurement for pressure and temperature is
+  // with oversampling disabled, the conversion time for one measurement for pressure and temperature is
   // ceilf(1.5*(1.0+1.0)) = 3ms
   delay(3);
 
