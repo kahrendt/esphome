@@ -115,8 +115,9 @@ void BMP581Component::setup() {
    *  2) Verify ASIC chip ID matches BMP581
    *  3) Verify sensor status (check if NVM is okay)
    *  4) Enable data ready interrupt
-   *  5) Write initial configuration values and write IIR settings, if configured
-   *  6) Write the configured over-sampling rates for all future measurements
+   *  5) Set initial configuration values internally
+   *  6) Configure and prime IIR Filter(s), if enabled
+   *  7) Write configured over-sampling rates for all future measurements
    */
 
   this->error_code_ = NONE;
@@ -211,9 +212,9 @@ void BMP581Component::setup() {
     return;
   }
 
-  /////////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////
   // 5) Set initial configuration values internally //
-  /////////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////
 
   // set output data rate to 4 Hz=0x19 (page 65 of datasheet)
   //  - ?shouldn't matter? as this component only uses FORCED_MODE - datasheet is ambiguous
@@ -226,28 +227,9 @@ void BMP581Component::setup() {
     this->osr_config_.bit.press_en = true;
   }
 
-  /////////////////////////////////////////////////////////////////////////////
-  // 6) Write the configured over-sampling rates for all future measurements //
-  /////////////////////////////////////////////////////////////////////////////
-
-  // set the measurement timeout for readings based on the current over-sampling rates
-  this->measurement_time_ =
-      this->determine_conversion_time_(this->temperature_oversampling_, this->pressure_oversampling_);
-
-  // write settings to over-sampling register
-  if (!this->write_oversampling_settings_(this->temperature_oversampling_, this->pressure_oversampling_)) {
-    // if (!this->write_byte(BMP581_OSR, this->osr_config_.reg)) {
-    ESP_LOGE(TAG, "Failed to write over-sampling register");
-
-    this->error_code_ = ERROR_COMMUNICATION_FAILED;
-    this->mark_failed();
-
-    return;
-  }
-
-  ////////////////////////////////////////////////////
-  /// 7) Enable and prime IIR Filter(s), if enabled //
-  ////////////////////////////////////////////////////
+  ///////////////////////////////////////////////////////
+  /// 6) Configure and prime IIR Filter(s), if enabled //
+  ///////////////////////////////////////////////////////
 
   if ((this->iir_temperature_level_ != IIR_FILTER_OFF) || (this->iir_pressure_level_ != IIR_FILTER_OFF)) {
     if (!this->write_iir_settings_(this->iir_temperature_level_, this->iir_pressure_level_)) {
@@ -267,6 +249,25 @@ void BMP581Component::setup() {
 
       return;
     }
+  }
+
+  /////////////////////////////////////////////////////////////////////////
+  // 7) Write configured over-sampling rates for all future measurements //
+  /////////////////////////////////////////////////////////////////////////
+
+  // set the measurement timeout for readings based on the current over-sampling rates
+  this->measurement_time_ =
+      this->determine_conversion_time_(this->temperature_oversampling_, this->pressure_oversampling_);
+
+  // write settings to over-sampling register
+  if (!this->write_oversampling_settings_(this->temperature_oversampling_, this->pressure_oversampling_)) {
+    // if (!this->write_byte(BMP581_OSR, this->osr_config_.reg)) {
+    ESP_LOGE(TAG, "Failed to write over-sampling register");
+
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
+    this->mark_failed();
+
+    return;
   }
 }
 
@@ -353,6 +354,7 @@ bool BMP581Component::check_data_readiness_() {
   //   - checks if data ready bit is asserted
   //      - If true, then internally sets component to standby mode if in forced mode
   //   - returns data readiness state
+
   if (this->odr_config_.bit.pwr_mode == STANDBY_MODE) {
     ESP_LOGD(TAG, "Data not ready, sensor is in standby mode");
     return false;
@@ -383,6 +385,7 @@ bool BMP581Component::check_data_readiness_() {
 uint16_t BMP581Component::determine_conversion_time_(Oversampling temperature_oversampling,
                                                      Oversampling pressure_oversampling) {
   // - returns a rounded up time in ms
+
   float temperature_conversion_times[8] = {1.0, 1.1, 1.5, 2.1, 3.3, 5.8, 10.8, 20.8};  // page 12 of datasheet
   float pressure_conversion_times[8] = {1.0, 1.7, 2.9, 5.4, 10.4, 20.4, 40.4, 80.4};   // page 12 of datasheet
 
@@ -444,7 +447,8 @@ bool BMP581Component::prime_iir_filter_() {
 bool BMP581Component::read_pressure_(float &pressure) {
   // - temperature measurement is always enabled on sensor, so read both temperature and pressure
   // - returns whether successful, where variable parameter contains
-  //  - the measured pressure (in hPa)
+  //    - the measured pressure (in hPa)
+
   float temperature;
   return this->read_temperature_and_pressure_(temperature, pressure);
 }
@@ -453,7 +457,8 @@ bool BMP581Component::read_temperature_(float &temperature) {
   // - verifies data is ready to be read
   // - reads in 3 bytes of temperature data
   // - returns whether successful, where the variable parameter contains
-  //  - the measured temperature (in degrees Celsius)
+  //    - the measured temperature (in degrees Celsius)
+
   if (!this->check_data_readiness_()) {
     ESP_LOGW(TAG, "Data from sensor isn't ready, skipping this update");
     this->status_set_warning();
@@ -480,8 +485,9 @@ bool BMP581Component::read_temperature_and_pressure_(float &temperature, float &
   // - verifies data is ready to be read
   // - reads in 6 bytes of temperature data (3 for temeperature, 3 for pressure)
   // - returns whether successful, where variable parameters contain
-  //  - the measured temperature (in degrees Celsius)
-  //  - the measured pressure (in hPa)
+  //    - the measured temperature (in degrees Celsius)
+  //    - the measured pressure (in hPa)
+
   if (!this->check_data_readiness_()) {
     ESP_LOGW(TAG, "Data from sensor isn't ready, skipping this update");
     this->status_set_warning();
@@ -513,6 +519,7 @@ bool BMP581Component::reset_() {
   // - writes reset command to the command register
   // - waits for sensor to complete reset
   // - returns the Power-On-Reboot interrupt status, which is asserted if successful
+
   // writes reset command to BMP's command register
   if (!this->write_byte(BMP581_COMMAND, RESET_COMMAND)) {
     ESP_LOGE(TAG, "Failed to write reset command");
@@ -538,6 +545,7 @@ bool BMP581Component::reset_() {
 bool BMP581Component::start_measurement_() {
   // - only pushes the sensor into FORCED_MODE for a reading if already in STANDBY_MODE
   // - returns whether a measurement is in progress or has been initiated
+
   if (this->odr_config_.bit.pwr_mode == STANDBY_MODE) {
     return this->write_power_mode_(FORCED_MODE);
   } else {
@@ -575,6 +583,7 @@ bool BMP581Component::write_oversampling_settings_(Oversampling temperature_over
                                                    Oversampling pressure_oversampling) {
   // - updates component's internal setting
   // - returns success or failure of write to Over-Sampling Rate register
+
   this->osr_config_.bit.osr_t = temperature_oversampling;
   this->osr_config_.bit.osr_p = pressure_oversampling;
 
@@ -585,6 +594,7 @@ bool BMP581Component::write_power_mode_(OperationMode mode) {
   // - updates the component's internal power mode
   // - writes odr register on BMP
   // - returns success or failure of write to Output Data Rate register
+
   this->odr_config_.bit.pwr_mode = mode;
 
   // write odr register
