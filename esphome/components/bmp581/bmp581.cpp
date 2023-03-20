@@ -384,12 +384,13 @@ bool BMP581Component::check_data_readiness_() {
 
 uint16_t BMP581Component::determine_conversion_time_(Oversampling temperature_oversampling,
                                                      Oversampling pressure_oversampling) {
+  // - adds up sensor conversion time based on tempertaure and pressure oversampling rates given in datasheet
   // - returns a rounded up time in ms
 
   float temperature_conversion_times[8] = {1.0, 1.1, 1.5, 2.1, 3.3, 5.8, 10.8, 20.8};  // page 12 of datasheet
   float pressure_conversion_times[8] = {1.0, 1.7, 2.9, 5.4, 10.4, 20.4, 40.4, 80.4};   // page 12 of datasheet
 
-  // Datasheet indicates a 5% possible error in each conversion
+  // Datasheet indicates a 5% possible error in each conversion time listed
   float total_time = 1.05 * (temperature_conversion_times[temperature_oversampling] +
                              pressure_conversion_times[pressure_oversampling]);
 
