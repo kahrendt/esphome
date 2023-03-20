@@ -398,13 +398,18 @@ uint16_t BMP581Component::determine_conversion_time_(Oversampling temperature_ov
 }
 
 bool BMP581Component::prime_iir_filter_() {
-  // - disables oversampling for a fast initial measurement; avoids slowing down ESPHome's startup process
+  // - temporarily disables oversampling for a fast initial measurement; avoids slowing down ESPHome's startup process
   // - enable IIR filter flushing with forced measurements
   // - force a measurement; flushing the IIR filter and priming it with a current value
   // - disable IIR filter flushing with forced measurements
-  // - returns success of priming
+  // - reverts to internally configured oversampling rates
+  // - returns success of all register writes/priming
 
-  // disable oversampling for temperature and pressure for a fast priming measurement
+  // store current internal oversampling settings to revert to after priming
+  Oversampling current_temperature_oversampling = (Oversampling) this->osr_config_.bit.osr_t;
+  Oversampling current_pressure_oversampling = (Oversampling) this->osr_config_.bit.osr_p;
+
+  // temporarily disables oversampling for temperature and pressure for a fast priming measurement
   if (!this->write_oversampling_settings_(OVERSAMPLING_NONE, OVERSAMPLING_NONE)) {
     ESP_LOGE(TAG, "Failed to write oversampling register");
 
@@ -440,9 +445,15 @@ bool BMP581Component::prime_iir_filter_() {
   }
 
   // disable IIR filter flushings on future forced measurements
-  this->dsp_config_.bit.iir_flush_forced_en = false;
+  this->dsp_config_.bit.iir_flush_forced_en = true;
+  if (!this->write_byte(BMP581_DSP, this->dsp_config_.reg)) {
+    ESP_LOGE(TAG, "Failed to write IIR source register");
 
-  return this->write_byte(BMP581_DSP, this->dsp_config_.reg);
+    return false;
+  }
+
+  // revert oversampling rates
+  return this->write_oversampling_settings_(current_temperature_oversampling, current_pressure_oversampling);
 }
 
 bool BMP581Component::read_pressure_(float &pressure) {

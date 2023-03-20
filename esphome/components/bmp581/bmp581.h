@@ -95,35 +95,35 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
 
   uint16_t measurement_time_{0};
 
-  // Checks if the BMP581 has measurement data ready
+  // Checks if the BMP581 has measurement data ready by checking the sensor's interrupts
   bool check_data_readiness_();
 
-  // Determines the sensor's conversion time needed for a measurement based on oversampling settings
+  // Determines the sensor's conversion time needed for a measurement based on oversampling settings and datasheet
   uint16_t determine_conversion_time_(Oversampling temperature_oversampling, Oversampling pressure_oversampling);
 
-  // Prime the IIR filter with an initial reading
+  // Flushes the IIR filter and primes an initial reading
   bool prime_iir_filter_();
 
-  // Reads a pressure measurement from sensor
+  // Reads pressure data from sensor and converts measurement
   bool read_pressure_(float &pressure);
-  // Reads a temperature measurement from sensor
+  // Reads temperature data from sensor and converts measurement
   bool read_temperature_(float &temperature);
-  // Reads temperature and pressure measurements from sensor
+  // Reads temperature and pressure data from sensor and converts measurements
   bool read_temperature_and_pressure_(float &temperature, float &pressure);
 
-  // Soft reset the BMP581
+  // Soft resets the BMP581
   bool reset_();
 
-  // Initiates a measurement on sensor
+  // Initiates a measurement on sensor by switching to FORCED_MODE
   bool start_measurement_();
 
-  // Writes the IIR filter configuration to sensor
+  // Writes the IIR filter configuration to the DSP and DSP_IIR registers
   bool write_iir_settings_(IIRFilter temperature_iir, IIRFilter pressure_iir);
 
-  // Writes the oversampling settings to sensor
+  // Writes the oversampling settings to the OSR register
   bool write_oversampling_settings_(Oversampling temperature_oversampling, Oversampling pressure_oversampling);
 
-  // Sets the power mode on the BMP581
+  // Sets the power mode on the BMP581 by writing to the ODR register
   bool write_power_mode_(OperationMode mode);
 
   enum ErrorCode {
