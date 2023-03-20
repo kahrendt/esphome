@@ -95,24 +95,35 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
 
   uint16_t measurement_time_{0};
 
+  // Checks if the BMP581 has measurement data ready
   bool check_data_readiness_();
 
+  // Determines the sensor's conversion time needed for a measurement based on over-sampling settings
   uint16_t determine_conversion_time_(Oversampling temperature_oversampling, Oversampling pressure_oversampling);
 
+  // Prime the IIR filter with an initial reading
   bool prime_iir_filter_();
 
-  bool read_temperature_and_pressure_(float &temperature, float &pressure);
-  bool read_temperature_(float &temperature);
+  // Reads a pressure measurement from sensor
   bool read_pressure_(float &pressure);
+  // Reads a temperature measurement from sensor
+  bool read_temperature_(float &temperature);
+  // Reads temperature and pressure measurements from sensor
+  bool read_temperature_and_pressure_(float &temperature, float &pressure);
 
+  // Soft reset the BMP581
   bool reset_();
 
+  // Initiates a measurement on sensor
   bool start_measurement_();
 
-  bool write_iir_(IIRFilter temperature_iir, IIRFilter pressure_iir);
+  // Writes the IIR filter configuration to sensor
+  bool write_iir_settings_(IIRFilter temperature_iir, IIRFilter pressure_iir);
 
-  bool write_oversampling_(Oversampling temperature_oversampling, Oversampling pressure_oversampling);
+  // Writes the over-sampling settings to sensor
+  bool write_oversampling_settings_(Oversampling temperature_oversampling, Oversampling pressure_oversampling);
 
+  // Set the power mode on the BMP581
   bool write_power_mode_(OperationMode mode);
 
   enum ErrorCode {
