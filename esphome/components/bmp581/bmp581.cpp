@@ -203,10 +203,8 @@ void BMP581Component::setup() {
   // 4) Enable data ready interrupt //
   ////////////////////////////////////
 
-  this->int_source_.bit.drdy_data_reg_en = true;  // enable data ready interrupt
-
-  // write interrupt source register
-  if (!this->write_byte(BMP581_INT_SOURCE, this->int_source_.reg)) {
+  // enable the data ready interrupt source
+  if (!this->write_interrupt_source_settings_(true)) {
     ESP_LOGE(TAG, "Failed to write interrupt source register");
 
     this->error_code_ = ERROR_COMMUNICATION_FAILED;
@@ -591,6 +589,16 @@ bool BMP581Component::write_iir_settings_(IIRFilter temperature_iir, IIRFilter p
   //  - allows us to write the IIR configuration with one command to both registers
   uint8_t register_data[2] = {dsp_config_.reg, iir_config_.reg};
   return this->write_bytes(BMP581_DSP, register_data, sizeof(register_data));
+}
+
+bool BMP581Component::write_interrupt_source_settings_(bool data_ready_enable) {
+  // - updates component's internal setting
+  // - returns success or failure of write to interrupt source register
+
+  this->int_source_.bit.drdy_data_reg_en = data_ready_enable;
+
+  // write interrupt source register
+  return this->write_byte(BMP581_INT_SOURCE, int_source_.reg);
 }
 
 bool BMP581Component::write_oversampling_settings_(Oversampling temperature_oversampling,

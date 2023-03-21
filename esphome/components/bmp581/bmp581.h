@@ -120,6 +120,9 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
   // Writes the IIR filter configuration to the DSP and DSP_IIR registers
   bool write_iir_settings_(IIRFilter temperature_iir, IIRFilter pressure_iir);
 
+  // Writes whether to enable the data ready interrupt to the interrupt source register
+  bool write_interrupt_source_settings_(bool data_ready_enable);
+
   // Writes the oversampling settings to the OSR register
   bool write_oversampling_settings_(Oversampling temperature_oversampling, Oversampling pressure_oversampling);
 
