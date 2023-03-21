@@ -93,8 +93,6 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
   IIRFilter iir_temperature_level_{IIR_FILTER_OFF};
   IIRFilter iir_pressure_level_{IIR_FILTER_OFF};
 
-  uint16_t measurement_time_{0};
-
   // Checks if the BMP581 has measurement data ready by checking the sensor's interrupts
   bool check_data_readiness_();
 

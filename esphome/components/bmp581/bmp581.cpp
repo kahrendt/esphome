@@ -94,10 +94,6 @@ void BMP581Component::dump_config() {
   LOG_I2C_DEVICE(this);
   LOG_UPDATE_INTERVAL(this);
 
-  if ((this->temperature_sensor_) || (this->pressure_sensor_)) {
-    ESP_LOGCONFIG(TAG, "  Each measurement is expected to internally take %d ms to complete", this->measurement_time_);
-  }
-
   if (this->temperature_sensor_) {
     LOG_SENSOR("  ", "Temperature", this->temperature_sensor_);
     ESP_LOGCONFIG(TAG, "    IIR Filter: %s", LOG_STR_ARG(iir_filter_to_str(this->iir_temperature_level_)));
@@ -235,10 +231,6 @@ void BMP581Component::setup() {
     return;
   }
 
-  // set the measurement timeout for readings based on the current oversampling rates
-  this->measurement_time_ =
-      this->determine_conversion_time_(this->temperature_oversampling_, this->pressure_oversampling_);
-
   // set output data rate to 4 Hz=0x19 (page 65 of datasheet)
   //  - ?shouldn't? matter as this component only uses FORCED_MODE - datasheet is ambiguous
   //  - If in NORMAL_MODE or NONSTOP_MODE, then this would still allow deep standby to save power
@@ -305,9 +297,11 @@ void BMP581Component::update() {
   // 2) Wait for measurement to finish (based on oversampling rates) //
   //////////////////////////////////////////////////////////////////////
 
-  ESP_LOGVV(TAG, "Measurement expected to take %d ms", this->measurement_time_);
+  uint16_t measurement_time =
+      this->determine_conversion_time_(this->temperature_oversampling_, this->pressure_oversampling_);
+  ESP_LOGVV(TAG, "Measurement expected to take %d ms", measurement_time);
 
-  this->set_timeout("measurement", this->measurement_time_, [this]() {
+  this->set_timeout("measurement", measurement_time, [this]() {
     float temperature = 0.0;
     float pressure = 0.0;
 
