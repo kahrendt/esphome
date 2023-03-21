@@ -94,7 +94,9 @@ void BMP581Component::dump_config() {
   LOG_I2C_DEVICE(this);
   LOG_UPDATE_INTERVAL(this);
 
-  ESP_LOGCONFIG(TAG, "  Each measurement is expected to internally take %d ms to complete", this->measurement_time_);
+  if ((this->temperature_sensor_) || (this->pressure_sensor_)) {
+    ESP_LOGCONFIG(TAG, "  Each measurement is expected to internally take %d ms to complete", this->measurement_time_);
+  }
 
   if (this->temperature_sensor_) {
     LOG_SENSOR("  ", "Temperature", this->temperature_sensor_);
@@ -219,7 +221,7 @@ void BMP581Component::setup() {
 
   // configure pressure readings, if sensor is defined
   // otherwise, disable pressure oversampling
-  if (this->pressure_sensor_ != nullptr) {
+  if (this->pressure_sensor_) {
     this->osr_config_.bit.press_en = true;
   } else {
     this->pressure_oversampling_ = OVERSAMPLING_NONE;
@@ -284,7 +286,7 @@ void BMP581Component::update() {
   // 0) Verify either a temperature or pressure sensor is defined before proceeding //
   ////////////////////////////////////////////////////////////////////////////////////
 
-  if ((this->temperature_sensor_ == nullptr) && (this->pressure_sensor_ == nullptr)) {
+  if ((!this->temperature_sensor_) && (!this->pressure_sensor_)) {
     return;
   }
 
@@ -315,7 +317,7 @@ void BMP581Component::update() {
     // 3) Read data registers for temperature and pressure, if applicable //
     ////////////////////////////////////////////////////////////////////////
 
-    if (this->pressure_sensor_ != nullptr) {
+    if (this->pressure_sensor_) {
       if (!this->read_temperature_and_pressure_(temperature, pressure)) {
         ESP_LOGW(TAG, "Failed to read temperature and pressure measurements, skipping update");
         this->status_set_warning();
@@ -335,11 +337,11 @@ void BMP581Component::update() {
     // 4) Publish measurements to sensor(s), if applicable //
     /////////////////////////////////////////////////////////
 
-    if (this->temperature_sensor_ != nullptr) {
+    if (this->temperature_sensor_) {
       this->temperature_sensor_->publish_state(temperature);
     }
 
-    if (this->pressure_sensor_ != nullptr) {
+    if (this->pressure_sensor_) {
       this->pressure_sensor_->publish_state(pressure);
     }
 
