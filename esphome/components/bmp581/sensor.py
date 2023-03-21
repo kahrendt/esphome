@@ -27,7 +27,7 @@ OVERSAMPLING_OPTIONS = {
     "8X": Oversampling.OVERSAMPLING_X8,
     "16X": Oversampling.OVERSAMPLING_X16,
     "32X": Oversampling.OVERSAMPLING_X32,
-    "64x": Oversampling.OVERSAMPLING_X64,
+    "64X": Oversampling.OVERSAMPLING_X64,
     "128X": Oversampling.OVERSAMPLING_X128,
 }
 
