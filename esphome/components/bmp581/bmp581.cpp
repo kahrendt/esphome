@@ -218,8 +218,11 @@ void BMP581Component::setup() {
   //////////////////////////////////////////////////////////////////////////
 
   // configure pressure readings, if sensor is defined
+  // otherwise, disable pressure oversampling
   if (this->pressure_sensor_ != nullptr) {
     this->osr_config_.bit.press_en = true;
+  } else {
+    this->pressure_oversampling_ = OVERSAMPLING_NONE;
   }
 
   // write oversampling settings
