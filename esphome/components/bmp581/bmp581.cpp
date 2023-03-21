@@ -587,7 +587,7 @@ bool BMP581Component::write_iir_settings_(IIRFilter temperature_iir, IIRFilter p
 
   // BMP581_DSP register and BMP581_DSP_IIR registers are successive
   //  - allows us to write the IIR configuration with one command to both registers
-  uint8_t register_data[2] = {dsp_config_.reg, iir_config_.reg};
+  uint8_t register_data[2] = {this->dsp_config_.reg, this->iir_config_.reg};
   return this->write_bytes(BMP581_DSP, register_data, sizeof(register_data));
 }
 
@@ -598,7 +598,7 @@ bool BMP581Component::write_interrupt_source_settings_(bool data_ready_enable) {
   this->int_source_.bit.drdy_data_reg_en = data_ready_enable;
 
   // write interrupt source register
-  return this->write_byte(BMP581_INT_SOURCE, int_source_.reg);
+  return this->write_byte(BMP581_INT_SOURCE, this->int_source_.reg);
 }
 
 bool BMP581Component::write_oversampling_settings_(Oversampling temperature_oversampling,
@@ -609,7 +609,7 @@ bool BMP581Component::write_oversampling_settings_(Oversampling temperature_over
   this->osr_config_.bit.osr_t = temperature_oversampling;
   this->osr_config_.bit.osr_p = pressure_oversampling;
 
-  return this->write_byte(BMP581_OSR, osr_config_.reg);
+  return this->write_byte(BMP581_OSR, this->osr_config_.reg);
 }
 
 bool BMP581Component::write_power_mode_(OperationMode mode) {
