@@ -299,7 +299,7 @@ void BMP581Component::update() {
 
   uint16_t measurement_time =
       this->determine_conversion_time_(this->temperature_oversampling_, this->pressure_oversampling_);
-  ESP_LOGVV(TAG, "Measurement expected to take %d ms", measurement_time);
+  ESP_LOGVV(TAG, "Measurement is expected to take %d ms to complete", measurement_time);
 
   this->set_timeout("measurement", measurement_time, [this]() {
     float temperature = 0.0;
