@@ -37,9 +37,11 @@ void VCNL4040::dump_config() {
   }
 
   ESP_LOGCONFIG(TAG, "  Ambient Interrupt Raw Lower Threshold: %u", this->read_sensor_without_stop_(VCNL4040_ALS_THDL));
-  ESP_LOGCONFIG(TAG, "  Ambient Interrupt Raw Upper Threshold: %u", this->read_sensor_without_stop_(VCNL4040_ALS_THDH));  
-  ESP_LOGCONFIG(TAG, "  Proximity Interrupt Raw Lower Threshold: %u", this->read_sensor_without_stop_(VCNL4040_PS_THDL));
-  ESP_LOGCONFIG(TAG, "  Proximity Interrupt Raw Upper Threshold: %u", this->read_sensor_without_stop_(VCNL4040_PS_THDH));    
+  ESP_LOGCONFIG(TAG, "  Ambient Interrupt Raw Upper Threshold: %u", this->read_sensor_without_stop_(VCNL4040_ALS_THDH));
+  ESP_LOGCONFIG(TAG, "  Proximity Interrupt Raw Lower Threshold: %u",
+                this->read_sensor_without_stop_(VCNL4040_PS_THDL));
+  ESP_LOGCONFIG(TAG, "  Proximity Interrupt Raw Upper Threshold: %u",
+                this->read_sensor_without_stop_(VCNL4040_PS_THDH));
 }
 
 void VCNL4040::setup() {
@@ -74,17 +76,17 @@ void VCNL4040::setup() {
   }
 
   if ((this->bright_event_binary_sensor_) || (this->dark_event_binary_sensor_)) {
-    this->als_conf_.bit.als_sd = 0;         // enable ambient light sensor
-    this->als_conf_.bit.als_int_en = 1;     // enable interrupt
+    this->als_conf_.bit.als_sd = 0;      // enable ambient light sensor
+    this->als_conf_.bit.als_int_en = 1;  // enable interrupt
 
-    uint16_t als_lower_threshold = this->convert_lux_to_level_(this->ambient_interrupt_lower_bound_);
-    uint16_t als_upper_threshold = this->convert_lux_to_level_(this->ambient_interrupt_upper_bound_);
+    // uint16_t als_lower_threshold = this->convert_lux_to_level_(this->ambient_interrupt_lower_bound_);
+    // uint16_t als_upper_threshold = this->convert_lux_to_level_(this->ambient_interrupt_upper_bound_);
 
-    this->write_threshold_(VCNL4040_ALS_THDL, als_lower_threshold);
-    this->write_threshold_(VCNL4040_ALS_THDH, als_upper_threshold);
+    this->write_threshold_(VCNL4040_ALS_THDL, this->ambient_interrupt_lower_bound_);
+    this->write_threshold_(VCNL4040_ALS_THDH, this->ambient_interrupt_upper_bound_);
   }
 
-  this->als_conf_.bit.als_it = this->als_integration_time_;   // set configured integration time
+  // this->als_conf_.bit.als_it = this->als_integration_time_;   // set configured integration time
 
   if (!write_als_config_settings_()) {
     ESP_LOGE(TAG, "Failed to write ambient light sensor configuration");
@@ -99,19 +101,18 @@ void VCNL4040::setup() {
   // Setup proximity sensor
   ////
 
-
   if (this->proximity_sensor_) {
     this->ps_conf1_.bit.ps_sd = 0;  // enable proximity sensor
   }
-  
+
   if ((this->far_event_binary_sensor_) || (this->close_event_binary_sensor_)) {
-    this->ps_conf1_.bit.ps_sd = 0;      // enable proximity sensor
+    this->ps_conf1_.bit.ps_sd = 0;  // enable proximity sensor
 
     // enable close event interrupt
     if (this->close_event_binary_sensor_) {
       this->ps_conf2_.bit.ps_int = 0x1 | this->ps_conf2_.bit.ps_int;
     }
-    
+
     // enable far event interrupt
     if (this->far_event_binary_sensor_) {
       this->ps_conf2_.bit.ps_int = 0x2 | this->ps_conf2_.bit.ps_int;
@@ -128,17 +129,18 @@ void VCNL4040::setup() {
 
     // this->ps_conf3_.bit.ps_sc_en = 0x1; // enable sunlight cancellation
 
-    uint16_t proximity_upper_threshold = this->convert_percentage_to_level_(this->proximity_far_event_upper_bound_percentage_);
-    uint16_t proximity_lower_threshold = this->convert_percentage_to_level_(this->proximity_close_event_lower_bound_percentage_);
-    
-    this->write_threshold_(VCNL4040_PS_THDL, proximity_lower_threshold);
-    this->write_threshold_(VCNL4040_PS_THDH, proximity_upper_threshold);
+    // uint16_t proximity_upper_threshold =
+    // this->convert_percentage_to_level_(this->proximity_far_event_upper_bound_percentage_); uint16_t
+    // proximity_lower_threshold =
+    // this->convert_percentage_to_level_(this->proximity_close_event_lower_bound_percentage_);
+
+    this->write_threshold_(VCNL4040_PS_THDL, this->proximity_close_event_lower_bound_);
+    this->write_threshold_(VCNL4040_PS_THDH, this->proximity_far_event_upper_bound_);
   }
 
-
-  this->ps_conf1_.bit.ps_duty = this->ired_duty_;
-  this->ps_conf1_.bit.ps_it = this->proximity_integration_time_;
-  this->ps_conf2_.bit.ps_hd = this->proximity_output_resolution_;  // enable HD mode for proximity reading
+  // this->ps_conf1_.bit.ps_duty = this->ired_duty_;
+  // this->ps_conf1_.bit.ps_it = this->proximity_integration_time_;
+  // this->ps_conf2_.bit.ps_hd = this->proximity_output_resolution_;  // enable HD mode for proximity reading
 
   if (!write_ps_config_settings_()) {
     ESP_LOGE(TAG, "Failed to write proximity sensor configuration");
@@ -151,17 +153,17 @@ void VCNL4040::setup() {
 }
 
 void VCNL4040::loop() {
-  if ((!this->bright_event_binary_sensor_) && (!this->dark_event_binary_sensor_) && (!this->far_event_binary_sensor_) && (!this->close_event_binary_sensor_)) {
+  if ((!this->bright_event_binary_sensor_) && (!this->dark_event_binary_sensor_) && (!this->far_event_binary_sensor_) &&
+      (!this->close_event_binary_sensor_)) {
     return;
-  }
-  else {
+  } else {
     uint16_t interrupt_info = this->read_sensor_without_stop_(VCNL4040_INT);
-    this->int_flag_.reg = (uint8_t)((0xFF00 & interrupt_info)>>8); 
+    this->int_flag_.reg = (uint8_t) ((0xFF00 & interrupt_info) >> 8);
 
     if (this->bright_event_binary_sensor_) {
       this->bright_event_binary_sensor_->publish_state(this->int_flag_.bit.als_if_h);
     }
-    
+
     if (this->dark_event_binary_sensor_) {
       this->dark_event_binary_sensor_->publish_state(this->int_flag_.bit.als_if_l);
     }
@@ -221,20 +223,6 @@ void VCNL4040::update() {
   }
 }
 
-uint16_t VCNL4040::convert_lux_to_level_(float lux) {
-  float converted_level = lux/(0.1 / pow(2.0, (float) this->als_integration_time_));
-  return (uint16_t) converted_level;
-}
-
-uint16_t VCNL4040::convert_percentage_to_level_(float percentage) {
-  // Set exponent to 12 if proximity resolution is 12 bits, else set it to 16 as the resolution is 16 bits
-  uint8_t exponent = ( this->proximity_output_resolution_ == PS_RESOLUTION_12 ? 12 : 16 );
-
-  float converted_level = percentage * (float)(1<<exponent);    // multiply by 2^exponent
-
-  return (uint16_t)converted_level;
-}
-
 bool VCNL4040::read_ambient_light_(float &ambient_light) {
   // see datasheet page 12 for formula to scale reading to lux based on the configured integration time
 
@@ -249,7 +237,7 @@ bool VCNL4040::read_ambient_light_(float &ambient_light) {
   // uint16_t raw_data = (int16_t) data[1] << 8 | (int16_t) data[0];
 
   ambient_light = (float) ((float) this->read_sensor_without_stop_(VCNL4040_ALS_OUTPUT) *
-                           (0.1 / pow(2.0, (float) this->als_integration_time_)));
+                           (0.1 / pow(2.0, (float) this->als_conf_.bit.als_it)));
 
   return true;
 }
@@ -265,10 +253,10 @@ bool VCNL4040::read_proximity_(float &proximity) {
   // // }
   // ESP_LOGD(TAG, "raw proximity lsb = %d, msb = %d", data[0], data[1]);
   // uint16_t raw_data = (int16_t) data[1] << 8 | (int16_t) data[0];
-  float maximum = ( this->proximity_output_resolution_ == PS_RESOLUTION_12 ? pow(2.0, 12.0) : pow(2.0, 16.0) );
-  float raw_reading = (float)this->read_sensor_without_stop_(VCNL4040_PS_OUTPUT);
+  float maximum = (this->ps_conf2_.bit.ps_hd == PS_RESOLUTION_12 ? pow(2.0, 12.0) : pow(2.0, 16.0));
+  float raw_reading = (float) this->read_sensor_without_stop_(VCNL4040_PS_OUTPUT);
 
-  proximity = 100.0*raw_reading/maximum;
+  proximity = 100.0 * raw_reading / maximum;
 
   return true;
 }
@@ -297,7 +285,7 @@ uint16_t VCNL4040::read_sensor_without_stop_(uint8_t register_address) {
 }
 
 bool VCNL4040::write_als_config_settings_() {
-  this->write_lsb_and_msb_(VCNL4040_ALS_CONF, this->als_conf_.reg, 0x00);  
+  this->write_lsb_and_msb_(VCNL4040_ALS_CONF, this->als_conf_.reg, 0x00);
 
   uint8_t verify_data[2];
   this->read_register(VCNL4040_ALS_CONF, &verify_data[0], 2, false);
@@ -333,8 +321,8 @@ bool VCNL4040::write_lsb_and_msb_(uint8_t address, uint8_t lsb, uint8_t msb) {
 }
 
 bool VCNL4040::write_threshold_(uint8_t address, uint16_t threshold) {
-  uint8_t lsb = (uint8_t)(threshold & 0xFF);
-  uint8_t msb = (uint8_t)((0xFF00 & threshold)>>8); 
+  uint8_t lsb = (uint8_t) (threshold & 0xFF);
+  uint8_t msb = (uint8_t) ((0xFF00 & threshold) >> 8);
   return this->write_lsb_and_msb_(address, lsb, msb);
 }
 

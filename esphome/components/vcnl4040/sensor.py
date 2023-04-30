@@ -37,6 +37,7 @@ CONFIG_SCHEMA = (
             ),
         }
     )
+    # cv.has_exactly_one_key(CONF_PROXIMITY, CONF_WHITE_CHANNEL),
 )
 
 
@@ -51,6 +52,6 @@ async def to_code(config):
         conf = config[CONF_PROXIMITY]
         sens = await sensor.new_sensor(conf)
         cg.add(getattr(hub, "set_proximity_sensor")(sens))
-        
+
     if CONF_WHITE_CHANNEL in config:
         cg.add(getattr(hub, "set_white_channel_sensor")(sens))

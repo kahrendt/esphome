@@ -13,16 +13,14 @@ CONF_DARK_EVENT = "dark_event"
 CONF_CLOSE_EVENT = "close_event"
 CONF_FAR_EVENT = "far_event"
 
-CONFIG_SCHEMA = (
-    cv.Schema(
-        {
-            cv.GenerateID(CONF_VCNL4040_ID): cv.use_id(VCNL4040),
-            cv.Optional(CONF_BRIGHT_EVENT): binary_sensor.binary_sensor_schema(),
-            cv.Optional(CONF_DARK_EVENT): binary_sensor.binary_sensor_schema(),
-            cv.Optional(CONF_CLOSE_EVENT): binary_sensor.binary_sensor_schema(),
-            cv.Optional(CONF_FAR_EVENT): binary_sensor.binary_sensor_schema(),            
-        }
-    )
+CONFIG_SCHEMA = cv.Schema(
+    {
+        cv.GenerateID(CONF_VCNL4040_ID): cv.use_id(VCNL4040),
+        cv.Optional(CONF_BRIGHT_EVENT): binary_sensor.binary_sensor_schema(),
+        cv.Optional(CONF_DARK_EVENT): binary_sensor.binary_sensor_schema(),
+        cv.Optional(CONF_CLOSE_EVENT): binary_sensor.binary_sensor_schema(),
+        cv.Optional(CONF_FAR_EVENT): binary_sensor.binary_sensor_schema(),
+    }
 )
 
 
@@ -37,7 +35,7 @@ async def to_code(config):
         conf = config[CONF_DARK_EVENT]
         sens = await binary_sensor.new_binary_sensor(conf)
         cg.add(getattr(hub, "set_dark_event_binary_sensor")(sens))
-        
+
     if CONF_CLOSE_EVENT in config:
         conf = config[CONF_CLOSE_EVENT]
         sens = await binary_sensor.new_binary_sensor(conf)
@@ -46,5 +44,4 @@ async def to_code(config):
     if CONF_FAR_EVENT in config:
         conf = config[CONF_FAR_EVENT]
         sens = await binary_sensor.new_binary_sensor(conf)
-        cg.add(getattr(hub, "set_far_event_binary_sensor")(sens))        
-        
+        cg.add(getattr(hub, "set_far_event_binary_sensor")(sens))

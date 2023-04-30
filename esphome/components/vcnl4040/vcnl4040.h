@@ -16,7 +16,7 @@ static const uint16_t VCNL4040_CHIP_ID = 0x86;  // VCNL4040's chip ID Lower Byte
 enum {
   VCNL4040_ALS_CONF = 0x00,       // ambient light sensor config
   VCNL4040_ALS_THDH = 0x01,       // ambient interrupt high threshold
-  VCNL4040_ALS_THDL = 0x02,       // ambient interrupt low threshold  
+  VCNL4040_ALS_THDL = 0x02,       // ambient interrupt low threshold
   VCNL4040_PS_CONF_FIRST = 0x03,  // proximity sensor config 1 and 2
   VCNL4040_PS_CONF_LAST = 0x04,   // proximity sensor config 3 and mode
   VCNL4040_PS_THDL = 0x06,        // proximity interrupt low threshold
@@ -68,11 +68,18 @@ class VCNL4040 : public PollingComponent, public i2c::I2CDevice {
   void update() override;
   void loop() override;
 
-  void set_bright_event_binary_sensor(binary_sensor::BinarySensor *bright_event_binary_sensor) { this->bright_event_binary_sensor_ = bright_event_binary_sensor; }
-  void set_dark_event_binary_sensor(binary_sensor::BinarySensor *dark_event_binary_sensor) { this->dark_event_binary_sensor_ = dark_event_binary_sensor; }
-  void set_far_event_binary_sensor(binary_sensor::BinarySensor *far_event_binary_sensor) { this->far_event_binary_sensor_ = far_event_binary_sensor; }
-  void set_close_event_binary_sensor(binary_sensor::BinarySensor *close_event_binary_sensor) { this->close_event_binary_sensor_ = close_event_binary_sensor; }
-
+  void set_bright_event_binary_sensor(binary_sensor::BinarySensor *bright_event_binary_sensor) {
+    this->bright_event_binary_sensor_ = bright_event_binary_sensor;
+  }
+  void set_dark_event_binary_sensor(binary_sensor::BinarySensor *dark_event_binary_sensor) {
+    this->dark_event_binary_sensor_ = dark_event_binary_sensor;
+  }
+  void set_far_event_binary_sensor(binary_sensor::BinarySensor *far_event_binary_sensor) {
+    this->far_event_binary_sensor_ = far_event_binary_sensor;
+  }
+  void set_close_event_binary_sensor(binary_sensor::BinarySensor *close_event_binary_sensor) {
+    this->close_event_binary_sensor_ = close_event_binary_sensor;
+  }
 
   void set_lux_sensor(sensor::Sensor *lux_sensor) { this->lux_sensor_ = lux_sensor; }
   void set_proximity_sensor(sensor::Sensor *proximity_sensor) { this->proximity_sensor_ = proximity_sensor; }
@@ -81,47 +88,58 @@ class VCNL4040 : public PollingComponent, public i2c::I2CDevice {
   }
 
   void set_als_integration_time_config(AmbientIntegrationTime als_integration_time) {
-    this->als_integration_time_ = als_integration_time;
+    // this->als_integration_time_ = als_integration_time;
+    this->als_conf_.bit.als_it = als_integration_time;
   }
-  void set_ired_duty_config(IREDDuty ired_duty) { this->ired_duty_ = ired_duty; }
+  void set_ired_duty_config(IREDDuty ired_duty) { this->ps_conf1_.bit.ps_duty = ired_duty; }
   void set_proximity_integration_time_config(ProximityIntegrationTime proximity_integration_time) {
-    this->proximity_integration_time_ = proximity_integration_time;
+    this->ps_conf1_.bit.ps_it = proximity_integration_time;
   }
   void set_proximity_output_resolution(ProximityOutputResolution proximity_output_resolution) {
-    this->proximity_output_resolution_ = proximity_output_resolution;
+    this->ps_conf2_.bit.ps_hd = proximity_output_resolution;
   }
 
-  void set_ambient_interrupt_lower_bound(float ambient_interrupt_lower_bound) { this->ambient_interrupt_lower_bound_ = ambient_interrupt_lower_bound; }
-  void set_ambient_interrupt_upper_bound(float ambient_interrupt_upper_bound) { this->ambient_interrupt_upper_bound_ = ambient_interrupt_upper_bound; }
- 
-  void set_proximity_close_event_lower_bound_percentage(float proximity_close_event_lower_bound_percentage) { this->proximity_close_event_lower_bound_percentage_ = proximity_close_event_lower_bound_percentage; }
-  void set_proximity_far_event_upper_bound_percentage(float proximity_far_event_upper_bound_percentage) { this->proximity_far_event_upper_bound_percentage_ = proximity_far_event_upper_bound_percentage; }
+  void set_ambient_interrupt_lower_bound(uint16_t ambient_interrupt_lower_bound) {
+    this->ambient_interrupt_lower_bound_ = ambient_interrupt_lower_bound;
+  }
+  void set_ambient_interrupt_upper_bound(uint16_t ambient_interrupt_upper_bound) {
+    this->ambient_interrupt_upper_bound_ = ambient_interrupt_upper_bound;
+  }
+
+  void set_proximity_close_event_lower_bound(uint16_t proximity_close_event_lower_bound_percentage) {
+    this->proximity_close_event_lower_bound_ = proximity_close_event_lower_bound_percentage;
+  }
+  void set_proximity_far_event_upper_bound(uint16_t proximity_far_event_upper_bound_percentage) {
+    this->proximity_far_event_upper_bound_ = proximity_far_event_upper_bound_percentage;
+  }
+
+  // void set_proximity_close_event_lower_bound_percentage(float proximity_close_event_lower_bound_percentage) {
+  // this->proximity_close_event_lower_bound_percentage_ = proximity_close_event_lower_bound_percentage; } void
+  // set_proximity_far_event_upper_bound_percentage(float proximity_far_event_upper_bound_percentage) {
+  // this->proximity_far_event_upper_bound_percentage_ = proximity_far_event_upper_bound_percentage; }
 
  protected:
   binary_sensor::BinarySensor *bright_event_binary_sensor_{nullptr};
   binary_sensor::BinarySensor *dark_event_binary_sensor_{nullptr};
   binary_sensor::BinarySensor *far_event_binary_sensor_{nullptr};
-  binary_sensor::BinarySensor *close_event_binary_sensor_{nullptr};  
+  binary_sensor::BinarySensor *close_event_binary_sensor_{nullptr};
 
   sensor::Sensor *lux_sensor_{nullptr};
   sensor::Sensor *proximity_sensor_{nullptr};
   sensor::Sensor *white_channel_sensor_{nullptr};
 
-  AmbientIntegrationTime als_integration_time_;
-  IREDDuty ired_duty_;
-  ProximityIntegrationTime proximity_integration_time_;
-  ProximityOutputResolution proximity_output_resolution_;
+  // AmbientIntegrationTime als_integration_time_;
+  // IREDDuty ired_duty_;
+  // ProximityIntegrationTime proximity_integration_time_;
+  // ProximityOutputResolution proximity_output_resolution_;
 
-  float ambient_interrupt_lower_bound_;
-  float ambient_interrupt_upper_bound_;
+  uint16_t ambient_interrupt_lower_bound_;
+  uint16_t ambient_interrupt_upper_bound_;
 
-  float proximity_close_event_lower_bound_percentage_;
-  float proximity_far_event_upper_bound_percentage_;
+  uint16_t proximity_close_event_lower_bound_;
+  uint16_t proximity_far_event_upper_bound_;
 
   uint16_t read_sensor_without_stop_(uint8_t register_address);
-
-  uint16_t convert_lux_to_level_(float lux);
-  uint16_t convert_percentage_to_level_(float percentage);  
 
   bool read_ambient_light_(float &ambient_light);
   bool read_proximity_(float &proximity);
@@ -129,7 +147,7 @@ class VCNL4040 : public PollingComponent, public i2c::I2CDevice {
 
   bool write_lsb_and_msb_(uint8_t register, uint8_t lsb, uint8_t msb);
   bool write_threshold_(uint8_t address, uint16_t threshold);
-  
+
   bool write_als_config_settings_();
   bool write_ps_config_settings_();
 
@@ -146,7 +164,8 @@ class VCNL4040 : public PollingComponent, public i2c::I2CDevice {
       uint8_t als_int_en : 1;  // ALS interupt enable
       uint8_t als_pers : 2;    // ALS interrupt persistence setting
       uint8_t : 2;             // reserved
-      uint8_t als_it : 2;      // ALS integration time setting
+      AmbientIntegrationTime als_it : 2;
+      // uint8_t als_it : 2;      // ALS integration time setting
     } bit;
     uint8_t reg;
   } als_conf_ = {.reg = 0x01};
@@ -154,10 +173,10 @@ class VCNL4040 : public PollingComponent, public i2c::I2CDevice {
   // VCNL4040's PS_CONF1 register (command code 0x03 Low) for the Proximity Sensor, page 10 of datasheet
   union {
     struct {
-      uint8_t ps_sd : 1;    // PS power on (if 0), PS shutdown if 1
-      uint8_t ps_it : 3;    // PS integration time
-      uint8_t ps_pers : 2;  // PS interrupt persistence setting
-      uint8_t ps_duty : 2;  // PS IRED on/off duty ratio
+      uint8_t ps_sd : 1;                   // PS power on (if 0), PS shutdown if 1
+      ProximityIntegrationTime ps_it : 3;  // PS integration time
+      uint8_t ps_pers : 2;                 // PS interrupt persistence setting
+      IREDDuty ps_duty : 2;                // PS IRED on/off duty ratio
     } bit;
     uint8_t reg;
   } ps_conf1_ = {.reg = 0x01};
@@ -165,9 +184,9 @@ class VCNL4040 : public PollingComponent, public i2c::I2CDevice {
   // VCNL4040's PS_CONF2 register (command code 0x03 High) for the Proximity Sensor, page 10 of datasheet
   union {
     struct {
-      uint8_t ps_int : 2;  // PS interrupt mode
-      uint8_t : 1;         // Reserved
-      uint8_t ps_hd : 3;   // high resolution setting (12 bits if = 0, 16 if = 1)
+      uint8_t ps_int : 2;                   // PS interrupt mode
+      uint8_t : 1;                          // Reserved
+      ProximityOutputResolution ps_hd : 3;  // high resolution setting (12 bits if = 0, 16 if = 1)
     } bit;
     uint8_t reg;
   } ps_conf2_ = {.reg = 0x00};
