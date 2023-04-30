@@ -11,7 +11,7 @@ namespace vcnl4040 {
 
 static const char *const TAG = "vcnl4040";
 
-void VCNL4040Component::dump_config() {
+void VCNL4040::dump_config() {
   ESP_LOGCONFIG(TAG, "VCNL4040:");
 
   switch (this->error_code_) {
@@ -35,9 +35,14 @@ void VCNL4040Component::dump_config() {
   if (this->proximity_sensor_) {
     LOG_SENSOR("  ", "Proximity", this->proximity_sensor_);
   }
+
+  ESP_LOGCONFIG(TAG, "  Ambient Interrupt Raw Lower Threshold: %u", this->read_sensor_without_stop_(VCNL4040_ALS_THDL));
+  ESP_LOGCONFIG(TAG, "  Ambient Interrupt Raw Upper Threshold: %u", this->read_sensor_without_stop_(VCNL4040_ALS_THDH));  
+  ESP_LOGCONFIG(TAG, "  Proximity Interrupt Raw Lower Threshold: %u", this->read_sensor_without_stop_(VCNL4040_PS_THDL));
+  ESP_LOGCONFIG(TAG, "  Proximity Interrupt Raw Upper Threshold: %u", this->read_sensor_without_stop_(VCNL4040_PS_THDH));    
 }
 
-void VCNL4040Component::setup() {
+void VCNL4040::setup() {
   this->error_code_ = NONE;
   ESP_LOGCONFIG(TAG, "Setting up VCNL4040...");
 
@@ -60,49 +65,118 @@ void VCNL4040Component::setup() {
     return;
   }
 
-  //////
-  // 2) Setup ambient light sensor (if applicable)
-  /////
+  ////
+  // Setup ambient light sensor
+  ////
+
   if (this->lux_sensor_) {
     this->als_conf_.bit.als_sd = 0;  // enable ambient light sensor
-    this->als_conf_.bit.als_it = this->als_integration_time_;
-
-    if (!write_als_config_settings_()) {
-      ESP_LOGE(TAG, "Failed to write ambient light sensor configuration");
-
-      this->error_code_ = ERROR_COMMUNICATION_FAILED;
-      this->mark_failed();
-
-      return;
-    }
   }
 
-  /////
-  // 3) Setup proximity sensor (if applicable)
-  /////
+  if ((this->bright_event_binary_sensor_) || (this->dark_event_binary_sensor_)) {
+    this->als_conf_.bit.als_sd = 0;         // enable ambient light sensor
+    this->als_conf_.bit.als_int_en = 1;     // enable interrupt
+
+    uint16_t als_lower_threshold = this->convert_lux_to_level_(this->ambient_interrupt_lower_bound_);
+    uint16_t als_upper_threshold = this->convert_lux_to_level_(this->ambient_interrupt_upper_bound_);
+
+    this->write_threshold_(VCNL4040_ALS_THDL, als_lower_threshold);
+    this->write_threshold_(VCNL4040_ALS_THDH, als_upper_threshold);
+  }
+
+  this->als_conf_.bit.als_it = this->als_integration_time_;   // set configured integration time
+
+  if (!write_als_config_settings_()) {
+    ESP_LOGE(TAG, "Failed to write ambient light sensor configuration");
+
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
+    this->mark_failed();
+
+    return;
+  }
+
+  ////
+  // Setup proximity sensor
+  ////
+
 
   if (this->proximity_sensor_) {
     this->ps_conf1_.bit.ps_sd = 0;  // enable proximity sensor
-    this->ps_conf1_.bit.ps_duty = this->ired_duty_;
-    this->ps_conf1_.bit.ps_it = this->proximity_integration_time_;
-    this->ps_conf2_.bit.ps_hd = this->proximity_output_resolution_;  // enable HD mode for proximity reading
+  }
+  
+  if ((this->far_event_binary_sensor_) || (this->close_event_binary_sensor_)) {
+    this->ps_conf1_.bit.ps_sd = 0;      // enable proximity sensor
 
-    if (!write_ps_config_settings_()) {
-      ESP_LOGE(TAG, "Failed to write proximity sensor configuration");
+    // enable close event interrupt
+    if (this->close_event_binary_sensor_) {
+      this->ps_conf2_.bit.ps_int = 0x1 | this->ps_conf2_.bit.ps_int;
+    }
+    
+    // enable far event interrupt
+    if (this->far_event_binary_sensor_) {
+      this->ps_conf2_.bit.ps_int = 0x2 | this->ps_conf2_.bit.ps_int;
+    }
 
-      this->error_code_ = ERROR_COMMUNICATION_FAILED;
-      this->mark_failed();
+    // this->ps_conf1_.bit.ps_pers = 0x3;
+    // this->ps_conf3_.bit.ps_mps = 0x2;
 
-      return;
+    // this->ps_conf3_.bit.ps_smart_pers = 0x1; // enable smart persistence
+
+    // this->ps_ms_.bit.ps_ms = 0x0;   // normal PS interrupt mode
+
+    // this->ps_ms_.bit.white_en = 0x1;  // disable white channel
+
+    // this->ps_conf3_.bit.ps_sc_en = 0x1; // enable sunlight cancellation
+
+    uint16_t proximity_upper_threshold = this->convert_percentage_to_level_(this->proximity_far_event_upper_bound_percentage_);
+    uint16_t proximity_lower_threshold = this->convert_percentage_to_level_(this->proximity_close_event_lower_bound_percentage_);
+    
+    this->write_threshold_(VCNL4040_PS_THDL, proximity_lower_threshold);
+    this->write_threshold_(VCNL4040_PS_THDH, proximity_upper_threshold);
+  }
+
+
+  this->ps_conf1_.bit.ps_duty = this->ired_duty_;
+  this->ps_conf1_.bit.ps_it = this->proximity_integration_time_;
+  this->ps_conf2_.bit.ps_hd = this->proximity_output_resolution_;  // enable HD mode for proximity reading
+
+  if (!write_ps_config_settings_()) {
+    ESP_LOGE(TAG, "Failed to write proximity sensor configuration");
+
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
+    this->mark_failed();
+
+    return;
+  }
+}
+
+void VCNL4040::loop() {
+  if ((!this->bright_event_binary_sensor_) && (!this->dark_event_binary_sensor_) && (!this->far_event_binary_sensor_) && (!this->close_event_binary_sensor_)) {
+    return;
+  }
+  else {
+    uint16_t interrupt_info = this->read_sensor_without_stop_(VCNL4040_INT);
+    this->int_flag_.reg = (uint8_t)((0xFF00 & interrupt_info)>>8); 
+
+    if (this->bright_event_binary_sensor_) {
+      this->bright_event_binary_sensor_->publish_state(this->int_flag_.bit.als_if_h);
+    }
+    
+    if (this->dark_event_binary_sensor_) {
+      this->dark_event_binary_sensor_->publish_state(this->int_flag_.bit.als_if_l);
+    }
+
+    if (this->close_event_binary_sensor_) {
+      this->close_event_binary_sensor_->publish_state(this->int_flag_.bit.ps_if_close);
+    }
+
+    if (this->far_event_binary_sensor_) {
+      this->far_event_binary_sensor_->publish_state(this->int_flag_.bit.ps_if_away);
     }
   }
 }
 
-void VCNL4040Component::update() {
-  ////////////////////////////////////////////////////////////////////////////////////
-  // 0) Verify either a lux or proximity sensor is defined before proceeding //
-  ////////////////////////////////////////////////////////////////////////////////////
-
+void VCNL4040::update() {
   if ((!this->lux_sensor_) && (!this->proximity_sensor_)) {
     return;
   }
@@ -147,7 +221,21 @@ void VCNL4040Component::update() {
   }
 }
 
-bool VCNL4040Component::read_ambient_light_(float &ambient_light) {
+uint16_t VCNL4040::convert_lux_to_level_(float lux) {
+  float converted_level = lux/(0.1 / pow(2.0, (float) this->als_integration_time_));
+  return (uint16_t) converted_level;
+}
+
+uint16_t VCNL4040::convert_percentage_to_level_(float percentage) {
+  // Set exponent to 12 if proximity resolution is 12 bits, else set it to 16 as the resolution is 16 bits
+  uint8_t exponent = ( this->proximity_output_resolution_ == PS_RESOLUTION_12 ? 12 : 16 );
+
+  float converted_level = percentage * (float)(1<<exponent);    // multiply by 2^exponent
+
+  return (uint16_t)converted_level;
+}
+
+bool VCNL4040::read_ambient_light_(float &ambient_light) {
   // see datasheet page 12 for formula to scale reading to lux based on the configured integration time
 
   // uint8_t data[2];
@@ -166,7 +254,7 @@ bool VCNL4040Component::read_ambient_light_(float &ambient_light) {
   return true;
 }
 
-bool VCNL4040Component::read_proximity_(float &proximity) {
+bool VCNL4040::read_proximity_(float &proximity) {
   // uint8_t data[2];
   // this->read_register(VCNL4040_PS_OUTPUT, &data[0], 2, false);
   // // if (!this->read_register(VCNL4040_PS_OUTPUT, &data[0], 2, false)) {
@@ -177,12 +265,15 @@ bool VCNL4040Component::read_proximity_(float &proximity) {
   // // }
   // ESP_LOGD(TAG, "raw proximity lsb = %d, msb = %d", data[0], data[1]);
   // uint16_t raw_data = (int16_t) data[1] << 8 | (int16_t) data[0];
+  float maximum = ( this->proximity_output_resolution_ == PS_RESOLUTION_12 ? pow(2.0, 12.0) : pow(2.0, 16.0) );
+  float raw_reading = (float)this->read_sensor_without_stop_(VCNL4040_PS_OUTPUT);
 
-  proximity = (float) this->read_sensor_without_stop_(VCNL4040_PS_OUTPUT);
+  proximity = 100.0*raw_reading/maximum;
+
   return true;
 }
 
-bool VCNL4040Component::read_white_channel_(float &white_channel) {
+bool VCNL4040::read_white_channel_(float &white_channel) {
   // uint8_t data[2];
   // this->read_register(VCNL4040_WHITE_OUTPUT, &data[0], 2, false);
   // // if (!this->read_register(VCNL4040_PS_OUTPUT, &data[0], 2, false)) {
@@ -199,46 +290,52 @@ bool VCNL4040Component::read_white_channel_(float &white_channel) {
   return true;
 }
 
-uint16_t VCNL4040Component::read_sensor_without_stop_(uint8_t register_address) {
+uint16_t VCNL4040::read_sensor_without_stop_(uint8_t register_address) {
   uint8_t data[2];
   this->read_register(register_address, &data[0], 2, false);  // read without sending a stop
   return ((uint16_t) data[1] << 8 | (uint16_t) data[0]);
 }
 
-bool VCNL4040Component::write_als_config_settings_() {
-  uint8_t write_data[2];
-  write_data[0] = this->als_conf_.reg;
-  write_data[1] = 0x00;
-  this->write_register(VCNL4040_ALS_CONF, &write_data[0], 2, true);
+bool VCNL4040::write_als_config_settings_() {
+  this->write_lsb_and_msb_(VCNL4040_ALS_CONF, this->als_conf_.reg, 0x00);  
 
   uint8_t verify_data[2];
   this->read_register(VCNL4040_ALS_CONF, &verify_data[0], 2, false);
-  if ((verify_data[0] != write_data[0]) || (verify_data[1] != write_data[1]))
+  if ((verify_data[0] != this->als_conf_.reg) || (verify_data[1] != 0x00))
     return false;
   else
     return true;
 }
 
-bool VCNL4040Component::write_ps_config_settings_() {
-  uint8_t write_data[2];
-  write_data[0] = this->ps_conf1_.reg;
-  write_data[1] = this->ps_conf2_.reg;
-  this->write_register(VCNL4040_PS_CONF_FIRST, &write_data[0], 2, true);
+bool VCNL4040::write_ps_config_settings_() {
+  this->write_lsb_and_msb_(VCNL4040_PS_CONF_FIRST, this->ps_conf1_.reg, this->ps_conf2_.reg);
 
   uint8_t verify_data[2];
   this->read_register(VCNL4040_PS_CONF_FIRST, &verify_data[0], 2, false);
-  if ((verify_data[0] != write_data[0]) || (verify_data[1] != write_data[1]))
+  if ((verify_data[0] != this->ps_conf1_.reg) || (verify_data[1] != this->ps_conf2_.reg))
     return false;
 
-  write_data[0] = this->ps_conf3_.reg;
-  write_data[1] = this->ps_ms_.reg;
-  this->write_register(VCNL4040_PS_CONF_LAST, &write_data[0], 2, true);
+  this->write_lsb_and_msb_(VCNL4040_PS_CONF_LAST, this->ps_conf3_.reg, this->ps_ms_.reg);
 
   this->read_register(VCNL4040_PS_CONF_LAST, &verify_data[0], 2, false);
-  if ((verify_data[0] != write_data[0]) || (verify_data[1] != write_data[1]))
+  if ((verify_data[0] != this->ps_conf3_.reg) || (verify_data[1] != this->ps_ms_.reg))
     return false;
   else
     return true;
+}
+
+bool VCNL4040::write_lsb_and_msb_(uint8_t address, uint8_t lsb, uint8_t msb) {
+  uint8_t write_data[2];
+  write_data[0] = lsb;
+  write_data[1] = msb;
+
+  return this->write_register(address, &write_data[0], 2, true);
+}
+
+bool VCNL4040::write_threshold_(uint8_t address, uint16_t threshold) {
+  uint8_t lsb = (uint8_t)(threshold & 0xFF);
+  uint8_t msb = (uint8_t)((0xFF00 & threshold)>>8); 
+  return this->write_lsb_and_msb_(address, lsb, msb);
 }
 
 }  // namespace vcnl4040
