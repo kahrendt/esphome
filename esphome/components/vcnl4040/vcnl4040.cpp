@@ -213,7 +213,7 @@ void VCNL4040::update() {
     float white_channel_reading;
 
     if (!this->read_white_channel_(white_channel_reading)) {
-      ESP_LOGE(TAG, "Failed to read proximity measurement, skipping update");
+      ESP_LOGE(TAG, "Failed to read white channel measurement, skipping update");
       this->status_set_warning();
 
       return;
@@ -256,6 +256,7 @@ bool VCNL4040::read_proximity_(float &proximity) {
   float maximum = (this->ps_conf2_.bit.ps_hd == PS_RESOLUTION_12 ? pow(2.0, 12.0) : pow(2.0, 16.0));
   float raw_reading = (float) this->read_sensor_without_stop_(VCNL4040_PS_OUTPUT);
 
+  ESP_LOGV(TAG, "Raw proximity reading: %f", raw_reading);
   proximity = 100.0 * raw_reading / maximum;
 
   return true;

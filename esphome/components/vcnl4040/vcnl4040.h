@@ -42,6 +42,17 @@ enum IREDDuty {
   IRED_DUTY_320 = 0x3,
 };
 
+enum LEDCurrent {
+  LED_CURRENT_50 = 0x0,
+  LED_CURRENT_75 = 0x1,
+  LED_CURRENT_100 = 0x2,
+  LED_CURRENT_120 = 0x3,
+  LED_CURRENT_140 = 0x4,
+  LED_CURRENT_160 = 0x5,
+  LED_CURRENT_180 = 0x6,
+  LED_CURRENT_200 = 0x7,
+};
+
 enum ProximityIntegrationTime {
   PS_IT_1T = 0x0,
   PS_IT_1T5 = 0x1,
@@ -92,6 +103,8 @@ class VCNL4040 : public PollingComponent, public i2c::I2CDevice {
     this->als_conf_.bit.als_it = als_integration_time;
   }
   void set_ired_duty_config(IREDDuty ired_duty) { this->ps_conf1_.bit.ps_duty = ired_duty; }
+  void set_led_current_config(LEDCurrent led_current) { this->ps_ms_.bit.led_i = led_current; }
+
   void set_proximity_integration_time_config(ProximityIntegrationTime proximity_integration_time) {
     this->ps_conf1_.bit.ps_it = proximity_integration_time;
   }
@@ -186,7 +199,7 @@ class VCNL4040 : public PollingComponent, public i2c::I2CDevice {
     struct {
       uint8_t ps_int : 2;                   // PS interrupt mode
       uint8_t : 1;                          // Reserved
-      ProximityOutputResolution ps_hd : 3;  // high resolution setting (12 bits if = 0, 16 if = 1)
+      ProximityOutputResolution ps_hd : 1;  // high resolution setting (12 bits if = 0, 16 if = 1)
     } bit;
     uint8_t reg;
   } ps_conf2_ = {.reg = 0x00};
@@ -211,7 +224,7 @@ class VCNL4040 : public PollingComponent, public i2c::I2CDevice {
       uint8_t : 3;           // Reserved
       uint8_t ps_ms : 1;     // 0 = proximity normal operation with interrupt function, 1 = proximity detection logic
                              // output mode enable
-      uint8_t white_en : 1;  // white channel (enabled = 1)
+      uint8_t white_en : 1;  // white channel (enabled = 0)
     } bit;
     uint8_t reg;
   } ps_ms_ = {.reg = 0x00};

@@ -23,6 +23,7 @@ CONF_PROXIMITY_INTERRUPT_LOWER_BOUND = "proximity_interrupt_lower_bound"
 CONF_PROXIMITY_INTERRUPT_UPPER_BOUND = "proximity_interrupt_upper_bound"
 
 CONF_PROXIMITY = "proximity"
+CONF_LED_CURRENT = "led_current"
 CONF_LOW_THRESHOLD = "low_threshold"
 CONF_LOW_THRESHOLD_LUX = "low_threshold_lux"
 CONF_LOW_THRESHOLD_PERCENTAGE = "low_threshold_percentage"
@@ -46,6 +47,18 @@ IREDDuty = {
     "1/80": IREDDuty.IRED_DUTY_80,
     "1/160": IREDDuty.IRED_DUTY_160,
     "1/320": IREDDuty.IRED_DUTY_160,
+}
+
+LEDCurrent = vcnl4040_ns.enum("LEDCurrent")
+LEDCurrent = {
+    "50": LEDCurrent.LED_CURRENT_50,
+    "75": LEDCurrent.LED_CURRENT_75,
+    "100": LEDCurrent.LED_CURRENT_100,
+    "120": LEDCurrent.LED_CURRENT_120,
+    "140": LEDCurrent.LED_CURRENT_140,
+    "160": LEDCurrent.LED_CURRENT_160,
+    "180": LEDCurrent.LED_CURRENT_180,
+    "200": LEDCurrent.LED_CURRENT_200,
 }
 
 ProximityIntegrationTime = vcnl4040_ns.enum("ProximityIntegrationTime")
@@ -193,6 +206,9 @@ CONFIG_SCHEMA = (
                         ),
                         cv.Optional(CONF_IRED_DUTY, default="1/40"): cv.enum(
                             IREDDuty, upper=True
+                        ),
+                        cv.Optional(CONF_LED_CURRENT, default="50"): cv.enum(
+                            LEDCurrent, upper=True
                         ),
                         cv.Optional(CONF_RESOLUTION, default="12"): cv.enum(
                             ProximityOutputResolution, upper=True
