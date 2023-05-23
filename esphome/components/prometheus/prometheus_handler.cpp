@@ -1,3 +1,5 @@
+#define USE_SENSOR true
+#define USE_ARDUINO
 #ifdef USE_ARDUINO
 
 #include "prometheus_handler.h"
@@ -65,40 +67,75 @@ std::string PrometheusHandler::relabel_name_(EntityBase *obj) {
 }
 
 // Type-specific implementation
+// Prometheus exposition format: https://github.com/prometheus/docs/blob/main/content/docs/instrumenting/exposition_formats.md
+// 
+
 #ifdef USE_SENSOR
 void PrometheusHandler::sensor_type_(AsyncResponseStream *stream) {
-  stream->print(F("#TYPE esphome_sensor_value GAUGE\n"));
-  stream->print(F("#TYPE esphome_sensor_failed GAUGE\n"));
 }
 void PrometheusHandler::sensor_row_(AsyncResponseStream *stream, sensor::Sensor *obj) {
+  std::string app_name = App.get_name();
+  std::replace(app_name.begin(), app_name.end(), '-', '_');
   if (obj->is_internal() && !this->include_internal_)
     return;
+
+  stream->print(F("#TYPE "));
+  stream->print(app_name.c_str());
+  stream->print(F("_"));
+  stream->print(relabel_id_(obj).c_str());
+  stream->print(F(" gauge\n"));
+
+  stream->print(app_name.c_str());
+  stream->print(F("_"));
+  stream->print(relabel_id_(obj).c_str());
+  stream->print(F("{name=\""));
+  stream->print(relabel_name_(obj).c_str());
+  stream->print(F("\",unit=\""));
+  stream->print(obj->get_unit_of_measurement().c_str());
+  stream->print(F("\"} "));
   if (!std::isnan(obj->state)) {
-    // We have a valid value, output this value
-    stream->print(F("esphome_sensor_failed{id=\""));
-    stream->print(relabel_id_(obj).c_str());
-    stream->print(F("\",name=\""));
-    stream->print(relabel_name_(obj).c_str());
-    stream->print(F("\"} 0\n"));
-    // Data itself
-    stream->print(F("esphome_sensor_value{id=\""));
-    stream->print(relabel_id_(obj).c_str());
-    stream->print(F("\",name=\""));
-    stream->print(relabel_name_(obj).c_str());
-    stream->print(F("\",unit=\""));
-    stream->print(obj->get_unit_of_measurement().c_str());
-    stream->print(F("\"} "));
     stream->print(value_accuracy_to_string(obj->state, obj->get_accuracy_decimals()).c_str());
-    stream->print('\n');
-  } else {
-    // Invalid state
-    stream->print(F("esphome_sensor_failed{id=\""));
-    stream->print(relabel_id_(obj).c_str());
-    stream->print(F("\",name=\""));
-    stream->print(relabel_name_(obj).c_str());
-    stream->print(F("\"} 1\n"));
   }
+  else {
+    // Send NaN value
+    // https://pkg.go.dev/github.com/prometheus/prometheus/pkg/value
+    stream->print(F("0x7ff0000000000001"));
+  }
+  stream->print(F("\n\n"));
 }
+// void PrometheusHandler::sensor_type_(AsyncResponseStream *stream) {
+//   stream->print(F("#TYPE esphome_sensor_value GAUGE\n"));
+//   stream->print(F("#TYPE esphome_sensor_failed GAUGE\n"));
+// }
+// void PrometheusHandler::sensor_row_(AsyncResponseStream *stream, sensor::Sensor *obj) {
+//   if (obj->is_internal() && !this->include_internal_)
+//     return;
+//   if (!std::isnan(obj->state)) {
+//     // We have a valid value, output this value
+//     stream->print(F("esphome_sensor_failed{id=\""));
+//     stream->print(relabel_id_(obj).c_str());
+//     stream->print(F("\",name=\""));
+//     stream->print(relabel_name_(obj).c_str());
+//     stream->print(F("\"} 0\n"));
+//     // Data itself
+//     stream->print(F("esphome_sensor_value{id=\""));
+//     stream->print(relabel_id_(obj).c_str());
+//     stream->print(F("\",name=\""));
+//     stream->print(relabel_name_(obj).c_str());
+//     stream->print(F("\",unit=\""));
+//     stream->print(obj->get_unit_of_measurement().c_str());
+//     stream->print(F("\"} "));
+//     stream->print(value_accuracy_to_string(obj->state, obj->get_accuracy_decimals()).c_str());
+//     stream->print('\n');
+//   } else {
+//     // Invalid state
+//     stream->print(F("esphome_sensor_failed{id=\""));
+//     stream->print(relabel_id_(obj).c_str());
+//     stream->print(F("\",name=\""));
+//     stream->print(relabel_name_(obj).c_str());
+//     stream->print(F("\"} 1\n"));
+//   }
+// }
 #endif
 
 // Type-specific implementation
