@@ -41,7 +41,7 @@ class StatisticsComponent : public Component {
 
   size_t update_count_ = 0;
   size_t valid_count_ = 0;
-  size_t sum_ = 0;
+  float sum_ = 0;
 
   size_t window_size_;
   size_t send_every_;

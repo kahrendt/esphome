@@ -44,21 +44,35 @@ void StatisticsComponent::setup() {
 
 
 void StatisticsComponent::handle_new_value_(float value) {
-  // idea: keep adding data until count = 10 while computing a moving average
-  // once count=10, reset
-  float old_value = this->queue_[this->index_];
-  if (!std::isnan(old_value)) {
-    this->sum_ -= old_value;
-    --this->valid_count_;
+
+
+  // update running sum with new value
+  if (this->mean_sensor_) {
+
+    // check if old value is valid, if so, remove from running sum
+    float old_value = this->queue_[this->index_];
+    if (!std::isnan(old_value)) {
+      this->sum_ -= old_value;
+    }
+
+    // if new value is valid, add it to running sum
+    if (!std::isnan(value)) {
+      this->sum_ += value;
+    }
+
+    // old value is NaN, but new value is valid
+    if ( (std::isnan(old_value)) && (!std::isnan(value)) ) { 
+      ++this->valid_count_;
+    }
+
+    if ( (!std::isnan(old_value)) && (std::isnan(value)) )  { // old value was good, but new one isn't
+      this->valid_count_ = std::max(0, (int)(this->valid_count_ - 1) );
+    }
   }
 
+  // overwrite old value in queue_ and increase the index
   this->queue_[this->index_] = value;
   this->index_ = (1 + this->index_) % this->window_size_;
-
-  if (!std::isnan(value)) {
-    this->sum_ += value;
-    ++this->valid_count_;
-  }
 
   // while (this->queue_.size() >= this->window_size_) {
   //   // float remove_value = this->queue_[0];
@@ -78,8 +92,8 @@ void StatisticsComponent::handle_new_value_(float value) {
   if (++this->send_at_ >= this->send_every_) {
     this->send_at_ = 0;
 
-    float max = *std::max_element(this->queue_.begin(), this->queue_.end());
-    float min = *std::min_element(this->queue_.begin(), this->queue_.end());
+
+
     // float sum = 0;
     // size_t valid_count = 0;
 
@@ -92,22 +106,29 @@ void StatisticsComponent::handle_new_value_(float value) {
     //   }
     // }
 
-    float average = NAN;
-    if (this->valid_count_) {
-      average = this->sum_ / this->valid_count_;
-    }
+
     // if (valid_count) {
     //   average = sum/valid_count;
     // }
 
     if (this->mean_sensor_) {
+      float average = NAN;
+      
+      if (this->valid_count_) {
+        average = this->sum_ / this->valid_count_;
+      }
+
       this->mean_sensor_->publish_state(average);
     }
 
     if (this->max_sensor_) {
+      float max = *std::max_element(this->queue_.begin(), this->queue_.end());
+
       this->max_sensor_->publish_state(max);
     }
     if (this->min_sensor_) {
+      float min = *std::min_element(this->queue_.begin(), this->queue_.end());
+
       this->min_sensor_->publish_state(min);
     }    
   }
