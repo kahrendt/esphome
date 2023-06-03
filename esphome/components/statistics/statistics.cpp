@@ -47,17 +47,12 @@ void StatisticsComponent::handle_new_value_(float value) {
 
 
   // update running sum with new value
-  if (this->mean_sensor_) {
+  if ((this->mean_sensor_) || (this->sd_sensor_)) {
 
     // check if old value is valid, if so, remove from running sum
     float old_value = this->queue_[this->index_];
     if (!std::isnan(old_value)) {
       this->sum_ -= old_value;
-    }
-
-    // if new value is valid, add it to running sum
-    if (!std::isnan(value)) {
-      this->sum_ += value;
     }
 
     // old value is NaN, but new value is valid
@@ -68,6 +63,20 @@ void StatisticsComponent::handle_new_value_(float value) {
     if ( (!std::isnan(old_value)) && (std::isnan(value)) )  { // old value was good, but new one isn't
       this->valid_count_ = std::max(0, (int)(this->valid_count_ - 1) );
     }
+
+    // if new value is valid, add it to running sum
+    if (!std::isnan(value)) {
+      this->sum_ += value;
+
+      float delta = value - this->mean_;
+      
+      this->mean += delta/this->valid_count_;
+
+      float delta2 = value - this->mean_;
+
+      this->m2_ += delta*delta2;
+    }
+
   }
 
   // overwrite old value in queue_ and increase the index
@@ -130,7 +139,17 @@ void StatisticsComponent::handle_new_value_(float value) {
       float min = *std::min_element(this->queue_.begin(), this->queue_.end());
 
       this->min_sensor_->publish_state(min);
-    }    
+    }
+
+    if (this->sd_sensor_) {
+      if this->valid_count_ < 2;
+        this->sd_sensor_->publish_state("NAN");
+      else {
+        float sd = this->M2/(this->valid_count_-1);
+        this->sd_sensor_->publish_state(sd);
+      }
+
+    }
   }
 }
 

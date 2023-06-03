@@ -20,6 +20,7 @@ CODEOWNERS = ["@kahrendt"]
 CONF_MEAN = "mean"
 CONF_MAX = "max"
 CONF_MIN = "min"
+CONF_SD = "sd"
 
 statistics_ns = cg.esphome_ns.namespace("statistics")
 
@@ -38,7 +39,8 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,            
             cv.Optional(CONF_MEAN): sensor.sensor_schema(),
             cv.Optional(CONF_MAX): sensor.sensor_schema(),
-            cv.Optional(CONF_MIN): sensor.sensor_schema(),                    
+            cv.Optional(CONF_MIN): sensor.sensor_schema(),           
+            cv.Optional(CONF_SD): sensor.sensor_schema(),                           
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -67,6 +69,10 @@ inherit_schema_for_min = [
     inherit_property_from([CONF_MIN, property], CONF_SOURCE_ID)
     for property in properties_to_inherit
 ]
+inherit_schema_for_sd = [
+    inherit_property_from([CONF_SD, property], CONF_SOURCE_ID)
+    for property in properties_to_inherit
+]
 
 FINAL_VALIDATE_SCHEMA = cv.All(
     CONFIG_SCHEMA.extend(
@@ -76,6 +82,7 @@ FINAL_VALIDATE_SCHEMA = cv.All(
     *inherit_schema_for_mean,
     *inherit_schema_for_max,
     *inherit_schema_for_min,
+    *inherit_schema_for_sd,
 )
 
 async def to_code(config):
@@ -103,3 +110,8 @@ async def to_code(config):
         conf = config[CONF_MIN]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_min_sensor(sens))
+
+    if CONF_SD in config:
+        conf = config[CONF_SD]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_sd_sensor(sens))

@@ -19,10 +19,12 @@ class StatisticsComponent : public Component {
   void set_mean_sensor(sensor::Sensor *mean_sensor) { this->mean_sensor_ = mean_sensor; }
   void set_max_sensor(sensor::Sensor *max_sensor) { this->max_sensor_ = max_sensor; }
   void set_min_sensor(sensor::Sensor *min_sensor) { this->min_sensor_ = min_sensor; }
+  void set_sd_sensor(sensor::Sensor *sd_sensor) { this->sd_sensor_ = sd_sensor; }
 
   void set_window_size(size_t window_size) { this->window_size_ = window_size; }
   void set_send_every(size_t send_every) { this->send_every_ = send_every; }
   void set_first_at(size_t send_first_at) { this->send_at_ = send_first_at; }
+
  protected:
   sensor::Sensor *source_sensor_{nullptr};
 
@@ -31,17 +33,17 @@ class StatisticsComponent : public Component {
   sensor::Sensor *mean_sensor_{nullptr};
   sensor::Sensor *max_sensor_{nullptr};  
   sensor::Sensor *min_sensor_{nullptr};  
+  sensor::Sensor *sd_sensor_{nullptr};
 
   std::vector<float> queue_;
   size_t index_ = 0;
 
-  //std::deque<float> queue_;
-  float Ex;
-  float Ex2;
-
   size_t update_count_ = 0;
   size_t valid_count_ = 0;
   float sum_ = 0;
+
+  float mean_ = 0;
+  float m2_ = 0;
 
   size_t window_size_;
   size_t send_every_;
