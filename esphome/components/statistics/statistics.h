@@ -2,6 +2,9 @@
 
 #include "esphome/core/component.h"
 #include "esphome/components/sensor/sensor.h"
+#include<limits>
+// #include "DABALite.hpp"
+// #include "AggregationFunctions.hpp"
 
 namespace esphome {
 namespace statistics {
@@ -26,6 +29,10 @@ class StatisticsComponent : public Component {
   void set_first_at(size_t send_first_at) { this->send_at_ = send_first_at; }
 
  protected:
+  // dabalite::Aggregate<Mean<int>> daba_lite_agg_;
+
+
+
   sensor::Sensor *source_sensor_{nullptr};
 
   void handle_new_value_(float value);
@@ -48,6 +55,152 @@ class StatisticsComponent : public Component {
   size_t window_size_;
   size_t send_every_;
   size_t send_at_;
+// };
+
+// class Aggregate {
+//   public:
+    struct Partial {
+      float sum;
+      float sq;
+      float max;
+      float min;
+      size_t count;
+    };
+
+    float lower_mean(Partial c) {
+      return static_cast<float>(c.sum/c.count);
+    }
+
+    float lower_max(Partial c) {
+      return static_cast<float>(c.max);
+    }
+
+    float lower_min(Partial c) {
+      return static_cast<float>(c.min);
+    }
+
+    float lower_sd(Partial c) {
+      return static_cast<float>(std::sqrt((1.0 / (c.count - 1)) * (c.sq - ((c.sum * c.sum) / static_cast<double>(c.count)))));
+    }
+
+    Partial lift(float v) {
+      Partial part;
+      part.sum = v;
+      part.sq = v * v;
+      part.max = v;
+      part.min = v;
+      part.n = 1;
+      return part;
+    }
+
+    Partial combine(Partial &a, Partial &b) {
+      Partial part;
+      part.sum = a.sum + b.sum;
+      part.sq = a.sq + b.sq;
+      part.n = a.n + b.n;
+
+      part.max = std::max(a.max, b.max);
+      part.min = std::min(a.min, b.min);
+
+      return part;
+    }
+
+  
+    size_t size() { return q_.size(); }
+
+    void insert(float value) {
+      Partial lifted = lift(value);
+      backSum_ = combine(backSum_, lifted);
+
+      queue_entry entry;
+      entry.val_ = lifted;
+      q_.push_back(entry);
+
+      step_();
+    }
+
+    void evict() {
+      q_.pop_front();
+      step_();
+    }
+
+    Partial query() {
+      if (q_.size() > 0) {
+        Partial alpha = get_alpha_();
+        Partial back = get_back_();
+
+        return combine(alpha, back);
+      }
+      else
+        return identity_;
+    }
+
+    // float query() {
+    //   if (q_.size() > 0) {
+    //     Partial alpha = get_alpha_();
+    //     Partial back = get_back_();
+
+    //     return lower(combine(alpha, back));
+    //   }
+    //   else
+    //     return lower(identity_);
+    // }
+
+  private:
+    struct queue_entry {
+      Partial val_;
+    };
+    
+    std::deque<queue_entry> q_;
+    std::deque<queue_entry>::iterator l_,r_,a_,b_;
+
+    Partial identity_ = {0,0,std::numeric_limits<float>::infinity()*(-1),std::numeric_limits<float>::infinity(),0};
+
+    Partial midSum_, backSum_;
+
+    void step_() {
+      if (l_ == b_) {
+        flip_();
+      }
+
+      if (q_.begin() != b_) {
+        if (a_ != r_) {
+          Partial prev_delta = get_delta_();
+          --a_;
+          a_->val_ = combine(a_->val_, prev_delta);
+        }
+
+        if (l_ != r_) {
+          l_->val_ = combine(l_->val_, midSum_);
+          ++l_;
+        }
+        else {
+          ++l_; ++r_; ++a_;
+          midSum_ = get_delta_();
+        }
+      }
+      else {
+        backSum_ = midSum_ = identity_;
+      }
+    }
+
+    void flip_() {
+      l_ = q_.begin();
+      r_ = b_;
+      a_ = q_.end();
+      b_ = q_.end();
+      midSum_ = backSum_;
+      backSum_ = identity_;
+    }
+
+    inline bool is_back_empty() { return b_ == q_.end(); }
+    inline bool is_front_empty() { return b_ == q_.begin(); }
+    inline bool is_delta_empty() { return a_ == b_; }
+    inline bool is_gamma_empty() { return a_ == r_; }
+    inline Partial get_back_() { return backSum_; }
+    inline Partial get_alpha_() { return is_front_empty() ? identity_ : q_.front().val_; }
+    inline Partial get_delta_() { return is_delta_empty() ? identity_ : a_->val_; }
+    inline Partial get_gamma_() { return is_gamma_empty() ? identity_ : (a_-1)->val_; }    
 };
 
 }  // namespace statistics
