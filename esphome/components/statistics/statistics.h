@@ -5,6 +5,7 @@
 #include<limits>
 // #include "DABALite.hpp"
 // #include "AggregationFunctions.hpp"
+#include "esphome/core/log.h"
 
 namespace esphome {
 namespace statistics {
@@ -38,16 +39,6 @@ class StatisticsComponent : public Component {
   sensor::Sensor *min_sensor_{nullptr};  
   sensor::Sensor *sd_sensor_{nullptr};
 
-  std::vector<float> queue_;
-  size_t index_ = 0;
-
-  size_t update_count_ = 0;
-  size_t valid_count_ = 0;
-  float sum_ = 0;
-
-  float mean_ = 0;
-  float m2_ = 0;
-
   size_t window_size_;
   size_t send_every_;
   size_t send_at_;
@@ -57,10 +48,11 @@ class StatisticsComponent : public Component {
 //   public:
     struct Partial {
       float sum;
-      float sq;
       float max;
       float min;
       size_t count;
+
+      double m2;
     };
 
     float lower_mean(Partial c) {
@@ -76,27 +68,49 @@ class StatisticsComponent : public Component {
     }
 
     float lower_sd(Partial c) {
-      return static_cast<float>(std::sqrt((1.0 / (c.count - 1)) * (c.sq - ((c.sum * c.sum) / static_cast<double>(c.count)))));
+      return std::sqrt(c.m2 /(static_cast<double>(c.count) - 1));      
+    }
+
+    float lower_variance(Partial c) {
+      return c.m2/(static_cast<double>(c.count)-1);
     }
 
     Partial lift(float v) {
       Partial part;
       part.sum = v;
-      part.sq = v * v;
+      // part.sq = (static_cast<double>(v)) * (static_cast<double>(v));
       part.max = v;
       part.min = v;
       part.count = 1;
+      
+      part.m2 = 0.0;
       return part;
     }
 
-    Partial combine(Partial &a, Partial &b) {
+    Partial combine(Partial &a, Partial &b) {  
       Partial part;
       part.sum = a.sum + b.sum;
-      part.sq = a.sq + b.sq;
+      // part.sq = a.sq + b.sq;
       part.count = a.count + b.count;
 
       part.max = std::max(a.max, b.max);
       part.min = std::min(a.min, b.min);
+
+  
+      double a_avg = 0.0;
+      double b_avg = 0.0;
+
+      double a_count = static_cast<float>(a.count);
+      double b_count = static_cast<float>(b.count);        
+    
+      if (a.count)
+        a_avg = a.sum/a_count;
+      if (b.count)
+        b_avg = b.sum/b_count;
+
+      float delta = b_avg - a_avg;
+
+      part.m2 = a.m2 + b.m2 + delta*delta*a_count*b_count/static_cast<double>(part.count);
 
       return part;
     }
@@ -144,7 +158,7 @@ class StatisticsComponent : public Component {
     std::deque<Partial> q_;
     std::deque<Partial>::iterator l_,r_,a_,b_;
 
-    Partial identity_ = {0,0,std::numeric_limits<float>::infinity()*(-1),std::numeric_limits<float>::infinity(),0};
+    Partial identity_ = {0,std::numeric_limits<float>::infinity()*(-1),std::numeric_limits<float>::infinity(),0,0};
 
     Partial midSum_, backSum_;
 
