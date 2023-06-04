@@ -29,10 +29,6 @@ class StatisticsComponent : public Component {
   void set_first_at(size_t send_first_at) { this->send_at_ = send_first_at; }
 
  protected:
-  // dabalite::Aggregate<Mean<int>> daba_lite_agg_;
-
-
-
   sensor::Sensor *source_sensor_{nullptr};
 
   void handle_new_value_(float value);
@@ -89,7 +85,7 @@ class StatisticsComponent : public Component {
       part.sq = v * v;
       part.max = v;
       part.min = v;
-      part.n = 1;
+      part.count = 1;
       return part;
     }
 
@@ -97,7 +93,7 @@ class StatisticsComponent : public Component {
       Partial part;
       part.sum = a.sum + b.sum;
       part.sq = a.sq + b.sq;
-      part.n = a.n + b.n;
+      part.count = a.count + b.count;
 
       part.max = std::max(a.max, b.max);
       part.min = std::min(a.min, b.min);
@@ -112,9 +108,7 @@ class StatisticsComponent : public Component {
       Partial lifted = lift(value);
       backSum_ = combine(backSum_, lifted);
 
-      queue_entry entry;
-      entry.val_ = lifted;
-      q_.push_back(entry);
+      q_.push_back(lifted);      
 
       step_();
     }
@@ -147,12 +141,8 @@ class StatisticsComponent : public Component {
     // }
 
   private:
-    struct queue_entry {
-      Partial val_;
-    };
-    
-    std::deque<queue_entry> q_;
-    std::deque<queue_entry>::iterator l_,r_,a_,b_;
+    std::deque<Partial> q_;
+    std::deque<Partial>::iterator l_,r_,a_,b_;
 
     Partial identity_ = {0,0,std::numeric_limits<float>::infinity()*(-1),std::numeric_limits<float>::infinity(),0};
 
@@ -167,11 +157,11 @@ class StatisticsComponent : public Component {
         if (a_ != r_) {
           Partial prev_delta = get_delta_();
           --a_;
-          a_->val_ = combine(a_->val_, prev_delta);
+          *a_ = combine(*a_, prev_delta);
         }
 
         if (l_ != r_) {
-          l_->val_ = combine(l_->val_, midSum_);
+          *l_ = combine(*l_, midSum_);
           ++l_;
         }
         else {
@@ -198,9 +188,9 @@ class StatisticsComponent : public Component {
     inline bool is_delta_empty() { return a_ == b_; }
     inline bool is_gamma_empty() { return a_ == r_; }
     inline Partial get_back_() { return backSum_; }
-    inline Partial get_alpha_() { return is_front_empty() ? identity_ : q_.front().val_; }
-    inline Partial get_delta_() { return is_delta_empty() ? identity_ : a_->val_; }
-    inline Partial get_gamma_() { return is_gamma_empty() ? identity_ : (a_-1)->val_; }    
+    inline Partial get_alpha_() { return is_front_empty() ? identity_ : q_.front(); }
+    inline Partial get_delta_() { return is_delta_empty() ? identity_ : *a_; }
+    inline Partial get_gamma_() { return is_gamma_empty() ? identity_ : *(a_-1); }    
 };
 
 }  // namespace statistics
