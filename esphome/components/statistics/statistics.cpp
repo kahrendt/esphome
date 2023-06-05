@@ -1,5 +1,5 @@
 /*
- * 
+ *
  */
 
 #include "statistics.h"
@@ -10,7 +10,6 @@ namespace esphome {
 namespace statistics {
 
 static const char *const TAG = "statistics";
-
 
 void StatisticsComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "Statistics:");
@@ -33,7 +32,7 @@ void StatisticsComponent::dump_config() {
 
   if (this->sd_sensor_) {
     LOG_SENSOR("  ", "Standard Deviation", this->sd_sensor_);
-  }  
+  }
 }
 
 void StatisticsComponent::setup() {
@@ -41,7 +40,6 @@ void StatisticsComponent::setup() {
 
   this->source_sensor_->add_on_state_callback([this](float value) -> void { this->handle_new_value_(value); });
 }
-
 
 void StatisticsComponent::handle_new_value_(float value) {
   while (this->queue_->size() >= this->window_size_) {

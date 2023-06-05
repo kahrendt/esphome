@@ -8,7 +8,6 @@
 namespace esphome {
 namespace statistics {
 
-
 // // partial summary statistics structure
 // struct Partial {
 //   float max;
@@ -40,15 +39,14 @@ class StatisticsComponent : public Component {
   void set_send_every(size_t send_every) { this->send_every_ = send_every; }
   void set_first_at(size_t send_first_at) { this->send_at_ = send_first_at; }
 
-
  protected:
   void handle_new_value_(float value);
 
   sensor::Sensor *source_sensor_{nullptr};
 
   sensor::Sensor *mean_sensor_{nullptr};
-  sensor::Sensor *max_sensor_{nullptr};  
-  sensor::Sensor *min_sensor_{nullptr};  
+  sensor::Sensor *max_sensor_{nullptr};
+  sensor::Sensor *min_sensor_{nullptr};
   sensor::Sensor *sd_sensor_{nullptr};
 
   size_t window_size_{};
@@ -58,26 +56,18 @@ class StatisticsComponent : public Component {
   DABALite *queue_{nullptr};
 
   // functions to convert a Partial structure to usable summary statistics
-  float lower_mean(Partial c) {
-    return c.mean;
-  }
+  float lower_mean(Partial c) { return c.mean; }
 
-  float lower_max(Partial c) {
-    return c.max;
-  }
+  float lower_max(Partial c) { return c.max; }
 
-  float lower_min(Partial c) {
-    return c.min;
-  }
+  float lower_min(Partial c) { return c.min; }
 
-  float lower_sd(Partial c) {
-    return std::sqrt(lower_variance(c));      
-  }
+  float lower_sd(Partial c) { return std::sqrt(lower_variance(c)); }
 
   float lower_variance(Partial c) {
     // Welford's algorithm for variance
-    return c.m2/(static_cast<double>(c.count)-1);
-  }  
+    return c.m2 / (static_cast<double>(c.count) - 1);
+  }
 };
 
 }  // namespace statistics
