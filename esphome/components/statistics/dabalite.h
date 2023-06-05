@@ -12,7 +12,6 @@
 
 #include "esphome/core/helpers.h"
 #include <limits>
-#include <algorithm>
 #include <vector>
 
 namespace esphome {
