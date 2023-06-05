@@ -37,25 +37,22 @@ void StatisticsComponent::dump_config() {
 }
 
 void StatisticsComponent::setup() {
-  l_ = q_.begin();
-  r_ = q_.begin();
-  a_ = q_.begin();
-  b_ = q_.begin();
+  this->queue_ = new DABALite(this->window_size_);
 
   this->source_sensor_->add_on_state_callback([this](float value) -> void { this->handle_new_value_(value); });
 }
 
 
 void StatisticsComponent::handle_new_value_(float value) {
-  while (size() >= this->window_size_) {
-    evict();
+  while (this->queue_->size() >= this->window_size_) {
+    this->queue_->evict();
   }
-  insert(value);
+  this->queue_->insert(value);
 
   if (++this->send_at_ >= this->send_every_) {
     this->send_at_ = 0;
 
-    Partial summary = query();
+    Partial summary = this->queue_->query();
 
     if (this->mean_sensor_) {
       this->mean_sensor_->publish_state(lower_mean(summary));
