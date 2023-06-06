@@ -8,18 +8,6 @@
 namespace esphome {
 namespace statistics {
 
-// // partial summary statistics structure
-// struct Partial {
-//   float max;
-//   float min;
-
-//   double m2;      // used to find variance/standard deviation via Welford's algorithm
-
-//   float mean;
-
-//   size_t count;
-// };
-
 class StatisticsComponent : public Component {
  public:
   float get_setup_priority() const override { return setup_priority::DATA; }
@@ -55,19 +43,32 @@ class StatisticsComponent : public Component {
 
   DABALite *queue_{nullptr};
 
-  // functions to convert a Partial structure to usable summary statistics
-  float lower_mean(Partial c) { return c.mean; }
+  Partial current_statistics_{};
 
-  float lower_max(Partial c) { return c.max; }
+  void update_current_statistics_();
 
-  float lower_min(Partial c) { return c.min; }
-
-  float lower_sd(Partial c) { return std::sqrt(lower_variance(c)); }
-
-  float lower_variance(Partial c) {
+  float mean_() { return current_statistics_.mean; }
+  float max_() { return current_statistics_.max; }
+  float min_() { return current_statistics_.min; }  
+  float variance_() {   
     // Welford's algorithm for variance
-    return c.m2 / (static_cast<double>(c.count) - 1);
+    return current_statistics_.m2 / (static_cast<double>(current_statistics_.count) - 1);
   }
+  float sd_() { return std::sqrt(this->variance_());}
+
+  // // functions to convert a Partial structure to usable summary statistics
+  // float lower_mean(Partial c) { return c.mean; }
+
+  // float lower_max(Partial c) { return c.max; }
+
+  // float lower_min(Partial c) { return c.min; }
+
+  // float lower_sd(Partial c) { return std::sqrt(lower_variance(c)); }
+
+  // float lower_variance(Partial c) {
+  //   // Welford's algorithm for variance
+  //   return c.m2 / (static_cast<double>(c.count) - 1);
+  // }
 };
 
 }  // namespace statistics

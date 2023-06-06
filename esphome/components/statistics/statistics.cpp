@@ -41,6 +41,10 @@ void StatisticsComponent::setup() {
   this->source_sensor_->add_on_state_callback([this](float value) -> void { this->handle_new_value_(value); });
 }
 
+void StatisticsComponent::update_current_statistics_() {
+  this->current_statistics_ = this->queue_->query();
+}
+
 void StatisticsComponent::handle_new_value_(float value) {
   while (this->queue_->size() >= this->window_size_) {
     this->queue_->evict();
@@ -50,22 +54,28 @@ void StatisticsComponent::handle_new_value_(float value) {
   if (++this->send_at_ >= this->send_every_) {
     this->send_at_ = 0;
 
-    Partial summary = this->queue_->query();
+    this->update_current_statistics_();
+
+    // Partial summary = this->queue_->query();
 
     if (this->mean_sensor_) {
-      this->mean_sensor_->publish_state(lower_mean(summary));
+      this->mean_sensor_->publish_state(mean_());
+      // this->mean_sensor_->publish_state(lower_mean(summary));
     }
 
     if (this->max_sensor_) {
-      this->max_sensor_->publish_state(lower_max(summary));
+      // this->max_sensor_->publish_state(lower_max(summary));
+      this->max_sensor_->publish_state(max_());
     }
 
     if (this->min_sensor_) {
-      this->min_sensor_->publish_state(lower_min(summary));
+      this->min_sensor_->publish_state(min_());
+      // this->min_sensor_->publish_state(lower_min(summary));
     }
 
     if (this->sd_sensor_) {
-      this->sd_sensor_->publish_state(lower_sd(summary));
+      this->sd_sensor_->publish_state(sd_());
+      // this->sd_sensor_->publish_state(lower_sd(summary));
     }
   }
 }

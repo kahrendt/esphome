@@ -14,6 +14,8 @@
 #include <limits>
 #include <vector>
 
+#include <boost/circular_buffer.hpp>
+
 namespace esphome {
 
 namespace statistics {
@@ -23,11 +25,39 @@ struct Partial {
   float max;
   float min;
 
-  double m2;  // used to find variance/standard deviation via Welford's algorithm
+  double m2;  // used to find variance & standard deviation via Welford's algorithm
 
   float mean;
 
   size_t count;
+};
+
+template <typename T> class CircularQueue {
+ public:
+  CircularQueue(size_t window_size);
+
+  size_t size();
+
+  void insert(T value);
+  void evict();
+  T retrieve(size_t index);
+  void replace(size_t index, T value);
+
+  size_t front();
+  size_t back();
+
+  inline size_t next_index(size_t current);
+  inline size_t previous_index(size_t current);
+
+ protected:
+  // std::vector<Partial> q_{};
+  std::vector<T, ExternalRAMAllocator<T>> q_{};
+
+  size_t queue_size_{0};
+  size_t window_size_{};
+
+  size_t head_{0};
+  size_t tail_{0};
 };
 
 class DABALite {
@@ -45,17 +75,7 @@ class DABALite {
   Partial query();
 
  protected:
-  // vector to store summary statistics, will use it as a circular queue
-  // std::vector<Partial> q_{};
-  std::vector<Partial, ExternalRAMAllocator<Partial>> q_{};
-
-  // size of the circular queue; i.e., number of valid entries
-  size_t queue_size_{0};
-  size_t window_size_{};
-
-  // Circular Queue - Indices
-  size_t head_{0};
-  size_t tail_{0};
+  CircularQueue<Partial> *queue_{nullptr};
 
   // DABA Lite - Indices
   size_t l_{0};
@@ -68,10 +88,6 @@ class DABALite {
 
   // DABA Lite - Running Totals
   Partial midSum_{this->identity_}, backSum_{this->identity_};
-
-  // Circular Queue - next and previous indices in the circular queue
-  inline size_t return_next_(size_t current);
-  inline size_t return_previous_(size_t current);
 
   // compute summary statistics for a single new value
   Partial lift_(float v);
