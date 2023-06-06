@@ -1,9 +1,4 @@
 /*
-  Summary Partial statistics are stored in a circular queue with capacity window_size_
-  One example of implementation: https://towardsdatascience.com/circular-queue-or-ring-buffer-92c7b0193326
-  Improved implementation with ideas from
-  https://os.mbed.com/users/hamparawa/code/circular_buffer//file/b241b75b052b/circular_buffer.cpp/
-
   Summary statistics are computed using the DABA Lite algorithm
     - space requirements: n+2
     - time complexity: worse-case O(1)
@@ -12,11 +7,8 @@
 
 #pragma once
 
-#include "esphome/core/helpers.h"
 #include <limits>
-#include <vector>
-
-// #include "circular_buffer.hpp"
+#include "circularqueue.h"
 
 namespace esphome {
 
@@ -32,30 +24,6 @@ struct Partial {
   float mean;
 
   size_t count;
-};
-
-template<typename T> class CircularQueue {
- public:
-  void set_capacity(size_t capacity);
-
-  size_t size();
-
-  void push_back(T value);
-  void pop_front();
-
-  T &at(size_t index);
-  T &operator[](size_t index);
-
- protected:
-  std::vector<T, ExternalRAMAllocator<T>> q_{};
-
-  size_t queue_size_{0};
-  size_t capacity_{};
-
-  size_t head_{0};
-  size_t tail_{0};
-
-  inline size_t increment_index_(size_t index);
 };
 
 class DABALite {
