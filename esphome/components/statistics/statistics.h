@@ -41,7 +41,7 @@ class StatisticsComponent : public Component {
   size_t send_every_{};
   size_t send_at_{};
 
-  DABALite *queue_{nullptr};
+  DABALite queue_{};
 
   Partial current_statistics_{};
 
@@ -49,26 +49,12 @@ class StatisticsComponent : public Component {
 
   float mean_() { return current_statistics_.mean; }
   float max_() { return current_statistics_.max; }
-  float min_() { return current_statistics_.min; }  
-  float variance_() {   
+  float min_() { return current_statistics_.min; }
+  float variance_() {
     // Welford's algorithm for variance
     return current_statistics_.m2 / (static_cast<double>(current_statistics_.count) - 1);
   }
-  float sd_() { return std::sqrt(this->variance_());}
-
-  // // functions to convert a Partial structure to usable summary statistics
-  // float lower_mean(Partial c) { return c.mean; }
-
-  // float lower_max(Partial c) { return c.max; }
-
-  // float lower_min(Partial c) { return c.min; }
-
-  // float lower_sd(Partial c) { return std::sqrt(lower_variance(c)); }
-
-  // float lower_variance(Partial c) {
-  //   // Welford's algorithm for variance
-  //   return c.m2 / (static_cast<double>(c.count) - 1);
-  // }
+  float sd_() { return std::sqrt(this->variance_()); }
 };
 
 }  // namespace statistics

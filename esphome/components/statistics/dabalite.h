@@ -1,6 +1,8 @@
 /*
   Summary Partial statistics are stored in a circular queue with capacity window_size_
   One example of implementation: https://towardsdatascience.com/circular-queue-or-ring-buffer-92c7b0193326
+  Improved implementation with ideas from
+  https://os.mbed.com/users/hamparawa/code/circular_buffer//file/b241b75b052b/circular_buffer.cpp/
 
   Summary statistics are computed using the DABA Lite algorithm
     - space requirements: n+2
@@ -14,7 +16,7 @@
 #include <limits>
 #include <vector>
 
-#include <boost/circular_buffer.hpp>
+// #include "circular_buffer.hpp"
 
 namespace esphome {
 
@@ -32,37 +34,34 @@ struct Partial {
   size_t count;
 };
 
-template <typename T> class CircularQueue {
+template<typename T> class CircularQueue {
  public:
-  CircularQueue(size_t window_size);
+  void set_capacity(size_t capacity);
 
   size_t size();
 
-  void insert(T value);
-  void evict();
-  T retrieve(size_t index);
-  void replace(size_t index, T value);
+  void push_back(T value);
+  void pop_front();
 
-  size_t front();
-  size_t back();
-
-  inline size_t next_index(size_t current);
-  inline size_t previous_index(size_t current);
+  T &at(size_t index);
+  T &operator[](size_t index);
 
  protected:
-  // std::vector<Partial> q_{};
   std::vector<T, ExternalRAMAllocator<T>> q_{};
 
   size_t queue_size_{0};
-  size_t window_size_{};
+  size_t capacity_{};
 
   size_t head_{0};
   size_t tail_{0};
+
+  inline size_t increment_index_(size_t index);
 };
 
 class DABALite {
  public:
-  DABALite(size_t window_size);
+  // DABALite(size_t window_size);
+  void set_window_size(size_t window_size);
   size_t size();
 
   // insert a new value at end of circular queue and step DABA Lite algorithm
@@ -75,7 +74,8 @@ class DABALite {
   Partial query();
 
  protected:
-  CircularQueue<Partial> *queue_{nullptr};
+  // CircularQueue<Partial> *queue_{nullptr};
+  CircularQueue<Partial> queue_;
 
   // DABA Lite - Indices
   size_t l_{0};
@@ -101,8 +101,8 @@ class DABALite {
   void flip_();
 
   // DABA Lite algorithm methods
-  inline bool is_front_empty();
-  inline bool is_delta_empty();
+  inline bool is_front_empty_();
+  inline bool is_delta_empty_();
   inline Partial get_back_();
   inline Partial get_alpha_();
   inline Partial get_delta_();
