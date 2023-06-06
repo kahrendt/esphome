@@ -8,7 +8,7 @@
 #pragma once
 
 #include <limits>
-#include "circularqueue.h"
+#include "circular_queue.h"
 
 namespace esphome {
 
@@ -42,7 +42,6 @@ class DABALite {
   Partial query();
 
  protected:
-  // CircularQueue<Partial> *queue_{nullptr};
   CircularQueue<Partial> queue_;
 
   // DABA Lite - Indices

@@ -1,7 +1,7 @@
-#include "circularqueue.h"
+#include "circular_queue.h"
+#include <vector>
 
 namespace esphome {
-
 namespace statistics {
 
 template<typename T> void CircularQueue<T>::set_capacity(size_t capacity) {
@@ -9,11 +9,14 @@ template<typename T> void CircularQueue<T>::set_capacity(size_t capacity) {
   this->q_.reserve(this->capacity_);
 }
 
+template<typename T> bool CircularQueue<T>::empty() { return this->queue_size_ == 0; }
 template<typename T> size_t CircularQueue<T>::size() { return this->queue_size_; }
+template<typename T> size_t CircularQueue<T>::max_size() { return this->capacity_; }
+template<typename T> size_t CircularQueue<T>::capacity() { return this->q_.capacity(); }
 
 // push a new value at end of circular queue
 template<typename T> void CircularQueue<T>::push_back(T value) {
-  if (this->size() > 0)
+  if (!this->empty())
     this->tail_ = increment_index_(this->tail_);
 
   this->q_[this->tail_] = value;
@@ -23,7 +26,7 @@ template<typename T> void CircularQueue<T>::push_back(T value) {
 
 // pop off value at front of circular queue
 template<typename T> void CircularQueue<T>::pop_front() {
-  if (this->size() > 0) {
+  if (!this->empty()) {
     this->head_ = this->increment_index_(head_);
     --this->queue_size_;
   }

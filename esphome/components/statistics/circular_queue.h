@@ -4,21 +4,22 @@
   Improved implementation with ideas from
   https://os.mbed.com/users/hamparawa/code/circular_buffer//file/b241b75b052b/circular_buffer.cpp/
 */
-
 #pragma once
 
 #include "esphome/core/helpers.h"
 #include <vector>
 
 namespace esphome {
-
 namespace statistics {
 
 template<typename T> class CircularQueue {
  public:
   void set_capacity(size_t capacity);
 
+  bool empty();
   size_t size();
+  size_t max_size();
+  size_t capacity();
 
   void push_back(T value);
   void pop_front();
