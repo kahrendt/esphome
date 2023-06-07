@@ -43,6 +43,10 @@ void StatisticsComponent::dump_config() {
   if (this->count_sensor_) {
     LOG_SENSOR("  ", "Count", this->count_sensor_);
   }
+
+  if (this->trend_sensor_) {
+    LOG_SENSOR("  ", "Trend", this->trend_sensor_);
+  }
 }
 
 void StatisticsComponent::setup() {
@@ -89,6 +93,14 @@ void StatisticsComponent::handle_new_value_(float value) {
 
     if (this->count_sensor_) {
       this->count_sensor_->publish_state(this->count_());
+    }
+
+    if (this->trend_sensor_) {
+      this->trend_sensor_->publish_state(this->trend_());
+    }
+
+    if (this->covariance_sensor_) {
+      this->covariance_sensor_->publish_state(this->covariance_());
     }
   }
 }

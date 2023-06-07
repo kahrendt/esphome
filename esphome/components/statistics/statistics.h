@@ -4,7 +4,7 @@
 #include "esphome/components/sensor/sensor.h"
 
 #include "daba_lite.h"
-
+#include "esphome/core/log.h"
 namespace esphome {
 namespace statistics {
 
@@ -24,6 +24,8 @@ class StatisticsComponent : public Component {
   void set_sd_sensor(sensor::Sensor *sd_sensor) { this->sd_sensor_ = sd_sensor; }
   void set_variance_sensor(sensor::Sensor *variance_sensor) { this->variance_sensor_ = variance_sensor; }
   void set_count_sensor(sensor::Sensor *count_sensor) { this->count_sensor_ = count_sensor; }
+  void set_trend_sensor(sensor::Sensor *trend_sensor) { this->trend_sensor_ = trend_sensor; }
+  void set_covariance_sensor(sensor::Sensor *covariance_senesor) { this->covariance_sensor_ = covariance_senesor; }
 
   void set_window_size(size_t window_size) { this->window_size_ = window_size; }
   void set_send_every(size_t send_every) { this->send_every_ = send_every; }
@@ -40,6 +42,8 @@ class StatisticsComponent : public Component {
   sensor::Sensor *sd_sensor_{nullptr};
   sensor::Sensor *variance_sensor_{nullptr};
   sensor::Sensor *count_sensor_{nullptr};
+  sensor::Sensor *trend_sensor_{nullptr};
+  sensor::Sensor *covariance_sensor_{nullptr};
 
   size_t window_size_{};
   size_t send_every_{};
@@ -51,15 +55,22 @@ class StatisticsComponent : public Component {
 
   void update_current_statistics_();
 
-  float mean_() { return current_statistics_.mean; }
-  float max_() { return current_statistics_.max; }
-  float min_() { return current_statistics_.min; }
+  float mean_() { return this->current_statistics_.mean; }
+  float max_() { return this->current_statistics_.max; }
+  float min_() { return this->current_statistics_.min; }
   float variance_() {
     // Welford's algorithm for variance
-    return current_statistics_.m2 / (static_cast<double>(current_statistics_.count) - 1);
+    return this->current_statistics_.m2 / (static_cast<double>(this->current_statistics_.count) - 1);
   }
   float sd_() { return std::sqrt(this->variance_()); }
-  size_t count_() { return current_statistics_.count; }
+  size_t count_() { return this->current_statistics_.count; }
+
+  float covariance_() { return this->current_statistics_.c2 / (this->current_statistics_.count - 1); }
+
+  // slope for line of best fit; i.e., trend is covariance(x,y)/variance(x)
+  //   - the variance and covariance are obtained by taking m2/(n-1) and c2/(n-1) respectivally
+  //   - we skip the division of the common factor of (n-1) in the numerator and denominator
+  float trend_() { return this->current_statistics_.c2 / this->current_statistics_.x_m2; }
 };
 
 }  // namespace statistics

@@ -24,6 +24,10 @@ struct Aggregate {
   float mean;
 
   size_t count;
+
+  double x_mean;
+  double x_m2;
+  double c2;
 };
 
 class DABALite {
@@ -43,6 +47,8 @@ class DABALite {
  protected:
   CircularQueue<Aggregate> queue_;
 
+  uint32_t last_update_{0};
+
   // void debug_pointers_();
 
   // DABA Lite - Raw Indices for queue_; i.e., not offset by the head index
@@ -57,7 +63,10 @@ class DABALite {
       std::numeric_limits<float>::infinity(),         // null min is Infinity
       NAN,                                            // null M2 is NaN
       NAN,                                            // null mean is NaN
-      0                                               // null count is 0
+      0,                                              // null count is 0
+      NAN,                                            // null x_mean is NaN
+      NAN,                                            // null x_m2 is NaN
+      NAN                                             // null C2 is NaN
   };
 
   // DABA Lite - Running Totals

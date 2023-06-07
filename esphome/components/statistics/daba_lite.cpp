@@ -3,6 +3,7 @@
 #include "circular_queue.cpp"
 #include <algorithm>
 
+#include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
 namespace esphome {
@@ -43,6 +44,10 @@ Aggregate DABALite::query() {
 
 // compute summary statistics for a single new value
 Aggregate DABALite::lift_(float v) {
+  const uint32_t now = millis();
+  const uint32_t dt_ms = now - this->last_update_;
+  this->last_update_ = now;
+
   Aggregate part = this->identity_;
 
   if (!std::isnan(v)) {
@@ -54,6 +59,11 @@ Aggregate DABALite::lift_(float v) {
     part.m2 = 0.0;
 
     part.mean = v;
+
+    // part.x_mean = static_cast<double>(dt_ms) / 1000.0;
+    part.x_mean = static_cast<double>(now) / 1000.0;
+    part.x_m2 = 0.0;
+    part.c2 = 0.0;
   }
 
   return part;
@@ -68,29 +78,53 @@ Aggregate DABALite::combine_(Aggregate &a, Aggregate &b) {
 
   part.count = a.count + b.count;
 
-  double a_count = static_cast<float>(a.count);
-  double b_count = static_cast<float>(b.count);
-  double part_count = static_cast<double>(part.count);
-
   if (std::isnan(a.mean) && std::isnan(b.mean)) {
     part.m2 = NAN;
     part.mean = NAN;
+    part.x_mean = NAN;
+    part.c2 = NAN;
+    part.x_m2 = NAN;
   } else if (std::isnan(a.mean)) {  // only a is NAN
     part.m2 = b.m2;
     part.mean = b.mean;
+    part.x_mean = b.x_mean;
+    part.x_m2 = b.x_m2;
+    part.c2 = b.c2;
   } else if (std::isnan(b.mean)) {  // only b is NAN
     part.m2 = a.m2;
     part.mean = a.mean;
+    part.x_mean = a.x_mean;
+    part.x_m2 = a.x_m2;
+    part.c2 = a.c2;
   } else {  // both valid
+    double a_count = static_cast<float>(a.count);
+    double b_count = static_cast<float>(b.count);
+    double part_count = static_cast<double>(part.count);
+
+    // weighted average of the two means based on their counts
+    // reduces the chances for floating point errors in comparison to saving the aggregate sum and dividing by the
+    part.mean = (a.mean * a_count + b.mean * b_count) / part_count;
+    part.x_mean = (a.x_mean * a_count + b.x_mean * b_count) / part_count;
+
     // compute overall M2 for Welford's algorithm using Chan's parallel algorithm for computing the variance
     // drastically reduces the chances for catastrophic cancellation with floating point arithmetic
     float delta = b.mean - a.mean;
     part.m2 = a.m2 + b.m2 + delta * delta * a_count * b_count / part_count;
 
-    // weighted average of the two means based on their counts
-    // reduces the chances for floating point errors in comparison to saving the aggregate sum and dividing by the
-    part.mean = (a.mean * a_count + b.mean * b_count) / part_count;
+    // compute M2 for Welford's algorithm for x-values; i.e., timestamps
+    float x_delta = b.x_mean - a.x_mean;
+    part.x_m2 = a.x_m2 + b.x_m2 + x_delta * x_delta * a_count * b_count / part_count;
+
+    // compute C2 for an extension of Welford's algorithm to compute the covariance of x (timestamps) and y (sensor
+    // measurements)
+    part.c2 = a.c2 + b.c2 + x_delta * delta * a_count * b_count / part_count;
   }
+
+  // https://stats.stackexchange.com/questions/263429/how-to-run-linear-regression-in-a-parallel-distributed-way-for-big-data-setting
+  // part.x = a.x + b.x;
+  // part.y = a.y + b.y;
+  // part.xx = a.xx + b.xx;
+  // part.xy = a.xy + b.xy;
 
   return part;
 }

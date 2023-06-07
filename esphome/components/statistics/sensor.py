@@ -23,6 +23,8 @@ CONF_MIN = "min"
 CONF_SD = "sd"
 CONF_VARIANCE = "variance"
 CONF_COUNT = "count"
+CONF_TREND = "trend"
+CONF_COVARIANCE = "covariance"
 
 statistics_ns = cg.esphome_ns.namespace("statistics")
 
@@ -41,6 +43,8 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_SD): sensor.sensor_schema(),
         cv.Optional(CONF_VARIANCE): sensor.sensor_schema(),
         cv.Optional(CONF_COUNT): sensor.sensor_schema(),
+        cv.Optional(CONF_TREND): sensor.sensor_schema(),
+        cv.Optional(CONF_COVARIANCE): sensor.sensor_schema(),
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -124,3 +128,13 @@ async def to_code(config):
         conf = config[CONF_COUNT]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_count_sensor(sens))
+
+    if CONF_TREND in config:
+        conf = config[CONF_TREND]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_trend_sensor(sens))
+
+    if CONF_COVARIANCE in config:
+        conf = config[CONF_COVARIANCE]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_covariance_sensor(sens))
