@@ -45,9 +45,9 @@ class StatisticsComponent : public Component {
   size_t send_every_{};
   size_t send_at_{};
 
-  DABALite partial_stats_{};
+  DABALite partial_stats_queue_{};
 
-  Partial current_statistics_{};
+  Aggregate current_statistics_{};
 
   void update_current_statistics_();
 

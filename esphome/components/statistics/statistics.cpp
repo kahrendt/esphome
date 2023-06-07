@@ -46,19 +46,21 @@ void StatisticsComponent::dump_config() {
 }
 
 void StatisticsComponent::setup() {
-  this->partial_stats_.set_window_size(this->window_size_);
+  this->partial_stats_queue_.set_capacity(this->window_size_);
 
   this->source_sensor_->add_on_state_callback([this](float value) -> void { this->handle_new_value_(value); });
 }
 
-void StatisticsComponent::update_current_statistics_() { this->current_statistics_ = this->partial_stats_.query(); }
+void StatisticsComponent::update_current_statistics_() {
+  this->current_statistics_ = this->partial_stats_queue_.query();
+}
 
 void StatisticsComponent::handle_new_value_(float value) {
-  while (this->partial_stats_.size() >= this->window_size_) {
-    this->partial_stats_.evict();
+  while (this->partial_stats_queue_.size() >= this->window_size_) {
+    this->partial_stats_queue_.evict();
   }
 
-  this->partial_stats_.insert(value);
+  this->partial_stats_queue_.insert(value);
 
   if (++this->send_at_ >= this->send_every_) {
     this->send_at_ = 0;

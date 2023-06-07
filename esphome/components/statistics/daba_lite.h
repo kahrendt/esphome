@@ -14,8 +14,8 @@ namespace esphome {
 
 namespace statistics {
 
-// partial summary statistics structure
-struct Partial {
+// Aggregate summary statistics structure
+struct Aggregate {
   float max;
   float min;
 
@@ -28,8 +28,7 @@ struct Partial {
 
 class DABALite {
  public:
-  // DABALite(size_t window_size);
-  void set_window_size(size_t window_size);
+  void set_capacity(size_t window_size);
   size_t size();
 
   // insert a new value at end of circular queue and step DABA Lite algorithm
@@ -39,30 +38,36 @@ class DABALite {
   void evict();
 
   // Return the summary statistics for all entries in the queue
-  Partial query();
+  Aggregate query();
 
  protected:
-  CircularQueue<Partial> queue_;
+  CircularQueue<Aggregate> queue_;
 
   // void debug_pointers_();
 
-  // DABA Lite - Indices
+  // DABA Lite - Raw Indices for queue_; i.e., not offset by the head index
   size_t l_{0};
   size_t r_{0};
   size_t a_{0};
   size_t b_{0};
 
   // Summary statisitics for a null entry
-  Partial identity_{std::numeric_limits<float>::infinity() * (-1), std::numeric_limits<float>::infinity(), NAN, NAN, 0};
+  Aggregate identity_{
+      std::numeric_limits<float>::infinity() * (-1),  // null max is -Infinity
+      std::numeric_limits<float>::infinity(),         // null min is Infinity
+      NAN,                                            // null M2 is NaN
+      NAN,                                            // null mean is NaN
+      0                                               // null count is 0
+  };
 
   // DABA Lite - Running Totals
-  Partial midSum_{this->identity_}, backSum_{this->identity_};
+  Aggregate midSum_{this->identity_}, backSum_{this->identity_};
 
   // compute summary statistics for a single new value
-  Partial lift_(float v);
+  Aggregate lift_(float v);
 
-  // combine summary statistics from two partial samples
-  Partial combine_(Partial &a, Partial &b);
+  // combine summary statistics from two aggregates
+  Aggregate combine_(Aggregate &a, Aggregate &b);
 
   // DABA Lite algorithm method
   void step_();
@@ -72,9 +77,9 @@ class DABALite {
   // DABA Lite algorithm methods
   inline bool is_front_empty_();
   inline bool is_delta_empty_();
-  inline Partial get_back_();
-  inline Partial get_alpha_();
-  inline Partial get_delta_();
+  inline Aggregate get_back_();
+  inline Aggregate get_alpha_();
+  inline Aggregate get_delta_();
 };
 
 }  // namespace statistics

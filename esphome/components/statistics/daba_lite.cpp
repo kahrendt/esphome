@@ -8,13 +8,16 @@
 namespace esphome {
 namespace statistics {
 
-void DABALite::set_window_size(size_t window_size) { this->queue_.set_capacity(window_size + 1); }
+void DABALite::set_capacity(size_t window_size) {
+  // DABA Lite requires an index to point to one entry past the end of the queue, hence +1
+  this->queue_.set_capacity(window_size + 1);
+}
 
 size_t DABALite::size() { return this->queue_.size(); }
 
 // insert a new value at end of circular queue and step DABA Lite algorithm
 void DABALite::insert(float value) {
-  Partial lifted = this->lift_(value);
+  Aggregate lifted = this->lift_(value);
   this->backSum_ = this->combine_(this->backSum_, lifted);
   this->queue_.push_back(lifted);
   this->step_();
@@ -28,10 +31,10 @@ void DABALite::evict() {
 }
 
 // Return the summary statistics for all entries in the queue
-Partial DABALite::query() {
+Aggregate DABALite::query() {
   if (!this->queue_.empty()) {
-    Partial alpha = this->get_alpha_();
-    Partial back = this->get_back_();
+    Aggregate alpha = this->get_alpha_();
+    Aggregate back = this->get_back_();
 
     return this->combine_(alpha, back);
   } else
@@ -39,8 +42,8 @@ Partial DABALite::query() {
 }
 
 // compute summary statistics for a single new value
-Partial DABALite::lift_(float v) {
-  Partial part = this->identity_;
+Aggregate DABALite::lift_(float v) {
+  Aggregate part = this->identity_;
 
   if (!std::isnan(v)) {
     part.max = v;
@@ -56,9 +59,9 @@ Partial DABALite::lift_(float v) {
   return part;
 }
 
-// combine summary statistics from two partial samples
-Partial DABALite::combine_(Partial &a, Partial &b) {
-  Partial part;
+// combine two aggregates summary statistics
+Aggregate DABALite::combine_(Aggregate &a, Aggregate &b) {
+  Aggregate part;
 
   part.max = std::max(a.max, b.max);
   part.min = std::min(a.min, b.min);
@@ -78,12 +81,14 @@ Partial DABALite::combine_(Partial &a, Partial &b) {
   } else if (std::isnan(b.mean)) {  // only b is NAN
     part.m2 = a.m2;
     part.mean = a.mean;
-  } else {  // both exist
-    // compute overall M2 using Chan's parallel algorithm for computing the variance
+  } else {  // both valid
+    // compute overall M2 for Welford's algorithm using Chan's parallel algorithm for computing the variance
+    // drastically reduces the chances for catastrophic cancellation with floating point arithmetic
     float delta = b.mean - a.mean;
     part.m2 = a.m2 + b.m2 + delta * delta * a_count * b_count / part_count;
 
     // weighted average of the two means based on their counts
+    // reduces the chances for floating point errors in comparison to saving the aggregate sum and dividing by the
     part.mean = (a.mean * a_count + b.mean * b_count) / part_count;
   }
 
@@ -98,16 +103,16 @@ void DABALite::step_() {
 
   if (this->queue_.head_index() != this->b_) {
     if (this->a_ != this->r_) {
-      Partial prev_delta = this->get_delta_();
+      Aggregate prev_delta = this->get_delta_();
 
       this->a_ = this->queue_.previous_index(this->a_);
-      Partial old_a = this->queue_.at_raw(this->a_);
+      Aggregate old_a = this->queue_.at_raw(this->a_);
 
       this->queue_.at_raw(this->a_) = combine_(old_a, prev_delta);
     }
 
     if (this->l_ != this->r_) {
-      Partial old_l = this->queue_.at_raw(this->l_);
+      Aggregate old_l = this->queue_.at_raw(this->l_);
       this->queue_.at_raw(this->l_) = combine_(old_l, this->midSum_);
 
       this->l_ = this->queue_.next_index(this->l_);
@@ -152,12 +157,12 @@ void DABALite::flip_() {
 //   }
 // }
 
-// online code version
+// DABA Lite algorithm methods
 inline bool DABALite::is_front_empty_() { return this->b_ == this->queue_.head_index(); }
 inline bool DABALite::is_delta_empty_() { return this->a_ == this->b_; }
-inline Partial DABALite::get_back_() { return this->backSum_; }
-inline Partial DABALite::get_alpha_() { return this->is_front_empty_() ? this->identity_ : this->queue_.front(); }
-inline Partial DABALite::get_delta_() {
+inline Aggregate DABALite::get_back_() { return this->backSum_; }
+inline Aggregate DABALite::get_alpha_() { return this->is_front_empty_() ? this->identity_ : this->queue_.front(); }
+inline Aggregate DABALite::get_delta_() {
   return this->is_delta_empty_() ? this->identity_ : this->queue_.at_raw(this->a_);
 }
 
