@@ -24,8 +24,22 @@ template<typename T> class CircularQueue {
   void push_back(T value);
   void pop_front();
 
-  T &at(size_t index);
-  T &operator[](size_t index);
+  size_t front_index();
+  size_t back_index();
+
+  T &front();
+  T &back();
+
+  // T &at(size_t index);
+  // T &operator[](size_t index);
+
+  T &at_raw(size_t index);
+
+  size_t next_index(size_t index);
+  size_t previous_index(size_t index);
+
+  size_t head_index();
+  size_t tail_index();
 
  protected:
   std::vector<T, ExternalRAMAllocator<T>> q_{};
@@ -36,7 +50,7 @@ template<typename T> class CircularQueue {
   size_t head_{0};
   size_t tail_{0};
 
-  inline size_t increment_index_(size_t index);
+  inline void increment_index_(size_t &index);
 };
 
 }  // namespace statistics

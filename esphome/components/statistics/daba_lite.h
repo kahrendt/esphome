@@ -44,6 +44,8 @@ class DABALite {
  protected:
   CircularQueue<Partial> queue_;
 
+  // void debug_pointers_();
+
   // DABA Lite - Indices
   size_t l_{0};
   size_t r_{0};
@@ -51,7 +53,7 @@ class DABALite {
   size_t b_{0};
 
   // Summary statisitics for a null entry
-  Partial identity_{std::numeric_limits<float>::infinity() * (-1), std::numeric_limits<float>::infinity(), 0.0, 0.0, 0};
+  Partial identity_{std::numeric_limits<float>::infinity() * (-1), std::numeric_limits<float>::infinity(), NAN, NAN, 0};
 
   // DABA Lite - Running Totals
   Partial midSum_{this->identity_}, backSum_{this->identity_};
