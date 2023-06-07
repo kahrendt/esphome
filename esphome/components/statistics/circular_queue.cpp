@@ -38,10 +38,13 @@ template<typename T> size_t CircularQueue<T>::front_index() { return 0; }
 template<typename T> size_t CircularQueue<T>::back_index() { return this->queue_size_ - 1; }
 
 template<typename T> T &CircularQueue<T>::front() { return this->q_[this->head_]; }
-template<typename T> T &CircularQueue<T>::back() { return this->q_[this->back_index()]; }
+template<typename T> T &CircularQueue<T>::back() { return this->q_[this->tail_]; }
 
-template<typename T> T &CircularQueue<T>::at_raw(size_t index) { return this->q_[index]; }
+// returns value of the queue at a given raw index; i.e., at_raw(head) gives the front entry regardless of actual head
+// position
+template<typename T> T &CircularQueue<T>::at_raw(size_t raw_index) { return this->q_[raw_index]; }
 
+// return next and previous indices based on circular queue logic
 template<typename T> size_t CircularQueue<T>::next_index(size_t index) {
   if (index == (this->capacity_ - 1))
     return 0;
@@ -55,10 +58,10 @@ template<typename T> size_t CircularQueue<T>::previous_index(size_t index) {
   return --index;
 }
 
+// returns raw index of head and tail
 template<typename T> size_t CircularQueue<T>::head_index() { return this->head_; }
 template<typename T> size_t CircularQueue<T>::tail_index() { return this->tail_; }
 
-// Circular Queue - next index following circulr queue logic
 template<typename T> void CircularQueue<T>::increment_index_(size_t &index) { index = this->next_index(index); }
 
 // // retrieve element at an index

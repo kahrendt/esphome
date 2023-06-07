@@ -39,6 +39,10 @@ void StatisticsComponent::dump_config() {
   if (this->variance_sensor_) {
     LOG_SENSOR("  ", "Variance", this->variance_sensor_);
   }
+
+  if (this->count_sensor_) {
+    LOG_SENSOR("  ", "Count", this->count_sensor_);
+  }
 }
 
 void StatisticsComponent::setup() {
@@ -55,12 +59,6 @@ void StatisticsComponent::handle_new_value_(float value) {
   }
 
   this->partial_stats_.insert(value);
-
-  // this->partial_stats_.insert(value);
-
-  // while (this->partial_stats_.size() > this->window_size_) {
-  //   this->partial_stats_.evict();
-  // }
 
   if (++this->send_at_ >= this->send_every_) {
     this->send_at_ = 0;

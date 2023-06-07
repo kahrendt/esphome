@@ -33,7 +33,7 @@ template<typename T> class CircularQueue {
   // T &at(size_t index);
   // T &operator[](size_t index);
 
-  T &at_raw(size_t index);
+  T &at_raw(size_t raw_index);
 
   size_t next_index(size_t index);
   size_t previous_index(size_t index);
