@@ -35,21 +35,40 @@ void DABALite::set_identity() {
 void DABALite::set_capacity(size_t window_size) {
   // DABA Lite requires an index to point to one entry past the end of the queue, hence +1
   this->set_identity();
-  this->queue_class_.set_capacity_and_fill(window_size + 1, this->identity_class_);
+  // this->queue_class_.set_capacity_and_fill(window_size + 1, this->identity_class_);
+
+  this->queue_.reserve(window_size + 1);
+
+  this->window_size_ = window_size + 1;
+
+  this->f_ = CircularQueueIndex(0, window_size + 1);
+  this->l_ = CircularQueueIndex(0, window_size + 1);
+  this->r_ = CircularQueueIndex(0, window_size + 1);
+  this->a_ = CircularQueueIndex(0, window_size + 1);
+  this->b_ = CircularQueueIndex(0, window_size + 1);
+  this->e_ = CircularQueueIndex(0, window_size + 1);
 }
 // void DABALite::set_capacity(size_t window_size) {
 //   // DABA Lite requires an index to point to one entry past the end of the queue, hence +1
 //   this->queue_.set_capacity(window_size + 1);
 // }
 
-size_t DABALite::size() { return this->queue_class_.size(); }
+size_t DABALite::size() {
+  if (this->e_ == this->f_)
+    return 0;
+  if (this->e_.get_index() < this->f_.get_index())
+    return (this->e_.get_index() + this->e_.get_capacity() - this->f_.get_index());
+
+  return (this->e_.get_index() - this->f_.get_index());
+}
 // size_t DABALite::size() { return this->queue_.size(); }
 
 // insert a new value at end of circular queue and step DABA Lite algorithm
 void DABALite::insert(float value) {
   AggregateClass lifted = this->lift_(value);
   this->backSum_ = this->combine_(this->backSum_, lifted);
-  this->queue_class_.push_back(lifted);
+  this->queue_[this->e_.get_index()] = lifted;
+  ++this->e_;
   this->step_();
 }
 // // insert a new value at end of circular queue and step DABA Lite algorithm
@@ -62,7 +81,7 @@ void DABALite::insert(float value) {
 
 // remove value at start of circular queue and step DABA Lite algorithm
 void DABALite::evict() {
-  this->queue_class_.pop_front();
+  ++this->f_;
 
   this->step_();
 }
@@ -75,7 +94,7 @@ void DABALite::evict() {
 
 // Return the summary statistics for all entries in the queue
 AggregateClass DABALite::query() {
-  if (!this->queue_class_.empty()) {
+  if (this->size() > 0) {
     AggregateClass alpha = this->get_alpha_();
     AggregateClass back = this->get_back_();
 
@@ -224,29 +243,30 @@ AggregateClass DABALite::combine_(AggregateClass &a, AggregateClass &b) {
 
 // DABA Lite algorithm method
 void DABALite::step_() {
+  // this->debug_pointers_();
   if (this->l_ == this->b_) {
     this->flip_();
   }
 
-  if (this->queue_class_.head_index() != this->b_) {
+  if (this->f_ != this->b_) {
     if (this->a_ != this->r_) {
       AggregateClass prev_delta = this->get_delta_();
 
-      this->a_ = this->queue_class_.previous_index(this->a_);
-      AggregateClass old_a = this->queue_class_.at_raw(this->a_);
+      --this->a_;  // = this->queue_class_.previous_index(this->a_);
+      AggregateClass old_a = this->queue_[this->a_.get_index()];
 
-      this->queue_class_.at_raw(this->a_) = combine_(old_a, prev_delta);
+      this->queue_[this->a_.get_index()] = combine_(old_a, prev_delta);
     }
 
     if (this->l_ != this->r_) {
-      AggregateClass old_l = this->queue_class_.at_raw(this->l_);
-      this->queue_class_.at_raw(this->l_) = combine_(old_l, this->midSum_);
+      AggregateClass old_l = this->queue_[this->l_.get_index()];
+      this->queue_[this->l_.get_index()] = combine_(old_l, this->midSum_);
 
-      this->l_ = this->queue_class_.next_index(this->l_);
+      ++this->l_;  //= this->queue_class_.next_index(this->l_);
     } else {
-      this->l_ = this->queue_class_.next_index(this->l_);
-      this->r_ = this->queue_class_.next_index(this->r_);
-      this->a_ = this->queue_class_.next_index(this->a_);
+      ++this->l_;  //= this->queue_class_.next_index(this->l_);
+      ++this->r_;  // = this->queue_class_.next_index(this->r_);
+      ++this->a_;  // = this->queue_class_.next_index(this->a_);
       this->midSum_ = get_delta_();
     }
   } else {
@@ -286,10 +306,10 @@ void DABALite::step_() {
 
 // DABA Lite algorithm method
 void DABALite::flip_() {
-  this->l_ = this->queue_class_.head_index();
+  this->l_ = this->f_;  // this->queue_class_.head_index();
   this->r_ = this->b_;
-  this->a_ = this->queue_class_.next_index(this->queue_class_.tail_index());
-  this->b_ = this->queue_class_.next_index(this->queue_class_.tail_index());
+  this->a_ = this->e_;  // this->queue_class_.next_index(this->queue_class_.tail_index());
+  this->b_ = this->e_;  // this->queue_class_.next_index(this->queue_class_.tail_index());
 
   this->midSum_ = this->backSum_;
   this->backSum_ = this->identity_class_;
@@ -305,34 +325,36 @@ void DABALite::flip_() {
 //   this->backSum_ = this->identity_;
 // }
 
-// void DABALite::debug_pointers_() {
-//   int head = this->queue_.head_index();
-//   int tail = this->queue_.tail_index();
-//   int capacity = this->queue_.capacity();
+void DABALite::debug_pointers_() {
+  int head = this->f_.get_index();
+  int tail = this->e_.get_index();
+  int capacity = this->window_size_;
 
-//   size_t f = (head - head);
-//   size_t l = (((static_cast<int>(this->l_) - head) % capacity) + capacity) % capacity;
-//   size_t r = (((static_cast<int>(this->r_) - head) % capacity) + capacity) % capacity;
-//   size_t a = (((static_cast<int>(this->a_) - head) % capacity) + capacity) % capacity;
-//   size_t b = (((static_cast<int>(this->b_) - head) % capacity) + capacity) % capacity;
-//   size_t e = (((tail - head) % capacity) + capacity) % capacity;
+  size_t f = (head - head);
+  size_t l = (((static_cast<int>(this->l_.get_index()) - head) % capacity) + capacity) % capacity;
+  size_t r = (((static_cast<int>(this->r_.get_index()) - head) % capacity) + capacity) % capacity;
+  size_t a = (((static_cast<int>(this->a_.get_index()) - head) % capacity) + capacity) % capacity;
+  size_t b = (((static_cast<int>(this->b_.get_index()) - head) % capacity) + capacity) % capacity;
+  size_t e = (((tail - head) % capacity) + capacity) % capacity;
 
-//   ESP_LOGI("iterates (raw)", "f=%d; l=%d; r=%d, a=%d, b=%d, e=%d", head, this->l_, this->r_, this->a_, this->b_,
-//   tail); ESP_LOGI("iterates (shifted)", "f=%d; l=%d; r=%d, a=%d, b=%d; e=%d", f, l, r, a, b, e); if ((l > r) || (r >
-//   a) || (a > b)) {
-//     ESP_LOGE("daba", "pointers in wrong order!");
-//   }
-// }
+  ESP_LOGI("iterates (raw)", "f=%d; l=%d; r=%d, a=%d, b=%d, e=%d", head, this->l_.get_index(), this->r_.get_index(),
+           this->a_.get_index(), this->b_.get_index(), tail);
+  ESP_LOGI("iterates (shifted)", "f=%d; l=%d; r=%d, a=%d, b=%d; e=%d", f, l, r, a, b, e);
+  if ((l > r) || (r > a) || (a > b)) {
+    ESP_LOGE("daba", "pointers in wrong order!");
+  }
+  ESP_LOGI("iterates", "queue_size=%d", this->size());
+}
 
 // DABA Lite algorithm methods
-inline bool DABALite::is_front_empty_() { return this->b_ == this->queue_class_.head_index(); }
+inline bool DABALite::is_front_empty_() { return this->b_ == this->f_; }
 inline bool DABALite::is_delta_empty_() { return this->a_ == this->b_; }
 inline AggregateClass DABALite::get_back_() { return this->backSum_; }
 inline AggregateClass DABALite::get_alpha_() {
-  return this->is_front_empty_() ? this->identity_class_ : this->queue_class_.front();
+  return this->is_front_empty_() ? this->identity_class_ : this->queue_[this->f_.get_index()];
 }
 inline AggregateClass DABALite::get_delta_() {
-  return this->is_delta_empty_() ? this->identity_class_ : this->queue_class_.at_raw(this->a_);
+  return this->is_delta_empty_() ? this->identity_class_ : this->queue_[this->a_.get_index()];
 }
 // // DABA Lite algorithm methods
 // inline bool DABALite::is_front_empty_() { return this->b_ == this->queue_.head_index(); }

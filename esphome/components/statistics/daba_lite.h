@@ -190,7 +190,9 @@ class DABALite {
 
  protected:
   // CircularQueue<Aggregate> queue_;
-  CircularQueue<AggregateClass> queue_class_;
+  // CircularQueue<AggregateClass> queue_class_;
+
+  std::vector<AggregateClass> queue_{};
 
   bool include_max_{false};
   bool include_min_{false};
@@ -203,13 +205,17 @@ class DABALite {
   bool include_c2_{false};
   bool include_t_m2_{false};
 
-  // void debug_pointers_();
+  void debug_pointers_();
+
+  size_t window_size_{0};
 
   // DABA Lite - Raw Indices for queue_; i.e., not offset by the head index
-  size_t l_{0};
-  size_t r_{0};
-  size_t a_{0};
-  size_t b_{0};
+  CircularQueueIndex f_;
+  CircularQueueIndex l_;
+  CircularQueueIndex r_;
+  CircularQueueIndex a_;
+  CircularQueueIndex b_;
+  CircularQueueIndex e_;
 
   AggregateClass identity_class_, midSum_, backSum_;
 

@@ -70,12 +70,12 @@ void StatisticsComponent::setup() {
     this->partial_stats_queue_.enable_count();
     this->partial_stats_queue_.enable_mean();
   }
-  // if (this->trend_sensor_) {
-  this->partial_stats_queue_.enable_c2();
-  this->partial_stats_queue_.enable_count();
-  this->partial_stats_queue_.enable_mean();
-  this->partial_stats_queue_.enable_t_m2();
-  //}
+  if (this->trend_sensor_) {
+    this->partial_stats_queue_.enable_c2();
+    this->partial_stats_queue_.enable_count();
+    this->partial_stats_queue_.enable_mean();
+    this->partial_stats_queue_.enable_t_m2();
+  }
 
   this->partial_stats_queue_.set_capacity(this->window_size_);
 
