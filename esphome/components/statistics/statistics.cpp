@@ -101,11 +101,21 @@ void StatisticsComponent::handle_new_value_(float value) {
     if (this->mean_sensor_)
       this->mean_sensor_->publish_state(this->partial_stats_queue_.aggregated_mean());
 
-    if (this->max_sensor_)
-      this->max_sensor_->publish_state(this->partial_stats_queue_.aggregated_max());
+    if (this->max_sensor_) {
+      float max = this->partial_stats_queue_.aggregated_max();
+      if (std::isinf(max))  // default aggregated max for 0 readings is -infinity, switch to NaN for HA
+        this->max_sensor_->publish_state(NAN);
+      else
+        this->max_sensor_->publish_state(max);
+    }
 
-    if (this->min_sensor_)
-      this->min_sensor_->publish_state(this->partial_stats_queue_.aggregated_min());
+    if (this->min_sensor_) {
+      float min = this->partial_stats_queue_.aggregated_min();
+      if (std::isinf(min))  // default aggregated min for 0 readings is infinity, switch to NaN for HA
+        this->max_sensor_->publish_state(NAN);
+      else
+        this->max_sensor_->publish_state(min);
+    }
 
     if (this->sd_sensor_)
       this->sd_sensor_->publish_state(this->partial_stats_queue_.aggregated_std_dev());

@@ -92,8 +92,8 @@ class Aggregate {
   // default values represent the statistic for a null entry
   size_t count_{0};
 
-  float max_{std::numeric_limits<float>::infinity() * (-1)};
-  float min_{std::numeric_limits<float>::infinity()};
+  float max_{std::numeric_limits<float>::infinity() * (-1)};  // the supremum of the empty set is -infinity
+  float min_{std::numeric_limits<float>::infinity()};         // the infimum of the empty set is +infinity
 
   float mean_{NAN};
 
