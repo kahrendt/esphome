@@ -59,6 +59,15 @@ properties_to_inherit = [
     # CONF_STATE_CLASS could also be inherited, but might lead to unexpected behaviour with "total_increasing"
 ]
 
+properties_to_inherit_new_unit = [
+    CONF_ACCURACY_DECIMALS,
+    CONF_DEVICE_CLASS,
+    CONF_ENTITY_CATEGORY,
+    CONF_ICON,
+    # CONF_STATE_CLASS could also be inherited, but might lead to unexpected behaviour with "total_increasing"
+]
+
+
 inherit_schema_for_mean = [
     inherit_property_from([CONF_MEAN, property], CONF_SOURCE_ID)
     for property in properties_to_inherit
@@ -75,6 +84,36 @@ inherit_schema_for_sd = [
     inherit_property_from([CONF_SD, property], CONF_SOURCE_ID)
     for property in properties_to_inherit
 ]
+inherit_schema_for_cov = [
+    inherit_property_from([CONF_COVARIANCE, property], CONF_SOURCE_ID)
+    for property in properties_to_inherit_new_unit
+]
+inherit_schema_for_trend = [
+    inherit_property_from([CONF_TREND, property], CONF_SOURCE_ID)
+    for property in properties_to_inherit_new_unit
+]
+inherit_schema_for_trend = [
+    inherit_property_from([CONF_VARIANCE, property], CONF_SOURCE_ID)
+    for property in properties_to_inherit_new_unit
+]
+
+
+# borrowed from integration sensor
+def covariance_unit(uom, config):
+    suffix = "⋅s"
+    if uom.endswith("/" + suffix):
+        return uom[0 : -len("/" + suffix)]
+    return uom + suffix
+
+
+def variance_unit(uom, config):
+    return "(" + uom + ")²"
+
+
+def trend_unit(uom, config):
+    denominator = "s"
+    return uom + "/" + denominator
+
 
 FINAL_VALIDATE_SCHEMA = cv.All(
     CONFIG_SCHEMA.extend(
@@ -85,6 +124,22 @@ FINAL_VALIDATE_SCHEMA = cv.All(
     *inherit_schema_for_max,
     *inherit_schema_for_min,
     *inherit_schema_for_sd,
+    *inherit_schema_for_cov,
+    *inherit_schema_for_trend,
+    *inherit_schema_for_trend,
+    inherit_property_from(
+        [CONF_COVARIANCE, CONF_UNIT_OF_MEASUREMENT],
+        CONF_SOURCE_ID,
+        transform=covariance_unit,
+    ),
+    inherit_property_from(
+        [CONF_TREND, CONF_UNIT_OF_MEASUREMENT], CONF_SOURCE_ID, transform=trend_unit
+    ),
+    inherit_property_from(
+        [CONF_VARIANCE, CONF_UNIT_OF_MEASUREMENT],
+        CONF_SOURCE_ID,
+        transform=variance_unit,
+    ),
 )
 
 
