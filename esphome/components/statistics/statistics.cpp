@@ -84,9 +84,9 @@ void StatisticsComponent::setup() {
   this->source_sensor_->add_on_state_callback([this](float value) -> void { this->handle_new_value_(value); });
 }
 
-void StatisticsComponent::update_current_statistics_() {
-  this->current_statistics_ = this->partial_stats_queue_.query();
-}
+// void StatisticsComponent::update_current_statistics_() {
+//   this->current_statistics_ = this->partial_stats_queue_.query();
+// }
 
 void StatisticsComponent::handle_new_value_(float value) {
   while (this->partial_stats_queue_.size() >= this->window_size_) {
@@ -98,39 +98,29 @@ void StatisticsComponent::handle_new_value_(float value) {
   if (++this->send_at_ >= this->send_every_) {
     this->send_at_ = 0;
 
-    this->update_current_statistics_();
+    if (this->mean_sensor_)
+      this->mean_sensor_->publish_state(this->partial_stats_queue_.aggregated_mean());
 
-    if (this->mean_sensor_) {
-      this->mean_sensor_->publish_state(this->mean_());
-    }
+    if (this->max_sensor_)
+      this->max_sensor_->publish_state(this->partial_stats_queue_.aggregated_max());
 
-    if (this->max_sensor_) {
-      this->max_sensor_->publish_state(this->max_());
-    }
+    if (this->min_sensor_)
+      this->min_sensor_->publish_state(this->partial_stats_queue_.aggregated_min());
 
-    if (this->min_sensor_) {
-      this->min_sensor_->publish_state(this->min_());
-    }
+    if (this->sd_sensor_)
+      this->sd_sensor_->publish_state(this->partial_stats_queue_.aggregated_std_dev());
 
-    if (this->sd_sensor_) {
-      this->sd_sensor_->publish_state(this->sd_());
-    }
+    if (this->variance_sensor_)
+      this->variance_sensor_->publish_state(this->partial_stats_queue_.aggregated_variance());
 
-    if (this->variance_sensor_) {
-      this->variance_sensor_->publish_state(this->variance_());
-    }
+    if (this->count_sensor_)
+      this->count_sensor_->publish_state(this->partial_stats_queue_.aggregated_count());
 
-    if (this->count_sensor_) {
-      this->count_sensor_->publish_state(this->count_());
-    }
+    if (this->trend_sensor_)
+      this->trend_sensor_->publish_state(this->partial_stats_queue_.aggregated_trend());
 
-    if (this->trend_sensor_) {
-      this->trend_sensor_->publish_state(this->trend_());
-    }
-
-    if (this->covariance_sensor_) {
-      this->covariance_sensor_->publish_state(this->covariance_());
-    }
+    if (this->covariance_sensor_)
+      this->covariance_sensor_->publish_state(this->partial_stats_queue_.aggregated_covariance());
   }
 }
 

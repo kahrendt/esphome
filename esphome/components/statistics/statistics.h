@@ -5,6 +5,7 @@
 
 #include "daba_lite.h"
 #include "esphome/core/log.h"
+
 namespace esphome {
 namespace statistics {
 
@@ -65,23 +66,6 @@ class StatisticsComponent : public Component {
   size_t send_at_{};
 
   DABALite partial_stats_queue_{};
-
-  AggregateClass current_statistics_{};
-  // Aggregate current_statistics_{};
-
-  void update_current_statistics_();
-
-  float mean_() { return this->current_statistics_.get_mean(); }
-  float max_() { return this->current_statistics_.get_max(); }
-  float min_() { return this->current_statistics_.get_min(); }
-  float variance_() { return this->current_statistics_.get_variance(); }
-  float sd_() { return this->current_statistics_.get_std_dev(); }
-
-  size_t count_() { return this->current_statistics_.get_count(); }
-
-  float covariance_() { return this->current_statistics_.get_covariance(); }
-
-  float trend_() { return this->current_statistics_.get_trend(); }
 };
 
 }  // namespace statistics

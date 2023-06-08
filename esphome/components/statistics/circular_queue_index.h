@@ -6,8 +6,9 @@
 */
 #pragma once
 
-#include "esphome/core/helpers.h"
 #include <vector>
+
+#include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
 
 namespace esphome {
@@ -89,48 +90,6 @@ class CircularQueueIndex {
  private:
   size_t index_;
   size_t capacity_;
-};
-
-template<typename T> class CircularQueue {
- public:
-  void set_capacity_and_fill(size_t capacity, T fill);
-
-  bool empty();
-  size_t size();
-  size_t max_size();
-  size_t capacity();
-
-  void push_back(T value);
-  void pop_front();
-
-  size_t front_index();
-  size_t back_index();
-
-  T &front();
-  T &back();
-
-  // T &at(size_t index);
-  // T &operator[](size_t index);
-
-  T &at_raw(size_t raw_index);
-
-  size_t next_index(size_t index);
-  size_t previous_index(size_t index);
-
-  size_t head_index();
-  size_t tail_index();
-
- protected:
-  // std::vector<T> q_{};
-  std::vector<T, ExternalRAMAllocator<T>> q_{};
-
-  size_t queue_size_{0};
-  size_t capacity_{0};
-
-  size_t head_{0};
-  size_t tail_{0};
-
-  inline void increment_index_(size_t &index);
 };
 
 }  // namespace statistics
