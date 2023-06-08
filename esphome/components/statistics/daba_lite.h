@@ -143,25 +143,6 @@ class AggregateClass {
   }
 };
 
-// // Aggregate summary statistics structure
-// struct Aggregate {
-//   float max;
-//   float min;
-
-//   double m2;  // used to find variance & standard deviation via Welford's algorithm
-
-//   float mean;
-
-//   size_t count;
-
-//   // timestamp mean and M2
-//   double t_mean;
-//   double t_m2;
-
-//   // used to find covariance
-//   double c2;
-// };
-
 class DABALite {
  public:
   void set_identity();
@@ -177,8 +158,6 @@ class DABALite {
 
   // Return the summary statistics for all entries in the queue
   AggregateClass query();
-  // // Return the summary statistics for all entries in the queue
-  // Aggregate query();
 
   void enable_max() { this->include_max_ = true; }
   void enable_min() { this->include_min_ = true; }
@@ -189,9 +168,6 @@ class DABALite {
   void enable_t_m2() { this->include_t_m2_ = true; }
 
  protected:
-  // CircularQueue<Aggregate> queue_;
-  // CircularQueue<AggregateClass> queue_class_;
-
   std::vector<AggregateClass> queue_{};
 
   bool include_max_{false};
@@ -236,11 +212,9 @@ class DABALite {
 
   // compute summary statistics for a single new value
   AggregateClass lift_(float v);
-  // Aggregate lift_(float v);
 
   // combine summary statistics from two aggregates
   AggregateClass combine_(AggregateClass &a, AggregateClass &b);
-  // Aggregate combine_(Aggregate &a, Aggregate &b);
 
   // DABA Lite algorithm method
   void step_();
@@ -253,9 +227,6 @@ class DABALite {
   inline AggregateClass get_back_();
   inline AggregateClass get_alpha_();
   inline AggregateClass get_delta_();
-  // inline Aggregate get_back_();
-  // inline Aggregate get_alpha_();
-  // inline Aggregate get_delta_();
 };
 
 }  // namespace statistics
