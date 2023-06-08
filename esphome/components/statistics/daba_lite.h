@@ -23,43 +23,36 @@ class AggregateClass {
  public:
   size_t get_count() { return this->count_; }
   void set_count(size_t count) { this->count_ = count; }
-  void set_count() { this->count_ = 0; }  // identity
   void combine_count(AggregateClass a, AggregateClass b) { this->count_ = a.get_count() + b.get_count(); }
 
   float get_max() { return this->max_; }
   void set_max(float max) { this->max_ = max; }
-  void set_max() { this->max_ = std::numeric_limits<float>::infinity() * (-1); }  // identity
   void combine_max(AggregateClass a, AggregateClass b) { this->max_ = std::max(a.get_max(), b.get_max()); }
 
   float get_min() { return this->min_; }
   void set_min(float min) { this->min_ = min; }
-  void set_min() { this->min_ = std::numeric_limits<float>::infinity(); }  // identity
   void combine_min(AggregateClass a, AggregateClass b) { this->min_ = std::min(a.get_min(), b.get_min()); }
 
   float get_mean() { return this->mean_; }
   void set_mean(float mean) { this->mean_ = mean; }
-  void set_mean() { this->mean_ = NAN; }  // identity
   void combine_mean(AggregateClass a, AggregateClass b) {
     this->mean_ = this->return_mean_(a.get_mean(), a.get_count(), b.get_mean(), b.get_count());
   }
 
   float get_m2() { return this->m2_; }
   void set_m2(float m2) { this->m2_ = m2; }
-  void set_m2() { this->m2_ = NAN; }  // identity
   void combine_m2(AggregateClass a, AggregateClass b) {
     this->m2_ = this->return_m2_(a.get_mean(), a.get_count(), a.get_m2(), b.get_mean(), b.get_count(), b.get_m2());
   }
 
   float get_t_mean() { return this->t_mean_; }
   void set_t_mean(float t_mean) { this->t_mean_ = t_mean; }
-  void set_t_mean() { this->t_mean_ = NAN; }  // identity
   void combine_t_mean(AggregateClass a, AggregateClass b) {
     this->t_mean_ = this->return_mean_(a.get_t_mean(), a.get_count(), b.get_t_mean(), b.get_count());
   }
 
   float get_t_m2() { return this->t_m2_; }
   void set_t_m2(float t_m2) { this->t_m2_ = t_m2; }
-  void set_t_m2() { this->t_m2_ = NAN; }  // identity
   void combine_t_m2(AggregateClass a, AggregateClass b) {
     this->t_m2_ =
         this->return_m2_(a.get_t_mean(), a.get_count(), a.get_t_m2(), b.get_t_mean(), b.get_count(), b.get_t_m2());
@@ -67,7 +60,6 @@ class AggregateClass {
 
   float get_c2() { return this->c2_; }
   void set_c2(float c2) { this->c2_ = c2; }
-  void set_c2() { this->c2_ = NAN; }  // identity
   void combine_c2(AggregateClass a, AggregateClass b) {
     float a_c2 = a.get_c2();
     float b_c2 = b.get_c2();
@@ -103,18 +95,19 @@ class AggregateClass {
   float get_trend() { return this->c2_ / this->t_m2_; }
 
  protected:
-  size_t count_;
+  // default values represent the statistic for a null entry
+  size_t count_{0};
 
-  float max_;
-  float min_;
+  float max_{std::numeric_limits<float>::infinity() * (-1)};
+  float min_{std::numeric_limits<float>::infinity()};
 
-  float mean_;
+  float mean_{NAN};
 
-  float m2_;
+  float m2_{NAN};
 
-  float t_mean_;
-  float t_m2_;
-  float c2_;
+  float t_mean_{NAN};
+  float t_m2_{NAN};
+  float c2_{NAN};
 
   float return_mean_(float a_mean, size_t a_count, float b_mean, size_t b_count) {
     if (std::isnan(a_mean) && std::isnan(b_mean))
@@ -145,8 +138,6 @@ class AggregateClass {
 
 class DABALite {
  public:
-  void set_identity();
-
   void set_capacity(size_t window_size);
   size_t size();
 
@@ -166,9 +157,17 @@ class DABALite {
   void enable_m2() { this->include_m2_ = true; }
   void enable_c2() { this->include_c2_ = true; }
   void enable_t_m2() { this->include_t_m2_ = true; }
+  void enable_t_mean() { this->include_t_mean_ = true; }
 
  protected:
-  std::vector<AggregateClass> queue_{};
+  std::vector<float> max_queue_{};
+  std::vector<float> min_queue_{};
+  std::vector<size_t> count_queue_{};
+  std::vector<float> mean_queue_{};
+  std::vector<float> m2_queue_{};
+  std::vector<float> c2_queue_{};
+  std::vector<float> t_mean_queue_{};
+  std::vector<float> t_m2_queue_{};
 
   bool include_max_{false};
   bool include_min_{false};
@@ -181,7 +180,10 @@ class DABALite {
   bool include_c2_{false};
   bool include_t_m2_{false};
 
+  bool include_t_mean_{false};
+
   void debug_pointers_();
+  void emplace_(AggregateClass value, size_t index);
 
   size_t window_size_{0};
 
@@ -193,25 +195,13 @@ class DABALite {
   CircularQueueIndex b_;
   CircularQueueIndex e_;
 
-  AggregateClass identity_class_, midSum_, backSum_;
-
-  // Summary statisitics for a null entry
-  // Aggregate identity_{
-  //     std::numeric_limits<float>::infinity() * (-1),  // null max is -Infinity
-  //     std::numeric_limits<float>::infinity(),         // null min is Infinity
-  //     NAN,                                            // null M2 is NaN
-  //     NAN,                                            // null mean is NaN
-  //     0,                                              // null count is 0
-  //     NAN,                                            // null t_mean is NaN
-  //     NAN,                                            // null t_m2 is NaN
-  //     NAN                                             // null C2 is NaN
-  // };
-
-  // DABA Lite - Running Totals
-  // Aggregate midSum_{this->identity_}, backSum_{this->identity_};
+  AggregateClass identity_class_, midSum_, backSum_;  // assumes default values for a null entry
 
   // compute summary statistics for a single new value
   AggregateClass lift_(float v);
+
+  // return summary statistics for a given index
+  AggregateClass lower_(size_t index);
 
   // combine summary statistics from two aggregates
   AggregateClass combine_(AggregateClass &a, AggregateClass &b);

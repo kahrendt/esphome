@@ -82,24 +82,6 @@ class StatisticsComponent : public Component {
   float covariance_() { return this->current_statistics_.get_covariance(); }
 
   float trend_() { return this->current_statistics_.get_trend(); }
-  // float mean_() { return this->current_statistics_.mean; }
-  // float max_() { return this->current_statistics_.max; }
-  // float min_() { return this->current_statistics_.min; }
-  // float variance_() {
-  //   // Welford's algorithm for variance
-  //   return this->current_statistics_.m2 / (static_cast<double>(this->current_statistics_.count) - 1);
-  // }
-  // float sd_() { return std::sqrt(this->variance_()); }
-
-  // size_t count_() { return this->current_statistics_.count; }
-
-  // // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-  // float covariance_() { return this->current_statistics_.c2 / (this->current_statistics_.count - 1); }
-
-  // // slope for line of best fit; i.e., trend is covariance(x,y)/variance(x)
-  // //   - the variance and covariance are obtained by taking m2/(n-1) and c2/(n-1) respectivally
-  // //   - we skip the division of the common factor of (n-1) in the numerator and denominator
-  // float trend_() { return this->current_statistics_.c2 / this->current_statistics_.t_m2; }
 };
 
 }  // namespace statistics
