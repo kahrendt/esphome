@@ -36,14 +36,29 @@ class StatisticsComponent : public Component {
 
   sensor::Sensor *source_sensor_{nullptr};
 
-  sensor::Sensor *mean_sensor_{nullptr};
-  sensor::Sensor *max_sensor_{nullptr};
-  sensor::Sensor *min_sensor_{nullptr};
-  sensor::Sensor *sd_sensor_{nullptr};
-  sensor::Sensor *variance_sensor_{nullptr};
+  // requires struct members {count}
   sensor::Sensor *count_sensor_{nullptr};
-  sensor::Sensor *trend_sensor_{nullptr};
+
+  // requires struct member {max}
+  sensor::Sensor *max_sensor_{nullptr};
+
+  // require struct member {min}
+  sensor::Sensor *min_sensor_{nullptr};
+
+  // requires struct members {mean, count}
+  sensor::Sensor *mean_sensor_{nullptr};
+
+  // requires struct members {mean, count, m2}
+  sensor::Sensor *sd_sensor_{nullptr};
+
+  // requires struct members {mean, count, m2}
+  sensor::Sensor *variance_sensor_{nullptr};
+
+  // requires struct members {mean, count, t_mean, c_2}
   sensor::Sensor *covariance_sensor_{nullptr};
+
+  // requires struct members {mean, count, t_mean, c_2, t_m2}
+  sensor::Sensor *trend_sensor_{nullptr};
 
   size_t window_size_{};
   size_t send_every_{};
@@ -51,26 +66,40 @@ class StatisticsComponent : public Component {
 
   DABALite partial_stats_queue_{};
 
-  Aggregate current_statistics_{};
+  AggregateClass current_statistics_{};
+  // Aggregate current_statistics_{};
 
   void update_current_statistics_();
 
-  float mean_() { return this->current_statistics_.mean; }
-  float max_() { return this->current_statistics_.max; }
-  float min_() { return this->current_statistics_.min; }
-  float variance_() {
-    // Welford's algorithm for variance
-    return this->current_statistics_.m2 / (static_cast<double>(this->current_statistics_.count) - 1);
-  }
-  float sd_() { return std::sqrt(this->variance_()); }
-  size_t count_() { return this->current_statistics_.count; }
+  float mean_() { return this->current_statistics_.get_mean(); }
+  float max_() { return this->current_statistics_.get_max(); }
+  float min_() { return this->current_statistics_.get_min(); }
+  float variance_() { return this->current_statistics_.get_variance(); }
+  float sd_() { return this->current_statistics_.get_std_dev(); }
 
-  float covariance_() { return this->current_statistics_.c2 / (this->current_statistics_.count - 1); }
+  size_t count_() { return this->current_statistics_.get_count(); }
 
-  // slope for line of best fit; i.e., trend is covariance(x,y)/variance(x)
-  //   - the variance and covariance are obtained by taking m2/(n-1) and c2/(n-1) respectivally
-  //   - we skip the division of the common factor of (n-1) in the numerator and denominator
-  float trend_() { return this->current_statistics_.c2 / this->current_statistics_.x_m2; }
+  float covariance_() { return this->current_statistics_.get_covariance(); }
+
+  float trend_() { return this->current_statistics_.get_trend(); }
+  // float mean_() { return this->current_statistics_.mean; }
+  // float max_() { return this->current_statistics_.max; }
+  // float min_() { return this->current_statistics_.min; }
+  // float variance_() {
+  //   // Welford's algorithm for variance
+  //   return this->current_statistics_.m2 / (static_cast<double>(this->current_statistics_.count) - 1);
+  // }
+  // float sd_() { return std::sqrt(this->variance_()); }
+
+  // size_t count_() { return this->current_statistics_.count; }
+
+  // // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+  // float covariance_() { return this->current_statistics_.c2 / (this->current_statistics_.count - 1); }
+
+  // // slope for line of best fit; i.e., trend is covariance(x,y)/variance(x)
+  // //   - the variance and covariance are obtained by taking m2/(n-1) and c2/(n-1) respectivally
+  // //   - we skip the division of the common factor of (n-1) in the numerator and denominator
+  // float trend_() { return this->current_statistics_.c2 / this->current_statistics_.t_m2; }
 };
 
 }  // namespace statistics

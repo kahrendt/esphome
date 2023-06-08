@@ -6,9 +6,10 @@
 namespace esphome {
 namespace statistics {
 
-template<typename T> void CircularQueue<T>::set_capacity(size_t capacity) {
+template<typename T> void CircularQueue<T>::set_capacity_and_fill(size_t capacity, T fill) {
   this->capacity_ = capacity;
   this->q_.reserve(this->capacity_);
+  this->q_.resize(this->capacity_, fill);
 }
 
 template<typename T> bool CircularQueue<T>::empty() { return this->queue_size_ == 0; }

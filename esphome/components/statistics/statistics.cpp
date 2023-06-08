@@ -50,6 +50,33 @@ void StatisticsComponent::dump_config() {
 }
 
 void StatisticsComponent::setup() {
+  if (this->max_sensor_)
+    this->partial_stats_queue_.enable_max();
+  if (this->min_sensor_)
+    this->partial_stats_queue_.enable_min();
+  if (this->count_sensor_)
+    this->partial_stats_queue_.enable_count();
+  if (this->mean_sensor_) {
+    this->partial_stats_queue_.enable_mean();
+    this->partial_stats_queue_.enable_count();
+  }
+  if ((this->variance_sensor_) || (this->sd_sensor_)) {
+    this->partial_stats_queue_.enable_mean();
+    this->partial_stats_queue_.enable_count();
+    this->partial_stats_queue_.enable_m2();
+  }
+  if (this->covariance_sensor_) {
+    this->partial_stats_queue_.enable_c2();
+    this->partial_stats_queue_.enable_count();
+    this->partial_stats_queue_.enable_mean();
+  }
+  // if (this->trend_sensor_) {
+  this->partial_stats_queue_.enable_c2();
+  this->partial_stats_queue_.enable_count();
+  this->partial_stats_queue_.enable_mean();
+  this->partial_stats_queue_.enable_t_m2();
+  //}
+
   this->partial_stats_queue_.set_capacity(this->window_size_);
 
   this->source_sensor_->add_on_state_callback([this](float value) -> void { this->handle_new_value_(value); });

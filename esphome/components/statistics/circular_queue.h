@@ -14,7 +14,7 @@ namespace statistics {
 
 template<typename T> class CircularQueue {
  public:
-  void set_capacity(size_t capacity);
+  void set_capacity_and_fill(size_t capacity, T fill);
 
   bool empty();
   size_t size();
@@ -42,6 +42,7 @@ template<typename T> class CircularQueue {
   size_t tail_index();
 
  protected:
+  // std::vector<T> q_{};
   std::vector<T, ExternalRAMAllocator<T>> q_{};
 
   size_t queue_size_{0};
