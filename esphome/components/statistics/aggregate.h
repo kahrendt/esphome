@@ -30,26 +30,26 @@ class Aggregate {
   float get_mean() { return this->mean_; }
   void set_mean(float mean) { this->mean_ = mean; }
   void combine_mean(Aggregate a, Aggregate b) {
-    this->mean_ = this->return_mean_(a.get_mean(), a.get_count(), b.get_mean(), b.get_count());
+    this->mean_ = this->combine_mean_(a.get_mean(), a.get_count(), b.get_mean(), b.get_count());
   }
 
   float get_m2() { return this->m2_; }
   void set_m2(float m2) { this->m2_ = m2; }
   void combine_m2(Aggregate a, Aggregate b) {
-    this->m2_ = this->return_m2_(a.get_mean(), a.get_count(), a.get_m2(), b.get_mean(), b.get_count(), b.get_m2());
+    this->m2_ = this->combine_m2_(a.get_mean(), a.get_count(), a.get_m2(), b.get_mean(), b.get_count(), b.get_m2());
   }
 
   float get_t_mean() { return this->t_mean_; }
   void set_t_mean(float t_mean) { this->t_mean_ = t_mean; }
   void combine_t_mean(Aggregate a, Aggregate b) {
-    this->t_mean_ = this->return_mean_(a.get_t_mean(), a.get_count(), b.get_t_mean(), b.get_count());
+    this->t_mean_ = this->combine_mean_(a.get_t_mean(), a.get_count(), b.get_t_mean(), b.get_count());
   }
 
   float get_t_m2() { return this->t_m2_; }
   void set_t_m2(float t_m2) { this->t_m2_ = t_m2; }
   void combine_t_m2(Aggregate a, Aggregate b) {
     this->t_m2_ =
-        this->return_m2_(a.get_t_mean(), a.get_count(), a.get_t_m2(), b.get_t_mean(), b.get_count(), b.get_t_m2());
+        this->combine_m2_(a.get_t_mean(), a.get_count(), a.get_t_m2(), b.get_t_mean(), b.get_count(), b.get_t_m2());
   }
 
   float get_c2() { return this->c2_; }
@@ -82,11 +82,11 @@ class Aggregate {
     }
   }
 
-  float get_variance() { return this->m2_ / (this->count_ - 1); }
-  float get_std_dev() { return std::sqrt(this->get_variance()); }
+  float compute_variance() { return this->m2_ / (this->count_ - 1); }
+  float compute_std_dev() { return std::sqrt(this->compute_variance()); }
 
-  float get_covariance() { return this->c2_ / (this->count_ - 1); }
-  float get_trend() { return this->c2_ / this->t_m2_; }
+  float compute_covariance() { return this->c2_ / (this->count_ - 1); }
+  float compute_trend() { return this->c2_ / this->t_m2_; }
 
  protected:
   // default values represent the statistic for a null entry
@@ -103,7 +103,7 @@ class Aggregate {
   float t_m2_{NAN};
   float c2_{NAN};
 
-  float return_mean_(float a_mean, size_t a_count, float b_mean, size_t b_count) {
+  float combine_mean_(float a_mean, size_t a_count, float b_mean, size_t b_count) {
     if (std::isnan(a_mean) && std::isnan(b_mean))
       return NAN;
     else if (std::isnan(a_mean))
@@ -115,7 +115,7 @@ class Aggregate {
            (static_cast<double>(a_count + b_count));
   }
 
-  float return_m2_(float a_mean, size_t a_count, float a_m2, float b_mean, size_t b_count, float b_m2) {
+  float combine_m2_(float a_mean, size_t a_count, float a_m2, float b_mean, size_t b_count, float b_m2) {
     if (std::isnan(a_m2) && std::isnan(b_m2))
       return NAN;
     else if (std::isnan(a_m2))

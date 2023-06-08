@@ -26,19 +26,19 @@ float DABALite::aggregated_mean() {
 }
 float DABALite::aggregated_variance() {
   this->update_current_aggregate_();
-  return this->current_aggregate_.get_variance();
+  return this->current_aggregate_.compute_variance();
 }
 float DABALite::aggregated_std_dev() {
   this->update_current_aggregate_();
-  return this->current_aggregate_.get_std_dev();
+  return this->current_aggregate_.compute_std_dev();
 }
 float DABALite::aggregated_covariance() {
   this->update_current_aggregate_();
-  return this->current_aggregate_.get_covariance();
+  return this->current_aggregate_.compute_covariance();
 }
 float DABALite::aggregated_trend() {
   this->update_current_aggregate_();
-  return this->current_aggregate_.get_trend();
+  return this->current_aggregate_.compute_trend();
 }
 
 void DABALite::set_capacity(size_t window_size) {
