@@ -1,8 +1,12 @@
 /*
-  Summary Partial statistics are stored in a circular queue with capacity window_size_
-  One example of implementation: https://towardsdatascience.com/circular-queue-or-ring-buffer-92c7b0193326
-  Improved implementation with ideas from
-  https://os.mbed.com/users/hamparawa/code/circular_buffer//file/b241b75b052b/circular_buffer.cpp/
+  Implements an iterator of sorts to keep track of indices in a circular queue
+    - Overloads operators to handle increasing and decreasing the index by 1
+    - Should work on any array like structure
+
+  An example of implementation: https://towardsdatascience.com/circular-queue-or-ring-buffer-92c7b0193326
+
+  To-do:
+    - move function implementations over to circular_queue_index.cpp
 */
 #pragma once
 

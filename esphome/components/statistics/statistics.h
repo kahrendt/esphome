@@ -1,3 +1,41 @@
+/*
+ * ESPHome component to compute several summary statistics of a single sensor in an effecient (computationally and
+ * memory-wise) manner
+ *  - Works over a sliding window of incoming values; i.e., it is an online algorithm
+ *  - Data is stored in a circular queue to be memory effecient by avoiding using std::deque
+ *    - Currently uses std::vector (as the size of the sliding window is only passed as a variable with ESPHome, so it
+ *      is dynamic in a sense)
+ *      - The circular queue is implemented by keeping track of the indices (circular_queue_index.h)
+ *    - Each summary statistic (or the value they are derived from) is stored in separate vectors
+ *      - This avoids reserving large amounts of memory for nothing if some sensors are not configured
+ *      - Configuring a sensor in ESPHome only stores the summary statistics it needs and no more
+ *        - If multiple sensors require the same intermediate statistic, it is only stored once
+ *  - Implements the DABA Lite algorithm on a circular_queue for computing online statistics
+ *    - space requirements: n+2 (this implementation needs n+3; can be fixed... need to handle the index of the end of
+ *      the queue being increased by 1)
+ *    - time complexity: worse-case O(1)
+ *    - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
+ *  - Uses variations of Welford's algorithm for parallel computing to find variance and covariance (with respect to
+ *    time) to avoid catastrophic cancellation
+ *  - mean is computed in a way to hopefully avoid catstrophic cancellation for large windows and large values
+ *
+ * Available computed over a sliding window:
+ *  - max: maximum measurement
+ *  - min: minimum measurement
+ *  - mean: average of the measurements
+ *  - count: number of valid measurements in the window (component ignores NaN values)
+ *  - variance: sample variance of the measurements
+ *  - sd: sample standard deviation of the measurements
+ *  - covariance: sample covariance of the measurements compared to the timestamps of each reading
+ *      - potentially problematic for devies with long uptimes as it is based on the timestamp given by millis()
+ *        - further experimentation is needed
+ *        - I am researching a way to compute the covariance of two sets parallely only using a time delta from previous
+ * r        readings
+ *  - trend: the slope of the line of best fit for the measurement values versus timestamps
+ *      - can be be used as an approximate of the rate of change (derivative) of the measurements
+ *      - potentially problematic for long uptimes as it uses covariance
+ */
+
 #pragma once
 
 #include "esphome/core/component.h"

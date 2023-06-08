@@ -1,8 +1,11 @@
 /*
-  Summary statistics are computed using the DABA Lite algorithm
-    - space requirements: n+2
-    - time complexity: worse-case O(1)
-    - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
+  Aggregate methods for computing summary statistics
+    - means are calculated in a manner that hopefully avoids catastrophic cancellation when using a large number of
+      samples
+    - variance and covariance aggregates are computed using a variation of Welford's alogorithm for parallel computing
+
+  To-do:
+    - move function implementations into aggregate.cpp
 */
 
 #pragma once
