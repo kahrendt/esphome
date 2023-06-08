@@ -30,7 +30,7 @@
  *      - potentially problematic for devies with long uptimes as it is based on the timestamp given by millis()
  *        - further experimentation is needed
  *        - I am researching a way to compute the covariance of two sets parallely only using a time delta from previous
- * r        readings
+ *          readings
  *  - trend: the slope of the line of best fit for the measurement values versus timestamps
  *      - can be be used as an approximate of the rate of change (derivative) of the measurements
  *      - potentially problematic for long uptimes as it uses covariance
