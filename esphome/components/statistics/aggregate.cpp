@@ -3,10 +3,11 @@
     - means are calculated in a manner that hopefully avoids catastrophic cancellation when using a large number of
       samples
     - variance and covariance aggregates are computed using a variation of Welford's alogorithm for parallel computing
+
+  Implemented by Kevin Ahrendt, June 2023
 */
 
 #include "aggregate.h"
-#include <limits>
 #include <algorithm>
 #include <cmath>
 

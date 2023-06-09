@@ -34,15 +34,16 @@
  *  - trend: the slope of the line of best fit for the measurement values versus timestamps
  *      - can be be used as an approximate of the rate of change (derivative) of the measurements
  *      - potentially problematic for long uptimes as it uses covariance
+ *
+ * Implemented by Kevin Ahrendt, June 2023
  */
 
 #pragma once
 
+#include "daba_lite.h"
+
 #include "esphome/core/component.h"
 #include "esphome/components/sensor/sensor.h"
-
-#include "daba_lite.h"
-#include "esphome/core/log.h"
 
 namespace esphome {
 namespace statistics {

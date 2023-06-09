@@ -5,15 +5,12 @@
 
   An example of implementation: https://towardsdatascience.com/circular-queue-or-ring-buffer-92c7b0193326
 
-  To-do:
-    - move function implementations over to circular_queue_index.cpp
+  Implemented by Kevin Ahrendt, June 2023
 */
+
 #pragma once
 
-#include <vector>
-
 #include "esphome/core/helpers.h"
-#include "esphome/core/log.h"
 
 namespace esphome {
 namespace statistics {
@@ -35,61 +32,19 @@ class CircularQueueIndex {
   void set_capacity(size_t capacity) { this->capacity_ = capacity; }
   size_t get_capacity() { return this->capacity_; }
 
-  CircularQueueIndex &operator++() {
-    if (this->index_ == (this->capacity_ - 1)) {
-      this->index_ = 0;
-      return *this;
-    }
+  CircularQueueIndex &operator++();
 
-    ++this->index_;
+  CircularQueueIndex operator++(int);
 
-    // ESP_LOGI("cq increment", "index=%d;capacity=%d", this->index_, this->capacity_);
-    return *this;
-  }
+  CircularQueueIndex &operator--();
 
-  CircularQueueIndex operator++(int) {
-    if (this->index_ == (this->capacity_ - 1))
-      return CircularQueueIndex(0, this->capacity_);
+  CircularQueueIndex operator--(int);
 
-    return CircularQueueIndex(++this->index_, this->capacity_);
-  }
+  void operator=(const CircularQueueIndex &i);
 
-  CircularQueueIndex &operator--() {
-    if (this->index_ == 0) {
-      this->index_ = this->capacity_ - 1;
-      return *this;
-    }
+  bool operator==(CircularQueueIndex &i);
 
-    --this->index_;
-    return *this;
-  }
-
-  CircularQueueIndex operator--(int) {
-    if (this->index_ == 0)
-      return CircularQueueIndex(this->capacity_ - 1, this->capacity_);
-
-    return CircularQueueIndex(--this->index_, this->capacity_);
-  }
-
-  void operator=(const CircularQueueIndex &i) {
-    this->index_ = i.index_;
-    // get_index();
-    this->capacity_ = i.capacity_;  // get_capacity();
-  }
-
-  bool operator==(CircularQueueIndex &i) {
-    if ((this->index_ == i.get_index()) && this->capacity_ == i.get_capacity())
-      return true;
-
-    return false;
-  }
-
-  bool operator!=(CircularQueueIndex &i) {
-    if ((this->index_ != i.get_index()) || this->capacity_ != i.get_capacity())
-      return true;
-
-    return false;
-  }
+  bool operator!=(CircularQueueIndex &i);
 
  private:
   size_t index_;

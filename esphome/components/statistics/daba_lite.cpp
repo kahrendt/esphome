@@ -1,9 +1,20 @@
+/*
+  Summary statistics are computed using the DABA Lite algorithm
+    - space requirements: n+2 (currently uses n+3, can probably fix this by handling the e_ index better)
+    - time complexity: worse-case O(1)
+    - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
+
+  Implemented by Kevin Ahrendt, June 2023
+*/
+
 #include "daba_lite.h"
 #include "circular_queue_index.h"
 #include "aggregate.h"
 
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
+
+#include <vector>
 
 namespace esphome {
 namespace statistics {
