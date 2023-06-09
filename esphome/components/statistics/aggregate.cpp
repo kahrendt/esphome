@@ -15,30 +15,30 @@
 namespace esphome {
 namespace statistics {
 
-void Aggregate::combine_count(Aggregate a, Aggregate b) { this->count_ = a.get_count() + b.get_count(); }
+void Aggregate::combine_count(const Aggregate &a, const Aggregate &b) { this->count_ = a.get_count() + b.get_count(); }
 
-void Aggregate::combine_max(Aggregate a, Aggregate b) { this->max_ = std::max(a.get_max(), b.get_max()); }
+void Aggregate::combine_max(const Aggregate &a, const Aggregate &b) { this->max_ = std::max(a.get_max(), b.get_max()); }
 
-void Aggregate::combine_min(Aggregate a, Aggregate b) { this->min_ = std::min(a.get_min(), b.get_min()); }
+void Aggregate::combine_min(const Aggregate &a, const Aggregate &b) { this->min_ = std::min(a.get_min(), b.get_min()); }
 
-void Aggregate::combine_mean(Aggregate a, Aggregate b) {
+void Aggregate::combine_mean(const Aggregate &a, const Aggregate &b) {
   this->mean_ = this->combine_mean_(a.get_mean(), a.get_count(), b.get_mean(), b.get_count());
 }
 
-void Aggregate::combine_m2(Aggregate a, Aggregate b) {
+void Aggregate::combine_m2(const Aggregate &a, const Aggregate &b) {
   this->m2_ = this->combine_m2_(a.get_mean(), a.get_count(), a.get_m2(), b.get_mean(), b.get_count(), b.get_m2());
 }
 
-void Aggregate::combine_t_mean(Aggregate a, Aggregate b) {
+void Aggregate::combine_t_mean(const Aggregate &a, const Aggregate &b) {
   this->t_mean_ = this->combine_mean_(a.get_t_mean(), a.get_count(), b.get_t_mean(), b.get_count());
 }
 
-void Aggregate::combine_t_m2(Aggregate a, Aggregate b) {
+void Aggregate::combine_t_m2(const Aggregate &a, const Aggregate &b) {
   this->t_m2_ =
       this->combine_m2_(a.get_t_mean(), a.get_count(), a.get_t_m2(), b.get_t_mean(), b.get_count(), b.get_t_m2());
 }
 
-void Aggregate::combine_c2(Aggregate a, Aggregate b) {
+void Aggregate::combine_c2(const Aggregate &a, const Aggregate &b) {
   float a_c2 = a.get_c2();
   float b_c2 = b.get_c2();
 
@@ -79,7 +79,7 @@ float Aggregate::combine_mean_(float a_mean, size_t a_count, float b_mean, size_
     return b_mean;
   } else if (std::isnan(b_mean)) {
     return a_mean;
-}
+  }
 
   return (a_mean * static_cast<double>(a_count) + b_mean * static_cast<double>(b_count)) /
          (static_cast<double>(a_count + b_count));
@@ -92,7 +92,7 @@ float Aggregate::combine_m2_(float a_mean, size_t a_count, float a_m2, float b_m
     return b_m2;
   } else if (std::isnan(b_m2)) {
     return a_m2;
-}
+  }
 
   float delta = b_mean - a_mean;
   return a_m2 + b_m2 +

@@ -17,37 +17,37 @@ namespace statistics {
 
 class Aggregate {
  public:
-  size_t get_count() { return this->count_; }
+  size_t get_count() const { return this->count_; }
   void set_count(size_t count) { this->count_ = count; }
-  void combine_count(Aggregate a, Aggregate b);
+  void combine_count(const Aggregate &a, const Aggregate &b);
 
-  float get_max() { return this->max_; }
+  float get_max() const { return this->max_; }
   void set_max(float max) { this->max_ = max; }
-  void combine_max(Aggregate a, Aggregate b);
+  void combine_max(const Aggregate &a, const Aggregate &b);
 
-  float get_min() { return this->min_; }
+  float get_min() const { return this->min_; }
   void set_min(float min) { this->min_ = min; }
-  void combine_min(Aggregate a, Aggregate b);
+  void combine_min(const Aggregate &a, const Aggregate &b);
 
-  float get_mean() { return this->mean_; }
+  float get_mean() const { return this->mean_; }
   void set_mean(float mean) { this->mean_ = mean; }
-  void combine_mean(Aggregate a, Aggregate b);
+  void combine_mean(const Aggregate &a, const Aggregate &b);
 
-  float get_m2() { return this->m2_; }
+  float get_m2() const { return this->m2_; }
   void set_m2(float m2) { this->m2_ = m2; }
-  void combine_m2(Aggregate a, Aggregate b);
+  void combine_m2(const Aggregate &a, const Aggregate &b);
 
-  float get_t_mean() { return this->t_mean_; }
+  float get_t_mean() const { return this->t_mean_; }
   void set_t_mean(float t_mean) { this->t_mean_ = t_mean; }
-  void combine_t_mean(Aggregate a, Aggregate b);
+  void combine_t_mean(const Aggregate &a, const Aggregate &b);
 
-  float get_t_m2() { return this->t_m2_; }
+  float get_t_m2() const { return this->t_m2_; }
   void set_t_m2(float t_m2) { this->t_m2_ = t_m2; }
-  void combine_t_m2(Aggregate a, Aggregate b);
+  void combine_t_m2(const Aggregate &a, const Aggregate &b);
 
-  float get_c2() { return this->c2_; }
+  float get_c2() const { return this->c2_; }
   void set_c2(float c2) { this->c2_ = c2; }
-  void combine_c2(Aggregate a, Aggregate b);
+  void combine_c2(const Aggregate &a, const Aggregate &b);
 
   float compute_variance();
   float compute_std_dev();

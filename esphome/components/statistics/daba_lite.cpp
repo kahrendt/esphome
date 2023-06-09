@@ -103,7 +103,7 @@ void DABALite::insert(float value) {
   this->is_current_aggregate_updated_ = false;
 }
 
-void DABALite::emplace_(Aggregate value, size_t index) {
+void DABALite::emplace_(const Aggregate &value, size_t index) {
   if (this->include_max_)
     this->max_queue_[index] = value.get_max();
   if (this->include_min_)
@@ -199,7 +199,7 @@ Aggregate DABALite::lower_(size_t index) {
 }
 
 // combine two aggregates summary statistics
-Aggregate DABALite::combine_(Aggregate &a, Aggregate &b) {
+Aggregate DABALite::combine_(const Aggregate &a, const Aggregate &b) {
   Aggregate part;
 
   if (this->include_max_)

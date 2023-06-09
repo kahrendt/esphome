@@ -96,7 +96,7 @@ class DABALite {
   void update_current_aggregate_();
 
   // Store an Aggregate at an index only in the enabled queue_ vectors
-  void emplace_(Aggregate value, size_t index);
+  void emplace_(const Aggregate &value, size_t index);
 
   // compute summary statistics for a single new value and returns an aggregate value
   Aggregate lift_(float v);
@@ -105,7 +105,7 @@ class DABALite {
   Aggregate lower_(size_t index);
 
   // combine summary statistics from two aggregates
-  Aggregate combine_(Aggregate &a, Aggregate &b);
+  Aggregate combine_(const Aggregate &a, const Aggregate &b);
 
   // DABA Lite algorithm method
   void step_();
