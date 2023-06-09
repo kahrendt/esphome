@@ -4,7 +4,6 @@
     - time complexity: worse-case O(1)
     - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
 */
-
 #pragma once
 
 #include "circular_queue_index.h"
