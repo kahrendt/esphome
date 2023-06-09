@@ -121,10 +121,6 @@ void StatisticsComponent::setup() {
   this->source_sensor_->add_on_state_callback([this](float value) -> void { this->handle_new_value_(value); });
 }
 
-// void StatisticsComponent::update_current_statistics_() {
-//   this->current_statistics_ = this->partial_stats_queue_.query();
-// }
-
 void StatisticsComponent::handle_new_value_(float value) {
   while (this->partial_stats_queue_.size() >= this->window_size_) {
     this->partial_stats_queue_.evict();
@@ -140,18 +136,20 @@ void StatisticsComponent::handle_new_value_(float value) {
 
     if (this->max_sensor_) {
       float max = this->partial_stats_queue_.aggregated_max();
-      if (std::isinf(max))  // default aggregated max for 0 readings is -infinity, switch to NaN for HA
+      if (std::isinf(max)) {  // default aggregated max for 0 readings is -infinity, switch to NaN for HA
         this->max_sensor_->publish_state(NAN);
-      else
+      } else {
         this->max_sensor_->publish_state(max);
+      }
     }
 
     if (this->min_sensor_) {
       float min = this->partial_stats_queue_.aggregated_min();
-      if (std::isinf(min))  // default aggregated min for 0 readings is infinity, switch to NaN for HA
-        this->max_sensor_->publish_state(NAN);
-      else
-        this->max_sensor_->publish_state(min);
+      if (std::isinf(min)) {  // default aggregated min for 0 readings is infinity, switch to NaN for HA
+        this->min_sensor_->publish_state(NAN);
+      } else {
+        this->min_sensor_->publish_state(min);
+      }
     }
 
     if (this->sd_sensor_)

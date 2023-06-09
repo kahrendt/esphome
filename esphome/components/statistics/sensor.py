@@ -12,6 +12,7 @@ from esphome.const import (
     CONF_ENTITY_CATEGORY,
     CONF_ICON,
     CONF_UNIT_OF_MEASUREMENT,
+    CONF_COUNT,
 )
 from esphome.core.entity_helpers import inherit_property_from
 
@@ -22,7 +23,6 @@ CONF_MAX = "max"
 CONF_MIN = "min"
 CONF_SD = "sd"
 CONF_VARIANCE = "variance"
-CONF_COUNT = "count"
 CONF_TREND = "trend"
 CONF_COVARIANCE = "covariance"
 

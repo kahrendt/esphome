@@ -47,23 +47,21 @@ CircularQueueIndex CircularQueueIndex::operator--(int) {
   return CircularQueueIndex(--this->index_, this->capacity_);
 }
 
-void CircularQueueIndex::operator=(const CircularQueueIndex &i) {
+CircularQueueIndex &CircularQueueIndex::operator=(const CircularQueueIndex &i) {
+  if (this == &i)
+    return *this;
   this->index_ = i.index_;
   this->capacity_ = i.capacity_;
+
+  return *this;
 }
 
 bool CircularQueueIndex::operator==(CircularQueueIndex &i) {
-  if ((this->index_ == i.get_index()) && this->capacity_ == i.get_capacity())
-    return true;
-
-  return false;
+  return (this->index_ == i.get_index()) && this->capacity_ == i.get_capacity();
 }
 
 bool CircularQueueIndex::operator!=(CircularQueueIndex &i) {
-  if ((this->index_ != i.get_index()) || this->capacity_ != i.get_capacity())
-    return true;
-
-  return false;
+  return (this->index_ != i.get_index()) || this->capacity_ != i.get_capacity();
 }
 
 }  // namespace statistics

@@ -40,7 +40,7 @@ class CircularQueueIndex {
 
   CircularQueueIndex operator--(int);
 
-  void operator=(const CircularQueueIndex &i);
+  CircularQueueIndex &operator=(const CircularQueueIndex &i);
 
   bool operator==(CircularQueueIndex &i);
 

@@ -67,12 +67,12 @@ std::string PrometheusHandler::relabel_name_(EntityBase *obj) {
 }
 
 // Type-specific implementation
-// Prometheus exposition format: https://github.com/prometheus/docs/blob/main/content/docs/instrumenting/exposition_formats.md
-// 
+// Prometheus exposition format:
+// https://github.com/prometheus/docs/blob/main/content/docs/instrumenting/exposition_formats.md
+//
 
 #ifdef USE_SENSOR
-void PrometheusHandler::sensor_type_(AsyncResponseStream *stream) {
-}
+void PrometheusHandler::sensor_type_(AsyncResponseStream *stream) {}
 void PrometheusHandler::sensor_row_(AsyncResponseStream *stream, sensor::Sensor *obj) {
   std::string app_name = App.get_name();
   std::replace(app_name.begin(), app_name.end(), '-', '_');
@@ -95,8 +95,7 @@ void PrometheusHandler::sensor_row_(AsyncResponseStream *stream, sensor::Sensor 
   stream->print(F("\"} "));
   if (!std::isnan(obj->state)) {
     stream->print(value_accuracy_to_string(obj->state, obj->get_accuracy_decimals()).c_str());
-  }
-  else {
+  } else {
     // Send NaN value
     // https://pkg.go.dev/github.com/prometheus/prometheus/pkg/value
     stream->print(F("0x7ff0000000000001"));
@@ -245,35 +244,35 @@ void PrometheusHandler::light_row_(AsyncResponseStream *stream, light::LightStat
   stream->print(relabel_id_(obj).c_str());
   stream->print(F("\",name=\""));
   stream->print(relabel_name_(obj).c_str());
-  stream->print(F("\",channel=\"brightness\"} "));
+  stream->print(F(R"(",channel="brightness"} )"));
   stream->print(brightness);
   stream->print(F("\n"));
   stream->print(F("esphome_light_color{id=\""));
   stream->print(relabel_id_(obj).c_str());
   stream->print(F("\",name=\""));
   stream->print(relabel_name_(obj).c_str());
-  stream->print(F("\",channel=\"r\"} "));
+  stream->print(F(R"(",channel="r"} )"));
   stream->print(r);
   stream->print(F("\n"));
   stream->print(F("esphome_light_color{id=\""));
   stream->print(relabel_id_(obj).c_str());
   stream->print(F("\",name=\""));
   stream->print(relabel_name_(obj).c_str());
-  stream->print(F("\",channel=\"g\"} "));
+  stream->print(F(R"(",channel="g"} )"));
   stream->print(g);
   stream->print(F("\n"));
   stream->print(F("esphome_light_color{id=\""));
   stream->print(relabel_id_(obj).c_str());
   stream->print(F("\",name=\""));
   stream->print(relabel_name_(obj).c_str());
-  stream->print(F("\",channel=\"b\"} "));
+  stream->print(F(R"(",channel="b"} )"));
   stream->print(b);
   stream->print(F("\n"));
   stream->print(F("esphome_light_color{id=\""));
   stream->print(relabel_id_(obj).c_str());
   stream->print(F("\",name=\""));
   stream->print(relabel_name_(obj).c_str());
-  stream->print(F("\",channel=\"w\"} "));
+  stream->print(F(R"(",channel="w"} )"));
   stream->print(w);
   stream->print(F("\n"));
   // Effect

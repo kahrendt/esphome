@@ -93,7 +93,7 @@ size_t DABALite::size() {
 // insert a new value at end of circular queue and step DABA Lite algorithm
 void DABALite::insert(float value) {
   Aggregate lifted = this->lift_(value);
-  this->backSum_ = this->combine_(this->backSum_, lifted);
+  this->back_sum_ = this->combine_(this->back_sum_, lifted);
 
   this->emplace_(lifted, this->e_.get_index());
 
@@ -242,16 +242,16 @@ void DABALite::step_() {
     if (this->l_ != this->r_) {
       Aggregate old_l = this->lower_(this->l_.get_index());
 
-      this->emplace_(combine_(old_l, this->midSum_), this->l_.get_index());
+      this->emplace_(combine_(old_l, this->mid_sum_), this->l_.get_index());
       ++this->l_;
     } else {
       ++this->l_;
       ++this->r_;
       ++this->a_;
-      this->midSum_ = get_delta_();
+      this->mid_sum_ = get_delta_();
     }
   } else {
-    this->backSum_ = this->midSum_ = this->identity_class_;
+    this->back_sum_ = this->mid_sum_ = this->identity_class_;
   }
 }
 
@@ -262,8 +262,8 @@ void DABALite::flip_() {
   this->a_ = this->e_;
   this->b_ = this->e_;
 
-  this->midSum_ = this->backSum_;
-  this->backSum_ = this->identity_class_;
+  this->mid_sum_ = this->back_sum_;
+  this->back_sum_ = this->identity_class_;
 }
 
 void DABALite::debug_pointers_() {
@@ -271,7 +271,7 @@ void DABALite::debug_pointers_() {
   int tail = this->e_.get_index();
   int capacity = this->window_size_;
 
-  size_t f = (head - head);
+  size_t f = 0;
   size_t l = (((static_cast<int>(this->l_.get_index()) - head) % capacity) + capacity) % capacity;
   size_t r = (((static_cast<int>(this->r_.get_index()) - head) % capacity) + capacity) % capacity;
   size_t a = (((static_cast<int>(this->a_.get_index()) - head) % capacity) + capacity) % capacity;
@@ -290,7 +290,7 @@ void DABALite::debug_pointers_() {
 // DABA Lite algorithm methods
 inline bool DABALite::is_front_empty_() { return this->b_ == this->f_; }
 inline bool DABALite::is_delta_empty_() { return this->a_ == this->b_; }
-inline Aggregate DABALite::get_back_() { return this->backSum_; }
+inline Aggregate DABALite::get_back_() { return this->back_sum_; }
 inline Aggregate DABALite::get_alpha_() {
   return this->is_front_empty_() ? this->identity_class_ : this->lower_(this->f_.get_index());
 }
