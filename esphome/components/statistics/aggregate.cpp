@@ -8,6 +8,7 @@
 */
 
 #include "aggregate.h"
+
 #include <algorithm>
 #include <cmath>
 

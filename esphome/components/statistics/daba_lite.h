@@ -12,6 +12,8 @@
 #include "circular_queue_index.h"
 #include "aggregate.h"
 
+#include "esphome/core/helpers.h"
+
 #include <vector>
 
 namespace esphome {
@@ -50,14 +52,14 @@ class DABALite {
 
  protected:
   // Vectors for storing summary statistics (only statistics needed by configured sensors are stored)
-  std::vector<float> max_queue_{};
-  std::vector<float> min_queue_{};
-  std::vector<size_t> count_queue_{};
-  std::vector<float> mean_queue_{};
-  std::vector<float> m2_queue_{};
-  std::vector<float> c2_queue_{};
-  std::vector<float> t_mean_queue_{};
-  std::vector<float> t_m2_queue_{};
+  std::vector<float, ExternalRAMAllocator<float>> max_queue_{};
+  std::vector<float, ExternalRAMAllocator<float>> min_queue_{};
+  std::vector<size_t, ExternalRAMAllocator<float>> count_queue_{};
+  std::vector<float, ExternalRAMAllocator<float>> mean_queue_{};
+  std::vector<float, ExternalRAMAllocator<float>> m2_queue_{};
+  std::vector<float, ExternalRAMAllocator<float>> c2_queue_{};
+  std::vector<float, ExternalRAMAllocator<float>> t_mean_queue_{};
+  std::vector<float, ExternalRAMAllocator<float>> t_m2_queue_{};
 
   bool include_max_{false};
   bool include_min_{false};
