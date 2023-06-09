@@ -22,7 +22,7 @@ namespace statistics {
 class DABALite {
  public:
   void set_capacity(size_t window_size);
-  size_t size();
+  size_t size() const;
 
   // insert a new value at end of circular queue and step DABA Lite algorithm
   void insert(float value);
@@ -86,7 +86,8 @@ class DABALite {
   CircularQueueIndex b_;
   CircularQueueIndex e_;  // end of queue (one past the most recently inserted measurement)
 
-  Aggregate identity_class_, mid_sum_, back_sum_;  // assumes default values for a null entry
+  const Aggregate identity_class_;  // assumes default values for a null entry
+  Aggregate mid_sum_, back_sum_;
 
   // if we have the current aggregate, we do not query it again but just use the stored result
   bool is_current_aggregate_updated_{false};

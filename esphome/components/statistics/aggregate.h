@@ -49,10 +49,10 @@ class Aggregate {
   void set_c2(float c2) { this->c2_ = c2; }
   void combine_c2(const Aggregate &a, const Aggregate &b);
 
-  float compute_variance();
-  float compute_std_dev();
-  float compute_covariance();
-  float compute_trend();
+  float compute_variance() const;
+  float compute_std_dev() const;
+  float compute_covariance() const;
+  float compute_trend() const;
 
  protected:
   // default values represent the statistic for a null entry
@@ -69,9 +69,9 @@ class Aggregate {
   float t_m2_{NAN};
   float c2_{NAN};
 
-  float combine_mean_(float a_mean, size_t a_count, float b_mean, size_t b_count);
+  float combine_mean_(float a_mean, size_t a_count, float b_mean, size_t b_count) const;
 
-  float combine_m2_(float a_mean, size_t a_count, float a_m2, float b_mean, size_t b_count, float b_m2);
+  float combine_m2_(float a_mean, size_t a_count, float a_m2, float b_mean, size_t b_count, float b_m2) const;
 };
 
 }  // namespace statistics

@@ -66,13 +66,13 @@ void Aggregate::combine_c2(const Aggregate &a, const Aggregate &b) {
   }
 }
 
-float Aggregate::compute_variance() { return this->m2_ / (this->count_ - 1); }
-float Aggregate::compute_std_dev() { return std::sqrt(this->compute_variance()); }
+float Aggregate::compute_variance() const { return this->m2_ / (this->count_ - 1); }
+float Aggregate::compute_std_dev() const { return std::sqrt(this->compute_variance()); }
 
-float Aggregate::compute_covariance() { return this->c2_ / (this->count_ - 1); }
-float Aggregate::compute_trend() { return this->c2_ / this->t_m2_; }
+float Aggregate::compute_covariance() const { return this->c2_ / (this->count_ - 1); }
+float Aggregate::compute_trend() const { return this->c2_ / this->t_m2_; }
 
-float Aggregate::combine_mean_(float a_mean, size_t a_count, float b_mean, size_t b_count) {
+float Aggregate::combine_mean_(float a_mean, size_t a_count, float b_mean, size_t b_count) const {
   if (std::isnan(a_mean) && std::isnan(b_mean)) {
     return NAN;
   } else if (std::isnan(a_mean)) {
@@ -85,7 +85,7 @@ float Aggregate::combine_mean_(float a_mean, size_t a_count, float b_mean, size_
          (static_cast<double>(a_count + b_count));
 }
 
-float Aggregate::combine_m2_(float a_mean, size_t a_count, float a_m2, float b_mean, size_t b_count, float b_m2) {
+float Aggregate::combine_m2_(float a_mean, size_t a_count, float a_m2, float b_mean, size_t b_count, float b_m2) const {
   if (std::isnan(a_m2) && std::isnan(b_m2)) {
     return NAN;
   } else if (std::isnan(a_m2)) {

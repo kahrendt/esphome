@@ -81,7 +81,7 @@ void DABALite::set_capacity(size_t window_size) {
   this->e_ = CircularQueueIndex(0, this->window_size_);
 }
 
-size_t DABALite::size() {
+size_t DABALite::size() const {
   if (this->e_ == this->f_)
     return 0;
   if (this->e_.get_index() < this->f_.get_index())

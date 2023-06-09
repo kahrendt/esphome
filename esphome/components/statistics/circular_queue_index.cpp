@@ -23,12 +23,13 @@ CircularQueueIndex &CircularQueueIndex::operator++() {
   return *this;
 }
 
-CircularQueueIndex CircularQueueIndex::operator++(int) {
-  if (this->index_ == (this->capacity_ - 1))
-    return CircularQueueIndex(0, this->capacity_);
+// clang-tidy keeps messing this up with const added and removed on each run
+// const CircularQueueIndex CircularQueueIndex::operator++(int) {
+//   if (this->index_ == (this->capacity_ - 1))
+//     return CircularQueueIndex(0, this->capacity_);
 
-  return CircularQueueIndex(++this->index_, this->capacity_);
-}
+//   return CircularQueueIndex(this->index_ + 1, this->capacity_);
+// }
 
 CircularQueueIndex &CircularQueueIndex::operator--() {
   if (this->index_ == 0) {
@@ -40,12 +41,13 @@ CircularQueueIndex &CircularQueueIndex::operator--() {
   return *this;
 }
 
-CircularQueueIndex CircularQueueIndex::operator--(int) {
-  if (this->index_ == 0)
-    return CircularQueueIndex(this->capacity_ - 1, this->capacity_);
+// clang-tidy keeps messing this up with const added and removed on each run
+// const CircularQueueIndex CircularQueueIndex::operator--(int) {
+//   if (this->index_ == 0)
+//     return CircularQueueIndex(this->capacity_ - 1, this->capacity_);
 
-  return CircularQueueIndex(--this->index_, this->capacity_);
-}
+//   return CircularQueueIndex(--this->index_, this->capacity_);
+// }
 
 CircularQueueIndex &CircularQueueIndex::operator=(const CircularQueueIndex &i) {
   if (this == &i)
@@ -56,11 +58,11 @@ CircularQueueIndex &CircularQueueIndex::operator=(const CircularQueueIndex &i) {
   return *this;
 }
 
-bool CircularQueueIndex::operator==(CircularQueueIndex &i) {
+bool CircularQueueIndex::operator==(const CircularQueueIndex &i) const {
   return (this->index_ == i.get_index()) && this->capacity_ == i.get_capacity();
 }
 
-bool CircularQueueIndex::operator!=(CircularQueueIndex &i) {
+bool CircularQueueIndex::operator!=(const CircularQueueIndex &i) const {
   return (this->index_ != i.get_index()) || this->capacity_ != i.get_capacity();
 }
 
