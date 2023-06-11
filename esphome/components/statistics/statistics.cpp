@@ -53,32 +53,38 @@ static const char *const TAG = "statistics";
 void StatisticsComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "Statistics:");
 
+  LOG_SENSOR("  ", "Source Sensor", this->source_sensor_);
+
   ESP_LOGCONFIG(TAG, "  window_size: %u", this->window_size_);
   ESP_LOGCONFIG(TAG, "  send_every: %u", this->send_every_);
   ESP_LOGCONFIG(TAG, "  send_first_at: %u", this->send_at_);
 
-  if (this->mean_sensor_) {
-    LOG_SENSOR("  ", "Mean", this->mean_sensor_);
+  if (this->count_sensor_) {
+    LOG_SENSOR("  ", "Count", this->count_sensor_);
   }
 
-  if (this->mean_sensor_) {
+  if (this->max_sensor_) {
+    LOG_SENSOR("  ", "Max", this->max_sensor_);
+  }
+
+  if (this->min_sensor_) {
     LOG_SENSOR("  ", "Min", this->min_sensor_);
   }
 
   if (this->mean_sensor_) {
-    LOG_SENSOR("  ", "Max", this->max_sensor_);
-  }
-
-  if (this->sd_sensor_) {
-    LOG_SENSOR("  ", "Standard Deviation", this->sd_sensor_);
+    LOG_SENSOR("  ", "Mean", this->mean_sensor_);
   }
 
   if (this->variance_sensor_) {
     LOG_SENSOR("  ", "Variance", this->variance_sensor_);
   }
 
-  if (this->count_sensor_) {
-    LOG_SENSOR("  ", "Count", this->count_sensor_);
+  if (this->std_dev_sensor_) {
+    LOG_SENSOR("  ", "Standard Deviation", this->std_dev_sensor_);
+  }
+
+  if (this->covariance_sensor_) {
+    LOG_SENSOR("  ", "Covariance", this->covariance_sensor_);
   }
 
   if (this->trend_sensor_) {
@@ -87,52 +93,69 @@ void StatisticsComponent::dump_config() {
 }
 
 void StatisticsComponent::setup() {
-  if (this->max_sensor_)
-    this->partial_stats_queue_.enable_max();
-  if (this->min_sensor_)
-    this->partial_stats_queue_.enable_min();
+  // store aggregate data only needed for the configured sensors
+
   if (this->count_sensor_)
     this->partial_stats_queue_.enable_count();
+
+  if (this->max_sensor_)
+    this->partial_stats_queue_.enable_max();
+
+  if (this->min_sensor_)
+    this->partial_stats_queue_.enable_min();
+
   if (this->mean_sensor_) {
-    this->partial_stats_queue_.enable_mean();
     this->partial_stats_queue_.enable_count();
+    this->partial_stats_queue_.enable_mean();
   }
-  if ((this->variance_sensor_) || (this->sd_sensor_)) {
-    this->partial_stats_queue_.enable_mean();
+
+  if ((this->variance_sensor_) || (this->std_dev_sensor_)) {
     this->partial_stats_queue_.enable_count();
+    this->partial_stats_queue_.enable_mean();
     this->partial_stats_queue_.enable_m2();
   }
+
   if (this->covariance_sensor_) {
-    this->partial_stats_queue_.enable_c2();
     this->partial_stats_queue_.enable_count();
     this->partial_stats_queue_.enable_mean();
     this->partial_stats_queue_.enable_t_mean();
+    this->partial_stats_queue_.enable_c2();
   }
+
   if (this->trend_sensor_) {
-    this->partial_stats_queue_.enable_c2();
     this->partial_stats_queue_.enable_count();
     this->partial_stats_queue_.enable_mean();
     this->partial_stats_queue_.enable_t_mean();
+    this->partial_stats_queue_.enable_c2();
     this->partial_stats_queue_.enable_t_m2();
   }
 
+  // set the capacity of the DABA Lite queue for our window size
   this->partial_stats_queue_.set_capacity(this->window_size_);
 
+  // when the source sensor updates, call handle_new_value_
   this->source_sensor_->add_on_state_callback([this](float value) -> void { this->handle_new_value_(value); });
+
+  // ensure we send our first reading when configured
+  this->set_first_at(this->send_every_ - this->send_at_);
 }
 
+// given a new sensor measurements, evict if window is full, add new value to window, and update sensors
 void StatisticsComponent::handle_new_value_(float value) {
+  // if sliding window is larger than the capacity, evict until less
   while (this->partial_stats_queue_.size() >= this->window_size_) {
     this->partial_stats_queue_.evict();
   }
 
+  // add new value to end of sliding window
   this->partial_stats_queue_.insert(value);
 
+  // ensures we only updates the sensors based on the configuration
   if (++this->send_at_ >= this->send_every_) {
     this->send_at_ = 0;
 
-    if (this->mean_sensor_)
-      this->mean_sensor_->publish_state(this->partial_stats_queue_.aggregated_mean());
+    if (this->count_sensor_)
+      this->count_sensor_->publish_state(this->partial_stats_queue_.aggregated_count());
 
     if (this->max_sensor_) {
       float max = this->partial_stats_queue_.aggregated_max();
@@ -152,20 +175,20 @@ void StatisticsComponent::handle_new_value_(float value) {
       }
     }
 
-    if (this->sd_sensor_)
-      this->sd_sensor_->publish_state(this->partial_stats_queue_.aggregated_std_dev());
+    if (this->mean_sensor_)
+      this->mean_sensor_->publish_state(this->partial_stats_queue_.aggregated_mean());
 
     if (this->variance_sensor_)
       this->variance_sensor_->publish_state(this->partial_stats_queue_.aggregated_variance());
 
-    if (this->count_sensor_)
-      this->count_sensor_->publish_state(this->partial_stats_queue_.aggregated_count());
-
-    if (this->trend_sensor_)
-      this->trend_sensor_->publish_state(this->partial_stats_queue_.aggregated_trend());
+    if (this->std_dev_sensor_)
+      this->std_dev_sensor_->publish_state(this->partial_stats_queue_.aggregated_std_dev());
 
     if (this->covariance_sensor_)
       this->covariance_sensor_->publish_state(this->partial_stats_queue_.aggregated_covariance());
+
+    if (this->trend_sensor_)
+      this->trend_sensor_->publish_state(this->partial_stats_queue_.aggregated_trend());
   }
 }
 

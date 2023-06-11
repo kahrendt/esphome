@@ -21,7 +21,7 @@ CODEOWNERS = ["@kahrendt"]
 CONF_MEAN = "mean"
 CONF_MAX = "max"
 CONF_MIN = "min"
-CONF_SD = "sd"
+CONF_STD_DEV = "std_dev"
 CONF_VARIANCE = "variance"
 CONF_TREND = "trend"
 CONF_COVARIANCE = "covariance"
@@ -40,7 +40,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_MEAN): sensor.sensor_schema(),
         cv.Optional(CONF_MAX): sensor.sensor_schema(),
         cv.Optional(CONF_MIN): sensor.sensor_schema(),
-        cv.Optional(CONF_SD): sensor.sensor_schema(),
+        cv.Optional(CONF_STD_DEV): sensor.sensor_schema(),
         cv.Optional(CONF_VARIANCE): sensor.sensor_schema(),
         cv.Optional(CONF_COUNT): sensor.sensor_schema(),
         cv.Optional(CONF_TREND): sensor.sensor_schema(),
@@ -80,9 +80,13 @@ inherit_schema_for_min = [
     inherit_property_from([CONF_MIN, property], CONF_SOURCE_ID)
     for property in properties_to_inherit
 ]
-inherit_schema_for_sd = [
-    inherit_property_from([CONF_SD, property], CONF_SOURCE_ID)
+inherit_schema_for_std_dev = [
+    inherit_property_from([CONF_STD_DEV, property], CONF_SOURCE_ID)
     for property in properties_to_inherit
+]
+inherit_schema_for_var = [
+    inherit_property_from([CONF_VARIANCE, property], CONF_SOURCE_ID)
+    for property in properties_to_inherit_new_unit
 ]
 inherit_schema_for_cov = [
     inherit_property_from([CONF_COVARIANCE, property], CONF_SOURCE_ID)
@@ -120,25 +124,25 @@ FINAL_VALIDATE_SCHEMA = cv.All(
         {cv.Required(CONF_ID): cv.use_id(StatisticsComponent)},
         extra=cv.ALLOW_EXTRA,
     ),
-    *inherit_schema_for_mean,
     *inherit_schema_for_max,
     *inherit_schema_for_min,
-    *inherit_schema_for_sd,
+    *inherit_schema_for_mean,
+    *inherit_schema_for_var,
+    inherit_property_from(
+        [CONF_VARIANCE, CONF_UNIT_OF_MEASUREMENT],
+        CONF_SOURCE_ID,
+        transform=variance_unit,
+    ),
+    *inherit_schema_for_std_dev,
     *inherit_schema_for_cov,
-    *inherit_schema_for_trend,
-    *inherit_schema_for_trend,
     inherit_property_from(
         [CONF_COVARIANCE, CONF_UNIT_OF_MEASUREMENT],
         CONF_SOURCE_ID,
         transform=covariance_unit,
     ),
+    *inherit_schema_for_trend,
     inherit_property_from(
         [CONF_TREND, CONF_UNIT_OF_MEASUREMENT], CONF_SOURCE_ID, transform=trend_unit
-    ),
-    inherit_property_from(
-        [CONF_VARIANCE, CONF_UNIT_OF_MEASUREMENT],
-        CONF_SOURCE_ID,
-        transform=variance_unit,
     ),
 )
 
@@ -154,10 +158,10 @@ async def to_code(config):
     cg.add(var.set_send_every(config[CONF_SEND_EVERY]))
     cg.add(var.set_first_at(config[CONF_SEND_FIRST_AT]))
 
-    if CONF_MEAN in config:
-        conf = config[CONF_MEAN]
+    if CONF_COUNT in config:
+        conf = config[CONF_COUNT]
         sens = await sensor.new_sensor(conf)
-        cg.add(var.set_mean_sensor(sens))
+        cg.add(var.set_count_sensor(sens))
 
     if CONF_MAX in config:
         conf = config[CONF_MAX]
@@ -169,27 +173,27 @@ async def to_code(config):
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_min_sensor(sens))
 
-    if CONF_SD in config:
-        conf = config[CONF_SD]
+    if CONF_MEAN in config:
+        conf = config[CONF_MEAN]
         sens = await sensor.new_sensor(conf)
-        cg.add(var.set_sd_sensor(sens))
+        cg.add(var.set_mean_sensor(sens))
 
     if CONF_VARIANCE in config:
         conf = config[CONF_VARIANCE]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_variance_sensor(sens))
 
-    if CONF_COUNT in config:
-        conf = config[CONF_COUNT]
+    if CONF_STD_DEV in config:
+        conf = config[CONF_STD_DEV]
         sens = await sensor.new_sensor(conf)
-        cg.add(var.set_count_sensor(sens))
-
-    if CONF_TREND in config:
-        conf = config[CONF_TREND]
-        sens = await sensor.new_sensor(conf)
-        cg.add(var.set_trend_sensor(sens))
+        cg.add(var.set_std_dev_sensor(sens))
 
     if CONF_COVARIANCE in config:
         conf = config[CONF_COVARIANCE]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_covariance_sensor(sens))
+
+    if CONF_TREND in config:
+        conf = config[CONF_TREND]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_trend_sensor(sens))

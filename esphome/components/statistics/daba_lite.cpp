@@ -19,30 +19,36 @@
 namespace esphome {
 namespace statistics {
 
-float DABALite::aggregated_max() {
-  this->update_current_aggregate_();
-  return this->current_aggregate_.get_max();
-}
-float DABALite::aggregated_min() {
-  this->update_current_aggregate_();
-  return this->current_aggregate_.get_min();
-}
 float DABALite::aggregated_count() {
   this->update_current_aggregate_();
   return this->current_aggregate_.get_count();
 }
+
+float DABALite::aggregated_max() {
+  this->update_current_aggregate_();
+  return this->current_aggregate_.get_max();
+}
+
+float DABALite::aggregated_min() {
+  this->update_current_aggregate_();
+  return this->current_aggregate_.get_min();
+}
+
 float DABALite::aggregated_mean() {
   this->update_current_aggregate_();
   return this->current_aggregate_.get_mean();
 }
+
 float DABALite::aggregated_variance() {
   this->update_current_aggregate_();
   return this->current_aggregate_.compute_variance();
 }
+
 float DABALite::aggregated_std_dev() {
   this->update_current_aggregate_();
   return this->current_aggregate_.compute_std_dev();
 }
+
 float DABALite::aggregated_covariance() {
   this->update_current_aggregate_();
   return this->current_aggregate_.compute_covariance();
@@ -52,6 +58,7 @@ float DABALite::aggregated_trend() {
   return this->current_aggregate_.compute_trend();
 }
 
+// set capacity (and reserve in memory) of the circular queues for the desired statistics
 void DABALite::set_capacity(size_t window_size) {
   // DABA Lite requires an index to point to one entry past the end of the queue, hence +1
   this->window_size_ = window_size + 1;
@@ -81,6 +88,7 @@ void DABALite::set_capacity(size_t window_size) {
   this->e_ = CircularQueueIndex(0, this->window_size_);
 }
 
+// number of measurements currently in the windowQ
 size_t DABALite::size() const {
   if (this->e_ == this->f_)
     return 0;
@@ -90,7 +98,7 @@ size_t DABALite::size() const {
   return (this->e_.get_index() - this->f_.get_index());
 }
 
-// insert a new value at end of circular queue and step DABA Lite algorithm
+// insert value at end of circular queue and step DABA Lite algorithm
 void DABALite::insert(float value) {
   Aggregate lifted = this->lift_(value);
   this->back_sum_ = this->combine_(this->back_sum_, lifted);
@@ -101,25 +109,6 @@ void DABALite::insert(float value) {
   this->step_();
 
   this->is_current_aggregate_updated_ = false;
-}
-
-void DABALite::emplace_(const Aggregate &value, size_t index) {
-  if (this->include_max_)
-    this->max_queue_[index] = value.get_max();
-  if (this->include_min_)
-    this->min_queue_[index] = value.get_min();
-  if (this->include_count_)
-    this->count_queue_[index] = value.get_count();
-  if (this->include_mean_)
-    this->mean_queue_[index] = value.get_mean();
-  if (this->include_m2_)
-    this->m2_queue_[index] = value.get_m2();
-  if (this->include_c2_)
-    this->c2_queue_[index] = value.get_c2();
-  if (this->include_t_mean_)
-    this->t_mean_queue_[index] = value.get_t_mean();
-  if (this->include_t_m2_)
-    this->t_m2_queue_[index] = value.get_t_m2();
 }
 
 // remove value at start of circular queue and step DABA Lite algorithm
@@ -147,6 +136,7 @@ void DABALite::update_current_aggregate_() {
   this->is_current_aggregate_updated_ = true;
 }
 
+// compute summary statistics for a single measurement and returns them as an Aggregate
 Aggregate DABALite::lift_(float v) {
   const uint32_t now = millis();
 
@@ -174,31 +164,27 @@ Aggregate DABALite::lift_(float v) {
   return part;
 }
 
-// return summary statistics for a given index
-Aggregate DABALite::lower_(size_t index) {
-  Aggregate aggregate = this->identity_class_;
-
+// store an Aggregate at an index only in the enabled queue_ vectors
+void DABALite::emplace_(const Aggregate &value, size_t index) {
   if (this->include_max_)
-    aggregate.set_max(this->max_queue_[index]);
+    this->max_queue_[index] = value.get_max();
   if (this->include_min_)
-    aggregate.set_min(this->min_queue_[index]);
+    this->min_queue_[index] = value.get_min();
   if (this->include_count_)
-    aggregate.set_count(this->count_queue_[index]);
+    this->count_queue_[index] = value.get_count();
   if (this->include_mean_)
-    aggregate.set_mean(this->mean_queue_[index]);
+    this->mean_queue_[index] = value.get_mean();
   if (this->include_m2_)
-    aggregate.set_m2(this->m2_queue_[index]);
+    this->m2_queue_[index] = value.get_m2();
   if (this->include_c2_)
-    aggregate.set_c2(this->c2_queue_[index]);
-  if (this->include_t_m2_)
-    aggregate.set_t_m2(this->t_m2_queue_[index]);
+    this->c2_queue_[index] = value.get_c2();
   if (this->include_t_mean_)
-    aggregate.set_t_mean(this->t_mean_queue_[index]);
-
-  return aggregate;
+    this->t_mean_queue_[index] = value.get_t_mean();
+  if (this->include_t_m2_)
+    this->t_m2_queue_[index] = value.get_t_m2();
 }
 
-// combine two aggregates summary statistics
+// combine summary statistics from two Aggregates
 Aggregate DABALite::combine_(const Aggregate &a, const Aggregate &b) {
   Aggregate part;
 
@@ -220,6 +206,30 @@ Aggregate DABALite::combine_(const Aggregate &a, const Aggregate &b) {
     part.combine_t_m2(a, b);
 
   return part;
+}
+
+// return summary statistics at given index as an Aggregate
+Aggregate DABALite::lower_(size_t index) {
+  Aggregate aggregate = this->identity_class_;
+
+  if (this->include_max_)
+    aggregate.set_max(this->max_queue_[index]);
+  if (this->include_min_)
+    aggregate.set_min(this->min_queue_[index]);
+  if (this->include_count_)
+    aggregate.set_count(this->count_queue_[index]);
+  if (this->include_mean_)
+    aggregate.set_mean(this->mean_queue_[index]);
+  if (this->include_m2_)
+    aggregate.set_m2(this->m2_queue_[index]);
+  if (this->include_c2_)
+    aggregate.set_c2(this->c2_queue_[index]);
+  if (this->include_t_m2_)
+    aggregate.set_t_m2(this->t_m2_queue_[index]);
+  if (this->include_t_mean_)
+    aggregate.set_t_mean(this->t_mean_queue_[index]);
+
+  return aggregate;
 }
 
 // DABA Lite algorithm method

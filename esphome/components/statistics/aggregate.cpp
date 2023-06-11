@@ -33,11 +33,7 @@ void Aggregate::combine_t_mean(const Aggregate &a, const Aggregate &b) {
   this->t_mean_ = this->combine_mean_(a.get_t_mean(), a.get_count(), b.get_t_mean(), b.get_count());
 }
 
-void Aggregate::combine_t_m2(const Aggregate &a, const Aggregate &b) {
-  this->t_m2_ =
-      this->combine_m2_(a.get_t_mean(), a.get_count(), a.get_t_m2(), b.get_t_mean(), b.get_count(), b.get_t_m2());
-}
-
+// parallel algorithm for combining two C2 values from two non-overlapping samples
 void Aggregate::combine_c2(const Aggregate &a, const Aggregate &b) {
   float a_c2 = a.get_c2();
   float b_c2 = b.get_c2();
@@ -66,12 +62,24 @@ void Aggregate::combine_c2(const Aggregate &a, const Aggregate &b) {
   }
 }
 
+void Aggregate::combine_t_m2(const Aggregate &a, const Aggregate &b) {
+  this->t_m2_ =
+      this->combine_m2_(a.get_t_mean(), a.get_count(), a.get_t_m2(), b.get_t_mean(), b.get_count(), b.get_t_m2());
+}
+
+// Sample variance using Welford's algorithm
 float Aggregate::compute_variance() const { return this->m2_ / (this->count_ - 1); }
+
+// Sample standard deviation using Welford's algorithm
 float Aggregate::compute_std_dev() const { return std::sqrt(this->compute_variance()); }
 
+// Sample covariance using a variation of Welford's algorithm
 float Aggregate::compute_covariance() const { return this->c2_ / (this->count_ - 1); }
+
+// Slope of the line of best fit over sliding window
 float Aggregate::compute_trend() const { return this->c2_ / this->t_m2_; }
 
+// computes the mean using summary statistics from two non-overlapping samples (parallel algorithm)
 float Aggregate::combine_mean_(float a_mean, size_t a_count, float b_mean, size_t b_count) const {
   if (std::isnan(a_mean) && std::isnan(b_mean)) {
     return NAN;
@@ -85,6 +93,7 @@ float Aggregate::combine_mean_(float a_mean, size_t a_count, float b_mean, size_
          (static_cast<double>(a_count + b_count));
 }
 
+// computes M2 for Welford's algorithm using summary statistics from two non-overlapping samples (parallel algorithm)
 float Aggregate::combine_m2_(float a_mean, size_t a_count, float a_m2, float b_mean, size_t b_count, float b_m2) const {
   if (std::isnan(a_m2) && std::isnan(b_m2)) {
     return NAN;

@@ -17,10 +17,13 @@ namespace statistics {
 
 class CircularQueueIndex {
  public:
+  // default constructor
   CircularQueueIndex() {
     this->index_ = 0;
     this->capacity_ = 0;
   }
+
+  // typical constructor
   CircularQueueIndex(size_t index, size_t capacity) {
     this->index_ = index;
     this->capacity_ = capacity;
@@ -32,22 +35,26 @@ class CircularQueueIndex {
   void set_capacity(size_t capacity) { this->capacity_ = capacity; }
   size_t get_capacity() const { return this->capacity_; }
 
+  // overloaded prefix increment operator
   CircularQueueIndex &operator++();
 
-  // const CircularQueueIndex operator++(int);
-
+  // overloaded prefix decrement operator
   CircularQueueIndex &operator--();
 
-  // const CircularQueueIndex operator--(int);
-
+  // overloaded equality operator
   CircularQueueIndex &operator=(const CircularQueueIndex &i);
 
+  // overloaded equality comparison operator
   bool operator==(const CircularQueueIndex &i) const;
 
+  // overlaoded inequality comparison operator
   bool operator!=(const CircularQueueIndex &i) const;
 
  private:
+  // index of value in circular queue
   size_t index_;
+
+  // capacity of the circular queue
   size_t capacity_;
 };
 
