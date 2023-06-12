@@ -66,6 +66,8 @@ class DABALite {
   std::vector<float, ExternalRAMAllocator<float>> t_mean_queue_{};
   std::vector<float, ExternalRAMAllocator<float>> t_m2_queue_{};
 
+  std::vector<uint32_t, ExternalRAMAllocator<uint32_t>> timestamp_sum_queue_{};
+
   bool include_count_{false};
   bool include_max_{false};
   bool include_min_{false};

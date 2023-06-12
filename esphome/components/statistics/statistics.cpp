@@ -149,7 +149,7 @@ void StatisticsComponent::handle_new_value_(float value) {
   // add new value to end of sliding window
   this->partial_stats_queue_.insert(value);
 
-  // ensures we only updates the sensors based on the configuration
+  // ensure we only push updates for the sensors based on the configuration
   if (++this->send_at_ >= this->send_every_) {
     this->send_at_ = 0;
 

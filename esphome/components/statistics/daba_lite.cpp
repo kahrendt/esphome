@@ -76,8 +76,10 @@ void DABALite::set_capacity(size_t window_size) {
     this->c2_queue_.reserve(this->window_size_);
   if (this->include_t_m2_)
     this->t_m2_queue_.reserve(this->window_size_);
-  if (this->include_t_mean_)
+  if (this->include_t_mean_) {
     this->t_mean_queue_.reserve(this->window_size_);
+    this->timestamp_sum_queue_.reserve(this->window_size_);
+  }
 
   this->f_ = CircularQueueIndex(0, this->window_size_);
   this->l_ = CircularQueueIndex(0, this->window_size_);
@@ -148,8 +150,10 @@ Aggregate DABALite::lift_(float v) {
       part.set_c2(0.0);
     if (this->include_t_m2_)
       part.set_t_m2(0.0);
-    if (this->include_t_mean_)
+    if (this->include_t_mean_) {
       part.set_t_mean(static_cast<double>(now) / 1000.0);
+      part.set_timestamp_sum(now);
+    }
   }
 
   return part;
@@ -169,8 +173,11 @@ void DABALite::emplace_(const Aggregate &value, size_t index) {
     this->m2_queue_[index] = value.get_m2();
   if (this->include_c2_)
     this->c2_queue_[index] = value.get_c2();
-  if (this->include_t_mean_)
+  if (this->include_t_mean_) {
     this->t_mean_queue_[index] = value.get_t_mean();
+    this->timestamp_sum_queue_[index] = value.get_timestamp_sum();
+  }
+
   if (this->include_t_m2_)
     this->t_m2_queue_[index] = value.get_t_m2();
 }
@@ -191,8 +198,11 @@ Aggregate DABALite::combine_(const Aggregate &a, const Aggregate &b) {
     part.combine_m2(a, b);
   if (this->include_c2_)
     part.combine_c2(a, b);
-  if (this->include_t_mean_)
+  if (this->include_t_mean_) {
     part.combine_t_mean(a, b);
+    part.combine_timestamp_sum(a, b);
+  }
+
   if (this->include_t_m2_)
     part.combine_t_m2(a, b);
 
@@ -217,8 +227,10 @@ Aggregate DABALite::lower_(size_t index) {
     aggregate.set_c2(this->c2_queue_[index]);
   if (this->include_t_m2_)
     aggregate.set_t_m2(this->t_m2_queue_[index]);
-  if (this->include_t_mean_)
+  if (this->include_t_mean_) {
     aggregate.set_t_mean(this->t_mean_queue_[index]);
+    aggregate.set_timestamp_sum(this->timestamp_sum_queue_[index]);
+  }
 
   return aggregate;
 }

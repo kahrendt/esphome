@@ -33,6 +33,10 @@ void Aggregate::combine_t_mean(const Aggregate &a, const Aggregate &b) {
   this->t_mean_ = this->combine_mean_(a.get_t_mean(), a.get_count(), b.get_t_mean(), b.get_count());
 }
 
+void Aggregate::combine_timestamp_sum(const Aggregate &a, const Aggregate &b) {
+  this->timestamp_sum_ = a.get_timestamp_sum() + b.get_timestamp_sum();
+}
+
 // parallel algorithm for combining two C2 values from two non-overlapping samples
 void Aggregate::combine_c2(const Aggregate &a, const Aggregate &b) {
   float a_c2 = a.get_c2();
@@ -54,7 +58,12 @@ void Aggregate::combine_c2(const Aggregate &a, const Aggregate &b) {
     float b_t_mean = b.get_t_mean();
 
     float delta = b_mean - a_mean;
-    float t_delta = b_t_mean - a_t_mean;
+    // float t_delta = b_t_mean - a_t_mean;
+
+    uint32_t timestamp_sum_difference = b.get_timestamp_sum() * a.get_count() - a.get_timestamp_sum() * b.get_count();
+
+    double t_delta = (static_cast<double>(timestamp_sum_difference) / (a_count * b_count)) /
+                     1000.0;  // divide by 1000 to convert ms to s
 
     // compute C2 for an extension of Welford's algorithm to compute the covariance of t (timestamps) and y (sensor
     // measurements)

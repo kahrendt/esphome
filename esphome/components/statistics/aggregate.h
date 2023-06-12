@@ -47,6 +47,10 @@ class Aggregate {
   void set_t_mean(float t_mean) { this->t_mean_ = t_mean; }
   void combine_t_mean(const Aggregate &a, const Aggregate &b);
 
+  uint32_t get_timestamp_sum() const { return this->timestamp_sum_; }
+  void set_timestamp_sum(uint32_t timestamp_sum) { this->timestamp_sum_ = timestamp_sum; }
+  void combine_timestamp_sum(const Aggregate &a, const Aggregate &b);
+
   // C2 from Welford's algorithm; used to compute the covariance of the measurements and timestamps
   float get_c2() const { return this->c2_; }
   void set_c2(float c2) { this->c2_ = c2; }
@@ -84,6 +88,8 @@ class Aggregate {
   float c2_{NAN};
 
   float t_m2_{NAN};
+
+  uint32_t timestamp_sum_{0};
 
   // computes the mean using summary statistics from two non-overlapping samples (parallel algorithm)
   float combine_mean_(float a_mean, size_t a_count, float b_mean, size_t b_count) const;
