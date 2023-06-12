@@ -11,8 +11,7 @@
  *      - Configuring a sensor in ESPHome only stores the summary statistics it needs and no more
  *        - If multiple sensors require the same intermediate statistic, it is only stored once
  *  - Implements the DABA Lite algorithm on a circular_queue for computing online statistics
- *    - space requirements: n+2 (this implementation needs n+3; can be fixed... need to handle the index of the end of
- *      the queue being increased by 1)
+ *    - space requirements: n+2
  *    - time complexity: worse-case O(1)
  *    - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
  *  - Uses variations of Welford's algorithm for parallel computing to find variance and covariance (with respect to
@@ -91,7 +90,7 @@ class StatisticsComponent : public Component {
   sensor::Sensor *covariance_sensor_{nullptr};
   sensor::Sensor *trend_sensor_{nullptr};
 
-  // mimic ESPHome's current filter behavior
+  // mimic ESPHome's current filters behavior
   size_t window_size_{};
   size_t send_every_{};
   size_t send_at_{};

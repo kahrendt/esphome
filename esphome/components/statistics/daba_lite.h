@@ -1,6 +1,6 @@
 /*
   Summary statistics are computed using the DABA Lite algorithm
-    - space requirements: n+2 (currently uses n+3, can probably fix this by handling the e_ index better)
+    - space requirements: n+2
     - time complexity: worse-case O(1)
     - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
 
@@ -36,7 +36,7 @@ class DABALite {
   void set_capacity(size_t window_size);
 
   // number of measurements currently in the window
-  size_t size() const;
+  size_t size() const { return this->size_; }
 
   // insert value at end of circular queue and step DABA Lite algorithm
   void insert(float value);
@@ -78,6 +78,8 @@ class DABALite {
   void debug_pointers_();
 
   size_t window_size_{0};
+
+  size_t size_{0};
 
   // if we have the current aggregate, we do not query it again but just use the stored result
   bool is_current_aggregate_updated_{false};

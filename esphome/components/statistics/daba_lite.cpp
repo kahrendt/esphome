@@ -1,6 +1,6 @@
 /*
   Summary statistics are computed using the DABA Lite algorithm
-    - space requirements: n+2 (currently uses n+3, can probably fix this by handling the e_ index better)
+    - space requirements: n+2
     - time complexity: worse-case O(1)
     - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
 
@@ -60,8 +60,7 @@ float DABALite::aggregated_trend() {
 
 // set capacity (and reserve in memory) of the circular queues for the desired statistics
 void DABALite::set_capacity(size_t window_size) {
-  // DABA Lite requires an index to point to one entry past the end of the queue, hence +1
-  this->window_size_ = window_size + 1;
+  this->window_size_ = window_size;
 
   if (this->include_max_)
     this->max_queue_.reserve(this->window_size_);
@@ -88,16 +87,6 @@ void DABALite::set_capacity(size_t window_size) {
   this->e_ = CircularQueueIndex(0, this->window_size_);
 }
 
-// number of measurements currently in the windowQ
-size_t DABALite::size() const {
-  if (this->e_ == this->f_)
-    return 0;
-  if (this->e_.get_index() < this->f_.get_index())
-    return (this->e_.get_index() + this->e_.get_capacity() - this->f_.get_index());
-
-  return (this->e_.get_index() - this->f_.get_index());
-}
-
 // insert value at end of circular queue and step DABA Lite algorithm
 void DABALite::insert(float value) {
   Aggregate lifted = this->lift_(value);
@@ -106,6 +95,7 @@ void DABALite::insert(float value) {
   this->emplace_(lifted, this->e_.get_index());
 
   ++this->e_;
+  ++this->size_;
   this->step_();
 
   this->is_current_aggregate_updated_ = false;
@@ -114,6 +104,7 @@ void DABALite::insert(float value) {
 // remove value at start of circular queue and step DABA Lite algorithm
 void DABALite::evict() {
   ++this->f_;
+  --this->size_;
 
   this->step_();
 
@@ -239,7 +230,7 @@ void DABALite::step_() {
     this->flip_();
   }
 
-  if (this->f_ != this->b_) {
+  if (this->size_ > 0) {
     if (this->a_ != this->r_) {
       Aggregate prev_delta = this->get_delta_();
 
@@ -298,7 +289,12 @@ void DABALite::debug_pointers_() {
 }
 
 // DABA Lite algorithm methods
-inline bool DABALite::is_front_empty_() { return this->b_ == this->f_; }
+
+// check if the b_ index is equal to the front index f_;
+//   note if the window size == size of queue, then the circular queue end and front point to the same entry
+//   so we verify that this is not the case
+inline bool DABALite::is_front_empty_() { return (this->b_ == this->f_) && (this->size_ != this->window_size_); }
+
 inline bool DABALite::is_delta_empty_() { return this->a_ == this->b_; }
 inline Aggregate DABALite::get_back_() { return this->back_sum_; }
 inline Aggregate DABALite::get_alpha_() {

@@ -13,6 +13,7 @@ from esphome.const import (
     CONF_ICON,
     CONF_UNIT_OF_MEASUREMENT,
     CONF_COUNT,
+    CONF_STATE_CLASS,
 )
 from esphome.core.entity_helpers import inherit_property_from
 
@@ -56,7 +57,7 @@ properties_to_inherit = [
     CONF_ENTITY_CATEGORY,
     CONF_ICON,
     CONF_UNIT_OF_MEASUREMENT,
-    # CONF_STATE_CLASS could also be inherited, but might lead to unexpected behaviour with "total_increasing"
+    CONF_STATE_CLASS,
 ]
 
 properties_to_inherit_new_unit = [
@@ -64,7 +65,7 @@ properties_to_inherit_new_unit = [
     CONF_DEVICE_CLASS,
     CONF_ENTITY_CATEGORY,
     CONF_ICON,
-    # CONF_STATE_CLASS could also be inherited, but might lead to unexpected behaviour with "total_increasing"
+    CONF_STATE_CLASS,
 ]
 
 
