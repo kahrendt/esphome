@@ -50,9 +50,9 @@ class DABALite {
   void enable_min() { this->include_min_ = true; }
   void enable_mean() { this->include_mean_ = true; }
   void enable_m2() { this->include_m2_ = true; }
-  void enable_t_mean() { this->include_t_mean_ = true; }
+  void enable_timestamp_mean() { this->include_timestamp_mean_ = true; }
   void enable_c2() { this->include_c2_ = true; }
-  void enable_t_m2() { this->include_t_m2_ = true; }
+  void enable_timestamp_m2() { this->include_timestamp_m2_ = true; }
 
  protected:
   // Vectors for storing summary statistics
@@ -63,24 +63,26 @@ class DABALite {
   std::vector<float, ExternalRAMAllocator<float>> mean_queue_{};
   std::vector<float, ExternalRAMAllocator<float>> m2_queue_{};
   std::vector<float, ExternalRAMAllocator<float>> c2_queue_{};
-  std::vector<float, ExternalRAMAllocator<float>> t_mean_queue_{};
-  std::vector<float, ExternalRAMAllocator<float>> t_m2_queue_{};
+  std::vector<float, ExternalRAMAllocator<float>> timestamp_m2_queue_{};
 
-  std::vector<uint32_t, ExternalRAMAllocator<uint32_t>> timestamp_sum_queue_{};
+  std::vector<int32_t, ExternalRAMAllocator<int32_t>> timestamp_sum_queue_{};
+  std::vector<uint32_t, ExternalRAMAllocator<uint32_t>> timestamp_reference_queue_{};
 
   bool include_count_{false};
   bool include_max_{false};
   bool include_min_{false};
   bool include_mean_{false};
   bool include_m2_{false};
-  bool include_t_mean_{false};
+  bool include_timestamp_mean_{false};
   bool include_c2_{false};
-  bool include_t_m2_{false};
+  bool include_timestamp_m2_{false};
 
   void debug_pointers_();
 
+  // maximum window capacity
   size_t window_size_{0};
 
+  // number of measurements stored in window
   size_t size_{0};
 
   // if we have the current aggregate, we do not query it again but just use the stored result

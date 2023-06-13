@@ -42,14 +42,13 @@ class Aggregate {
   void set_m2(float m2) { this->m2_ = m2; }
   void combine_m2(const Aggregate &a, const Aggregate &b);
 
-  // average timestamp of measurements in the window
-  float get_t_mean() const { return this->t_mean_; }
-  void set_t_mean(float t_mean) { this->t_mean_ = t_mean; }
-  void combine_t_mean(const Aggregate &a, const Aggregate &b);
-
-  uint32_t get_timestamp_sum() const { return this->timestamp_sum_; }
-  void set_timestamp_sum(uint32_t timestamp_sum) { this->timestamp_sum_ = timestamp_sum; }
+  int32_t get_timestamp_sum() const { return this->timestamp_sum_; }
+  void set_timestamp_sum(int32_t timestamp_sum) { this->timestamp_sum_ = timestamp_sum; }
   void combine_timestamp_sum(const Aggregate &a, const Aggregate &b);
+
+  uint32_t get_timestamp_reference() const { return this->timestamp_reference_; }
+  void set_timestamp_reference(uint32_t timestamp_reference) { this->timestamp_reference_ = timestamp_reference; }
+  void combine_timestamp(const Aggregate &a, const Aggregate &b);
 
   // C2 from Welford's algorithm; used to compute the covariance of the measurements and timestamps
   float get_c2() const { return this->c2_; }
@@ -57,9 +56,9 @@ class Aggregate {
   void combine_c2(const Aggregate &a, const Aggregate &b);
 
   // M2 from Welford's algorithm for timestamps; used to compute variance of timestamps
-  float get_t_m2() const { return this->t_m2_; }
-  void set_t_m2(float t_m2) { this->t_m2_ = t_m2; }
-  void combine_t_m2(const Aggregate &a, const Aggregate &b);
+  float get_timestamp_m2() const { return this->timestamp_m2_; }
+  void set_timestamp_m2(float timestamp_m2) { this->timestamp_m2_ = timestamp_m2; }
+  void combine_timestamp_m2(const Aggregate &a, const Aggregate &b);
 
   // sample variance of measurements
   float compute_variance() const;
@@ -75,27 +74,37 @@ class Aggregate {
 
  protected:
   // default values represent the statistic for a null entry
+
+  // count of non-NaN measurements in the sliding window
   size_t count_{0};
 
+  // extrema of sliding window measurements
   float max_{std::numeric_limits<float>::infinity() * (-1)};  // the supremum of the empty set is -infinity
   float min_{std::numeric_limits<float>::infinity()};         // the infimum of the empty set is +infinity
 
+  // average of sliding window measurements
   float mean_{NAN};
 
+  // Welford's algorithm for finding the variance of sliding window measurements
   float m2_{NAN};
 
-  float t_mean_{NAN};
+  // Extended Welford's algorithm for finding the covariance of sliding window measurements and timestamps
   float c2_{NAN};
 
-  float t_m2_{NAN};
+  // Welford's algorithm for finding the variance of timestamps of sliding window measurements
+  float timestamp_m2_{NAN};
 
-  uint32_t timestamp_sum_{0};
+  // offset timestamps sum of the sliding window measurements
+  int32_t timestamp_sum_{0};
 
-  // computes the mean using summary statistics from two non-overlapping samples (parallel algorithm)
-  float combine_mean_(float a_mean, size_t a_count, float b_mean, size_t b_count) const;
+  // the reference timestamp for the timestamp sum values
+  // e.g., if we have one raw timestamp at 5 ms and the reference is 5 ms, we store 0 ms in the timestamp_sum
+  uint32_t timestamp_reference_{0};
 
-  // computes M2 for Welford's algorithm using summary statistics from two non-overlapping samples (parallel algorithm)
-  float combine_m2_(float a_mean, size_t a_count, float a_m2, float b_mean, size_t b_count, float b_m2) const;
+  // given two samples, normalize the timestamp sums so that they are both in reference to the larger timestamp
+  // returns the timestamp both sums are in reference to
+  uint32_t normalize_timestamp_sums_(int32_t &a_timestamp_sum, uint32_t const &a_timestamp, const size_t &a_count,
+                                     int32_t &b_timestamp_sum, const uint32_t &b_timestamp, const size_t &b_count);
 };
 
 }  // namespace statistics

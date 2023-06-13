@@ -26,13 +26,19 @@
  *  - variance: sample variance of the measurements
  *  - sd: sample standard deviation of the measurements
  *  - covariance: sample covariance of the measurements compared to the timestamps of each reading
- *      - potentially problematic for devies with long uptimes as it is based on the timestamp given by millis()
- *        - further experimentation is needed
- *        - I am researching a way to compute the covariance of two sets parallely only using a time delta from previous
- *          readings
+ *      - timestamps are stored as milliseconds
+ *      - computed by keeping a rolling sum of the timestamps and a reference timestamp
+ *      - the reference timestamp allows the rolling sum to always have one timestamp at 0
+ *          - keeping offset rolling sum close to 0 should reduce the chance of floating point operations losing
+ *            signficant digits
+ *      - integer operations are used as much as possible before switching to floating point arithemtic
+ *      - ?potential issues when millis() rolls over?
  *  - trend: the slope of the line of best fit for the measurement values versus timestamps
  *      - can be be used as an approximate of the rate of change (derivative) of the measurements
- *      - potentially problematic for long uptimes as it uses covariance
+ *      - computed using the covariance of timestamps versus measurements and the variance of timestamps
+ *      - ?potential issues when millis() rolls over?
+ *
+ * To-Do: Verify that millis() rollover is handled
  *
  * Implemented by Kevin Ahrendt, June 2023
  */
@@ -117,16 +123,16 @@ void StatisticsComponent::setup() {
   if (this->covariance_sensor_) {
     this->partial_stats_queue_.enable_count();
     this->partial_stats_queue_.enable_mean();
-    this->partial_stats_queue_.enable_t_mean();
+    this->partial_stats_queue_.enable_timestamp_mean();
     this->partial_stats_queue_.enable_c2();
   }
 
   if (this->trend_sensor_) {
     this->partial_stats_queue_.enable_count();
     this->partial_stats_queue_.enable_mean();
-    this->partial_stats_queue_.enable_t_mean();
+    this->partial_stats_queue_.enable_timestamp_mean();
     this->partial_stats_queue_.enable_c2();
-    this->partial_stats_queue_.enable_t_m2();
+    this->partial_stats_queue_.enable_timestamp_m2();
   }
 
   // set the capacity of the DABA Lite queue for our window size
