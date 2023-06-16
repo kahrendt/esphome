@@ -49,6 +49,14 @@
 namespace esphome {
 namespace statistics {
 
+enum TimeConversionFactor {
+  FACTOR_MS = 1,          // timestamps already are in ms
+  FACTOR_S = 1000,        // 1000 ms per second
+  FACTOR_MIN = 60000,     // 60000 ms per minute
+  FACTOR_HOUR = 3600000,  // 3600000 ms per hour
+  FACTOR_DAY = 86400000,  // 86400000 ms per day
+};
+
 class StatisticsComponent : public Component {
  public:
   float get_setup_priority() const override { return setup_priority::DATA; }
@@ -75,9 +83,15 @@ class StatisticsComponent : public Component {
   void set_send_every(size_t send_every) { this->send_every_ = send_every; }
   void set_first_at(size_t send_first_at) { this->send_at_ = send_first_at; }
 
+  void set_time_conversion_factor(TimeConversionFactor conversion_factor) {
+    this->time_conversion_factor_ = conversion_factor;
+  }
+
  protected:
   // given a new sensor measurements, add it to window, evict if window is full, and update sensors
   void handle_new_value_(float value);
+
+  TimeConversionFactor time_conversion_factor_;
 
   // source sensor of measurement data
   sensor::Sensor *source_sensor_{nullptr};

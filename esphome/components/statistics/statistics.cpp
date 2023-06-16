@@ -36,6 +36,8 @@
  *      - can be be used as an approximation for the rate of change (derivative) of the measurements
  *      - computed using the covariance of timestamps versus measurements and the variance of timestamps
  *
+ * To-Do: Implement a configurable time unit for covariance and trend
+ *
  * Implemented by Kevin Ahrendt, June 2023
  */
 
@@ -190,11 +192,19 @@ void StatisticsComponent::handle_new_value_(float value) {
     if (this->std_dev_sensor_)
       this->std_dev_sensor_->publish_state(this->partial_stats_queue_.aggregated_std_dev());
 
-    if (this->covariance_sensor_)
-      this->covariance_sensor_->publish_state(this->partial_stats_queue_.aggregated_covariance());
+    if (this->covariance_sensor_) {
+      float covariance_ms = this->partial_stats_queue_.aggregated_covariance();
+      float converted_covariance = covariance_ms / this->time_conversion_factor_;
 
-    if (this->trend_sensor_)
-      this->trend_sensor_->publish_state(this->partial_stats_queue_.aggregated_trend());
+      this->covariance_sensor_->publish_state(converted_covariance);
+    }
+
+    if (this->trend_sensor_) {
+      float trend_ms = this->partial_stats_queue_.aggregated_trend();
+      float converted_trend = trend_ms * this->time_conversion_factor_;
+
+      this->trend_sensor_->publish_state(converted_trend);
+    }
   }
 }
 

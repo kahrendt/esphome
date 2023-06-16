@@ -91,7 +91,7 @@ void Aggregate::combine_c2(const Aggregate &a, const Aggregate &b) {
     // use interger operations as much as possible to reduce floating point arithmetic
     // store as int64_t, as if we have a larger number of samples over a large time period, an int32_t quickly overflows
     int64_t timestamp_sum_difference = b_timestamp_sum * a_count - a_timestamp_sum * b_count;
-    size_t total_count_second_converted = (a_count + b_count) * 1000;  // 1000 ms per 1 second
+    size_t total_count_second_converted = (a_count + b_count);
 
     float delta = b.get_mean() - a.get_mean();
 
@@ -120,7 +120,7 @@ void Aggregate::combine_timestamp_m2(const Aggregate &a, const Aggregate &b) {
     int64_t delta = b_sum * a.get_count() - a_sum * b.get_count();
     uint64_t delta_squared = delta * delta;
 
-    size_t denominator = 1000 * 1000 * a.get_count() * b.get_count() * (a.get_count() + b.get_count());
+    size_t denominator = a.get_count() * b.get_count() * (a.get_count() + b.get_count());
 
     // compute M2 for Welford's algorithm to find the variance
     this->timestamp_m2_ = a.get_timestamp_m2() + b.get_timestamp_m2() +
