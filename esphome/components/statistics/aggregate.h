@@ -42,8 +42,8 @@ class Aggregate {
   void set_m2(float m2) { this->m2_ = m2; }
   void combine_m2(const Aggregate &a, const Aggregate &b);
 
-  __int32_t get_timestamp_sum() const { return this->timestamp_sum_; }
-  void set_timestamp_sum(__int32_t timestamp_sum) { this->timestamp_sum_ = timestamp_sum; }
+  int32_t get_timestamp_sum() const { return this->timestamp_sum_; }
+  void set_timestamp_sum(int32_t timestamp_sum) { this->timestamp_sum_ = timestamp_sum; }
   void combine_timestamp_sum(const Aggregate &a, const Aggregate &b);
 
   uint32_t get_timestamp_reference() const { return this->timestamp_reference_; }
@@ -95,7 +95,7 @@ class Aggregate {
   float timestamp_m2_{NAN};
 
   // offset timestamps sum of the sliding window measurements
-  __int32_t timestamp_sum_{0};
+  int32_t timestamp_sum_{0};
 
   // the reference timestamp for the timestamp sum values
   // e.g., if we have one raw timestamp at 5 ms and the reference is 5 ms, we store 0 ms in the timestamp_sum
@@ -103,8 +103,8 @@ class Aggregate {
 
   // given two samples, normalize the timestamp sums so that they are both in reference to the larger timestamp
   // returns the timestamp both sums are in reference to
-  uint32_t normalize_timestamp_sums_(__int32_t &a_timestamp_sum, uint32_t const &a_timestamp, const size_t &a_count,
-                                     __int32_t &b_timestamp_sum, const uint32_t &b_timestamp, const size_t &b_count);
+  uint32_t normalize_timestamp_sums_(int32_t &a_timestamp_sum, uint32_t const &a_timestamp, const size_t &a_count,
+                                     int32_t &b_timestamp_sum, const uint32_t &b_timestamp, const size_t &b_count);
 };
 
 }  // namespace statistics

@@ -53,8 +53,8 @@ void Aggregate::combine_m2(const Aggregate &a, const Aggregate &b) {
 }
 
 void Aggregate::combine_timestamp_sum(const Aggregate &a, const Aggregate &b) {
-  __int32_t a_sum = a.get_timestamp_sum();
-  __int32_t b_sum = b.get_timestamp_sum();
+  int32_t a_sum = a.get_timestamp_sum();
+  int32_t b_sum = b.get_timestamp_sum();
 
   this->timestamp_reference_ = this->normalize_timestamp_sums_(a_sum, a.get_timestamp_reference(), a.get_count(), b_sum,
                                                                b.get_timestamp_reference(), b.get_count());
@@ -66,8 +66,8 @@ void Aggregate::combine_c2(const Aggregate &a, const Aggregate &b) {
   float a_c2 = a.get_c2();
   float b_c2 = b.get_c2();
 
-  __int32_t a_timestamp_sum = a.get_timestamp_sum();
-  __int32_t b_timestamp_sum = b.get_timestamp_sum();
+  int32_t a_timestamp_sum = a.get_timestamp_sum();
+  int32_t b_timestamp_sum = b.get_timestamp_sum();
   uint32_t a_timestamp_reference = a.get_timestamp_reference();
   uint32_t b_timestamp_reference = b.get_timestamp_reference();
   size_t a_count = a.get_count();
@@ -90,7 +90,7 @@ void Aggregate::combine_c2(const Aggregate &a, const Aggregate &b) {
 
     // use interger operations as much as possible to reduce floating point arithmetic
     // store as int64_t, as if we have a larger number of samples over a large time period, an int32_t quickly overflows
-    __int64_t timestamp_sum_difference = b_timestamp_sum * a_count - a_timestamp_sum * b_count;
+    int64_t timestamp_sum_difference = b_timestamp_sum * a_count - a_timestamp_sum * b_count;
     size_t total_count_second_converted = (a_count + b_count) * 1000;  // 1000 ms per 1 second
 
     float delta = b.get_mean() - a.get_mean();
@@ -108,8 +108,8 @@ void Aggregate::combine_timestamp_m2(const Aggregate &a, const Aggregate &b) {
   } else if (std::isnan(b.get_timestamp_m2())) {
     this->timestamp_m2_ = a.get_timestamp_m2();
   } else {
-    __int32_t a_sum = a.get_timestamp_sum();
-    __int32_t b_sum = b.get_timestamp_sum();
+    int32_t a_sum = a.get_timestamp_sum();
+    int32_t b_sum = b.get_timestamp_sum();
 
     // noramlize a_sum and b_sum so they are referenced from the same timestamp
     this->normalize_timestamp_sums_(a_sum, a.get_timestamp_reference(), a.get_count(), b_sum,
@@ -117,7 +117,7 @@ void Aggregate::combine_timestamp_m2(const Aggregate &a, const Aggregate &b) {
 
     // use interger operations as much as possible to reduce floating point arithmetic
     // store as int64_t, as if we have a larger number of samples over a large time period, an int32_t quickly overflows
-    __int64_t delta = b_sum * a.get_count() - a_sum * b.get_count();
+    int64_t delta = b_sum * a.get_count() - a_sum * b.get_count();
     uint64_t delta_squared = delta * delta;
 
     size_t denominator = 1000 * 1000 * a.get_count() * b.get_count() * (a.get_count() + b.get_count());
@@ -150,8 +150,8 @@ float Aggregate::compute_trend() const {
 
 // given two samples, normalize the timestamp sums so that they are both in reference to the more recent timestamp
 // returns the timestamp both sums are in reference to
-uint32_t Aggregate::normalize_timestamp_sums(int32_t &a_sum, const uint32_t &a_timestamp_reference,
-                                              const size_t &a_count, __int32_t &b_sum,
+uint32_t Aggregate::normalize_timestamp_sums_(int32_t &a_sum, const uint32_t &a_timestamp_reference,
+                                              const size_t &a_count, int32_t &b_sum,
                                               const uint32_t &b_timestamp_reference, const size_t &b_count) {
   if (a_count == 0) {
     // a is null, so b is always the more recent timestamp; no adjustments necessary
