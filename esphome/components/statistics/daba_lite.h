@@ -12,10 +12,6 @@
 #include "circular_queue_index.h"
 #include "aggregate.h"
 
-#include "esphome/core/helpers.h"
-
-#include <vector>
-
 namespace esphome {
 namespace statistics {
 
@@ -33,7 +29,7 @@ class DABALite {
   float aggregated_trend();
 
   // sets the window size by adjusting the capacity of the underlying circular queues
-  void set_capacity(size_t window_size);
+  bool set_capacity(size_t window_size);
 
   // number of measurements currently in the window
   size_t size() const { return this->size_; }
@@ -55,18 +51,15 @@ class DABALite {
   void enable_timestamp_m2() { this->include_timestamp_m2_ = true; }
 
  protected:
-  // Vectors for storing summary statistics
-  //    - allocated to PSRam if available
-  std::vector<float, ExternalRAMAllocator<float>> max_queue_{};
-  std::vector<float, ExternalRAMAllocator<float>> min_queue_{};
-  std::vector<size_t, ExternalRAMAllocator<float>> count_queue_{};
-  std::vector<float, ExternalRAMAllocator<float>> mean_queue_{};
-  std::vector<float, ExternalRAMAllocator<float>> m2_queue_{};
-  std::vector<float, ExternalRAMAllocator<float>> c2_queue_{};
-  std::vector<float, ExternalRAMAllocator<float>> timestamp_m2_queue_{};
-
-  std::vector<int32_t, ExternalRAMAllocator<int32_t>> timestamp_sum_queue_{};
-  std::vector<uint32_t, ExternalRAMAllocator<uint32_t>> timestamp_reference_queue_{};
+  float *max_queue_{nullptr};
+  float *min_queue_{nullptr};
+  size_t *count_queue_{nullptr};
+  float *mean_queue_{nullptr};
+  float *m2_queue_{nullptr};
+  float *c2_queue_{nullptr};
+  float *timestamp_m2_queue_{nullptr};
+  int32_t *timestamp_sum_queue_{nullptr};
+  uint32_t *timestamp_reference_queue_{nullptr};
 
   bool include_count_{false};
   bool include_max_{false};

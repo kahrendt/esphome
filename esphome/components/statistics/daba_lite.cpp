@@ -14,7 +14,7 @@
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
-#include <vector>
+#include "esphome/core/helpers.h"
 
 namespace esphome {
 namespace statistics {
@@ -59,26 +59,73 @@ float DABALite::aggregated_trend() {
 }
 
 // set capacity (and reserve in memory) of the circular queues for the desired statistics
-void DABALite::set_capacity(size_t window_size) {
+bool DABALite::set_capacity(size_t window_size) {
   this->window_size_ = window_size;
 
-  if (this->include_max_)
-    this->max_queue_.reserve(this->window_size_);
-  if (this->include_min_)
-    this->min_queue_.reserve(this->window_size_);
-  if (this->include_count_)
-    this->count_queue_.reserve(this->window_size_);
-  if (this->include_mean_)
-    this->mean_queue_.reserve(this->window_size_);
-  if (this->include_m2_)
-    this->m2_queue_.reserve(this->window_size_);
-  if (this->include_c2_)
-    this->c2_queue_.reserve(this->window_size_);
-  if (this->include_timestamp_m2_)
-    this->timestamp_m2_queue_.reserve(this->window_size_);
+  ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
+  ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
+  ExternalRAMAllocator<int32_t> int32_t_allocator(ExternalRAMAllocator<int32_t>::ALLOW_FAILURE);
+  ExternalRAMAllocator<uint32_t> uint32_t_allocator(ExternalRAMAllocator<uint32_t>::ALLOW_FAILURE);
+
+  if (this->include_max_) {
+    this->max_queue_ = float_allocator.allocate(this->window_size_);
+    if (this->max_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (this->include_min_) {
+    this->min_queue_ = float_allocator.allocate(this->window_size_);
+    if (this->min_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (this->include_count_) {
+    this->count_queue_ = size_t_allocator.allocate(this->window_size_);
+    if (this->count_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (this->include_mean_) {
+    this->mean_queue_ = float_allocator.allocate(this->window_size_);
+    if (this->mean_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (this->include_m2_) {
+    this->m2_queue_ = float_allocator.allocate(this->window_size_);
+    if (this->m2_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (this->include_c2_) {
+    this->c2_queue_ = float_allocator.allocate(this->window_size_);
+    if (this->c2_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (this->include_timestamp_m2_) {
+    this->timestamp_m2_queue_ = float_allocator.allocate(this->window_size_);
+    if (this->timestamp_m2_queue_ == nullptr) {
+      return false;
+    }
+  }
+
   if (this->include_timestamp_mean_) {
-    this->timestamp_sum_queue_.reserve(this->window_size_);
-    this->timestamp_reference_queue_.reserve(this->window_size_);
+    this->timestamp_sum_queue_ = int32_t_allocator.allocate(this->window_size_);
+    if (this->timestamp_sum_queue_ == nullptr) {
+      return false;
+    }
+
+    this->timestamp_reference_queue_ = uint32_t_allocator.allocate(this->window_size_);
+    if (this->timestamp_reference_queue_ == nullptr) {
+      return false;
+    }
   }
 
   this->f_ = CircularQueueIndex(0, this->window_size_);
@@ -87,6 +134,8 @@ void DABALite::set_capacity(size_t window_size) {
   this->a_ = CircularQueueIndex(0, this->window_size_);
   this->b_ = CircularQueueIndex(0, this->window_size_);
   this->e_ = CircularQueueIndex(0, this->window_size_);
+
+  return true;
 }
 
 // insert value at end of circular queue and step DABA Lite algorithm
@@ -124,6 +173,8 @@ void DABALite::update_current_aggregate_() {
     } else {
       this->current_aggregate_ = this->identity_class_;
     }
+    ESP_LOGI("daba query", "timestamp_sum=%d;timestamp_reference=%d", this->current_aggregate_.get_timestamp_sum(),
+             this->current_aggregate_.get_timestamp_reference());
   }
   this->is_current_aggregate_updated_ = true;
 }
@@ -158,7 +209,7 @@ Aggregate DABALite::lift_(float v) {
   return part;
 }
 
-// store an Aggregate at an index only in the enabled queue_ vectors
+// store an Aggregate at an index only for the enabled queue_s
 void DABALite::emplace_(const Aggregate &value, size_t index) {
   if (this->include_max_)
     this->max_queue_[index] = value.get_max();

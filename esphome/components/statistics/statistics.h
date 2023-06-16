@@ -3,11 +3,11 @@
  * memory-wise) manner
  *  - Works over a sliding window of incoming values; i.e., it is an online algorithm
  *  - Data is stored in a circular queue to be memory effecient by avoiding using std::deque
- *    - Currently uses std::vector (as the size of the sliding window is only passed as a variable with ESPHome, so it
- *      is dynamic in a sense)
+ *    - The queue itself is an array allocated during componenet setup for the specified window size
  *      - The circular queue is implemented by keeping track of the indices (circular_queue_index.h)
- *    - Each summary statistic (or the value they are derived from) is stored in separate vectors
- *      - This avoids reserving large amounts of memory for nothing if some sensors are not configured
+ *   - Performs push_back and pop_front operations in constant time*
+ *    - Each summary statistic (or the value they are derived from) is stored in a separate queue
+ *      - This avoids reserving large amounts of useless memory if some sensors are not configured
  *      - Configuring a sensor in ESPHome only stores the summary statistics it needs and no more
  *        - If multiple sensors require the same intermediate statistic, it is only stored once
  *  - Implements the DABA Lite algorithm on a circular_queue for computing online statistics

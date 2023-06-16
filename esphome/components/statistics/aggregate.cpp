@@ -151,6 +151,34 @@ float Aggregate::compute_trend() const {
   return NAN;
 }
 
+/* This doesn't work. Normalizing with teh smaller timestamp causes all future timestamps to be normalized with 0.
+ * This causes the timestamp_delta to continue increasing */
+// uint32_t Aggregate::normalize_timestamp_sums_(int32_t &a_sum, const uint32_t &a_timestamp_reference,
+//                                               const size_t &a_count, int32_t &b_sum,
+//                                               const uint32_t &b_timestamp_reference, const size_t &b_count) {
+//   // we test the sign bit of the difference to see if the subtraction rolls over
+//   //  - this assumes the references are not truly more than 2^31 ms apart, which is about 24.86 days
+//   //    (https://arduino.stackexchange.com/a/12591)
+//   if ((a_timestamp_reference - b_timestamp_reference) & 0x80000000) {
+//     // b is the larger timestamp
+//     // normalize the b_sum using the a_timestamp
+
+//     // ?? Does this subtraction eliminate millis() overflow problems ??
+//     uint32_t timestamp_delta = b_timestamp_reference - a_timestamp_reference;
+//     b_sum = b_sum + timestamp_delta * b_count;  // b_sum is now offset and normalized to a_timestamp_reference
+
+//     return a_timestamp_reference;  // both timestamps are in reference to a_timestamp_reference
+//   } else {
+//     // a is the larger timestamp
+//     // normalize the a_sum using the b_timestamp
+
+//     uint32_t timestamp_delta = a_timestamp_reference - b_timestamp_reference;
+//     a_sum = a_sum + timestamp_delta * a_count;  // a_sum is now offset and normalized to a_timestamp_reference
+
+//     return b_timestamp_reference;
+//   }
+// }
+
 // given two samples, normalize the timestamp sums so that they are both in reference to the larger timestamp
 // returns the timestamp both sums are in reference to
 uint32_t Aggregate::normalize_timestamp_sums_(int32_t &a_sum, const uint32_t &a_timestamp_reference,
