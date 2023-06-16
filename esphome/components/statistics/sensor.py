@@ -37,7 +37,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
         cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
-        cv.Optional(CONF_SEND_FIRST_AT, default=15): cv.positive_not_null_int,
+        cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
         cv.Optional(CONF_MEAN): sensor.sensor_schema(),
         cv.Optional(CONF_MAX): sensor.sensor_schema(),
         cv.Optional(CONF_MIN): sensor.sensor_schema(),
