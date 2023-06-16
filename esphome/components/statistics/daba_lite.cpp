@@ -7,14 +7,12 @@
   Implemented by Kevin Ahrendt, June 2023
 */
 
-#include "daba_lite.h"
-#include "circular_queue_index.h"
 #include "aggregate.h"
+#include "circular_queue_index.h"
+#include "daba_lite.h"
 
-#include "esphome/core/hal.h"
-#include "esphome/core/log.h"
-
-#include "esphome/core/helpers.h"
+#include "esphome/core/hal.h"      // necessary for millis()
+#include "esphome/core/helpers.h"  // necessary for ExternalRAMAllocator
 
 namespace esphome {
 namespace statistics {
@@ -62,6 +60,7 @@ float DABALite::aggregated_trend() {
 bool DABALite::set_capacity(size_t window_size) {
   this->window_size_ = window_size;
 
+  // mimics ESPHome's rp2040_pio_led_strip component's buf_ code (accessed June 2023)
   ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
   ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<int32_t> int32_t_allocator(ExternalRAMAllocator<int32_t>::ALLOW_FAILURE);
@@ -173,8 +172,6 @@ void DABALite::update_current_aggregate_() {
     } else {
       this->current_aggregate_ = this->identity_class_;
     }
-    ESP_LOGI("daba query", "timestamp_sum=%d;timestamp_reference=%d", this->current_aggregate_.get_timestamp_sum(),
-             this->current_aggregate_.get_timestamp_reference());
   }
   this->is_current_aggregate_updated_ = true;
 }
@@ -325,27 +322,6 @@ void DABALite::flip_() {
 
   this->mid_sum_ = this->back_sum_;
   this->back_sum_ = this->identity_class_;
-}
-
-void DABALite::debug_pointers_() {
-  int head = this->f_.get_index();
-  int tail = this->e_.get_index();
-  int capacity = this->window_size_;
-
-  size_t f = 0;
-  size_t l = (((static_cast<int>(this->l_.get_index()) - head) % capacity) + capacity) % capacity;
-  size_t r = (((static_cast<int>(this->r_.get_index()) - head) % capacity) + capacity) % capacity;
-  size_t a = (((static_cast<int>(this->a_.get_index()) - head) % capacity) + capacity) % capacity;
-  size_t b = (((static_cast<int>(this->b_.get_index()) - head) % capacity) + capacity) % capacity;
-  size_t e = (((tail - head) % capacity) + capacity) % capacity;
-
-  ESP_LOGI("iterates (raw)", "f=%d; l=%d; r=%d, a=%d, b=%d, e=%d", head, this->l_.get_index(), this->r_.get_index(),
-           this->a_.get_index(), this->b_.get_index(), tail);
-  ESP_LOGI("iterates (shifted)", "f=%d; l=%d; r=%d, a=%d, b=%d; e=%d", f, l, r, a, b, e);
-  if ((l > r) || (r > a) || (a > b)) {
-    ESP_LOGE("daba", "pointers in wrong order!");
-  }
-  ESP_LOGI("iterates", "queue_size=%d", this->size());
 }
 
 // DABA Lite algorithm methods

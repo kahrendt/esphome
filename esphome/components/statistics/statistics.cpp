@@ -16,35 +16,31 @@
  *    - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
  *  - Uses variations of Welford's algorithm for parallel computing to find variance and covariance (with respect to
  *    time) to avoid catastrophic cancellation
- *  - mean is computed in a way to hopefully avoid catstrophic cancellation for large windows and large values
+ *  - The mean is computed in a way to hopefully avoid catstrophic cancellation for large windows and/or large values
  *
  * Available computed over a sliding window:
  *  - max: maximum measurement
  *  - min: minimum measurement
  *  - mean: average of the measurements
- *  - count: number of valid measurements in the window (component ignores NaN values)
- *  - variance: sample variance of the measurements
- *  - sd: sample standard deviation of the measurements
+ *  - count: number of valid measurements in the window (component ignores NaN values in the window)
+ *  - variance: sample variance of the measurements (Bessel's correction is applied)
+ *  - std_dev: sample standard deviation of the measurements (Bessel's correction is applied)
  *  - covariance: sample covariance of the measurements compared to the timestamps of each reading
  *      - timestamps are stored as milliseconds
  *      - computed by keeping a rolling sum of the timestamps and a reference timestamp
  *      - the reference timestamp allows the rolling sum to always have one timestamp at 0
- *          - keeping offset rolling sum close to 0 should reduce the chance of floating point operations losing
+ *          - keeping offset rolling sum close to 0 should reduce the chance of floating point numbers losing
  *            signficant digits
  *      - integer operations are used as much as possible before switching to floating point arithemtic
- *      - ?potential issues when millis() rolls over?
  *  - trend: the slope of the line of best fit for the measurement values versus timestamps
- *      - can be be used as an approximate of the rate of change (derivative) of the measurements
+ *      - can be be used as an approximation for the rate of change (derivative) of the measurements
  *      - computed using the covariance of timestamps versus measurements and the variance of timestamps
- *      - ?potential issues when millis() rolls over?
- *
- * To-Do: Verify that millis() rollover is handled
  *
  * Implemented by Kevin Ahrendt, June 2023
  */
 
-#include "statistics.h"
 #include "daba_lite.h"
+#include "statistics.h"
 
 #include "esphome/core/log.h"
 #include "esphome/core/hal.h"

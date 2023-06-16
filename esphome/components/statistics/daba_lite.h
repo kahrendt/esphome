@@ -9,8 +9,8 @@
 
 #pragma once
 
-#include "circular_queue_index.h"
 #include "aggregate.h"
+#include "circular_queue_index.h"
 
 namespace esphome {
 namespace statistics {
@@ -69,8 +69,6 @@ class DABALite {
   bool include_timestamp_mean_{false};
   bool include_c2_{false};
   bool include_timestamp_m2_{false};
-
-  void debug_pointers_();
 
   // maximum window capacity
   size_t window_size_{0};
