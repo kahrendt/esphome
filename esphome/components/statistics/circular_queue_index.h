@@ -1,12 +1,15 @@
 /*
-  Implements an iterator of sorts to keep track of indices in a circular queue
-    - Overloads operators to handle increasing and decreasing the index by 1
-    - Should work on any array like structure
-
-  An example of implementation: https://towardsdatascience.com/circular-queue-or-ring-buffer-92c7b0193326
-
-  Implemented by Kevin Ahrendt, June 2023
-*/
+ * Class that handles an index for a circular queue
+ *   - Circular queue concept:
+ *     - Has a capacity set at the start
+ *     - The index of the next element past the end of the array structure
+ *       is the first index of the array structure; i.e., it loops around
+ *     - An example implementation: https://towardsdatascience.com/circular-queue-or-ring-buffer-92c7b0193326
+ *   - Overloads operators to handle index operations respecting the circular queue structure
+ *   - Should work on any array like structure with element access
+ *
+ * Implemented by Kevin Ahrendt, June 2023
+ */
 
 #pragma once
 
@@ -23,7 +26,7 @@ class CircularQueueIndex {
     this->capacity_ = 0;
   }
 
-  // typical constructor
+  // general constructor
   CircularQueueIndex(size_t index, size_t capacity) {
     this->index_ = index;
     this->capacity_ = capacity;
@@ -51,11 +54,8 @@ class CircularQueueIndex {
   bool operator!=(const CircularQueueIndex &i) const;
 
  private:
-  // index of value in circular queue
-  size_t index_;
-
-  // capacity of the circular queue
-  size_t capacity_;
+  size_t index_;     // index of value in circular queue
+  size_t capacity_;  // capacity of the circular queue
 };
 
 }  // namespace statistics
