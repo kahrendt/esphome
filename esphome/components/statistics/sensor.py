@@ -13,7 +13,8 @@ from esphome.const import (
     CONF_ICON,
     CONF_UNIT_OF_MEASUREMENT,
     CONF_COUNT,
-    CONF_STATE_CLASS,
+    STATE_CLASS_MEASUREMENT,
+    STATE_CLASS_TOTAL,
 )
 from esphome.core.entity_helpers import inherit_property_from
 
@@ -41,6 +42,7 @@ TIME_CONVERSION_FACTORS = {
     "d": TimeConversionFactor.FACTOR_DAY,
 }
 
+
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(StatisticsComponent),
@@ -51,52 +53,64 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
             TIME_CONVERSION_FACTORS, lower=True
         ),
-        cv.Optional(CONF_MEAN): sensor.sensor_schema(),
-        cv.Optional(CONF_MAX): sensor.sensor_schema(),
-        cv.Optional(CONF_MIN): sensor.sensor_schema(),
-        cv.Optional(CONF_STD_DEV): sensor.sensor_schema(),
-        cv.Optional(CONF_VARIANCE): sensor.sensor_schema(),
-        cv.Optional(CONF_COUNT): sensor.sensor_schema(),
-        cv.Optional(CONF_TREND): sensor.sensor_schema(),
-        cv.Optional(CONF_COVARIANCE): sensor.sensor_schema(),
-    }
+        cv.Optional(CONF_MEAN): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_MAX): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_MIN): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_STD_DEV): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_VARIANCE): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_COUNT): sensor.sensor_schema(
+            state_class=STATE_CLASS_TOTAL,
+        ),
+        cv.Optional(CONF_TREND): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_COVARIANCE): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+    },
 ).extend(cv.COMPONENT_SCHEMA)
 
-# copied from kalman sensor component
-# Inherit some sensor values from the first source, for both the state and the error value
-properties_to_inherit = [
+# borrowed from kalman sensor component
+properties_to_inherit_same_unit = [
     CONF_ACCURACY_DECIMALS,
     CONF_DEVICE_CLASS,
     CONF_ENTITY_CATEGORY,
     CONF_ICON,
     CONF_UNIT_OF_MEASUREMENT,
-    CONF_STATE_CLASS,
 ]
 
 properties_to_inherit_new_unit = [
     CONF_ACCURACY_DECIMALS,
-    CONF_DEVICE_CLASS,
     CONF_ENTITY_CATEGORY,
     CONF_ICON,
-    CONF_STATE_CLASS,
 ]
 
 
 inherit_schema_for_mean = [
     inherit_property_from([CONF_MEAN, property], CONF_SOURCE_ID)
-    for property in properties_to_inherit
+    for property in properties_to_inherit_same_unit
 ]
 inherit_schema_for_max = [
     inherit_property_from([CONF_MAX, property], CONF_SOURCE_ID)
-    for property in properties_to_inherit
+    for property in properties_to_inherit_same_unit
 ]
 inherit_schema_for_min = [
     inherit_property_from([CONF_MIN, property], CONF_SOURCE_ID)
-    for property in properties_to_inherit
+    for property in properties_to_inherit_same_unit
 ]
 inherit_schema_for_std_dev = [
     inherit_property_from([CONF_STD_DEV, property], CONF_SOURCE_ID)
-    for property in properties_to_inherit
+    for property in properties_to_inherit_same_unit
 ]
 inherit_schema_for_var = [
     inherit_property_from([CONF_VARIANCE, property], CONF_SOURCE_ID)
@@ -110,10 +124,17 @@ inherit_schema_for_trend = [
     inherit_property_from([CONF_TREND, property], CONF_SOURCE_ID)
     for property in properties_to_inherit_new_unit
 ]
-inherit_schema_for_trend = [
-    inherit_property_from([CONF_VARIANCE, property], CONF_SOURCE_ID)
-    for property in properties_to_inherit_new_unit
-]
+
+
+# borrowed from sensor/__init__.py
+def validate_send_first_at(value):
+    send_first_at = value.get(CONF_SEND_FIRST_AT)
+    send_every = value[CONF_SEND_EVERY]
+    if send_first_at is not None and send_first_at > send_every:
+        raise cv.Invalid(
+            f"send_first_at must be smaller than or equal to send_every! {send_first_at} <= {send_every}"
+        )
+    return value
 
 
 # borrowed from integration sensor
@@ -122,10 +143,6 @@ def covariance_unit_of_measurement(uom, config):
     if uom.endswith("/" + suffix):
         return uom[0 : -len("/" + suffix)]
     return uom + "⋅" + suffix
-
-
-# def variance_unit(uom, config):
-#     return "(" + uom + ")²"
 
 
 def variance_unit_of_measurement(uom, config):
@@ -142,6 +159,7 @@ FINAL_VALIDATE_SCHEMA = cv.All(
         {cv.Required(CONF_ID): cv.use_id(StatisticsComponent)},
         extra=cv.ALLOW_EXTRA,
     ),
+    validate_send_first_at,
     *inherit_schema_for_max,
     *inherit_schema_for_min,
     *inherit_schema_for_mean,
