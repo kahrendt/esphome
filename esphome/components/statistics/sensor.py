@@ -20,6 +20,9 @@ from esphome.core.entity_helpers import inherit_property_from
 
 CODEOWNERS = ["@kahrendt"]
 
+statistics_ns = cg.esphome_ns.namespace("statistics")
+StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
+
 CONF_MEAN = "mean"
 CONF_MAX = "max"
 CONF_MIN = "min"
@@ -28,9 +31,6 @@ CONF_VARIANCE = "variance"
 CONF_TREND = "trend"
 CONF_COVARIANCE = "covariance"
 CONF_TIME_UNIT = "time_unit"
-
-statistics_ns = cg.esphome_ns.namespace("statistics")
-StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
 
 TimeConversionFactor = statistics_ns.enum("TimeConversionFactor")
 TIME_CONVERSION_FACTORS = {
@@ -111,7 +111,7 @@ CONFIG_SCHEMA = cv.Schema(
 ).extend(cv.COMPONENT_SCHEMA)
 
 # approach orrowed from kalman sensor component
-properties_to_inherit_same_unit = [
+properties_to_inherit_original_unit = [
     CONF_ACCURACY_DECIMALS,
     CONF_DEVICE_CLASS,
     CONF_ENTITY_CATEGORY,
@@ -130,7 +130,7 @@ new_unit_sensor_list = [CONF_VARIANCE, CONF_COVARIANCE, CONF_TREND]
 
 inherit_schema_for_same_unit_sensors = [
     inherit_property_from([sensor_config, property], CONF_SOURCE_ID)
-    for property in properties_to_inherit_same_unit
+    for property in properties_to_inherit_original_unit
     for sensor_config in same_unit_sensor_list
 ]
 inherit_schema_for_new_unit_sensors = [
