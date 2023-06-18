@@ -1,11 +1,12 @@
 /*
-  Summary statistics are computed using the DABA Lite algorithm
-    - space requirements: n+2
-    - time complexity: worse-case O(1)
-    - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
-
-  Implemented by Kevin Ahrendt, June 2023
-*/
+ * Sliding window aggregates are stored and computed using the De-Amortized Banker's Aggregator Lite (DABA Lite)
+ * algorithm
+ *  - space requirements: n+2 aggregates
+ *  - time complexity: worse-case O(1)
+ *  - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
+ *
+ * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
+ */
 
 #pragma once
 
@@ -17,8 +18,8 @@ namespace statistics {
 
 class DABALite {
  public:
-  // each store the current aggregate and return the desired summary statistic
-  //  - avoids recomputing the aggregate if it is still current
+  // Each function update the current aggregate and return the desired summary statistic
+  //  - Avoids updating the aggregate if it is still current
   float aggregated_count();
   float aggregated_max();
   float aggregated_min();
@@ -28,19 +29,20 @@ class DABALite {
   float aggregated_covariance();
   float aggregated_trend();
 
-  // sets the window size by adjusting the capacity of the underlying circular queues
+  // Sets the window size by adjusting the capacity of the underlying circular queues
+  //  - returns whether memory was successfully allocated
   bool set_capacity(size_t window_size);
 
-  // number of measurements currently in the window
+  // Number of measurements currently in the window
   size_t size() const { return this->size_; }
 
-  // insert value at end of circular queue and step DABA Lite algorithm
+  // Insert a value at end of circular queue and step the DABA Lite algorithm
   void insert(float value);
 
-  // remove value at start of circular queue and step DABA Lite algorithm
+  // Remove a value at start of circular queue and step the DABA Lite algorithm
   void evict();
 
-  // enable storing values for these aggregates
+  // Each function enables storing the aggregates for their respective values
   void enable_count() { this->include_count_ = true; }
   void enable_max() { this->include_max_ = true; }
   void enable_min() { this->include_min_ = true; }
@@ -70,20 +72,20 @@ class DABALite {
   bool include_c2_{false};
   bool include_timestamp_m2_{false};
 
-  // maximum window capacity
+  // Maximum window capacity
   size_t window_size_{0};
 
-  // number of measurements stored in window
+  // Number of measurements currently stored in window
   size_t size_{0};
 
-  // if we have the current aggregate, we do not query it again but just use the stored result
+  // If the current aggregate is updated, it is not repeatedly updates but instead stored
   bool is_current_aggregate_updated_{false};
   Aggregate current_aggregate_;
 
-  // Update current_aggregate_ to account for latest changes
+  // Update current_aggregate_ to account for latest changes (necessary after an insertion or evict operation)
   void update_current_aggregate_();
 
-  // DABA Lite - Raw Indices for queue_; i.e., not offset by the head index
+  // DABA Lite - raw Indices for queues; i.e., not offset by the head index
   CircularQueueIndex f_;  // front of queue
   CircularQueueIndex l_;
   CircularQueueIndex r_;
@@ -91,22 +93,22 @@ class DABALite {
   CircularQueueIndex b_;
   CircularQueueIndex e_;  // end of queue (one past the most recently inserted measurement)
 
-  // default values for a null measurement
+  // Default values for an empty set of measurements
   const Aggregate identity_class_;
 
-  // running aggregates for DABA Lite algorithm
+  // Running aggregates for DABA Lite algorithm
   Aggregate mid_sum_, back_sum_;
 
-  // compute summary statistics for a single measurement and returns them as an Aggregate
+  // Compute aggregates for a single measurement v and return it as an Aggregate
   Aggregate lift_(float v);
 
-  // store an Aggregate at an index only in the enabled queue_ vectors
+  // Store an Aggregate at specified index only in the enabled queues
   void emplace_(const Aggregate &value, size_t index);
 
-  // combine summary statistics from two Aggregates
+  // Combine Aggregates for two disjoint sets of measurements
   Aggregate combine_(const Aggregate &a, const Aggregate &b);
 
-  // return summary statistics at given index as an Aggregate
+  // Return aggregates at a given index in the queues
   Aggregate lower_(size_t index);
 
   // DABA Lite algorithm method

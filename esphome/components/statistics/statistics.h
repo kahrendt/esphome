@@ -5,20 +5,20 @@
  *  - Data is stored in a circular queue to be memory effecient by avoiding using std::deque
  *    - The queue itself is an array allocated during componenet setup for the specified window size
  *      - The circular queue is implemented by keeping track of the indices (circular_queue_index.h)
- *   - Performs push_back and pop_front operations in constant time*
- *    - Each summary statistic (or the value they are derived from) is stored in a separate queue
- *      - This avoids reserving large amounts of useless memory if some sensors are not configured
- *      - Configuring a sensor in ESPHome only stores the summary statistics it needs and no more
- *        - If multiple sensors require the same intermediate statistic, it is only stored once
- *  - Implements the DABA Lite algorithm on a circular_queue for computing online statistics
- *    - space requirements: n+2
+ *   - Performs push_back and pop_front operations in constant time
+ *    - Each summary statistic (or the aggregate they are derived from) is stored in a separate queue
+ *      - This avoids reserving large amounts of pointless memory if some sensors are not configured
+ *      - Configuring a sensor in ESPHome only stores the aggregates it needs and no more
+ *        - If multiple sensors require the same intermediate aggregates, it is only stored once
+ *  - Implements the DABA Lite algorithm over a circular queue for computing online statistics
+ *    - space requirements: n+2 aggregates
  *    - time complexity: worse-case O(1)
  *    - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
  *  - Uses variations of Welford's algorithm for parallel computing to find variance and covariance (with respect to
  *    time) to avoid catastrophic cancellation
- *  - The mean is computed in a way to hopefully avoid catstrophic cancellation for large windows and/or large values
+ *  - The mean is computed to avoid catstrophic cancellation for large windows and/or large values
  *
- * Available computed over a sliding window:
+ * Available statistics computed over the sliding window:
  *  - max: maximum measurement
  *  - min: minimum measurement
  *  - mean: average of the measurements
@@ -36,7 +36,7 @@
  *      - can be be used as an approximation for the rate of change (derivative) of the measurements
  *      - computed using the covariance of timestamps versus measurements and the variance of timestamps
  *
- * Implemented by Kevin Ahrendt, June 2023
+ * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
  */
 
 #pragma once

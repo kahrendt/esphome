@@ -1,11 +1,28 @@
 /*
-  Aggregate methods for computing summary statistics
-    - means are calculated in a manner that hopefully avoids catastrophic cancellation when using a large number of
-      samples
-    - variance and covariance aggregates are computed using a variation of Welford's alogorithm for parallel computing
-
-  Implemented by Kevin Ahrendt, June 2023
-*/
+ * Aggregate class for computing summary statistics for a set of measurements
+ *  - Three main roles:
+ *    1) Set a default value for a null measurement; i.e., for an empty set of measurements
+ *    2) Combine two aggregates from two disjoint sets of measurements
+ *    3) Compute summary statistics from the stored aggregates
+ *
+ *  - Means are calculated in a manner that avoids catastrophic cancellation with a large number of measurements.
+ *  - Variance and covariance aggregates are computed using a variation of Welford's alogorithm for parallel computing.
+ *    - See the article "Numerically Stable Parallel Computation of (Co-)Variance" by Schubert and Gertz for details.
+ *  - Two timestamp quantities are stored: timestamp_sum & timestamp_reference
+ *    - timestamp_sum is the sum of the timestamps (in milliseconds) in the set of measurements all offset by the
+ * reference.
+ *    - timestamp_reference is the offset (in milliseconds) is the offset for timestamp_sum.
+ *    - timestamp_sums need to normalized before comparing so that they reference the same timestamp
+ *      - The normalizing process involves finding the time delta between the two references; this avoids issues from
+ *        millis() rolling over
+ *    - This approach ensures one of timestamps included in the timestamp_sum is 0.
+ *      - timestamp_sum is as small as possible to minimize floating point operations losing significant digits.
+ *    - timestamp_sum and timestamp_reference are stored as integers.
+ *      - Operations on integers are performed as much as possible before switching to (slower) floating point
+ *          operations.
+ *
+ * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
+ */
 
 #include "aggregate.h"
 
@@ -15,13 +32,16 @@
 namespace esphome {
 namespace statistics {
 
+// Parallel algorithm for combining two counts from non-overlapping samples
 void Aggregate::combine_count(const Aggregate &a, const Aggregate &b) { this->count_ = a.get_count() + b.get_count(); }
 
+// Parallel algorithm for combining two maximums from non-overlapping samples
 void Aggregate::combine_max(const Aggregate &a, const Aggregate &b) { this->max_ = std::max(a.get_max(), b.get_max()); }
 
+// Parallel algorithm for combining two minimums from non-overlapping samples
 void Aggregate::combine_min(const Aggregate &a, const Aggregate &b) { this->min_ = std::min(a.get_min(), b.get_min()); }
 
-// computes the mean using summary statistics from two disjoint samples (parallel algorithm)
+// Parallel algorithm for combining two means from non-overlapping samples
 void Aggregate::combine_mean(const Aggregate &a, const Aggregate &b) {
   if (std::isnan(a.get_mean()) && std::isnan(b.get_mean())) {
     this->mean_ = NAN;
@@ -36,7 +56,7 @@ void Aggregate::combine_mean(const Aggregate &a, const Aggregate &b) {
   }
 }
 
-// computes M2 for Welford's algorithm using summary statistics from two non-overlapping samples (parallel algorithm)
+// Parallel algorithm for combining two M2 values (for determining variance) from two non-overlapping samples
 void Aggregate::combine_m2(const Aggregate &a, const Aggregate &b) {
   if (std::isnan(a.get_m2()) && std::isnan(b.get_m2())) {
     this->m2_ = NAN;
@@ -52,6 +72,7 @@ void Aggregate::combine_m2(const Aggregate &a, const Aggregate &b) {
   }
 }
 
+// Parallel algorithm for combining two timestamp sums from non-overlapping samples using a normalized reference
 void Aggregate::combine_timestamp_sum(const Aggregate &a, const Aggregate &b) {
   int32_t a_sum = a.get_timestamp_sum();
   int32_t b_sum = b.get_timestamp_sum();
@@ -61,7 +82,7 @@ void Aggregate::combine_timestamp_sum(const Aggregate &a, const Aggregate &b) {
   this->timestamp_sum_ = a_sum + b_sum;
 }
 
-// parallel algorithm for combining two C2 values from two non-overlapping samples
+// Parallel algorithm for combining two C2 values (for determining covariance) from non-overlapping samples
 void Aggregate::combine_c2(const Aggregate &a, const Aggregate &b) {
   float a_c2 = a.get_c2();
   float b_c2 = b.get_c2();
@@ -95,11 +116,13 @@ void Aggregate::combine_c2(const Aggregate &a, const Aggregate &b) {
 
     float delta = b.get_mean() - a.get_mean();
 
-    // compute C2 for an extension of Welford's algorithm to compute the covariance of timestamps and measurements
+    // compute C2 quantity for an extension of Welford's algorithm which can determine the covariance of timestamps and
+    // measurements
     this->c2_ = a_c2 + b_c2 + timestamp_sum_difference * delta / static_cast<double>(total_count_second_converted);
   }
 }
 
+// Parallel algorithm for combining two timestamp M2 values (for finding the variance) from non-overlapping samples
 void Aggregate::combine_timestamp_m2(const Aggregate &a, const Aggregate &b) {
   if (std::isnan(a.get_timestamp_m2()) && std::isnan(b.get_timestamp_m2())) {
     this->timestamp_m2_ = NAN;
@@ -122,7 +145,7 @@ void Aggregate::combine_timestamp_m2(const Aggregate &a, const Aggregate &b) {
 
     size_t denominator = a.get_count() * b.get_count() * (a.get_count() + b.get_count());
 
-    // compute M2 for Welford's algorithm to find the variance
+    // compute M2 quantity for Welford's algorithm which can determine the variance
     this->timestamp_m2_ = a.get_timestamp_m2() + b.get_timestamp_m2() +
                           static_cast<double>(delta_squared) / static_cast<double>(denominator);
   }
@@ -131,10 +154,10 @@ void Aggregate::combine_timestamp_m2(const Aggregate &a, const Aggregate &b) {
 // Sample variance using Welford's algorithm (Bessel's correction is applied)
 float Aggregate::compute_variance() const { return this->m2_ / (this->count_ - 1); }
 
-// Sample standard deviation using Welford's algorithm (Bessel's correction is applied)
+// Sample standard deviation using Welford's algorithm (Bessel's correction is applied to the computed variance)
 float Aggregate::compute_std_dev() const { return std::sqrt(this->compute_variance()); }
 
-// Sample covariance using a variation of Welford's algorithm (Bessel's correction is applied)
+// Sample covariance using an extension of Welford's algorithm (Bessel's correction is applied)
 float Aggregate::compute_covariance() const {
   if (this->count_ > 1)
     return this->c2_ / (this->count_ - 1);
@@ -148,7 +171,7 @@ float Aggregate::compute_trend() const {
   return NAN;
 }
 
-// given two samples, normalize the timestamp sums so that they are both in reference to the more recent timestamp
+// Given two samples a and b, normalize the timestamp sums so that they are both in reference to the larger timestamp
 // returns the timestamp both sums are in reference to
 uint32_t Aggregate::normalize_timestamp_sums_(int32_t &a_sum, const uint32_t &a_timestamp_reference,
                                               const size_t &a_count, int32_t &b_sum,
@@ -162,7 +185,7 @@ uint32_t Aggregate::normalize_timestamp_sums_(int32_t &a_sum, const uint32_t &a_
     return a_timestamp_reference;
   }
 
-  // a and b both represent actual measurements, so determine which timestamp is more recent
+  // a and b both represent non-empty sets of measuremnts, so determine which timestamp is more recent
   // we test the sign bit of the difference to see if the subtraction rolls over
   //  - this assumes the references are not truly more than 2^31 ms apart, which is about 24.86 days
   //    (https://arduino.stackexchange.com/a/12591)

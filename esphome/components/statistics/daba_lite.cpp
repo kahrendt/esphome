@@ -1,11 +1,12 @@
 /*
-  Summary statistics are computed using the DABA Lite algorithm
-    - space requirements: n+2
-    - time complexity: worse-case O(1)
-    - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
-
-  Implemented by Kevin Ahrendt, June 2023
-*/
+ * Sliding window aggregates are stored and computed using the De-Amortized Banker's Aggregator Lite (DABA Lite)
+ * algorithm
+ *  - space requirements: n+2 aggregates
+ *  - time complexity: worse-case O(1)
+ *  - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
+ *
+ * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
+ */
 
 #include "aggregate.h"
 #include "circular_queue_index.h"
@@ -56,11 +57,12 @@ float DABALite::aggregated_trend() {
   return this->current_aggregate_.compute_trend();
 }
 
-// set capacity (and reserve in memory) of the circular queues for the desired statistics
+// Set capacity (and reserve in memory) of the circular queues for the desired statistics
+//  - returns whether memory was successfully allocated
 bool DABALite::set_capacity(size_t window_size) {
   this->window_size_ = window_size;
 
-  // mimics ESPHome's rp2040_pio_led_strip component's buf_ code (accessed June 2023)
+  // Mimics ESPHome's rp2040_pio_led_strip component's buf_ code (accessed June 2023)
   ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
   ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<int32_t> int32_t_allocator(ExternalRAMAllocator<int32_t>::ALLOW_FAILURE);
@@ -137,7 +139,7 @@ bool DABALite::set_capacity(size_t window_size) {
   return true;
 }
 
-// insert value at end of circular queue and step DABA Lite algorithm
+// Insert value at end of circular queue and step DABA Lite algorithm
 void DABALite::insert(float value) {
   Aggregate lifted = this->lift_(value);
   this->back_sum_ = this->combine_(this->back_sum_, lifted);
@@ -151,7 +153,7 @@ void DABALite::insert(float value) {
   this->is_current_aggregate_updated_ = false;
 }
 
-// remove value at start of circular queue and step DABA Lite algorithm
+// Remove value at start of circular queue and step DABA Lite algorithm
 void DABALite::evict() {
   ++this->f_;
   --this->size_;
@@ -176,7 +178,7 @@ void DABALite::update_current_aggregate_() {
   this->is_current_aggregate_updated_ = true;
 }
 
-// compute summary statistics for a single measurement and returns them as an Aggregate
+// Compute aggregates for a single measurement v and return it as an Aggregate
 Aggregate DABALite::lift_(float v) {
   const uint32_t now = millis();
 
@@ -206,7 +208,7 @@ Aggregate DABALite::lift_(float v) {
   return part;
 }
 
-// store an Aggregate at an index only for the enabled queue_s
+// Store an Aggregate at specified index only in the enabled queues
 void DABALite::emplace_(const Aggregate &value, size_t index) {
   if (this->include_max_)
     this->max_queue_[index] = value.get_max();
@@ -228,7 +230,7 @@ void DABALite::emplace_(const Aggregate &value, size_t index) {
     this->timestamp_m2_queue_[index] = value.get_timestamp_m2();
 }
 
-// combine summary statistics from two Aggregates
+// Combine Aggregates for two disjoint sets of measurements
 Aggregate DABALite::combine_(const Aggregate &a, const Aggregate &b) {
   Aggregate part;
 
@@ -254,7 +256,7 @@ Aggregate DABALite::combine_(const Aggregate &a, const Aggregate &b) {
   return part;
 }
 
-// return summary statistics at given index as an Aggregate
+// Return aggregates at a given index in the queues
 Aggregate DABALite::lower_(size_t index) {
   Aggregate aggregate = this->identity_class_;
 
@@ -326,9 +328,9 @@ void DABALite::flip_() {
 
 // DABA Lite algorithm methods
 
-// check if the b_ index is equal to the front index f_;
-//   note if the window size == size of queue, then the circular queue end and front point to the same entry
-//   so we verify that this is not the case
+// Checks if the b_ index is equal to the front index f_;
+//  - Note if window size == size of queue, then the front and end indices point to the same index,
+//    so we verify that this is not the case
 inline bool DABALite::is_front_empty_() { return (this->b_ == this->f_) && (this->size_ != this->window_size_); }
 
 inline bool DABALite::is_delta_empty_() { return this->a_ == this->b_; }
