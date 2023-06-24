@@ -50,6 +50,17 @@ Aggregate::Aggregate(float value) {
   }
 }
 
+void Aggregate::combine(Aggregate &new_aggregate) {
+  this->combine_count(*this, new_aggregate);
+  this->combine_max(*this, new_aggregate);
+  this->combine_min(*this, new_aggregate);
+  this->combine_mean(*this, new_aggregate);
+  this->combine_m2(*this, new_aggregate);
+  this->combine_c2(*this, new_aggregate);
+  this->combine_timestamp_sum(*this, new_aggregate);
+  this->combine_timestamp_m2(*this, new_aggregate);
+}
+
 // Parallel algorithm for combining two counts from non-overlapping samples
 void Aggregate::combine_count(const Aggregate &a, const Aggregate &b) { this->count_ = a.get_count() + b.get_count(); }
 

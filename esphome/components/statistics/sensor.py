@@ -16,6 +16,7 @@ from esphome.const import (
     CONF_COUNT,
     STATE_CLASS_MEASUREMENT,
     STATE_CLASS_TOTAL,
+    CONF_TYPE,
 )
 from esphome.core.entity_helpers import inherit_property_from
 
@@ -24,7 +25,8 @@ CODEOWNERS = ["@kahrendt"]
 statistics_ns = cg.esphome_ns.namespace("statistics")
 StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
 
-ResetAction = statistics_ns.class_("ResetAction", automation.Action)
+CONF_SLIDING_WINDOW = "sliding_window"
+CONF_RUNNING = "running"
 
 CONF_MEAN = "mean"
 CONF_MAX = "max"
@@ -34,6 +36,15 @@ CONF_VARIANCE = "variance"
 CONF_TREND = "trend"
 CONF_COVARIANCE = "covariance"
 CONF_TIME_UNIT = "time_unit"
+
+StatisticsType = statistics_ns.enum("StatisticsType")
+STATISTICS_TYPES = {
+    CONF_SLIDING_WINDOW: StatisticsType.STATISTICS_TYPE_SLIDING_WINDOW,
+    CONF_RUNNING: StatisticsType.STATISTICS_TYPE_RUNNING,
+}
+
+ResetAction = statistics_ns.class_("ResetAction", automation.Action)
+
 
 TimeConversionFactor = statistics_ns.enum("TimeConversionFactor")
 TIME_CONVERSION_FACTORS = {
@@ -83,6 +94,9 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
         cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
         cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
+        cv.Optional(CONF_TYPE, default=CONF_SLIDING_WINDOW): cv.enum(
+            STATISTICS_TYPES, lower=True
+        ),
         cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
             TIME_CONVERSION_FACTORS, lower=True
         ),
@@ -175,6 +189,8 @@ async def to_code(config):
 
     source = await cg.get_variable(config[CONF_SOURCE_ID])
     cg.add(var.set_source_sensor(source))
+
+    cg.add(var.set_statistics_type(config[CONF_TYPE]))
 
     cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
     cg.add(var.set_send_every(config[CONF_SEND_EVERY]))

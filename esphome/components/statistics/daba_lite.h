@@ -60,6 +60,8 @@ class DABALite {
   // Remove a value at start of circular queue and step the DABA Lite algorithm
   void evict();
 
+  Aggregate get_current_aggregate();
+
  protected:
   float *max_queue_{nullptr};
   float *min_queue_{nullptr};

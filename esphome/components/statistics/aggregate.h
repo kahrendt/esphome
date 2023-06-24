@@ -37,6 +37,8 @@ class Aggregate {
   Aggregate();  // default constructor for a null measurement
   Aggregate(float value);
 
+  void combine(Aggregate &new_aggregate);
+
   // Count of valid readings; i.e., not NaN, in the set of measurements
   size_t get_count() const { return this->count_; }
   void set_count(size_t count) { this->count_ = count; }
