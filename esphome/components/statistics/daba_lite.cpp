@@ -155,7 +155,8 @@ void DABALite::clear() {
 
 // Insert value at end of circular queue and step DABA Lite algorithm
 void DABALite::insert(float value) {
-  Aggregate lifted = this->lift_(value);
+  Aggregate lifted = Aggregate(value);
+  // this->lift_(value);
   this->back_sum_ = this->combine_(this->back_sum_, lifted);
 
   this->emplace_(lifted, this->e_.get_index());
@@ -192,35 +193,35 @@ void DABALite::update_current_aggregate_() {
   this->is_current_aggregate_updated_ = true;
 }
 
-// Compute aggregates for a single measurement v and return it as an Aggregate
-Aggregate DABALite::lift_(float v) {
-  const uint32_t now = millis();
+// // Compute aggregates for a single measurement v and return it as an Aggregate
+// Aggregate DABALite::lift_(float v) {
+//   const uint32_t now = millis();
 
-  Aggregate part = this->identity_class_;
+//   Aggregate part = this->identity_class_;
 
-  if (!std::isnan(v)) {
-    if (this->config_.max)
-      part.set_max(v);
-    if (this->config_.min)
-      part.set_min(v);
-    if (this->config_.count)
-      part.set_count(1);
-    if (this->config_.mean)
-      part.set_mean(v);
-    if (this->config_.m2)
-      part.set_m2(0.0);
-    if (this->config_.c2)
-      part.set_c2(0.0);
-    if (this->config_.timestamp_m2)
-      part.set_timestamp_m2(0.0);
-    if (this->config_.timestamp_mean) {
-      part.set_timestamp_sum(0);
-      part.set_timestamp_reference(now);
-    }
-  }
+//   if (!std::isnan(v)) {
+//     if (this->config_.max)
+//       part.set_max(v);
+//     if (this->config_.min)
+//       part.set_min(v);
+//     if (this->config_.count)
+//       part.set_count(1);
+//     if (this->config_.mean)
+//       part.set_mean(v);
+//     if (this->config_.m2)
+//       part.set_m2(0.0);
+//     if (this->config_.c2)
+//       part.set_c2(0.0);
+//     if (this->config_.timestamp_m2)
+//       part.set_timestamp_m2(0.0);
+//     if (this->config_.timestamp_mean) {
+//       part.set_timestamp_sum(0);
+//       part.set_timestamp_reference(now);
+//     }
+//   }
 
-  return part;
-}
+//   return part;
+// }
 
 // Store an Aggregate at specified index only in the enabled queues
 void DABALite::emplace_(const Aggregate &value, size_t index) {
