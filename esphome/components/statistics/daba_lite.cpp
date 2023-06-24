@@ -68,56 +68,56 @@ bool DABALite::set_capacity(size_t window_size) {
   ExternalRAMAllocator<int32_t> int32_t_allocator(ExternalRAMAllocator<int32_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<uint32_t> uint32_t_allocator(ExternalRAMAllocator<uint32_t>::ALLOW_FAILURE);
 
-  if (this->include_max_) {
+  if (this->config_.max) {
     this->max_queue_ = float_allocator.allocate(this->window_size_);
     if (this->max_queue_ == nullptr) {
       return false;
     }
   }
 
-  if (this->include_min_) {
+  if (this->config_.min) {
     this->min_queue_ = float_allocator.allocate(this->window_size_);
     if (this->min_queue_ == nullptr) {
       return false;
     }
   }
 
-  if (this->include_count_) {
+  if (this->config_.count) {
     this->count_queue_ = size_t_allocator.allocate(this->window_size_);
     if (this->count_queue_ == nullptr) {
       return false;
     }
   }
 
-  if (this->include_mean_) {
+  if (this->config_.mean) {
     this->mean_queue_ = float_allocator.allocate(this->window_size_);
     if (this->mean_queue_ == nullptr) {
       return false;
     }
   }
 
-  if (this->include_m2_) {
+  if (this->config_.m2) {
     this->m2_queue_ = float_allocator.allocate(this->window_size_);
     if (this->m2_queue_ == nullptr) {
       return false;
     }
   }
 
-  if (this->include_c2_) {
+  if (this->config_.c2) {
     this->c2_queue_ = float_allocator.allocate(this->window_size_);
     if (this->c2_queue_ == nullptr) {
       return false;
     }
   }
 
-  if (this->include_timestamp_m2_) {
+  if (this->config_.timestamp_m2) {
     this->timestamp_m2_queue_ = float_allocator.allocate(this->window_size_);
     if (this->timestamp_m2_queue_ == nullptr) {
       return false;
     }
   }
 
-  if (this->include_timestamp_mean_) {
+  if (this->config_.timestamp_mean) {
     this->timestamp_sum_queue_ = int32_t_allocator.allocate(this->window_size_);
     if (this->timestamp_sum_queue_ == nullptr) {
       return false;
@@ -192,21 +192,21 @@ Aggregate DABALite::lift_(float v) {
   Aggregate part = this->identity_class_;
 
   if (!std::isnan(v)) {
-    if (this->include_max_)
+    if (this->config_.max)
       part.set_max(v);
-    if (this->include_min_)
+    if (this->config_.min)
       part.set_min(v);
-    if (this->include_count_)
+    if (this->config_.count)
       part.set_count(1);
-    if (this->include_mean_)
+    if (this->config_.mean)
       part.set_mean(v);
-    if (this->include_m2_)
+    if (this->config_.m2)
       part.set_m2(0.0);
-    if (this->include_c2_)
+    if (this->config_.c2)
       part.set_c2(0.0);
-    if (this->include_timestamp_m2_)
+    if (this->config_.timestamp_m2)
       part.set_timestamp_m2(0.0);
-    if (this->include_timestamp_mean_) {
+    if (this->config_.timestamp_mean) {
       part.set_timestamp_sum(0);
       part.set_timestamp_reference(now);
     }
@@ -217,23 +217,23 @@ Aggregate DABALite::lift_(float v) {
 
 // Store an Aggregate at specified index only in the enabled queues
 void DABALite::emplace_(const Aggregate &value, size_t index) {
-  if (this->include_max_)
+  if (this->config_.max)
     this->max_queue_[index] = value.get_max();
-  if (this->include_min_)
+  if (this->config_.min)
     this->min_queue_[index] = value.get_min();
-  if (this->include_count_)
+  if (this->config_.count)
     this->count_queue_[index] = value.get_count();
-  if (this->include_mean_)
+  if (this->config_.mean)
     this->mean_queue_[index] = value.get_mean();
-  if (this->include_m2_)
+  if (this->config_.m2)
     this->m2_queue_[index] = value.get_m2();
-  if (this->include_c2_)
+  if (this->config_.c2)
     this->c2_queue_[index] = value.get_c2();
-  if (this->include_timestamp_mean_) {
+  if (this->config_.timestamp_mean) {
     this->timestamp_sum_queue_[index] = value.get_timestamp_sum();
     this->timestamp_reference_queue_[index] = value.get_timestamp_reference();
   }
-  if (this->include_timestamp_m2_)
+  if (this->config_.timestamp_m2)
     this->timestamp_m2_queue_[index] = value.get_timestamp_m2();
 }
 
@@ -241,23 +241,23 @@ void DABALite::emplace_(const Aggregate &value, size_t index) {
 Aggregate DABALite::combine_(const Aggregate &a, const Aggregate &b) {
   Aggregate part;
 
-  if (this->include_max_)
+  if (this->config_.max)
     part.combine_max(a, b);
-  if (this->include_min_)
+  if (this->config_.min)
     part.combine_min(a, b);
-  if (this->include_count_)
+  if (this->config_.count)
     part.combine_count(a, b);
-  if (this->include_mean_)
+  if (this->config_.mean)
     part.combine_mean(a, b);
-  if (this->include_m2_)
+  if (this->config_.m2)
     part.combine_m2(a, b);
-  if (this->include_c2_)
+  if (this->config_.c2)
     part.combine_c2(a, b);
-  if (this->include_timestamp_mean_) {
+  if (this->config_.timestamp_mean) {
     part.combine_timestamp_sum(a, b);
   }
 
-  if (this->include_timestamp_m2_)
+  if (this->config_.timestamp_m2)
     part.combine_timestamp_m2(a, b);
 
   return part;
@@ -267,21 +267,21 @@ Aggregate DABALite::combine_(const Aggregate &a, const Aggregate &b) {
 Aggregate DABALite::lower_(size_t index) {
   Aggregate aggregate = this->identity_class_;
 
-  if (this->include_max_)
+  if (this->config_.max)
     aggregate.set_max(this->max_queue_[index]);
-  if (this->include_min_)
+  if (this->config_.min)
     aggregate.set_min(this->min_queue_[index]);
-  if (this->include_count_)
+  if (this->config_.count)
     aggregate.set_count(this->count_queue_[index]);
-  if (this->include_mean_)
+  if (this->config_.mean)
     aggregate.set_mean(this->mean_queue_[index]);
-  if (this->include_m2_)
+  if (this->config_.m2)
     aggregate.set_m2(this->m2_queue_[index]);
-  if (this->include_c2_)
+  if (this->config_.c2)
     aggregate.set_c2(this->c2_queue_[index]);
-  if (this->include_timestamp_m2_)
+  if (this->config_.timestamp_m2)
     aggregate.set_timestamp_m2(this->timestamp_m2_queue_[index]);
-  if (this->include_timestamp_mean_) {
+  if (this->config_.timestamp_mean) {
     aggregate.set_timestamp_sum(this->timestamp_sum_queue_[index]);
     aggregate.set_timestamp_reference(this->timestamp_reference_queue_[index]);
   }
