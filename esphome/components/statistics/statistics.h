@@ -41,6 +41,7 @@
 
 #pragma once
 
+#include "aggregate.h"
 #include "daba_lite.h"
 
 #include "esphome/core/component.h"
@@ -49,6 +50,11 @@
 
 namespace esphome {
 namespace statistics {
+
+enum StatisticsType {
+  STATISTICS_TYPE_SLIDING_WINDOW,
+  STATISTICS_TYPE_RUNNING,
+};
 
 enum TimeConversionFactor {
   FACTOR_MS = 1,          // timestamps already are in ms
@@ -90,6 +96,8 @@ class StatisticsComponent : public Component {
     this->time_conversion_factor_ = conversion_factor;
   }
 
+  void set_statistics_type(StatisticsType type) { this->statistics_type_ = type; }
+
  protected:
   // given a new sensor measurements, add it to window, evict if window is full, and update sensors
   void handle_new_value_(float value);
@@ -111,11 +119,14 @@ class StatisticsComponent : public Component {
 
   // DABA Lite implementation for storing measurements and computing aggregate statistics over the sliding window
   DABALite *partial_stats_queue_{nullptr};
+  Aggregate running_aggregate_{};
 
   // mimic ESPHome's current filters behavior
   size_t window_size_{};
   size_t send_every_{};
   size_t send_at_{};
+
+  StatisticsType statistics_type_{STATISTICS_TYPE_SLIDING_WINDOW};
 };
 
 // Based on the integration component reset action

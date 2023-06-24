@@ -178,6 +178,11 @@ void DABALite::evict() {
   this->is_current_aggregate_updated_ = false;
 }
 
+Aggregate DABALite::get_current_aggregate() {
+  this->update_current_aggregate_();
+  return this->current_aggregate_;
+}
+
 // Update current_aggregate_ to account for latest changes
 void DABALite::update_current_aggregate_() {
   if (!this->is_current_aggregate_updated_) {
