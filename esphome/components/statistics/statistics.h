@@ -44,6 +44,7 @@
 #include "daba_lite.h"
 
 #include "esphome/core/component.h"
+#include "esphome/core/automation.h"
 #include "esphome/components/sensor/sensor.h"
 
 namespace esphome {
@@ -64,6 +65,8 @@ class StatisticsComponent : public Component {
   void dump_config() override;
 
   void setup() override;
+
+  void reset();
 
   // source sensor of measurement data
   void set_source_sensor(sensor::Sensor *source_sensor) { this->source_sensor_ = source_sensor; }
@@ -106,13 +109,24 @@ class StatisticsComponent : public Component {
   sensor::Sensor *covariance_sensor_{nullptr};
   sensor::Sensor *trend_sensor_{nullptr};
 
+  // DABA Lite implementation for storing measurements and computing aggregate statistics over the sliding window
+  DABALite partial_stats_queue_{};
+
   // mimic ESPHome's current filters behavior
   size_t window_size_{};
   size_t send_every_{};
   size_t send_at_{};
+};
 
-  // DABA Lite implementation for storing measurements and computing aggregate statistics over the sliding window
-  DABALite partial_stats_queue_{};
+// Based on the integration component reset action
+template<typename... Ts> class ResetAction : public Action<Ts...> {
+ public:
+  explicit ResetAction(StatisticsComponent *parent) : parent_(parent) {}
+
+  void play(Ts... x) override { this->parent_->reset(); }
+
+ protected:
+  StatisticsComponent *parent_;
 };
 
 }  // namespace statistics

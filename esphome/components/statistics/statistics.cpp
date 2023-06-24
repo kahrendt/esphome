@@ -146,6 +146,8 @@ void StatisticsComponent::setup() {
   this->set_first_at(this->send_every_ - this->send_at_);
 }
 
+void StatisticsComponent::reset() { this->partial_stats_queue_.clear(); }
+
 // Given a new sensor measurement, evict if window is full, add new value to window, and update sensors
 void StatisticsComponent::handle_new_value_(float value) {
   // If sliding window is larger than the capacity, evict until less
