@@ -26,11 +26,29 @@
 
 #include "aggregate.h"
 
+#include "esphome/core/hal.h"  // necessary for millis()
+
 #include <algorithm>  // necessary for std::min and std::max functions
 #include <cmath>      // necessary for NaN
 
 namespace esphome {
 namespace statistics {
+
+Aggregate::Aggregate() {}
+
+Aggregate::Aggregate(float value) {
+  if (!std::isnan(value)) {
+    this->max_ = value;
+    this->min_ = value;
+    this->count_ = 1;
+    this->mean_ = value;
+    this->m2_ = 0.0;
+    this->c2_ = 0.0;
+    this->timestamp_m2_ = 0.0;
+    this->timestamp_sum_ = 0;
+    this->timestamp_reference_ = millis();
+  }
+}
 
 // Parallel algorithm for combining two counts from non-overlapping samples
 void Aggregate::combine_count(const Aggregate &a, const Aggregate &b) { this->count_ = a.get_count() + b.get_count(); }
