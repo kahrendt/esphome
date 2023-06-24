@@ -18,6 +18,11 @@
 namespace esphome {
 namespace statistics {
 
+DABALite::DABALite(DABAEnabledAggregateConfiguration config, size_t capacity) {
+  this->config_ = config;
+  this->set_capacity(capacity);
+}
+
 float DABALite::aggregated_count() {
   this->update_current_aggregate_();
   return this->current_aggregate_.get_count();
@@ -130,6 +135,8 @@ bool DABALite::set_capacity(size_t window_size) {
   }
 
   this->clear();
+
+  this->memory_allocated_ = true;
 
   return true;
 }
