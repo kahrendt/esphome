@@ -33,6 +33,9 @@ class DABALite {
   //  - returns whether memory was successfully allocated
   bool set_capacity(size_t window_size);
 
+  // Clears all readings from the sliding window
+  void clear();
+
   // Number of measurements currently in the window
   size_t size() const { return this->size_; }
 

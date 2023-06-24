@@ -129,14 +129,21 @@ bool DABALite::set_capacity(size_t window_size) {
     }
   }
 
+  this->clear();
+
+  return true;
+}
+
+void DABALite::clear() {
+  this->size_ = 0;  // set size of valid readings to 0
+
+  // Reset Indices in the circular queue to the start
   this->f_ = CircularQueueIndex(0, this->window_size_);
   this->l_ = CircularQueueIndex(0, this->window_size_);
   this->r_ = CircularQueueIndex(0, this->window_size_);
   this->a_ = CircularQueueIndex(0, this->window_size_);
   this->b_ = CircularQueueIndex(0, this->window_size_);
   this->e_ = CircularQueueIndex(0, this->window_size_);
-
-  return true;
 }
 
 // Insert value at end of circular queue and step DABA Lite algorithm
