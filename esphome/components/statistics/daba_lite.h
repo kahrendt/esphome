@@ -16,9 +16,22 @@
 namespace esphome {
 namespace statistics {
 
+struct DABAEnabledAggregateConfiguration {
+  bool count{false};
+  bool max{false};
+  bool min{false};
+  bool mean{false};
+  bool m2{false};
+  bool timestamp_mean{false};
+  bool c2{false};
+  bool timestamp_m2{false};
+};
+
 class DABALite {
  public:
-  // Each function update the current aggregate and return the desired summary statistic
+  DABALite(DABAEnabledAggregateConfiguration config) { this->config_ = config; }
+
+  // Each function updates the current aggregate and return the desired summary statistic
   //  - Avoids updating the aggregate if it is still current
   float aggregated_count();
   float aggregated_max();
@@ -45,16 +58,6 @@ class DABALite {
   // Remove a value at start of circular queue and step the DABA Lite algorithm
   void evict();
 
-  // Each function enables storing the aggregates for their respective values
-  void enable_count() { this->include_count_ = true; }
-  void enable_max() { this->include_max_ = true; }
-  void enable_min() { this->include_min_ = true; }
-  void enable_mean() { this->include_mean_ = true; }
-  void enable_m2() { this->include_m2_ = true; }
-  void enable_timestamp_mean() { this->include_timestamp_mean_ = true; }
-  void enable_c2() { this->include_c2_ = true; }
-  void enable_timestamp_m2() { this->include_timestamp_m2_ = true; }
-
  protected:
   float *max_queue_{nullptr};
   float *min_queue_{nullptr};
@@ -66,14 +69,7 @@ class DABALite {
   int32_t *timestamp_sum_queue_{nullptr};
   uint32_t *timestamp_reference_queue_{nullptr};
 
-  bool include_count_{false};
-  bool include_max_{false};
-  bool include_min_{false};
-  bool include_mean_{false};
-  bool include_m2_{false};
-  bool include_timestamp_mean_{false};
-  bool include_c2_{false};
-  bool include_timestamp_m2_{false};
+  DABAEnabledAggregateConfiguration config_{};
 
   // Maximum window capacity
   size_t window_size_{0};
