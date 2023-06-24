@@ -39,6 +39,7 @@
  * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
  */
 
+#include "aggregate.h"
 #include "daba_lite.h"
 #include "statistics.h"
 
@@ -94,51 +95,54 @@ void StatisticsComponent::dump_config() {
 }
 
 void StatisticsComponent::setup() {
-  // store aggregate data only necessary for the configured sensors
-  DABAEnabledAggregateConfiguration config;
+  if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
+    // store aggregate data only necessary for the configured sensors
+    DABAEnabledAggregateConfiguration config;
 
-  if (this->count_sensor_)
-    config.count = true;
+    if (this->count_sensor_)
+      config.count = true;
 
-  if (this->max_sensor_)
-    config.max = true;
+    if (this->max_sensor_)
+      config.max = true;
 
-  if (this->min_sensor_)
-    config.min = true;
+    if (this->min_sensor_)
+      config.min = true;
 
-  if (this->mean_sensor_) {
-    config.count = true;
-    config.mean = true;
-  }
+    if (this->mean_sensor_) {
+      config.count = true;
+      config.mean = true;
+    }
 
-  if ((this->variance_sensor_) || (this->std_dev_sensor_)) {
-    config.count = true;
-    config.mean = true;
-    config.m2 = true;
-  }
+    if ((this->variance_sensor_) || (this->std_dev_sensor_)) {
+      config.count = true;
+      config.mean = true;
+      config.m2 = true;
+    }
 
-  if (this->covariance_sensor_) {
-    config.count = true;
-    config.mean = true;
-    config.timestamp_mean = true;
-    config.c2 = true;
-  }
+    if (this->covariance_sensor_) {
+      config.count = true;
+      config.mean = true;
+      config.timestamp_mean = true;
+      config.c2 = true;
+    }
 
-  if (this->trend_sensor_) {
-    config.count = true;
-    config.mean = true;
-    config.timestamp_mean = true;
-    config.c2 = true;
-    config.timestamp_m2 = true;
-  }
+    if (this->trend_sensor_) {
+      config.count = true;
+      config.mean = true;
+      config.timestamp_mean = true;
+      config.c2 = true;
+      config.timestamp_m2 = true;
+    }
+    this->partial_stats_queue_ = new DABALite(config, this->window_size_);
 
-  this->partial_stats_queue_ = new DABALite(config, this->window_size_);
-
-  // Verify memory was properly allocated for the aggregates
-  if (!this->partial_stats_queue_->get_memory_allocated()) {
-    ESP_LOGE(TAG, "Failed to allocate memory for sliding window aggregates of size %u", this->window_size_);
-    this->mark_failed();
-    return;
+    // Verify memory was properly allocated for the aggregates
+    if (!this->partial_stats_queue_->get_memory_allocated()) {
+      ESP_LOGE(TAG, "Failed to allocate memory for sliding window aggregates of size %u", this->window_size_);
+      this->mark_failed();
+      return;
+    }
+  } else {
+    this->running_aggregate_ = Aggregate();
   }
 
   // On every source sensor update, call handle_new_value_()
@@ -148,27 +152,40 @@ void StatisticsComponent::setup() {
   this->set_first_at(this->send_every_ - this->send_at_);
 }
 
-void StatisticsComponent::reset() { this->partial_stats_queue_->clear(); }
+void StatisticsComponent::reset() {
+  if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
+    this->partial_stats_queue_->clear();
+  else
+    this->running_aggregate_ = Aggregate();
+}
 
 // Given a new sensor measurement, evict if window is full, add new value to window, and update sensors
 void StatisticsComponent::handle_new_value_(float value) {
-  // If sliding window is larger than the capacity, evict until less
-  while (this->partial_stats_queue_->size() >= this->window_size_) {
-    this->partial_stats_queue_->evict();
-  }
+  if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
+    // If sliding window is larger than the capacity, evict until less
+    while (this->partial_stats_queue_->size() >= this->window_size_) {
+      this->partial_stats_queue_->evict();
+    }
 
-  // Add new value to end of sliding window
-  this->partial_stats_queue_->insert(value);
+    // Add new value to end of sliding window
+    this->partial_stats_queue_->insert(value);
+  } else {
+    Aggregate new_aggregate = Aggregate(value);
+    this->running_aggregate_.combine(new_aggregate);
+  }
 
   // Ensure we only push updates for the sensors based on the configuration
   if (++this->send_at_ >= this->send_every_) {
     this->send_at_ = 0;
 
+    if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
+      this->running_aggregate_ = this->partial_stats_queue_->get_current_aggregate();
+
     if (this->count_sensor_)
-      this->count_sensor_->publish_state(this->partial_stats_queue_->aggregated_count());
+      this->count_sensor_->publish_state(this->running_aggregate_.get_count());
 
     if (this->max_sensor_) {
-      float max = this->partial_stats_queue_->aggregated_max();
+      float max = this->running_aggregate_.get_max();
       if (std::isinf(max)) {  // default aggregated max for 0 measuremnts is -infinity, switch to NaN for HA
         this->max_sensor_->publish_state(NAN);
       } else {
@@ -177,7 +194,7 @@ void StatisticsComponent::handle_new_value_(float value) {
     }
 
     if (this->min_sensor_) {
-      float min = this->partial_stats_queue_->aggregated_min();
+      float min = this->running_aggregate_.get_min();
       if (std::isinf(min)) {  // default aggregated min for 0 measurements is infinity, switch to NaN for HA
         this->min_sensor_->publish_state(NAN);
       } else {
@@ -186,23 +203,23 @@ void StatisticsComponent::handle_new_value_(float value) {
     }
 
     if (this->mean_sensor_)
-      this->mean_sensor_->publish_state(this->partial_stats_queue_->aggregated_mean());
+      this->mean_sensor_->publish_state(this->running_aggregate_.get_mean());
 
     if (this->variance_sensor_)
-      this->variance_sensor_->publish_state(this->partial_stats_queue_->aggregated_variance());
+      this->variance_sensor_->publish_state(this->running_aggregate_.compute_variance());
 
     if (this->std_dev_sensor_)
-      this->std_dev_sensor_->publish_state(this->partial_stats_queue_->aggregated_std_dev());
+      this->std_dev_sensor_->publish_state(this->running_aggregate_.compute_std_dev());
 
     if (this->covariance_sensor_) {
-      float covariance_ms = this->partial_stats_queue_->aggregated_covariance();
+      float covariance_ms = this->running_aggregate_.compute_covariance();
       float converted_covariance = covariance_ms / this->time_conversion_factor_;
 
       this->covariance_sensor_->publish_state(converted_covariance);
     }
 
     if (this->trend_sensor_) {
-      float trend_ms = this->partial_stats_queue_->aggregated_trend();
+      float trend_ms = this->running_aggregate_.compute_trend();
       float converted_trend = trend_ms * this->time_conversion_factor_;
 
       this->trend_sensor_->publish_state(converted_trend);
