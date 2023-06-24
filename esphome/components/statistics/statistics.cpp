@@ -132,11 +132,10 @@ void StatisticsComponent::setup() {
     config.timestamp_m2 = true;
   }
 
-  this->partial_stats_queue_ = new DABALite(config);
+  this->partial_stats_queue_ = new DABALite(config, this->window_size_);
 
-  // Set the capacity of the DABA Lite queue for our window size
-  //  - If not successful, then log an error and mark the component as failed
-  if (!this->partial_stats_queue_->set_capacity(this->window_size_)) {
+  // Verify memory was properly allocated for the aggregates
+  if (!this->partial_stats_queue_->get_memory_allocated()) {
     ESP_LOGE(TAG, "Failed to allocate memory for sliding window aggregates of size %u", this->window_size_);
     this->mark_failed();
     return;
