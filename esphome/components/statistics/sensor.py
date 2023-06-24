@@ -1,5 +1,6 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
+from esphome import automation
 from esphome.components import sensor
 from esphome.const import (
     CONF_ID,
@@ -22,6 +23,8 @@ CODEOWNERS = ["@kahrendt"]
 
 statistics_ns = cg.esphome_ns.namespace("statistics")
 StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
+
+ResetAction = statistics_ns.class_("ResetAction", automation.Action)
 
 CONF_MEAN = "mean"
 CONF_MAX = "max"
@@ -218,3 +221,17 @@ async def to_code(config):
         conf = config[CONF_TREND]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_trend_sensor(sens))
+
+
+@automation.register_action(
+    "sensor.statistics.reset",
+    ResetAction,
+    automation.maybe_simple_id(
+        {
+            cv.Required(CONF_ID): cv.use_id(StatisticsComponent),
+        }
+    ),
+)
+async def sensor_statistics_reset_to_code(config, action_id, template_arg, args):
+    paren = await cg.get_variable(config[CONF_ID])
+    return cg.new_Pvariable(action_id, template_arg, paren)
