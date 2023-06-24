@@ -94,46 +94,49 @@ void StatisticsComponent::dump_config() {
 }
 
 void StatisticsComponent::setup() {
-  // store aggregate data only needed for the configured sensors
+  // store aggregate data only necessary for the configured sensors
+  DABAEnabledAggregateConfiguration config;
 
   if (this->count_sensor_)
-    this->partial_stats_queue_.enable_count();
+    config.count = true;
 
   if (this->max_sensor_)
-    this->partial_stats_queue_.enable_max();
+    config.max = true;
 
   if (this->min_sensor_)
-    this->partial_stats_queue_.enable_min();
+    config.min = true;
 
   if (this->mean_sensor_) {
-    this->partial_stats_queue_.enable_count();
-    this->partial_stats_queue_.enable_mean();
+    config.count = true;
+    config.mean = true;
   }
 
   if ((this->variance_sensor_) || (this->std_dev_sensor_)) {
-    this->partial_stats_queue_.enable_count();
-    this->partial_stats_queue_.enable_mean();
-    this->partial_stats_queue_.enable_m2();
+    config.count = true;
+    config.mean = true;
+    config.m2 = true;
   }
 
   if (this->covariance_sensor_) {
-    this->partial_stats_queue_.enable_count();
-    this->partial_stats_queue_.enable_mean();
-    this->partial_stats_queue_.enable_timestamp_mean();
-    this->partial_stats_queue_.enable_c2();
+    config.count = true;
+    config.mean = true;
+    config.timestamp_mean = true;
+    config.c2 = true;
   }
 
   if (this->trend_sensor_) {
-    this->partial_stats_queue_.enable_count();
-    this->partial_stats_queue_.enable_mean();
-    this->partial_stats_queue_.enable_timestamp_mean();
-    this->partial_stats_queue_.enable_c2();
-    this->partial_stats_queue_.enable_timestamp_m2();
+    config.count = true;
+    config.mean = true;
+    config.timestamp_mean = true;
+    config.c2 = true;
+    config.timestamp_m2 = true;
   }
+
+  this->partial_stats_queue_ = new DABALite(config);
 
   // Set the capacity of the DABA Lite queue for our window size
   //  - If not successful, then log an error and mark the component as failed
-  if (!this->partial_stats_queue_.set_capacity(this->window_size_)) {
+  if (!this->partial_stats_queue_->set_capacity(this->window_size_)) {
     ESP_LOGE(TAG, "Failed to allocate memory for sliding window aggregates of size %u", this->window_size_);
     this->mark_failed();
     return;
@@ -146,27 +149,27 @@ void StatisticsComponent::setup() {
   this->set_first_at(this->send_every_ - this->send_at_);
 }
 
-void StatisticsComponent::reset() { this->partial_stats_queue_.clear(); }
+void StatisticsComponent::reset() { this->partial_stats_queue_->clear(); }
 
 // Given a new sensor measurement, evict if window is full, add new value to window, and update sensors
 void StatisticsComponent::handle_new_value_(float value) {
   // If sliding window is larger than the capacity, evict until less
-  while (this->partial_stats_queue_.size() >= this->window_size_) {
-    this->partial_stats_queue_.evict();
+  while (this->partial_stats_queue_->size() >= this->window_size_) {
+    this->partial_stats_queue_->evict();
   }
 
   // Add new value to end of sliding window
-  this->partial_stats_queue_.insert(value);
+  this->partial_stats_queue_->insert(value);
 
   // Ensure we only push updates for the sensors based on the configuration
   if (++this->send_at_ >= this->send_every_) {
     this->send_at_ = 0;
 
     if (this->count_sensor_)
-      this->count_sensor_->publish_state(this->partial_stats_queue_.aggregated_count());
+      this->count_sensor_->publish_state(this->partial_stats_queue_->aggregated_count());
 
     if (this->max_sensor_) {
-      float max = this->partial_stats_queue_.aggregated_max();
+      float max = this->partial_stats_queue_->aggregated_max();
       if (std::isinf(max)) {  // default aggregated max for 0 measuremnts is -infinity, switch to NaN for HA
         this->max_sensor_->publish_state(NAN);
       } else {
@@ -175,7 +178,7 @@ void StatisticsComponent::handle_new_value_(float value) {
     }
 
     if (this->min_sensor_) {
-      float min = this->partial_stats_queue_.aggregated_min();
+      float min = this->partial_stats_queue_->aggregated_min();
       if (std::isinf(min)) {  // default aggregated min for 0 measurements is infinity, switch to NaN for HA
         this->min_sensor_->publish_state(NAN);
       } else {
@@ -184,23 +187,23 @@ void StatisticsComponent::handle_new_value_(float value) {
     }
 
     if (this->mean_sensor_)
-      this->mean_sensor_->publish_state(this->partial_stats_queue_.aggregated_mean());
+      this->mean_sensor_->publish_state(this->partial_stats_queue_->aggregated_mean());
 
     if (this->variance_sensor_)
-      this->variance_sensor_->publish_state(this->partial_stats_queue_.aggregated_variance());
+      this->variance_sensor_->publish_state(this->partial_stats_queue_->aggregated_variance());
 
     if (this->std_dev_sensor_)
-      this->std_dev_sensor_->publish_state(this->partial_stats_queue_.aggregated_std_dev());
+      this->std_dev_sensor_->publish_state(this->partial_stats_queue_->aggregated_std_dev());
 
     if (this->covariance_sensor_) {
-      float covariance_ms = this->partial_stats_queue_.aggregated_covariance();
+      float covariance_ms = this->partial_stats_queue_->aggregated_covariance();
       float converted_covariance = covariance_ms / this->time_conversion_factor_;
 
       this->covariance_sensor_->publish_state(converted_covariance);
     }
 
     if (this->trend_sensor_) {
-      float trend_ms = this->partial_stats_queue_.aggregated_trend();
+      float trend_ms = this->partial_stats_queue_->aggregated_trend();
       float converted_trend = trend_ms * this->time_conversion_factor_;
 
       this->trend_sensor_->publish_state(converted_trend);
