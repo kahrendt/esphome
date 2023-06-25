@@ -31,17 +31,6 @@ class DABALite {
  public:
   DABALite(DABAEnabledAggregateConfiguration config, size_t capacity);
 
-  // Each function updates the current aggregate and return the desired summary statistic
-  //  - Avoids updating the aggregate if it is still current
-  float aggregated_count();
-  float aggregated_max();
-  float aggregated_min();
-  float aggregated_mean();
-  float aggregated_variance();
-  float aggregated_std_dev();
-  float aggregated_covariance();
-  float aggregated_trend();
-
   // Sets the window size by adjusting the capacity of the underlying circular queues
   //  - returns whether memory was successfully allocated
   bool set_capacity(size_t window_size);
@@ -82,13 +71,6 @@ class DABALite {
   // Number of measurements currently stored in window
   size_t size_{0};
 
-  // If the current aggregate is updated, it is not repeatedly updates but instead stored
-  bool is_current_aggregate_updated_{false};
-  Aggregate current_aggregate_;
-
-  // Update current_aggregate_ to account for latest changes (necessary after an insertion or evict operation)
-  void update_current_aggregate_();
-
   // DABA Lite - raw Indices for queues; i.e., not offset by the head index
   CircularQueueIndex f_;  // front of queue
   CircularQueueIndex l_;
@@ -109,8 +91,8 @@ class DABALite {
   // Store an Aggregate at specified index only in the enabled queues
   void emplace_(const Aggregate &value, size_t index);
 
-  // Combine Aggregates for two disjoint sets of measurements
-  Aggregate combine_(const Aggregate &a, const Aggregate &b);
+  // // Combine Aggregates for two disjoint sets of measurements
+  // Aggregate combine_(const Aggregate &a, const Aggregate &b);
 
   // Return aggregates at a given index in the queues
   Aggregate lower_(size_t index);
