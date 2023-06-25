@@ -170,8 +170,9 @@ void StatisticsComponent::handle_new_value_(float value) {
     // Add new value to end of sliding window
     this->partial_stats_queue_->insert(value);
   } else {
-    Aggregate new_aggregate = Aggregate(value);
-    this->running_aggregate_.combine(new_aggregate);
+    // Aggregate new_aggregate = Aggregate(value);
+    // this->running_aggregate_.combine(new_aggregate);
+    this->running_aggregate_ = this->running_aggregate_ + Aggregate(value);
   }
 
   // Ensure we only push updates for the sensors based on the configuration

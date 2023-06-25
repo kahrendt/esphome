@@ -37,7 +37,7 @@ class Aggregate {
   Aggregate();  // default constructor for a null measurement
   Aggregate(float value);
 
-  void combine(Aggregate &new_aggregate);
+  void combine(const Aggregate &new_aggregate);
 
   // Count of valid readings; i.e., not NaN, in the set of measurements
   size_t get_count() const { return this->count_; }
@@ -82,7 +82,7 @@ class Aggregate {
   // The reference timestamp (in milliseconds) that all timestamps in the sum are offset by
   uint32_t get_timestamp_reference() const { return this->timestamp_reference_; }
   void set_timestamp_reference(uint32_t timestamp_reference) { this->timestamp_reference_ = timestamp_reference; }
-  void combine_timestamp(const Aggregate &a, const Aggregate &b);
+  // void combine_timestamp(const Aggregate &a, const Aggregate &b);
 
   // Return the sample variance of measurements
   float compute_variance() const;
@@ -95,6 +95,8 @@ class Aggregate {
 
   // Return the slope of the line of best fit over the window
   float compute_trend() const;
+
+  Aggregate operator+(const Aggregate &b);
 
  protected:
   /*

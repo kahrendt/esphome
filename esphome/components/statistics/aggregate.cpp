@@ -50,7 +50,14 @@ Aggregate::Aggregate(float value) {
   }
 }
 
-void Aggregate::combine(Aggregate &new_aggregate) {
+Aggregate Aggregate::operator+(const Aggregate &b) {
+  Aggregate combined = *this;
+  combined.combine(b);
+
+  return combined;
+}
+
+void Aggregate::combine(const Aggregate &new_aggregate) {
   this->combine_count(*this, new_aggregate);
   this->combine_max(*this, new_aggregate);
   this->combine_min(*this, new_aggregate);
@@ -79,9 +86,12 @@ void Aggregate::combine_mean(const Aggregate &a, const Aggregate &b) {
   } else if (std::isnan(b.get_mean())) {
     this->mean_ = a.get_mean();
   } else {
-    this->mean_ =
-        (a.get_mean() * static_cast<double>(a.get_count()) + b.get_mean() * static_cast<double>(b.get_count())) /
-        (static_cast<double>(a.get_count() + b.get_count()));
+    float delta = b.get_mean() - a.get_mean();
+    this->mean_ = a.get_mean() +
+                  delta * (static_cast<double>(b.get_count())) / (static_cast<double>(a.get_count() + b.get_count()));
+    // this->mean_ =
+    //     (a.get_mean() * static_cast<double>(a.get_count()) + b.get_mean() * static_cast<double>(b.get_count())) /
+    //     (static_cast<double>(a.get_count() + b.get_count()));
   }
 }
 
