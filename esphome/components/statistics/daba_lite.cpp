@@ -23,45 +23,6 @@ DABALite::DABALite(DABAEnabledAggregateConfiguration config, size_t capacity) {
   this->set_capacity(capacity);
 }
 
-float DABALite::aggregated_count() {
-  this->update_current_aggregate_();
-  return this->current_aggregate_.get_count();
-}
-
-float DABALite::aggregated_max() {
-  this->update_current_aggregate_();
-  return this->current_aggregate_.get_max();
-}
-
-float DABALite::aggregated_min() {
-  this->update_current_aggregate_();
-  return this->current_aggregate_.get_min();
-}
-
-float DABALite::aggregated_mean() {
-  this->update_current_aggregate_();
-  return this->current_aggregate_.get_mean();
-}
-
-float DABALite::aggregated_variance() {
-  this->update_current_aggregate_();
-  return this->current_aggregate_.compute_variance();
-}
-
-float DABALite::aggregated_std_dev() {
-  this->update_current_aggregate_();
-  return this->current_aggregate_.compute_std_dev();
-}
-
-float DABALite::aggregated_covariance() {
-  this->update_current_aggregate_();
-  return this->current_aggregate_.compute_covariance();
-}
-float DABALite::aggregated_trend() {
-  this->update_current_aggregate_();
-  return this->current_aggregate_.compute_trend();
-}
-
 // Set capacity (and reserve in memory) of the circular queues for the desired statistics
 //  - returns whether memory was successfully allocated
 bool DABALite::set_capacity(size_t window_size) {
@@ -156,16 +117,14 @@ void DABALite::clear() {
 // Insert value at end of circular queue and step DABA Lite algorithm
 void DABALite::insert(float value) {
   Aggregate lifted = Aggregate(value);
-  // this->lift_(value);
-  this->back_sum_ = this->combine_(this->back_sum_, lifted);
+
+  this->back_sum_ = this->back_sum_ + lifted;
 
   this->emplace_(lifted, this->e_.get_index());
 
   ++this->e_;
   ++this->size_;
   this->step_();
-
-  this->is_current_aggregate_updated_ = false;
 }
 
 // Remove value at start of circular queue and step DABA Lite algorithm
@@ -174,59 +133,17 @@ void DABALite::evict() {
   --this->size_;
 
   this->step_();
-
-  this->is_current_aggregate_updated_ = false;
 }
 
 Aggregate DABALite::get_current_aggregate() {
-  this->update_current_aggregate_();
-  return this->current_aggregate_;
-}
+  if (this->size() > 0) {
+    Aggregate alpha = this->get_alpha_();
+    Aggregate back = this->get_back_();
 
-// Update current_aggregate_ to account for latest changes
-void DABALite::update_current_aggregate_() {
-  if (!this->is_current_aggregate_updated_) {
-    if (this->size() > 0) {
-      Aggregate alpha = this->get_alpha_();
-      Aggregate back = this->get_back_();
-
-      this->current_aggregate_ = this->combine_(alpha, back);
-    } else {
-      this->current_aggregate_ = this->identity_class_;
-    }
+    return alpha + back;
   }
-  this->is_current_aggregate_updated_ = true;
+  return this->identity_class_;
 }
-
-// // Compute aggregates for a single measurement v and return it as an Aggregate
-// Aggregate DABALite::lift_(float v) {
-//   const uint32_t now = millis();
-
-//   Aggregate part = this->identity_class_;
-
-//   if (!std::isnan(v)) {
-//     if (this->config_.max)
-//       part.set_max(v);
-//     if (this->config_.min)
-//       part.set_min(v);
-//     if (this->config_.count)
-//       part.set_count(1);
-//     if (this->config_.mean)
-//       part.set_mean(v);
-//     if (this->config_.m2)
-//       part.set_m2(0.0);
-//     if (this->config_.c2)
-//       part.set_c2(0.0);
-//     if (this->config_.timestamp_m2)
-//       part.set_timestamp_m2(0.0);
-//     if (this->config_.timestamp_mean) {
-//       part.set_timestamp_sum(0);
-//       part.set_timestamp_reference(now);
-//     }
-//   }
-
-//   return part;
-// }
 
 // Store an Aggregate at specified index only in the enabled queues
 void DABALite::emplace_(const Aggregate &value, size_t index) {
@@ -248,32 +165,6 @@ void DABALite::emplace_(const Aggregate &value, size_t index) {
   }
   if (this->config_.timestamp_m2)
     this->timestamp_m2_queue_[index] = value.get_timestamp_m2();
-}
-
-// Combine Aggregates for two disjoint sets of measurements
-Aggregate DABALite::combine_(const Aggregate &a, const Aggregate &b) {
-  Aggregate part;
-
-  if (this->config_.max)
-    part.combine_max(a, b);
-  if (this->config_.min)
-    part.combine_min(a, b);
-  if (this->config_.count)
-    part.combine_count(a, b);
-  if (this->config_.mean)
-    part.combine_mean(a, b);
-  if (this->config_.m2)
-    part.combine_m2(a, b);
-  if (this->config_.c2)
-    part.combine_c2(a, b);
-  if (this->config_.timestamp_mean) {
-    part.combine_timestamp_sum(a, b);
-  }
-
-  if (this->config_.timestamp_m2)
-    part.combine_timestamp_m2(a, b);
-
-  return part;
 }
 
 // Return aggregates at a given index in the queues
@@ -316,13 +207,13 @@ void DABALite::step_() {
       --this->a_;
       Aggregate old_a = this->lower_(this->a_.get_index());
 
-      this->emplace_(combine_(old_a, prev_delta), this->a_.get_index());
+      this->emplace_(old_a + prev_delta, this->a_.get_index());
     }
 
     if (this->l_ != this->r_) {
       Aggregate old_l = this->lower_(this->l_.get_index());
 
-      this->emplace_(combine_(old_l, this->mid_sum_), this->l_.get_index());
+      this->emplace_(old_l + this->mid_sum_, this->l_.get_index());
       ++this->l_;
     } else {
       ++this->l_;
