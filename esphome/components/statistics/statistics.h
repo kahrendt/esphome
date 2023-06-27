@@ -123,7 +123,6 @@ class StatisticsComponent : public Component {
 
   // DABA Lite implementation for storing measurements and computing aggregate statistics over the sliding window
   DABALite *partial_stats_queue_{nullptr};
-  Aggregate running_aggregate_{};
 
   std::vector<Aggregate> running_queue_;
 
