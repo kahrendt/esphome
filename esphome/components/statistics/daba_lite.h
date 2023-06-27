@@ -59,7 +59,7 @@ class DABALite {
   float *m2_queue_{nullptr};
   float *c2_queue_{nullptr};
   float *timestamp_m2_queue_{nullptr};
-  int32_t *timestamp_sum_queue_{nullptr};
+  float *timestamp_mean_queue_{nullptr};
   uint32_t *timestamp_reference_queue_{nullptr};
 
   DABAEnabledAggregateConfiguration config_{};
