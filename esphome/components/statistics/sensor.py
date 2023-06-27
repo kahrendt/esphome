@@ -27,6 +27,7 @@ StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
 
 CONF_SLIDING_WINDOW = "sliding_window"
 CONF_RUNNING = "running"
+CONF_RESET_EVERY = "reset_every"
 
 CONF_MEAN = "mean"
 CONF_MAX = "max"
@@ -92,6 +93,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.GenerateID(): cv.declare_id(StatisticsComponent),
         cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
+        cv.Optional(CONF_RESET_EVERY, default=1000): cv.positive_int,
         cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
         cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
         cv.Optional(CONF_TYPE, default=CONF_SLIDING_WINDOW): cv.enum(
@@ -192,6 +194,7 @@ async def to_code(config):
 
     cg.add(var.set_statistics_type(config[CONF_TYPE]))
 
+    cg.add(var.set_reset_every(config[CONF_RESET_EVERY]))
     cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
     cg.add(var.set_send_every(config[CONF_SEND_EVERY]))
     cg.add(var.set_first_at(config[CONF_SEND_FIRST_AT]))

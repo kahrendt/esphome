@@ -85,14 +85,8 @@ class DABALite {
   // Running aggregates for DABA Lite algorithm
   Aggregate mid_sum_, back_sum_;
 
-  // // Compute aggregates for a single measurement v and return it as an Aggregate
-  // Aggregate lift_(float v);
-
   // Store an Aggregate at specified index only in the enabled queues
   void emplace_(const Aggregate &value, size_t index);
-
-  // // Combine Aggregates for two disjoint sets of measurements
-  // Aggregate combine_(const Aggregate &a, const Aggregate &b);
 
   // Return aggregates at a given index in the queues
   Aggregate lower_(size_t index);
