@@ -92,6 +92,8 @@ class StatisticsComponent : public Component {
   void set_send_every(size_t send_every) { this->send_every_ = send_every; }
   void set_first_at(size_t send_first_at) { this->send_at_ = send_first_at; }
 
+  void set_reset_every(size_t reset_every) { this->reset_every_ = reset_every; }
+
   void set_time_conversion_factor(TimeConversionFactor conversion_factor) {
     this->time_conversion_factor_ = conversion_factor;
   }
@@ -125,6 +127,9 @@ class StatisticsComponent : public Component {
   size_t window_size_{};
   size_t send_every_{};
   size_t send_at_{};
+
+  size_t reset_every_{};
+  size_t reset_count_{0};
 
   StatisticsType statistics_type_{STATISTICS_TYPE_SLIDING_WINDOW};
 };

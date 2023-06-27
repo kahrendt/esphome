@@ -170,9 +170,8 @@ void StatisticsComponent::handle_new_value_(float value) {
     // Add new value to end of sliding window
     this->partial_stats_queue_->insert(value);
   } else {
-    // Aggregate new_aggregate = Aggregate(value);
-    // this->running_aggregate_.combine(new_aggregate);
     this->running_aggregate_ = this->running_aggregate_ + Aggregate(value);
+    ++this->reset_count_;
   }
 
   // Ensure we only push updates for the sensors based on the configuration
@@ -225,6 +224,11 @@ void StatisticsComponent::handle_new_value_(float value) {
 
       this->trend_sensor_->publish_state(converted_trend);
     }
+  }
+
+  if (this->reset_count_ == this->reset_every_) {
+    this->reset();
+    this->reset_count_ = 0;
   }
 }
 

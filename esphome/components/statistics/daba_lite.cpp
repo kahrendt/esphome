@@ -12,7 +12,6 @@
 #include "circular_queue_index.h"
 #include "daba_lite.h"
 
-#include "esphome/core/hal.h"      // necessary for millis()
 #include "esphome/core/helpers.h"  // necessary for ExternalRAMAllocator
 
 namespace esphome {
