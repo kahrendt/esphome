@@ -83,8 +83,8 @@ bool DABALite::set_capacity(size_t window_size) {
   }
 
   if (this->config_.timestamp_mean) {
-    this->timestamp_sum_queue_ = int32_t_allocator.allocate(this->window_size_);
-    if (this->timestamp_sum_queue_ == nullptr) {
+    this->timestamp_mean_queue_ = float_allocator.allocate(this->window_size_);
+    if (this->timestamp_mean_queue_ == nullptr) {
       return false;
     }
 
@@ -159,7 +159,7 @@ void DABALite::emplace_(const Aggregate &value, size_t index) {
   if (this->config_.c2)
     this->c2_queue_[index] = value.get_c2();
   if (this->config_.timestamp_mean) {
-    this->timestamp_sum_queue_[index] = value.get_timestamp_sum();
+    this->timestamp_mean_queue_[index] = value.get_timestamp_mean();
     this->timestamp_reference_queue_[index] = value.get_timestamp_reference();
   }
   if (this->config_.timestamp_m2)
@@ -185,7 +185,7 @@ Aggregate DABALite::lower_(size_t index) {
   if (this->config_.timestamp_m2)
     aggregate.set_timestamp_m2(this->timestamp_m2_queue_[index]);
   if (this->config_.timestamp_mean) {
-    aggregate.set_timestamp_sum(this->timestamp_sum_queue_[index]);
+    aggregate.set_timestamp_mean(this->timestamp_mean_queue_[index]);
     aggregate.set_timestamp_reference(this->timestamp_reference_queue_[index]);
   }
 

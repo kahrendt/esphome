@@ -27,6 +27,7 @@
 #include "aggregate.h"
 
 #include "esphome/core/hal.h"  // necessary for millis()
+#include "esphome/core/log.h"
 
 #include <algorithm>  // necessary for std::min and std::max functions
 #include <cmath>      // necessary for NaN
@@ -45,8 +46,8 @@ Aggregate::Aggregate(float value) {
     this->m2_ = 0.0;
     this->c2_ = 0.0;
     this->timestamp_m2_ = 0.0;
-    this->timestamp_sum_ = 0;
     this->timestamp_reference_ = millis();
+    this->timestamp_mean_ = 0.0;
   }
 }
 
@@ -54,8 +55,8 @@ Aggregate Aggregate::operator+(const Aggregate &b) {
   size_t a_count = this->get_count();
   size_t b_count = b.get_count();
 
-  size_t cast_a_count = static_cast<double>(a_count);
-  size_t cast_b_count = static_cast<double>(b_count);
+  double cast_a_count = static_cast<double>(a_count);
+  double cast_b_count = static_cast<double>(b_count);
 
   float a_min = this->get_min();
   float b_min = b.get_min();
@@ -72,14 +73,14 @@ Aggregate Aggregate::operator+(const Aggregate &b) {
   double a_c2 = static_cast<double>(this->get_c2());
   double b_c2 = static_cast<double>(b.get_c2());
 
-  int32_t a_timestamp_sum = this->get_timestamp_sum();
-  int32_t b_timestamp_sum = b.get_timestamp_sum();
-
   uint32_t a_timestamp_reference = this->get_timestamp_reference();
   uint32_t b_timestamp_reference = b.get_timestamp_reference();
 
   double a_timestamp_m2 = this->get_timestamp_m2();
   double b_timestamp_m2 = b.get_timestamp_m2();
+
+  double a_timestamp_mean = this->get_timestamp_mean();
+  double b_timestamp_mean = b.get_timestamp_mean();
 
   Aggregate combined;
 
@@ -88,25 +89,30 @@ Aggregate Aggregate::operator+(const Aggregate &b) {
   combined.max_ = std::max(a_max, b_max);
   combined.min_ = std::min(a_min, b_min);
 
-  combined.timestamp_reference_ = this->normalize_timestamp_sums_(a_timestamp_sum, a_timestamp_reference, a_count,
-                                                                  b_timestamp_sum, b_timestamp_reference, b_count);
-  combined.timestamp_sum_ = a_timestamp_sum + b_timestamp_sum;
+  combined.timestamp_reference_ = this->normalize_timestamp_means_(a_timestamp_mean, a_timestamp_reference, a_count,
+                                                                   b_timestamp_mean, b_timestamp_reference, b_count);
 
-  if (!a_count && !b_count) {
+  if ((a_count == 0) && (b_count == 0)) {
     combined.mean_ = NAN;
     combined.m2_ = NAN;
     combined.c2_ = NAN;
     combined.timestamp_m2_ = NAN;
-  } else if (!a_count) {
+    combined.timestamp_mean_ = NAN;
+    // combined.timestamp_reference_ = 0;
+  } else if (a_count == 0) {
     combined.mean_ = b_mean;
     combined.m2_ = b_m2;
     combined.c2_ = b_c2;
     combined.timestamp_m2_ = b_timestamp_m2;
-  } else if (!b_count) {
+    combined.timestamp_mean_ = b_timestamp_mean;
+    // combined.timestamp_reference_ = b_timestamp_reference;
+  } else if (b_count == 0) {
     combined.mean_ = a_mean;
     combined.m2_ = a_m2;
     combined.c2_ = a_c2;
     combined.timestamp_m2_ = a_m2;
+    combined.timestamp_mean_ = a_timestamp_mean;
+    // combined.timestamp_reference_ = a_timestamp_reference;
   } else {
     double delta = b_mean - a_mean;
 
@@ -115,22 +121,15 @@ Aggregate Aggregate::operator+(const Aggregate &b) {
     // compute M2 quantity for Welford's algorithm which can determine the variance
     combined.m2_ = a_m2 + b_m2 + delta * delta * cast_a_count * cast_b_count / (cast_a_count + cast_b_count);
 
-    // use integer operations as much as possible to reduce floating point arithmetic when dealing with timestamps
-    // store timestamp_delta as int64_t, as if we have a larger number of samples over a large time period, an int32_t
-    // quickly overflows
-    int64_t timestamp_delta = b_timestamp_sum * a_count - a_timestamp_sum * b_count;
-    uint64_t timestamp_delta_squared = timestamp_delta * timestamp_delta;
+    double timestamp_delta = b_timestamp_mean - a_timestamp_mean;
+    combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta * cast_b_count / (cast_a_count + cast_b_count);
 
-    // compute C2 quantity for an extension of Welford's algorithm which can determine the covariance of timestamps and
-    // measurements
-    combined.c2_ =
-        this->get_c2() + b.get_c2() + static_cast<double>(timestamp_delta) * delta / (cast_a_count + cast_b_count);
+    double timestamp_delta_squared = timestamp_delta * timestamp_delta;
 
-    size_t timestamp_m2_denominator = a_count * b_count * (a_count + b_count);
+    combined.c2_ = a_c2 + b_c2 + timestamp_delta * delta * cast_a_count * cast_b_count / (cast_a_count + cast_b_count);
 
-    combined.timestamp_m2_ =
-        a_timestamp_m2 + b_timestamp_m2 +
-        static_cast<double>(timestamp_delta_squared) / static_cast<double>(timestamp_m2_denominator);
+    combined.timestamp_m2_ = a_timestamp_m2 + b_timestamp_m2 +
+                             timestamp_delta_squared * cast_a_count * cast_b_count / (cast_a_count + cast_b_count);
   }
 
   return combined;
@@ -156,11 +155,9 @@ float Aggregate::compute_trend() const {
   return NAN;
 }
 
-// Given two samples a and b, normalize the timestamp sums so that they are both in reference to the larger timestamp
-// returns the timestamp both sums are in reference to
-uint32_t Aggregate::normalize_timestamp_sums_(int32_t &a_sum, const uint32_t &a_timestamp_reference,
-                                              const size_t &a_count, int32_t &b_sum,
-                                              const uint32_t &b_timestamp_reference, const size_t &b_count) {
+double Aggregate::normalize_timestamp_means_(double &a_mean, const uint32_t &a_timestamp_reference,
+                                             const size_t &a_count, double &b_mean,
+                                             const uint32_t &b_timestamp_reference, const size_t &b_count) {
   if (a_count == 0) {
     // a is null, so b is always the more recent timestamp; no adjustments necessary
     return b_timestamp_reference;
@@ -179,7 +176,7 @@ uint32_t Aggregate::normalize_timestamp_sums_(int32_t &a_sum, const uint32_t &a_
     // normalize the a_sum using the b_timestamp
 
     uint32_t timestamp_delta = b_timestamp_reference - a_timestamp_reference;
-    a_sum = a_sum - timestamp_delta * a_count;  // a_sum is now offset and normalized to b_timestamp_reference
+    a_mean = a_mean - timestamp_delta;  // a_sum is now offset and normalized to b_timestamp_reference
 
     return b_timestamp_reference;  // both timestamps are in reference to b_timestamp_reference
   } else {
@@ -187,7 +184,7 @@ uint32_t Aggregate::normalize_timestamp_sums_(int32_t &a_sum, const uint32_t &a_
     // normalize the b_sum using the a_timestamp
 
     uint32_t timestamp_delta = a_timestamp_reference - b_timestamp_reference;
-    b_sum = b_sum - timestamp_delta * b_count;  // b_sum is now offset and normalized to a_timestamp_reference
+    b_mean = b_mean - timestamp_delta;  // b_sum is now offset and normalized to a_timestamp_reference
 
     return a_timestamp_reference;
   }
