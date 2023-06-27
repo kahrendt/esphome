@@ -65,13 +65,12 @@ class Aggregate {
   float get_timestamp_m2() const { return this->timestamp_m2_; }
   void set_timestamp_m2(float timestamp_m2) { this->timestamp_m2_ = timestamp_m2; }
 
-  // Offset sum (by the reference) of the timestamps in the set
-  int64_t get_timestamp_sum() const { return this->timestamp_sum_; }
-  void set_timestamp_sum(int32_t timestamp_sum) { this->timestamp_sum_ = timestamp_sum; }
-
   // The reference timestamp (in milliseconds) that all timestamps in the sum are offset by
   uint32_t get_timestamp_reference() const { return this->timestamp_reference_; }
   void set_timestamp_reference(uint32_t timestamp_reference) { this->timestamp_reference_ = timestamp_reference; }
+
+  float get_timestamp_mean() const { return this->timestamp_mean_; }
+  void set_timestamp_mean(double timestamp_mean) { this->timestamp_mean_ = timestamp_mean; }
 
   // Return the sample variance of measurements
   float compute_variance() const;
@@ -113,17 +112,16 @@ class Aggregate {
   // Quantity used in Welford's algorihtm for finding the variance of timestamps in the set of measurements
   double timestamp_m2_{NAN};
 
-  // Sum of all the timestamps in the set of measurements - offset by the reference
-  int32_t timestamp_sum_{0};
-
   // The reference timestamp for the timestamp sum values;
   // e.g., if we have one raw timestamp at 5 ms and the reference is 5 ms, we store 0 ms in timestamp_sum
   uint32_t timestamp_reference_{0};
 
+  double timestamp_mean_{NAN};
+
   // Given two samples, normalize the timestamp sums so that they are both in reference to the larger timestamp
   // returns the timestamp both sums are in reference to
-  uint32_t normalize_timestamp_sums_(int32_t &a_timestamp_sum, uint32_t const &a_timestamp, const size_t &a_count,
-                                     int32_t &b_timestamp_sum, const uint32_t &b_timestamp, const size_t &b_count);
+  double normalize_timestamp_means_(double &a_mean, const uint32_t &a_timestamp_reference, const size_t &a_count,
+                                    double &b_mean, const uint32_t &b_timestamp_reference, const size_t &b_count);
 };
 
 }  // namespace statistics
