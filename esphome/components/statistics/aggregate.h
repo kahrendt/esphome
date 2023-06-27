@@ -42,34 +42,34 @@ class Aggregate {
   void set_count(size_t count) { this->count_ = count; }
 
   // Maximum value of the set of measurements
-  float get_max() const { return this->max_; }
-  void set_max(float max) { this->max_ = max; }
+  double get_max() const { return this->max_; }
+  void set_max(double max) { this->max_ = max; }
 
   // minimum value in the set of measurements
-  float get_min() const { return this->min_; }
-  void set_min(float min) { this->min_ = min; }
+  double get_min() const { return this->min_; }
+  void set_min(double min) { this->min_ = min; }
 
   // average value in the set of measurements
-  float get_mean() const { return this->mean_; }
+  double get_mean() const { return this->mean_; }
   void set_mean(double mean) { this->mean_ = mean; }
 
   // M2 from Welford's algorithm; used to compute variance
-  float get_m2() const { return this->m2_; }
-  void set_m2(float m2) { this->m2_ = m2; }
+  double get_m2() const { return this->m2_; }
+  void set_m2(double m2) { this->m2_ = m2; }
 
   // C2 from Welford's algorithm; used to compute the covariance of the measurements and timestamps
-  float get_c2() const { return this->c2_; }
+  double get_c2() const { return this->c2_; }
   void set_c2(float c2) { this->c2_ = c2; }
 
   // M2 from Welford's algorithm for timestamps; used to compute variance of timestamps
-  float get_timestamp_m2() const { return this->timestamp_m2_; }
-  void set_timestamp_m2(float timestamp_m2) { this->timestamp_m2_ = timestamp_m2; }
+  double get_timestamp_m2() const { return this->timestamp_m2_; }
+  void set_timestamp_m2(double timestamp_m2) { this->timestamp_m2_ = timestamp_m2; }
 
   // The reference timestamp (in milliseconds) that all timestamps in the sum are offset by
   uint32_t get_timestamp_reference() const { return this->timestamp_reference_; }
   void set_timestamp_reference(uint32_t timestamp_reference) { this->timestamp_reference_ = timestamp_reference; }
 
-  float get_timestamp_mean() const { return this->timestamp_mean_; }
+  double get_timestamp_mean() const { return this->timestamp_mean_; }
   void set_timestamp_mean(double timestamp_mean) { this->timestamp_mean_ = timestamp_mean; }
 
   // Return the sample variance of measurements
