@@ -144,7 +144,6 @@ void StatisticsComponent::setup() {
       return;
     }
   } else {
-    // this->running_aggregate_ = Aggregate();
     this->insert_running_queue(Aggregate());
   }
 
@@ -158,14 +157,11 @@ void StatisticsComponent::setup() {
 void StatisticsComponent::reset() {
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
     this->partial_stats_queue_->clear();
-  else {
+  else
     this->running_queue_.clear();
-    this->running_aggregate_ = Aggregate();
-  }
 }
 
 void StatisticsComponent::insert_running_queue(Aggregate new_aggregate) {
-  static size_t max_queue_size = 1;
   if (this->running_queue_.size() == 0) {
     this->running_queue_.push_back(new_aggregate);
   } else {
@@ -177,10 +173,6 @@ void StatisticsComponent::insert_running_queue(Aggregate new_aggregate) {
       most_recent = this->running_queue_.back();
     }
 
-    if (this->running_queue_.size() > max_queue_size) {
-      ++max_queue_size;
-      ESP_LOGW(TAG, "maximum running queue size increased to %d", this->running_queue_.size());
-    }
     this->running_queue_.push_back(new_aggregate);
   }
 }
@@ -208,8 +200,6 @@ void StatisticsComponent::handle_new_value_(float value) {
     // Add new value to end of sliding window
     this->partial_stats_queue_->insert(value);
   } else {
-    // this->partial_stats_queue_->insert(value);
-    // this->running_aggregate_ = this->running_aggregate_ + Aggregate(value);
     this->insert_running_queue(Aggregate(value));
 
     ++this->reset_count_;
@@ -217,20 +207,21 @@ void StatisticsComponent::handle_new_value_(float value) {
 
   // Ensure we only push updates for the sensors based on the configuration
   if (++this->send_at_ >= this->send_every_) {
+    Aggregate current_aggregate;
+
     this->send_at_ = 0;
 
-    if (this->statistics_type_ == STATISTICS_TYPE_RUNNING) {
-      this->running_aggregate_ = this->compute_running_queue_aggregate();
-    }
+    if (this->statistics_type_ == STATISTICS_TYPE_RUNNING)
+      current_aggregate = this->compute_running_queue_aggregate();
 
     if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
-      this->running_aggregate_ = this->partial_stats_queue_->get_current_aggregate();
+      current_aggregate = this->partial_stats_queue_->get_current_aggregate();
 
     if (this->count_sensor_)
-      this->count_sensor_->publish_state(this->running_aggregate_.get_count());
+      this->count_sensor_->publish_state(current_aggregate.get_count());
 
     if (this->max_sensor_) {
-      float max = this->running_aggregate_.get_max();
+      float max = current_aggregate.get_max();
       if (std::isinf(max)) {  // default aggregated max for 0 measuremnts is -infinity, switch to NaN for HA
         this->max_sensor_->publish_state(NAN);
       } else {
@@ -239,7 +230,7 @@ void StatisticsComponent::handle_new_value_(float value) {
     }
 
     if (this->min_sensor_) {
-      float min = this->running_aggregate_.get_min();
+      float min = current_aggregate.get_min();
       if (std::isinf(min)) {  // default aggregated min for 0 measurements is infinity, switch to NaN for HA
         this->min_sensor_->publish_state(NAN);
       } else {
@@ -248,23 +239,23 @@ void StatisticsComponent::handle_new_value_(float value) {
     }
 
     if (this->mean_sensor_)
-      this->mean_sensor_->publish_state(this->running_aggregate_.get_mean());
+      this->mean_sensor_->publish_state(current_aggregate.get_mean());
 
     if (this->variance_sensor_)
-      this->variance_sensor_->publish_state(this->running_aggregate_.compute_variance());
+      this->variance_sensor_->publish_state(current_aggregate.compute_variance());
 
     if (this->std_dev_sensor_)
-      this->std_dev_sensor_->publish_state(this->running_aggregate_.compute_std_dev());
+      this->std_dev_sensor_->publish_state(current_aggregate.compute_std_dev());
 
     if (this->covariance_sensor_) {
-      float covariance_ms = this->running_aggregate_.compute_covariance();
+      float covariance_ms = current_aggregate.compute_covariance();
       float converted_covariance = covariance_ms / this->time_conversion_factor_;
 
       this->covariance_sensor_->publish_state(converted_covariance);
     }
 
     if (this->trend_sensor_) {
-      float trend_ms = this->running_aggregate_.compute_trend();
+      float trend_ms = current_aggregate.compute_trend();
       float converted_trend = trend_ms * this->time_conversion_factor_;
 
       this->trend_sensor_->publish_state(converted_trend);
