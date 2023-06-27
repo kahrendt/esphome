@@ -51,144 +51,95 @@ Aggregate::Aggregate(float value) {
 }
 
 Aggregate Aggregate::operator+(const Aggregate &b) {
-  Aggregate combined = *this;
-  combined.combine(b);
+  size_t a_count = this->get_count();
+  size_t b_count = b.get_count();
+
+  size_t cast_a_count = static_cast<double>(a_count);
+  size_t cast_b_count = static_cast<double>(b_count);
+
+  float a_min = this->get_min();
+  float b_min = b.get_min();
+
+  float a_max = this->get_max();
+  float b_max = b.get_max();
+
+  double a_mean = static_cast<double>(this->get_mean());
+  double b_mean = static_cast<double>(b.get_mean());
+
+  double a_m2 = static_cast<double>(this->get_m2());
+  double b_m2 = static_cast<double>(b.get_m2());
+
+  double a_c2 = static_cast<double>(this->get_c2());
+  double b_c2 = static_cast<double>(b.get_c2());
+
+  int32_t a_timestamp_sum = this->get_timestamp_sum();
+  int32_t b_timestamp_sum = b.get_timestamp_sum();
+
+  uint32_t a_timestamp_reference = this->get_timestamp_reference();
+  uint32_t b_timestamp_reference = b.get_timestamp_reference();
+
+  uint32_t a_timestamp_m2 = this->get_timestamp_m2();
+  uint32_t b_timestamp_m2 = b.get_timestamp_m2();
+
+  Aggregate combined;
+
+  combined.count_ = a_count + b_count;
+
+  combined.max_ = std::max(a_max, b_max);
+  combined.min_ = std::min(a_min, b_min);
+
+  combined.timestamp_reference_ = this->normalize_timestamp_sums_(a_timestamp_sum, a_timestamp_reference, a_count,
+                                                                  b_timestamp_sum, b_timestamp_reference, b_count);
+  combined.timestamp_sum_ = a_timestamp_sum + b_timestamp_sum;
+
+  if (!a_count && !b_count) {
+    combined.mean_ = NAN;
+    combined.m2_ = NAN;
+    combined.c2_ = NAN;
+    combined.timestamp_m2_ = NAN;
+  } else if (!a_count) {
+    combined.mean_ = b_mean;
+    combined.m2_ = b_m2;
+    combined.c2_ = b_c2;
+    combined.timestamp_m2_ = b_timestamp_m2;
+  } else if (!b_count) {
+    combined.mean_ = a_mean;
+    combined.m2_ = a_m2;
+    combined.c2_ = a_c2;
+    combined.timestamp_m2_ = a_m2;
+  } else {
+    double delta = b_mean - a_mean;
+
+    combined.mean_ = a_mean + delta * cast_b_count / (cast_a_count + cast_b_count);
+
+    // compute M2 quantity for Welford's algorithm which can determine the variance
+    combined.m2_ = a_m2 + b_m2 + delta * delta * cast_a_count * cast_b_count / (cast_a_count + cast_b_count);
+
+    // use integer operations as much as possible to reduce floating point arithmetic when dealing with timestamps
+    // store timestamp_delta as int64_t, as if we have a larger number of samples over a large time period, an int32_t
+    // quickly overflows
+    int64_t timestamp_delta = b_timestamp_sum * a_count - a_timestamp_sum * b_count;
+    uint64_t timestamp_delta_squared = timestamp_delta * timestamp_delta;
+
+    // compute C2 quantity for an extension of Welford's algorithm which can determine the covariance of timestamps and
+    // measurements
+    combined.c2_ =
+        this->get_c2() + b.get_c2() + static_cast<double>(timestamp_delta) * delta / (cast_a_count + cast_b_count);
+
+    size_t timestamp_m2_denominator = a_count * b_count * (a_count + b_count);
+
+    combined.timestamp_m2_ =
+        a_timestamp_m2 + b_timestamp_m2 +
+        static_cast<double>(timestamp_delta_squared) / static_cast<double>(timestamp_m2_denominator);
+  }
 
   return combined;
 }
 
-void Aggregate::combine(const Aggregate &new_aggregate) {
-  this->combine_count(*this, new_aggregate);
-  this->combine_max(*this, new_aggregate);
-  this->combine_min(*this, new_aggregate);
-  this->combine_mean(*this, new_aggregate);
-  this->combine_m2(*this, new_aggregate);
-  this->combine_c2(*this, new_aggregate);
-  this->combine_timestamp_sum(*this, new_aggregate);
-  this->combine_timestamp_m2(*this, new_aggregate);
-}
-
-// Parallel algorithm for combining two counts from non-overlapping samples
-void Aggregate::combine_count(const Aggregate &a, const Aggregate &b) { this->count_ = a.get_count() + b.get_count(); }
-
-// Parallel algorithm for combining two maximums from non-overlapping samples
-void Aggregate::combine_max(const Aggregate &a, const Aggregate &b) { this->max_ = std::max(a.get_max(), b.get_max()); }
-
-// Parallel algorithm for combining two minimums from non-overlapping samples
-void Aggregate::combine_min(const Aggregate &a, const Aggregate &b) { this->min_ = std::min(a.get_min(), b.get_min()); }
-
-// Parallel algorithm for combining two means from non-overlapping samples
-void Aggregate::combine_mean(const Aggregate &a, const Aggregate &b) {
-  if (std::isnan(a.get_mean()) && std::isnan(b.get_mean())) {
-    this->mean_ = NAN;
-  } else if (std::isnan(a.get_mean())) {
-    this->mean_ = b.get_mean();
-  } else if (std::isnan(b.get_mean())) {
-    this->mean_ = a.get_mean();
-  } else {
-    float delta = b.get_mean() - a.get_mean();
-    this->mean_ = a.get_mean() +
-                  delta * (static_cast<double>(b.get_count())) / (static_cast<double>(a.get_count() + b.get_count()));
-    // this->mean_ =
-    //     (a.get_mean() * static_cast<double>(a.get_count()) + b.get_mean() * static_cast<double>(b.get_count())) /
-    //     (static_cast<double>(a.get_count() + b.get_count()));
-  }
-}
-
-// Parallel algorithm for combining two M2 values (for determining variance) from two non-overlapping samples
-void Aggregate::combine_m2(const Aggregate &a, const Aggregate &b) {
-  if (std::isnan(a.get_m2()) && std::isnan(b.get_m2())) {
-    this->m2_ = NAN;
-  } else if (std::isnan(a.get_m2())) {
-    this->m2_ = b.get_m2();
-  } else if (std::isnan(b.get_m2())) {
-    this->m2_ = a.get_m2();
-  } else {
-    double delta = b.get_mean() - a.get_mean();
-    this->m2_ = a.get_m2() + b.get_m2() +
-                delta * delta * (static_cast<double>(a.get_count())) * (static_cast<double>(b.get_count())) /
-                    ((static_cast<double>(a.get_count())) + (static_cast<double>(b.get_count())));
-  }
-}
-
-// Parallel algorithm for combining two timestamp sums from non-overlapping samples using a normalized reference
-void Aggregate::combine_timestamp_sum(const Aggregate &a, const Aggregate &b) {
-  int32_t a_sum = a.get_timestamp_sum();
-  int32_t b_sum = b.get_timestamp_sum();
-
-  this->timestamp_reference_ = this->normalize_timestamp_sums_(a_sum, a.get_timestamp_reference(), a.get_count(), b_sum,
-                                                               b.get_timestamp_reference(), b.get_count());
-  this->timestamp_sum_ = a_sum + b_sum;
-}
-
-// Parallel algorithm for combining two C2 values (for determining covariance) from non-overlapping samples
-void Aggregate::combine_c2(const Aggregate &a, const Aggregate &b) {
-  float a_c2 = a.get_c2();
-  float b_c2 = b.get_c2();
-
-  int32_t a_timestamp_sum = a.get_timestamp_sum();
-  int32_t b_timestamp_sum = b.get_timestamp_sum();
-  uint32_t a_timestamp_reference = a.get_timestamp_reference();
-  uint32_t b_timestamp_reference = b.get_timestamp_reference();
-  size_t a_count = a.get_count();
-  size_t b_count = b.get_count();
-
-  if (std::isnan(a_c2) && std::isnan(b_c2)) {
-    this->c2_ = NAN;
-  } else if (std::isnan(a_c2)) {
-    this->c2_ = b_c2;
-    this->timestamp_reference_ = b_timestamp_reference;
-    this->timestamp_sum_ = b_timestamp_sum;
-  } else if (std::isnan(b_c2)) {
-    this->c2_ = a_c2;
-    this->timestamp_reference_ = a_timestamp_reference;
-    this->timestamp_sum_ = a_timestamp_sum;
-  } else {
-    // noramlize a_sum and b_sum so they are referenced from the same timestamp
-    this->normalize_timestamp_sums_(a_timestamp_sum, a_timestamp_reference, a_count, b_timestamp_sum,
-                                    b_timestamp_reference, b_count);
-
-    // use interger operations as much as possible to reduce floating point arithmetic
-    // store as int64_t, as if we have a larger number of samples over a large time period, an int32_t quickly overflows
-    int64_t timestamp_sum_difference = b_timestamp_sum * a_count - a_timestamp_sum * b_count;
-    size_t total_count_second_converted = (a_count + b_count);
-
-    float delta = b.get_mean() - a.get_mean();
-
-    // compute C2 quantity for an extension of Welford's algorithm which can determine the covariance of timestamps and
-    // measurements
-    this->c2_ = a_c2 + b_c2 + timestamp_sum_difference * delta / static_cast<double>(total_count_second_converted);
-  }
-}
-
-// Parallel algorithm for combining two timestamp M2 values (for finding the variance) from non-overlapping samples
-void Aggregate::combine_timestamp_m2(const Aggregate &a, const Aggregate &b) {
-  if (std::isnan(a.get_timestamp_m2()) && std::isnan(b.get_timestamp_m2())) {
-    this->timestamp_m2_ = NAN;
-  } else if (std::isnan(a.get_timestamp_m2())) {
-    this->timestamp_m2_ = b.get_timestamp_m2();
-  } else if (std::isnan(b.get_timestamp_m2())) {
-    this->timestamp_m2_ = a.get_timestamp_m2();
-  } else {
-    int32_t a_sum = a.get_timestamp_sum();
-    int32_t b_sum = b.get_timestamp_sum();
-
-    // noramlize a_sum and b_sum so they are referenced from the same timestamp
-    this->normalize_timestamp_sums_(a_sum, a.get_timestamp_reference(), a.get_count(), b_sum,
-                                    b.get_timestamp_reference(), b.get_count());
-
-    // use interger operations as much as possible to reduce floating point arithmetic
-    // store as int64_t, as if we have a larger number of samples over a large time period, an int32_t quickly overflows
-    int64_t delta = b_sum * a.get_count() - a_sum * b.get_count();
-    uint64_t delta_squared = delta * delta;
-
-    size_t denominator = a.get_count() * b.get_count() * (a.get_count() + b.get_count());
-
-    // compute M2 quantity for Welford's algorithm which can determine the variance
-    this->timestamp_m2_ = a.get_timestamp_m2() + b.get_timestamp_m2() +
-                          static_cast<double>(delta_squared) / static_cast<double>(denominator);
-  }
-}
+// Aggregate &Aggregate::operator+=(const Aggregate &rhs) {
+//   Aggregate copy = *this;
+//   return copy + *rhs;
+// }
 
 // Sample variance using Welford's algorithm (Bessel's correction is applied)
 float Aggregate::compute_variance() const { return this->m2_ / (this->count_ - 1); }

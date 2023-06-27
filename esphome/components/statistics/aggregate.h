@@ -37,52 +37,41 @@ class Aggregate {
   Aggregate();  // default constructor for a null measurement
   Aggregate(float value);
 
-  void combine(const Aggregate &new_aggregate);
-
   // Count of valid readings; i.e., not NaN, in the set of measurements
   size_t get_count() const { return this->count_; }
   void set_count(size_t count) { this->count_ = count; }
-  void combine_count(const Aggregate &a, const Aggregate &b);
 
   // Maximum value of the set of measurements
   float get_max() const { return this->max_; }
   void set_max(float max) { this->max_ = max; }
-  void combine_max(const Aggregate &a, const Aggregate &b);
 
   // minimum value in the set of measurements
   float get_min() const { return this->min_; }
   void set_min(float min) { this->min_ = min; }
-  void combine_min(const Aggregate &a, const Aggregate &b);
 
   // average value in the set of measurements
   float get_mean() const { return this->mean_; }
   void set_mean(double mean) { this->mean_ = mean; }
-  void combine_mean(const Aggregate &a, const Aggregate &b);
 
   // M2 from Welford's algorithm; used to compute variance
   float get_m2() const { return this->m2_; }
   void set_m2(float m2) { this->m2_ = m2; }
-  void combine_m2(const Aggregate &a, const Aggregate &b);
 
   // C2 from Welford's algorithm; used to compute the covariance of the measurements and timestamps
   float get_c2() const { return this->c2_; }
   void set_c2(float c2) { this->c2_ = c2; }
-  void combine_c2(const Aggregate &a, const Aggregate &b);
 
   // M2 from Welford's algorithm for timestamps; used to compute variance of timestamps
   float get_timestamp_m2() const { return this->timestamp_m2_; }
   void set_timestamp_m2(float timestamp_m2) { this->timestamp_m2_ = timestamp_m2; }
-  void combine_timestamp_m2(const Aggregate &a, const Aggregate &b);
 
   // Offset sum (by the reference) of the timestamps in the set
   int32_t get_timestamp_sum() const { return this->timestamp_sum_; }
   void set_timestamp_sum(int32_t timestamp_sum) { this->timestamp_sum_ = timestamp_sum; }
-  void combine_timestamp_sum(const Aggregate &a, const Aggregate &b);
 
   // The reference timestamp (in milliseconds) that all timestamps in the sum are offset by
   uint32_t get_timestamp_reference() const { return this->timestamp_reference_; }
   void set_timestamp_reference(uint32_t timestamp_reference) { this->timestamp_reference_ = timestamp_reference; }
-  // void combine_timestamp(const Aggregate &a, const Aggregate &b);
 
   // Return the sample variance of measurements
   float compute_variance() const;
@@ -97,6 +86,7 @@ class Aggregate {
   float compute_trend() const;
 
   Aggregate operator+(const Aggregate &b);
+  Aggregate &operator+=(const Aggregate &rhs);
 
  protected:
   /*
