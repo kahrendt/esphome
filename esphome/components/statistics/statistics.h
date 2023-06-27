@@ -48,6 +48,8 @@
 #include "esphome/core/automation.h"
 #include "esphome/components/sensor/sensor.h"
 
+#include <vector>
+
 namespace esphome {
 namespace statistics {
 
@@ -123,6 +125,8 @@ class StatisticsComponent : public Component {
   DABALite *partial_stats_queue_{nullptr};
   Aggregate running_aggregate_{};
 
+  std::vector<Aggregate> running_queue_;
+
   // mimic ESPHome's current filters behavior
   size_t window_size_{};
   size_t send_every_{};
@@ -132,6 +136,9 @@ class StatisticsComponent : public Component {
   size_t reset_count_{0};
 
   StatisticsType statistics_type_{STATISTICS_TYPE_SLIDING_WINDOW};
+
+  void insert_running_queue(Aggregate new_aggregate);
+  Aggregate compute_running_queue_aggregate();
 };
 
 // Based on the integration component reset action

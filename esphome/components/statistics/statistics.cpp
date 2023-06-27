@@ -47,6 +47,8 @@
 #include "esphome/core/hal.h"
 #include "esphome/components/sensor/sensor.h"
 
+#include <vector>
+
 namespace esphome {
 namespace statistics {
 
@@ -142,7 +144,8 @@ void StatisticsComponent::setup() {
       return;
     }
   } else {
-    this->running_aggregate_ = Aggregate();
+    // this->running_aggregate_ = Aggregate();
+    this->insert_running_queue(Aggregate());
   }
 
   // On every source sensor update, call handle_new_value_()
@@ -155,8 +158,43 @@ void StatisticsComponent::setup() {
 void StatisticsComponent::reset() {
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
     this->partial_stats_queue_->clear();
-  else
+  else {
+    this->running_queue_.clear();
     this->running_aggregate_ = Aggregate();
+  }
+}
+
+void StatisticsComponent::insert_running_queue(Aggregate new_aggregate) {
+  static size_t max_queue_size = 1;
+  if (this->running_queue_.size() == 0) {
+    this->running_queue_.push_back(new_aggregate);
+  } else {
+    Aggregate most_recent = this->running_queue_.back();
+
+    while ((this->running_queue_.size() > 0) && (most_recent.get_count() <= new_aggregate.get_count())) {
+      this->running_queue_.pop_back();
+      new_aggregate = most_recent + new_aggregate;
+      most_recent = this->running_queue_.back();
+    }
+
+    if (this->running_queue_.size() > max_queue_size) {
+      ++max_queue_size;
+      ESP_LOGW(TAG, "maximum running queue size increased to %d", this->running_queue_.size());
+    }
+    this->running_queue_.push_back(new_aggregate);
+  }
+}
+
+Aggregate StatisticsComponent::compute_running_queue_aggregate() {
+  Aggregate total = Aggregate();
+
+  // loop backwards through loop to accumulate lower count aggregates first to avoid floating point precision issues
+  // https://stackoverflow.com/a/24851790
+  for (auto aggregate = this->running_queue_.rbegin(); aggregate != this->running_queue_.rend(); ++aggregate) {
+    total = total + *aggregate;
+  }
+
+  return total;
 }
 
 // Given a new sensor measurement, evict if window is full, add new value to window, and update sensors
@@ -170,13 +208,20 @@ void StatisticsComponent::handle_new_value_(float value) {
     // Add new value to end of sliding window
     this->partial_stats_queue_->insert(value);
   } else {
-    this->running_aggregate_ = this->running_aggregate_ + Aggregate(value);
+    // this->partial_stats_queue_->insert(value);
+    // this->running_aggregate_ = this->running_aggregate_ + Aggregate(value);
+    this->insert_running_queue(Aggregate(value));
+
     ++this->reset_count_;
   }
 
   // Ensure we only push updates for the sensors based on the configuration
   if (++this->send_at_ >= this->send_every_) {
     this->send_at_ = 0;
+
+    if (this->statistics_type_ == STATISTICS_TYPE_RUNNING) {
+      this->running_aggregate_ = this->compute_running_queue_aggregate();
+    }
 
     if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
       this->running_aggregate_ = this->partial_stats_queue_->get_current_aggregate();

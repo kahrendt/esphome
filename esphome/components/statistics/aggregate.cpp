@@ -78,8 +78,8 @@ Aggregate Aggregate::operator+(const Aggregate &b) {
   uint32_t a_timestamp_reference = this->get_timestamp_reference();
   uint32_t b_timestamp_reference = b.get_timestamp_reference();
 
-  uint32_t a_timestamp_m2 = this->get_timestamp_m2();
-  uint32_t b_timestamp_m2 = b.get_timestamp_m2();
+  double a_timestamp_m2 = this->get_timestamp_m2();
+  double b_timestamp_m2 = b.get_timestamp_m2();
 
   Aggregate combined;
 
@@ -135,11 +135,6 @@ Aggregate Aggregate::operator+(const Aggregate &b) {
 
   return combined;
 }
-
-// Aggregate &Aggregate::operator+=(const Aggregate &rhs) {
-//   Aggregate copy = *this;
-//   return copy + *rhs;
-// }
 
 // Sample variance using Welford's algorithm (Bessel's correction is applied)
 float Aggregate::compute_variance() const { return this->m2_ / (this->count_ - 1); }
