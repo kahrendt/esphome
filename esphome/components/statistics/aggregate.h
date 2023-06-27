@@ -66,7 +66,7 @@ class Aggregate {
   void set_timestamp_m2(float timestamp_m2) { this->timestamp_m2_ = timestamp_m2; }
 
   // Offset sum (by the reference) of the timestamps in the set
-  int32_t get_timestamp_sum() const { return this->timestamp_sum_; }
+  int64_t get_timestamp_sum() const { return this->timestamp_sum_; }
   void set_timestamp_sum(int32_t timestamp_sum) { this->timestamp_sum_ = timestamp_sum; }
 
   // The reference timestamp (in milliseconds) that all timestamps in the sum are offset by
@@ -86,7 +86,6 @@ class Aggregate {
   float compute_trend() const;
 
   Aggregate operator+(const Aggregate &b);
-  Aggregate &operator+=(const Aggregate &rhs);
 
  protected:
   /*
@@ -102,17 +101,17 @@ class Aggregate {
   float min_{std::numeric_limits<float>::infinity()};         // the infimum of the empty set is +infinity
 
   // Average of the set of measurements
-  float mean_{NAN};
+  double mean_{NAN};
 
   // Quantity used in Welford's algorihtm for finding the variance of the set of measurements
-  float m2_{NAN};
+  double m2_{NAN};
 
   // Quantity used in an extended Welford's algorithm for finding the covariance of the set of measurements and
   // timestamps
-  float c2_{NAN};
+  double c2_{NAN};
 
   // Quantity used in Welford's algorihtm for finding the variance of timestamps in the set of measurements
-  float timestamp_m2_{NAN};
+  double timestamp_m2_{NAN};
 
   // Sum of all the timestamps in the set of measurements - offset by the reference
   int32_t timestamp_sum_{0};
