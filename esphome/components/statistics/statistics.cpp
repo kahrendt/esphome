@@ -135,14 +135,14 @@ void StatisticsComponent::setup() {
       config.c2 = true;
       config.timestamp_m2 = true;
     }
-    this->partial_stats_queue_ = new DABALite(config, this->window_size_);
+    this->partial_stats_queue_.set_enabled_aggregates(config);
 
-    // Verify memory was properly allocated for the aggregates
-    if (!this->partial_stats_queue_->get_memory_allocated()) {
+    if (!this->partial_stats_queue_.set_capacity(this->window_size_)) {
       ESP_LOGE(TAG, "Failed to allocate memory for sliding window aggregates of size %u", this->window_size_);
       this->mark_failed();
       return;
     }
+
   } else {
     this->insert_running_queue(Aggregate());
   }
@@ -156,7 +156,7 @@ void StatisticsComponent::setup() {
 
 void StatisticsComponent::reset() {
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
-    this->partial_stats_queue_->clear();
+    this->partial_stats_queue_.clear();
   else
     this->running_queue_.clear();
 }
@@ -193,12 +193,12 @@ Aggregate StatisticsComponent::compute_running_queue_aggregate() {
 void StatisticsComponent::handle_new_value_(float value) {
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
     // If sliding window is larger than the capacity, evict until less
-    while (this->partial_stats_queue_->size() >= this->window_size_) {
-      this->partial_stats_queue_->evict();
+    while (this->partial_stats_queue_.size() >= this->window_size_) {
+      this->partial_stats_queue_.evict();
     }
 
     // Add new value to end of sliding window
-    this->partial_stats_queue_->insert(value);
+    this->partial_stats_queue_.insert(value);
   } else {
     this->insert_running_queue(Aggregate(value));
 
@@ -215,7 +215,7 @@ void StatisticsComponent::handle_new_value_(float value) {
       current_aggregate = this->compute_running_queue_aggregate();
 
     if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
-      current_aggregate = this->partial_stats_queue_->get_current_aggregate();
+      current_aggregate = this->partial_stats_queue_.get_current_aggregate();
 
     if (this->count_sensor_)
       this->count_sensor_->publish_state(current_aggregate.get_count());
