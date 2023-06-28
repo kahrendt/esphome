@@ -41,6 +41,7 @@
 
 #include "aggregate.h"
 #include "daba_lite.h"
+#include "running_queue.h"
 #include "statistics.h"
 
 #include "esphome/core/log.h"
@@ -144,7 +145,8 @@ void StatisticsComponent::setup() {
     }
 
   } else {
-    this->insert_running_queue(Aggregate());
+    this->queue_.set_capacity(32);
+    // this->insert_running_queue(Aggregate());
   }
 
   // On every source sensor update, call handle_new_value_()
@@ -158,7 +160,8 @@ void StatisticsComponent::reset() {
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
     this->partial_stats_queue_.clear();
   else
-    this->running_queue_.clear();
+    // this->running_queue_.clear();
+    this->queue_.clear();
 }
 
 void StatisticsComponent::insert_running_queue(Aggregate new_aggregate) {
@@ -200,8 +203,11 @@ void StatisticsComponent::handle_new_value_(float value) {
     // Add new value to end of sliding window
     this->partial_stats_queue_.insert(value);
   } else {
-    this->insert_running_queue(Aggregate(value));
+    // this->insert_running_queue(Aggregate(value));
 
+    //++this->reset_count_;
+
+    this->queue_.insert(value);
     ++this->reset_count_;
   }
 
@@ -212,7 +218,8 @@ void StatisticsComponent::handle_new_value_(float value) {
     this->send_at_ = 0;
 
     if (this->statistics_type_ == STATISTICS_TYPE_RUNNING)
-      current_aggregate = this->compute_running_queue_aggregate();
+      // current_aggregate = this->compute_running_queue_aggregate();
+      current_aggregate = this->queue_.compute_current_aggregate();
 
     if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
       current_aggregate = this->partial_stats_queue_.get_current_aggregate();
