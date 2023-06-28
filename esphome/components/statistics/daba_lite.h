@@ -29,13 +29,10 @@ struct DABAEnabledAggregateConfiguration {
 
 class DABALite {
  public:
-  DABALite(DABAEnabledAggregateConfiguration config, size_t capacity);
-
   // Sets the window size by adjusting the capacity of the underlying circular queues
   //  - returns whether memory was successfully allocated
   bool set_capacity(size_t window_size);
-
-  bool get_memory_allocated() { return this->memory_allocated_; }
+  void set_enabled_aggregates(DABAEnabledAggregateConfiguration config) { this->config_ = config; }
 
   // Clears all readings from the sliding window
   void clear();
@@ -52,9 +49,9 @@ class DABALite {
   Aggregate get_current_aggregate();
 
  protected:
+  size_t *count_queue_{nullptr};
   float *max_queue_{nullptr};
   float *min_queue_{nullptr};
-  size_t *count_queue_{nullptr};
   float *mean_queue_{nullptr};
   float *m2_queue_{nullptr};
   float *c2_queue_{nullptr};
@@ -63,7 +60,6 @@ class DABALite {
   uint32_t *timestamp_reference_queue_{nullptr};
 
   DABAEnabledAggregateConfiguration config_{};
-  bool memory_allocated_{false};
 
   // Maximum window capacity
   size_t window_size_{0};

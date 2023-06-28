@@ -122,7 +122,7 @@ class StatisticsComponent : public Component {
   sensor::Sensor *trend_sensor_{nullptr};
 
   // DABA Lite implementation for storing measurements and computing aggregate statistics over the sliding window
-  DABALite *partial_stats_queue_{nullptr};
+  DABALite partial_stats_queue_;
 
   std::vector<Aggregate> running_queue_;
 

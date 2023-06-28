@@ -17,11 +17,6 @@
 namespace esphome {
 namespace statistics {
 
-DABALite::DABALite(DABAEnabledAggregateConfiguration config, size_t capacity) {
-  this->config_ = config;
-  this->set_capacity(capacity);
-}
-
 // Set capacity (and reserve in memory) of the circular queues for the desired statistics
 //  - returns whether memory was successfully allocated
 bool DABALite::set_capacity(size_t window_size) {
@@ -30,7 +25,6 @@ bool DABALite::set_capacity(size_t window_size) {
   // Mimics ESPHome's rp2040_pio_led_strip component's buf_ code (accessed June 2023)
   ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
   ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
-  ExternalRAMAllocator<int32_t> int32_t_allocator(ExternalRAMAllocator<int32_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<uint32_t> uint32_t_allocator(ExternalRAMAllocator<uint32_t>::ALLOW_FAILURE);
 
   if (this->config_.max) {
@@ -95,8 +89,6 @@ bool DABALite::set_capacity(size_t window_size) {
   }
 
   this->clear();
-
-  this->memory_allocated_ = true;
 
   return true;
 }
