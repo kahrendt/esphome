@@ -15,7 +15,7 @@ class RunningQueue {
  public:
   // Sets the window size by adjusting the capacity of the underlying circular queues
   //  - returns whether memory was successfully allocated
-  bool set_capacity(size_t window_size);
+  bool set_capacity(uint8_t capacity);
 
   // Clears all readings
   void clear();
@@ -27,8 +27,9 @@ class RunningQueue {
 
  protected:
   Aggregate *queue_{nullptr};
+  uint8_t index_{0};
 
-  size_t index_{0};
+  inline Aggregate get_end_();
 };
 
 }  // namespace statistics
