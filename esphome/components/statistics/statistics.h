@@ -43,6 +43,7 @@
 
 #include "aggregate.h"
 #include "daba_lite.h"
+#include "running_queue.h"
 
 #include "esphome/core/component.h"
 #include "esphome/core/automation.h"
@@ -125,6 +126,8 @@ class StatisticsComponent : public Component {
   DABALite partial_stats_queue_;
 
   std::vector<Aggregate> running_queue_;
+
+  RunningQueue queue_;
 
   // mimic ESPHome's current filters behavior
   size_t window_size_{};
