@@ -60,7 +60,14 @@ void StatisticsComponent::dump_config() {
 
   LOG_SENSOR("  ", "Source Sensor", this->source_sensor_);
 
-  ESP_LOGCONFIG(TAG, "  window_size: %u", this->window_size_);
+  if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
+    ESP_LOGCONFIG(TAG, "  statistics_type: sliding_window");
+    ESP_LOGCONFIG(TAG, "  window_size: %u", this->window_size_);
+  } else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING) {
+    ESP_LOGCONFIG(TAG, "  statistics_type: running");
+    ESP_LOGCONFIG(TAG, "  reset_every: %u", this->reset_every_);
+  }
+
   ESP_LOGCONFIG(TAG, "  send_every: %u", this->send_every_);
   ESP_LOGCONFIG(TAG, "  send_first_at: %u", this->send_at_);
 
@@ -145,8 +152,11 @@ void StatisticsComponent::setup() {
     }
 
   } else {
-    this->queue_.set_capacity(32);
-    // this->insert_running_queue(Aggregate());
+    if (!this->running_queue_.set_capacity(this->reset_every_)) {
+      ESP_LOGE(TAG, "Failed to allocate memory for running aggregates.");
+      this->mark_failed();
+      return;
+    }
   }
 
   // On every source sensor update, call handle_new_value_()
@@ -159,37 +169,8 @@ void StatisticsComponent::setup() {
 void StatisticsComponent::reset() {
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
     this->partial_stats_queue_.clear();
-  else
-    // this->running_queue_.clear();
-    this->queue_.clear();
-}
-
-void StatisticsComponent::insert_running_queue(Aggregate new_aggregate) {
-  if (this->running_queue_.size() == 0) {
-    this->running_queue_.push_back(new_aggregate);
-  } else {
-    Aggregate most_recent = this->running_queue_.back();
-
-    while ((this->running_queue_.size() > 0) && (most_recent.get_count() <= new_aggregate.get_count())) {
-      this->running_queue_.pop_back();
-      new_aggregate = most_recent + new_aggregate;
-      most_recent = this->running_queue_.back();
-    }
-
-    this->running_queue_.push_back(new_aggregate);
-  }
-}
-
-Aggregate StatisticsComponent::compute_running_queue_aggregate() {
-  Aggregate total = Aggregate();
-
-  // loop backwards through loop to accumulate lower count aggregates first to avoid floating point precision issues
-  // https://stackoverflow.com/a/24851790
-  for (auto aggregate = this->running_queue_.rbegin(); aggregate != this->running_queue_.rend(); ++aggregate) {
-    total = total + *aggregate;
-  }
-
-  return total;
+  else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING)
+    this->running_queue_.clear();
 }
 
 // Given a new sensor measurement, evict if window is full, add new value to window, and update sensors
@@ -203,11 +184,7 @@ void StatisticsComponent::handle_new_value_(float value) {
     // Add new value to end of sliding window
     this->partial_stats_queue_.insert(value);
   } else {
-    // this->insert_running_queue(Aggregate(value));
-
-    //++this->reset_count_;
-
-    this->queue_.insert(value);
+    this->running_queue_.insert(value);
     ++this->reset_count_;
   }
 
@@ -217,12 +194,10 @@ void StatisticsComponent::handle_new_value_(float value) {
 
     this->send_at_ = 0;
 
-    if (this->statistics_type_ == STATISTICS_TYPE_RUNNING)
-      // current_aggregate = this->compute_running_queue_aggregate();
-      current_aggregate = this->queue_.compute_current_aggregate();
-
     if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
       current_aggregate = this->partial_stats_queue_.get_current_aggregate();
+    else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING)
+      current_aggregate = this->running_queue_.compute_current_aggregate();
 
     if (this->count_sensor_)
       this->count_sensor_->publish_state(current_aggregate.get_count());
