@@ -7,6 +7,7 @@
 
 #include "esphome/core/helpers.h"  // necessary for ExternalRAMAllocator
 
+#include <cmath>
 #include <vector>
 
 namespace esphome {
@@ -14,11 +15,15 @@ namespace statistics {
 
 // Set capacity (and reserve in memory) of the circular queues for the desired statistics
 //  - returns whether memory was successfully allocated
-bool RunningQueue::set_capacity(size_t window_size) {
+bool RunningQueue::set_capacity(size_t reset_after) {
+  uint8_t aggregate_capacity = 32;
+  if (reset_after > 0)
+    aggregate_capacity = std::ceil(std::log2(reset_after)) + 1;
+
   // Mimics ESPHome's rp2040_pio_led_strip component's buf_ code (accessed June 2023)
   ExternalRAMAllocator<Aggregate> aggregate_allocator(ExternalRAMAllocator<Aggregate>::ALLOW_FAILURE);
 
-  this->queue_ = aggregate_allocator.allocate(window_size);
+  this->queue_ = aggregate_allocator.allocate(aggregate_capacity);
 
   if (this->queue_ == nullptr)
     return false;

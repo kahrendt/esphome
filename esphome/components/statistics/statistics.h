@@ -125,9 +125,7 @@ class StatisticsComponent : public Component {
   // DABA Lite implementation for storing measurements and computing aggregate statistics over the sliding window
   DABALite partial_stats_queue_;
 
-  std::vector<Aggregate> running_queue_;
-
-  RunningQueue queue_;
+  RunningQueue running_queue_;
 
   // mimic ESPHome's current filters behavior
   size_t window_size_{};
@@ -138,9 +136,6 @@ class StatisticsComponent : public Component {
   size_t reset_count_{0};
 
   StatisticsType statistics_type_{STATISTICS_TYPE_SLIDING_WINDOW};
-
-  void insert_running_queue(Aggregate new_aggregate);
-  Aggregate compute_running_queue_aggregate();
 };
 
 // Based on the integration component reset action
