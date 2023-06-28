@@ -15,7 +15,7 @@ namespace statistics {
 
 // Set capacity (and reserve in memory) of the circular queues for the desired statistics
 //  - returns whether memory was successfully allocated
-bool RunningQueue::set_capacity(uint8_t capacity) {
+bool RunningQueue::set_capacity(size_t capacity) {
   uint8_t aggregate_capacity = 32;
   if (capacity > 0)
     aggregate_capacity = std::ceil(std::log2(capacity)) + 1;

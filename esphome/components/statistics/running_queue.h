@@ -13,9 +13,9 @@ namespace statistics {
 
 class RunningQueue {
  public:
-  // Sets the window size by adjusting the capacity of the underlying circular queues
+  // Sets the capacity of underlying queue; uses at most log_2(n)+1 aggregates
   //  - returns whether memory was successfully allocated
-  bool set_capacity(uint8_t capacity);
+  bool set_capacity(size_t capacity);
 
   // Clears all readings
   void clear();
