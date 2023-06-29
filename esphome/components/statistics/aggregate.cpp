@@ -239,19 +239,19 @@ template<typename T> Aggregate AggregateQueue<T>::lower(size_t index) {
 
 template<typename T> bool AggregateQueue<T>::allocate_memory(size_t capacity, EnabledAggregatesConfiguration config) {
   // Mimics ESPHome's rp2040_pio_led_strip component's buf_ code (accessed June 2023)
-  ExternalRAMAllocator<T> float_allocator(ExternalRAMAllocator<T>::ALLOW_FAILURE);
+  ExternalRAMAllocator<T> decimal_allocator(ExternalRAMAllocator<T>::ALLOW_FAILURE);
   ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<uint32_t> uint32_t_allocator(ExternalRAMAllocator<uint32_t>::ALLOW_FAILURE);
 
   if (config.max) {
-    this->max_queue_ = float_allocator.allocate(capacity);
+    this->max_queue_ = decimal_allocator.allocate(capacity);
     if (this->max_queue_ == nullptr) {
       return false;
     }
   }
 
   if (config.min) {
-    this->min_queue_ = float_allocator.allocate(capacity);
+    this->min_queue_ = decimal_allocator.allocate(capacity);
     if (this->min_queue_ == nullptr) {
       return false;
     }
@@ -265,35 +265,35 @@ template<typename T> bool AggregateQueue<T>::allocate_memory(size_t capacity, En
   }
 
   if (config.mean) {
-    this->mean_queue_ = float_allocator.allocate(capacity);
+    this->mean_queue_ = decimal_allocator.allocate(capacity);
     if (this->mean_queue_ == nullptr) {
       return false;
     }
   }
 
   if (config.m2) {
-    this->m2_queue_ = float_allocator.allocate(capacity);
+    this->m2_queue_ = decimal_allocator.allocate(capacity);
     if (this->m2_queue_ == nullptr) {
       return false;
     }
   }
 
   if (config.c2) {
-    this->c2_queue_ = float_allocator.allocate(capacity);
+    this->c2_queue_ = decimal_allocator.allocate(capacity);
     if (this->c2_queue_ == nullptr) {
       return false;
     }
   }
 
   if (config.timestamp_m2) {
-    this->timestamp_m2_queue_ = float_allocator.allocate(capacity);
+    this->timestamp_m2_queue_ = decimal_allocator.allocate(capacity);
     if (this->timestamp_m2_queue_ == nullptr) {
       return false;
     }
   }
 
   if (config.timestamp_mean) {
-    this->timestamp_mean_queue_ = float_allocator.allocate(capacity);
+    this->timestamp_mean_queue_ = decimal_allocator.allocate(capacity);
     if (this->timestamp_mean_queue_ == nullptr) {
       return false;
     }
@@ -310,12 +310,6 @@ template<typename T> bool AggregateQueue<T>::allocate_memory(size_t capacity, En
 }
 
 // avoids linking errors (https://isocpp.org/wiki/faq/templates)
-// template bool AggregateQueue<float>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
-// template void AggregateQueue<float>::clear();
-// template size_t AggregateQueue<float>::size() const;
-// template void AggregateQueue<float>::insert(float value);
-// template void AggregateQueue<float>::evict();
-// template Aggregate AggregateQueue<float>::compute_current_aggregate();
 
 template void AggregateQueue<float>::emplace(const Aggregate &value, size_t index);
 template Aggregate AggregateQueue<float>::lower(size_t index);
