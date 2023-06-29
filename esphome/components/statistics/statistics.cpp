@@ -107,7 +107,7 @@ void StatisticsComponent::dump_config() {
 void StatisticsComponent::setup() {
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
     // store aggregate data only necessary for the configured sensors
-    DABAEnabledAggregateConfiguration config;
+    EnabledAggregatesConfiguration config;
 
     if (this->count_sensor_)
       config.count = true;
