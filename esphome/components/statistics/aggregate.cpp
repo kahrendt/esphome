@@ -36,124 +36,6 @@
 namespace esphome {
 namespace statistics {
 
-bool AggregateQueue::set_capacity(const size_t capacity, const EnabledAggregatesConfiguration config) {
-  this->config_ = config;
-
-  // Mimics ESPHome's rp2040_pio_led_strip component's buf_ code (accessed June 2023)
-  ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
-  ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
-  ExternalRAMAllocator<uint32_t> uint32_t_allocator(ExternalRAMAllocator<uint32_t>::ALLOW_FAILURE);
-
-  if (this->config_.max) {
-    this->max_queue_ = float_allocator.allocate(capacity);
-    if (this->max_queue_ == nullptr) {
-      return false;
-    }
-  }
-
-  if (this->config_.min) {
-    this->min_queue_ = float_allocator.allocate(capacity);
-    if (this->min_queue_ == nullptr) {
-      return false;
-    }
-  }
-
-  if (this->config_.count) {
-    this->count_queue_ = size_t_allocator.allocate(capacity);
-    if (this->count_queue_ == nullptr) {
-      return false;
-    }
-  }
-
-  if (this->config_.mean) {
-    this->mean_queue_ = float_allocator.allocate(capacity);
-    if (this->mean_queue_ == nullptr) {
-      return false;
-    }
-  }
-
-  if (this->config_.m2) {
-    this->m2_queue_ = float_allocator.allocate(capacity);
-    if (this->m2_queue_ == nullptr) {
-      return false;
-    }
-  }
-
-  if (this->config_.c2) {
-    this->c2_queue_ = float_allocator.allocate(capacity);
-    if (this->c2_queue_ == nullptr) {
-      return false;
-    }
-  }
-
-  if (this->config_.timestamp_m2) {
-    this->timestamp_m2_queue_ = float_allocator.allocate(capacity);
-    if (this->timestamp_m2_queue_ == nullptr) {
-      return false;
-    }
-  }
-
-  if (this->config_.timestamp_mean) {
-    this->timestamp_mean_queue_ = float_allocator.allocate(capacity);
-    if (this->timestamp_mean_queue_ == nullptr) {
-      return false;
-    }
-
-    this->timestamp_reference_queue_ = uint32_t_allocator.allocate(capacity);
-    if (this->timestamp_reference_queue_ == nullptr) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-void AggregateQueue::emplace(const Aggregate &value, const size_t index) {
-  if (this->config_.max)
-    this->max_queue_[index] = value.get_max();
-  if (this->config_.min)
-    this->min_queue_[index] = value.get_min();
-  if (this->config_.count)
-    this->count_queue_[index] = value.get_count();
-  if (this->config_.mean)
-    this->mean_queue_[index] = value.get_mean();
-  if (this->config_.m2)
-    this->m2_queue_[index] = value.get_m2();
-  if (this->config_.c2)
-    this->c2_queue_[index] = value.get_c2();
-  if (this->config_.timestamp_mean) {
-    this->timestamp_mean_queue_[index] = value.get_timestamp_mean();
-    this->timestamp_reference_queue_[index] = value.get_timestamp_reference();
-  }
-  if (this->config_.timestamp_m2)
-    this->timestamp_m2_queue_[index] = value.get_timestamp_m2();
-}
-
-Aggregate AggregateQueue::lower(const size_t index) {
-  Aggregate aggregate = Aggregate();
-
-  if (this->config_.max)
-    aggregate.set_max(this->max_queue_[index]);
-  if (this->config_.min)
-    aggregate.set_min(this->min_queue_[index]);
-  if (this->config_.count)
-    aggregate.set_count(this->count_queue_[index]);
-  if (this->config_.mean)
-    aggregate.set_mean(this->mean_queue_[index]);
-  if (this->config_.m2)
-    aggregate.set_m2(this->m2_queue_[index]);
-  if (this->config_.c2)
-    aggregate.set_c2(this->c2_queue_[index]);
-  if (this->config_.timestamp_m2)
-    aggregate.set_timestamp_m2(this->timestamp_m2_queue_[index]);
-  if (this->config_.timestamp_mean) {
-    aggregate.set_timestamp_mean(this->timestamp_mean_queue_[index]);
-    aggregate.set_timestamp_reference(this->timestamp_reference_queue_[index]);
-  }
-
-  return aggregate;
-}
-
 Aggregate::Aggregate() {}
 
 Aggregate::Aggregate(float value) {
@@ -307,6 +189,124 @@ double Aggregate::normalize_timestamp_means_(double &a_mean, const uint32_t &a_t
 
     return a_timestamp_reference;
   }
+}
+
+void AggregateQueue::emplace(const Aggregate &value, size_t index) {
+  if (this->max_queue_ != nullptr)
+    this->max_queue_[index] = value.get_max();
+  if (this->min_queue_ != nullptr)
+    this->min_queue_[index] = value.get_min();
+  if (this->count_queue_ != nullptr)
+    this->count_queue_[index] = value.get_count();
+  if (this->mean_queue_ != nullptr)
+    this->mean_queue_[index] = value.get_mean();
+  if (this->m2_queue_ != nullptr)
+    this->m2_queue_[index] = value.get_m2();
+  if (this->c2_queue_ != nullptr)
+    this->c2_queue_[index] = value.get_c2();
+  if (this->timestamp_mean_queue_ != nullptr)
+    this->timestamp_mean_queue_[index] = value.get_timestamp_mean();
+  if (this->timestamp_m2_queue_ != nullptr)
+    this->timestamp_m2_queue_[index] = value.get_timestamp_m2();
+  if (this->timestamp_reference_queue_ != nullptr)
+    this->timestamp_reference_queue_[index] = value.get_timestamp_reference();
+}
+
+Aggregate AggregateQueue::lower(size_t index) {
+  Aggregate aggregate = Aggregate();
+
+  if (this->max_queue_ != nullptr)
+    aggregate.set_max(this->max_queue_[index]);
+  if (this->min_queue_ != nullptr)
+    aggregate.set_min(this->min_queue_[index]);
+  if (this->count_queue_ != nullptr)
+    aggregate.set_count(this->count_queue_[index]);
+  if (this->mean_queue_ != nullptr)
+    aggregate.set_mean(this->mean_queue_[index]);
+  if (this->m2_queue_ != nullptr)
+    aggregate.set_m2(this->m2_queue_[index]);
+  if (this->c2_queue_ != nullptr)
+    aggregate.set_c2(this->c2_queue_[index]);
+  if (this->timestamp_m2_queue_ != nullptr)
+    aggregate.set_timestamp_m2(this->timestamp_m2_queue_[index]);
+  if (this->timestamp_mean_queue_ != nullptr)
+    aggregate.set_timestamp_mean(this->timestamp_mean_queue_[index]);
+  if (this->timestamp_reference_queue_ != nullptr)
+    aggregate.set_timestamp_reference(this->timestamp_reference_queue_[index]);
+
+  return aggregate;
+}
+
+bool AggregateQueue::set_capacity(size_t capacity, EnabledAggregatesConfiguration config) {
+  // Mimics ESPHome's rp2040_pio_led_strip component's buf_ code (accessed June 2023)
+  ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
+  ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
+  ExternalRAMAllocator<uint32_t> uint32_t_allocator(ExternalRAMAllocator<uint32_t>::ALLOW_FAILURE);
+
+  if (config.max) {
+    this->max_queue_ = float_allocator.allocate(capacity);
+    if (this->max_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (config.min) {
+    this->min_queue_ = float_allocator.allocate(capacity);
+    if (this->min_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (config.count) {
+    this->count_queue_ = size_t_allocator.allocate(capacity);
+    if (this->count_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (config.mean) {
+    this->mean_queue_ = float_allocator.allocate(capacity);
+    if (this->mean_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (config.m2) {
+    this->m2_queue_ = float_allocator.allocate(capacity);
+    if (this->m2_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (config.c2) {
+    this->c2_queue_ = float_allocator.allocate(capacity);
+    if (this->c2_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (config.timestamp_m2) {
+    this->timestamp_m2_queue_ = float_allocator.allocate(capacity);
+    if (this->timestamp_m2_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (config.timestamp_mean) {
+    this->timestamp_mean_queue_ = float_allocator.allocate(capacity);
+    if (this->timestamp_mean_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (config.timestamp_reference) {
+    this->timestamp_reference_queue_ = uint32_t_allocator.allocate(capacity);
+    if (this->timestamp_reference_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 }  // namespace statistics

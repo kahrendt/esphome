@@ -15,7 +15,7 @@ namespace statistics {
 
 // Set capacity (and reserve in memory) of the circular queues for the desired statistics
 //  - returns whether memory was successfully allocated
-bool RunningQueue::set_capacity(const size_t capacity, const EnabledAggregatesConfiguration config) {
+bool RunningQueue::set_capacity(size_t capacity, EnabledAggregatesConfiguration config) {
   this->config_ = config;
 
   uint8_t aggregate_capacity = 32;
@@ -31,7 +31,7 @@ bool RunningQueue::set_capacity(const size_t capacity, const EnabledAggregatesCo
 void RunningQueue::clear() { this->index_ = 0; }
 
 // Insert value
-void RunningQueue::insert(const float value) {
+void RunningQueue::insert(float value) {
   Aggregate new_aggregate = Aggregate(value);
 
   Aggregate most_recent = this->get_end_();
