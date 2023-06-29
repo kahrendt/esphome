@@ -38,7 +38,7 @@ namespace statistics {
 
 Aggregate::Aggregate() {}
 
-Aggregate::Aggregate(float value) {
+Aggregate::Aggregate(double value) {
   if (!std::isnan(value)) {
     this->max_ = value;
     this->min_ = value;
@@ -59,11 +59,11 @@ Aggregate Aggregate::operator+(const Aggregate &b) {
   double cast_a_count = static_cast<double>(a_count);
   double cast_b_count = static_cast<double>(b_count);
 
-  float a_min = this->get_min();
-  float b_min = b.get_min();
+  double a_min = this->get_min();
+  double b_min = b.get_min();
 
-  float a_max = this->get_max();
-  float b_max = b.get_max();
+  double a_max = this->get_max();
+  double b_max = b.get_max();
 
   double a_mean = static_cast<double>(this->get_mean());
   double b_mean = static_cast<double>(b.get_mean());
@@ -137,20 +137,20 @@ Aggregate Aggregate::operator+(const Aggregate &b) {
 }
 
 // Sample variance using Welford's algorithm (Bessel's correction is applied)
-float Aggregate::compute_variance() const { return this->m2_ / (this->count_ - 1); }
+double Aggregate::compute_variance() const { return this->m2_ / (this->count_ - 1); }
 
 // Sample standard deviation using Welford's algorithm (Bessel's correction is applied to the computed variance)
-float Aggregate::compute_std_dev() const { return std::sqrt(this->compute_variance()); }
+double Aggregate::compute_std_dev() const { return std::sqrt(this->compute_variance()); }
 
 // Sample covariance using an extension of Welford's algorithm (Bessel's correction is applied)
-float Aggregate::compute_covariance() const {
+double Aggregate::compute_covariance() const {
   if (this->count_ > 1)
     return this->c2_ / (this->count_ - 1);
   return NAN;
 }
 
 // Slope of the line of best fit over sliding window
-float Aggregate::compute_trend() const {
+double Aggregate::compute_trend() const {
   if (this->count_ > 1)
     return this->c2_ / this->timestamp_m2_;
   return NAN;
@@ -191,7 +191,7 @@ double Aggregate::normalize_timestamp_means_(double &a_mean, const uint32_t &a_t
   }
 }
 
-void AggregateQueue::emplace(const Aggregate &value, size_t index) {
+template<typename T> void AggregateQueue<T>::emplace(const Aggregate &value, size_t index) {
   if (this->max_queue_ != nullptr)
     this->max_queue_[index] = value.get_max();
   if (this->min_queue_ != nullptr)
@@ -212,7 +212,7 @@ void AggregateQueue::emplace(const Aggregate &value, size_t index) {
     this->timestamp_reference_queue_[index] = value.get_timestamp_reference();
 }
 
-Aggregate AggregateQueue::lower(size_t index) {
+template<typename T> Aggregate AggregateQueue<T>::lower(size_t index) {
   Aggregate aggregate = Aggregate();
 
   if (this->max_queue_ != nullptr)
@@ -237,9 +237,9 @@ Aggregate AggregateQueue::lower(size_t index) {
   return aggregate;
 }
 
-bool AggregateQueue::set_capacity(size_t capacity, EnabledAggregatesConfiguration config) {
+template<typename T> bool AggregateQueue<T>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config) {
   // Mimics ESPHome's rp2040_pio_led_strip component's buf_ code (accessed June 2023)
-  ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
+  ExternalRAMAllocator<T> float_allocator(ExternalRAMAllocator<T>::ALLOW_FAILURE);
   ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<uint32_t> uint32_t_allocator(ExternalRAMAllocator<uint32_t>::ALLOW_FAILURE);
 
@@ -308,6 +308,15 @@ bool AggregateQueue::set_capacity(size_t capacity, EnabledAggregatesConfiguratio
 
   return true;
 }
+
+// avoids linking errors (https://isocpp.org/wiki/faq/templates)
+template void AggregateQueue<float>::emplace(const Aggregate &value, size_t index);
+template Aggregate AggregateQueue<float>::lower(size_t index);
+template bool AggregateQueue<float>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
+
+template void AggregateQueue<double>::emplace(const Aggregate &value, size_t index);
+template Aggregate AggregateQueue<double>::lower(size_t index);
+template bool AggregateQueue<double>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 
 }  // namespace statistics
 }  // namespace esphome
