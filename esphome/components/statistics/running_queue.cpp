@@ -20,7 +20,7 @@ bool RunningQueue::set_capacity(size_t capacity, EnabledAggregatesConfiguration 
   if (capacity > 0)
     aggregate_capacity = std::ceil(std::log2(capacity)) + 1;
 
-  if (!this->queue_.set_capacity(aggregate_capacity, config))
+  if (!this->allocate_memory(aggregate_capacity, config))
     return false;
 
   this->clear();
@@ -43,7 +43,7 @@ void RunningQueue::insert(float value) {
     most_recent = this->get_end_();
   }
 
-  this->queue_.emplace(new_aggregate, this->index_);
+  this->emplace(new_aggregate, this->index_);
   ++this->index_;
 }
 
@@ -51,15 +51,13 @@ void RunningQueue::insert(float value) {
 Aggregate RunningQueue::compute_current_aggregate() {
   Aggregate total = Aggregate();
   for (int i = this->index_ - 1; i >= 0; --i) {
-    total = total + this->queue_.lower(i);
+    total = total + this->lower(i);
   }
 
   return total;
 }
 
-inline Aggregate RunningQueue::get_end_() {
-  return (this->index_ == 0) ? Aggregate() : this->queue_.lower(this->index_ - 1);
-}
+inline Aggregate RunningQueue::get_end_() { return (this->index_ == 0) ? Aggregate() : this->lower(this->index_ - 1); }
 
 }  // namespace statistics
 }  // namespace esphome

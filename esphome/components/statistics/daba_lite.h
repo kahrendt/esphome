@@ -16,7 +16,7 @@
 namespace esphome {
 namespace statistics {
 
-class DABALite {
+class DABALite : AggregateQueue<float> {
  public:
   // Sets the window size by adjusting the capacity of the underlying circular queues
   //  - returns whether memory was successfully allocated
@@ -38,7 +38,7 @@ class DABALite {
 
  protected:
   // The queue_ stores aggregates values for the sliding window
-  AggregateQueue<double> queue_{};
+  // AggregateQueue<double> queue_{};
 
   // Maximum window capacity
   size_t window_size_{0};

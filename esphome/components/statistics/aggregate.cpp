@@ -237,7 +237,7 @@ template<typename T> Aggregate AggregateQueue<T>::lower(size_t index) {
   return aggregate;
 }
 
-template<typename T> bool AggregateQueue<T>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config) {
+template<typename T> bool AggregateQueue<T>::allocate_memory(size_t capacity, EnabledAggregatesConfiguration config) {
   // Mimics ESPHome's rp2040_pio_led_strip component's buf_ code (accessed June 2023)
   ExternalRAMAllocator<T> float_allocator(ExternalRAMAllocator<T>::ALLOW_FAILURE);
   ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
@@ -312,11 +312,11 @@ template<typename T> bool AggregateQueue<T>::set_capacity(size_t capacity, Enabl
 // avoids linking errors (https://isocpp.org/wiki/faq/templates)
 template void AggregateQueue<float>::emplace(const Aggregate &value, size_t index);
 template Aggregate AggregateQueue<float>::lower(size_t index);
-template bool AggregateQueue<float>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
+template bool AggregateQueue<float>::allocate_memory(size_t capacity, EnabledAggregatesConfiguration config);
 
 template void AggregateQueue<double>::emplace(const Aggregate &value, size_t index);
 template Aggregate AggregateQueue<double>::lower(size_t index);
-template bool AggregateQueue<double>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
+template bool AggregateQueue<double>::allocate_memory(size_t capacity, EnabledAggregatesConfiguration config);
 
 }  // namespace statistics
 }  // namespace esphome
