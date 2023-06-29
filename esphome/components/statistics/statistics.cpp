@@ -111,11 +111,15 @@ void StatisticsComponent::setup() {
   if (this->count_sensor_)
     config.count = true;
 
-  if (this->max_sensor_)
+  if (this->max_sensor_) {
+    config.count = true;  // count is always needed for running type
     config.max = true;
+  }
 
-  if (this->min_sensor_)
+  if (this->min_sensor_) {
+    config.count = true;  // count is always needed for running type
     config.min = true;
+  }
 
   if (this->mean_sensor_) {
     config.count = true;
