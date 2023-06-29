@@ -11,7 +11,7 @@
 namespace esphome {
 namespace statistics {
 
-class RunningQueue {
+class RunningQueue : AggregateQueue<float> {
  public:
   // Sets the capacity of underlying queue; uses at most log_2(n)+1 aggregates
   //  - returns whether memory was successfully allocated
@@ -28,7 +28,6 @@ class RunningQueue {
 
  protected:
   uint8_t index_{0};
-  AggregateQueue<float> queue_{};
 
   inline Aggregate get_end_();
 };
