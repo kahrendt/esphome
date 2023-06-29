@@ -22,7 +22,7 @@ namespace statistics {
 bool DABALite::set_capacity(size_t window_size, EnabledAggregatesConfiguration config) {
   this->window_size_ = window_size;
 
-  if (!this->queue_.set_capacity(this->window_size_, config))
+  if (!this->allocate_memory(this->window_size_, config))
     return false;
 
   this->clear();
@@ -48,7 +48,7 @@ void DABALite::insert(float value) {
 
   this->back_sum_ = this->back_sum_ + lifted;
 
-  this->queue_.emplace(lifted, this->e_.get_index());
+  this->emplace(lifted, this->e_.get_index());
 
   ++this->e_;
   ++this->size_;
@@ -85,15 +85,15 @@ void DABALite::step_() {
       Aggregate prev_delta = this->get_delta_();
 
       --this->a_;
-      Aggregate old_a = this->queue_.lower(this->a_.get_index());
+      Aggregate old_a = this->lower(this->a_.get_index());
 
-      this->queue_.emplace(old_a + prev_delta, this->a_.get_index());
+      this->emplace(old_a + prev_delta, this->a_.get_index());
     }
 
     if (this->l_ != this->r_) {
-      Aggregate old_l = this->queue_.lower(this->l_.get_index());
+      Aggregate old_l = this->lower(this->l_.get_index());
 
-      this->queue_.emplace(old_l + this->mid_sum_, this->l_.get_index());
+      this->emplace(old_l + this->mid_sum_, this->l_.get_index());
       ++this->l_;
     } else {
       ++this->l_;
@@ -127,10 +127,10 @@ inline bool DABALite::is_front_empty_() { return (this->b_ == this->f_) && (this
 inline bool DABALite::is_delta_empty_() { return this->a_ == this->b_; }
 inline Aggregate DABALite::get_back_() { return this->back_sum_; }
 inline Aggregate DABALite::get_alpha_() {
-  return this->is_front_empty_() ? this->identity_class_ : this->queue_.lower(this->f_.get_index());
+  return this->is_front_empty_() ? this->identity_class_ : this->lower(this->f_.get_index());
 }
 inline Aggregate DABALite::get_delta_() {
-  return this->is_delta_empty_() ? this->identity_class_ : this->queue_.lower(this->a_.get_index());
+  return this->is_delta_empty_() ? this->identity_class_ : this->lower(this->a_.get_index());
 }
 }  // namespace statistics
 }  // namespace esphome

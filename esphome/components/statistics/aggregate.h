@@ -141,7 +141,7 @@ template<typename T> class AggregateQueue {
   void emplace(const Aggregate &value, size_t index);
   Aggregate lower(size_t index);
 
-  bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
+  bool allocate_memory(size_t capacity, EnabledAggregatesConfiguration config);
 
  protected:
   size_t *count_queue_{nullptr};
