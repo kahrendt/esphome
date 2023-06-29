@@ -15,31 +15,23 @@ namespace statistics {
 
 // Set capacity (and reserve in memory) of the circular queues for the desired statistics
 //  - returns whether memory was successfully allocated
-bool RunningQueue::set_capacity(size_t capacity) {
+bool RunningQueue::set_capacity(const size_t capacity, const EnabledAggregatesConfiguration config) {
+  this->config_ = config;
+
   uint8_t aggregate_capacity = 32;
   if (capacity > 0)
     aggregate_capacity = std::ceil(std::log2(capacity)) + 1;
 
-  // Mimics ESPHome's rp2040_pio_led_strip component's buf_ code (accessed June 2023)
-  ExternalRAMAllocator<Aggregate> aggregate_allocator(ExternalRAMAllocator<Aggregate>::ALLOW_FAILURE);
-
-  this->queue_ = aggregate_allocator.allocate(aggregate_capacity);
-
-  if (this->queue_ == nullptr)
+  if (!this->queue_.set_capacity(aggregate_capacity, this->config_))
     return false;
-
-  this->queue_[index_] = Aggregate();
 
   return true;
 }
 
-void RunningQueue::clear() {
-  this->queue_[0] = Aggregate();
-  this->index_ = 0;
-}
+void RunningQueue::clear() { this->index_ = 0; }
 
 // Insert value
-void RunningQueue::insert(float value) {
+void RunningQueue::insert(const float value) {
   Aggregate new_aggregate = Aggregate(value);
 
   Aggregate most_recent = this->get_end_();
@@ -50,20 +42,22 @@ void RunningQueue::insert(float value) {
     most_recent = this->get_end_();
   }
 
-  this->queue_[this->index_] = new_aggregate;
+  this->queue_.emplace(new_aggregate, this->index_);
   ++this->index_;
 }
 
 Aggregate RunningQueue::compute_current_aggregate() {
   Aggregate total = Aggregate();
   for (int i = this->index_ - 1; i >= 0; --i) {
-    total = total + this->queue_[i];
+    total = total + this->queue_.lower(i);
   }
 
   return total;
 }
 
-inline Aggregate RunningQueue::get_end_() { return (this->index_ == 0) ? Aggregate() : this->queue_[this->index_ - 1]; }
+inline Aggregate RunningQueue::get_end_() {
+  return (this->index_ == 0) ? Aggregate() : this->queue_.lower(this->index_ - 1);
+}
 
 }  // namespace statistics
 }  // namespace esphome
