@@ -59,6 +59,8 @@ enum StatisticsType {
   STATISTICS_TYPE_RUNNING,
 };
 
+enum Precision { FLOAT_PRECISION, DOUBLE_PRECISION };
+
 enum TimeConversionFactor {
   FACTOR_MS = 1,          // timestamps already are in ms
   FACTOR_S = 1000,        // 1000 ms per second
@@ -102,10 +104,11 @@ class StatisticsComponent : public Component {
   }
 
   void set_statistics_type(StatisticsType type) { this->statistics_type_ = type; }
+  void set_precision(Precision precision) { this->precision_ = precision; }
 
  protected:
   // given a new sensor measurements, add it to window, evict if window is full, and update sensors
-  void handle_new_value_(float value);
+  void handle_new_value_(double value);
 
   TimeConversionFactor time_conversion_factor_;
 
@@ -122,7 +125,10 @@ class StatisticsComponent : public Component {
   sensor::Sensor *covariance_sensor_{nullptr};
   sensor::Sensor *trend_sensor_{nullptr};
 
-  AggregateQueue<float> *queue_;
+  union {
+    AggregateQueue<float> *float_precision;
+    AggregateQueue<double> *double_precision;
+  } queue_{nullptr};
 
   // mimic ESPHome's current filters behavior
   size_t window_size_{};
@@ -132,7 +138,15 @@ class StatisticsComponent : public Component {
   size_t reset_every_{};
   size_t reset_count_{0};
 
-  StatisticsType statistics_type_{STATISTICS_TYPE_SLIDING_WINDOW};
+  StatisticsType statistics_type_{};
+
+  Precision precision_{};
+
+  void set_capacity_(size_t capacity, EnabledAggregatesConfiguration config);
+  void insert_(double value);
+  void evict_();
+  size_t size_() const;
+  Aggregate compute_current_aggregate_() const;
 };
 
 // Based on the integration component reset action

@@ -147,15 +147,20 @@ void StatisticsComponent::setup() {
   }
 
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
-    this->queue_ = new DABALite<float>();
-  } else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING) {
-    this->queue_ = new RunningQueue<float>();
-  }
+    if (this->precision_ == FLOAT_PRECISION)
+      this->queue_.float_precision = new DABALite<float>();
+    else
+      this->queue_.double_precision = new DABALite<double>();
 
-  if (!this->queue_->set_capacity(this->window_size_, config)) {
-    ESP_LOGE(TAG, "Failed to allocate memory for statistics");
-    this->mark_failed();
-    return;
+    this->set_capacity_(this->window_size_, config);
+
+  } else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING) {
+    if (this->precision_ == FLOAT_PRECISION)
+      this->queue_.float_precision = new RunningQueue<float>();
+    else
+      this->queue_.double_precision = new RunningQueue<double>();
+
+    this->set_capacity_(this->reset_every_, config);
   }
 
   // On every source sensor update, call handle_new_value_()
@@ -165,25 +170,66 @@ void StatisticsComponent::setup() {
   this->set_first_at(this->send_every_ - this->send_at_);
 }
 
-void StatisticsComponent::reset() { this->queue_->clear(); }
+void StatisticsComponent::set_capacity_(size_t capacity, EnabledAggregatesConfiguration config) {
+  if (this->precision_ == FLOAT_PRECISION) {
+    this->queue_.float_precision->set_capacity(capacity, config);
+  } else {
+    this->queue_.double_precision->set_capacity(capacity, config);
+  }
+}
+
+void StatisticsComponent::insert_(double value) {
+  if (this->precision_ == FLOAT_PRECISION)
+    this->queue_.float_precision->insert(value);
+  else
+    this->queue_.double_precision->insert(value);
+}
+
+void StatisticsComponent::evict_() {
+  if (this->precision_ == FLOAT_PRECISION)
+    this->queue_.float_precision->evict();
+  else
+    this->queue_.double_precision->evict();
+}
+
+Aggregate StatisticsComponent::compute_current_aggregate_() const {
+  if (this->precision_ == FLOAT_PRECISION)
+    return this->queue_.float_precision->compute_current_aggregate();
+
+  return this->queue_.double_precision->compute_current_aggregate();
+}
+
+size_t StatisticsComponent::size_() const {
+  if (this->precision_ == FLOAT_PRECISION)
+    return this->queue_.float_precision->size();
+
+  return this->queue_.double_precision->size();
+}
+
+void StatisticsComponent::reset() {
+  if (this->precision_ == FLOAT_PRECISION)
+    this->queue_.float_precision->clear();
+  else
+    this->queue_.double_precision->clear();
+}
 
 // Given a new sensor measurement, evict if window is full, add new value to window, and update sensors
-void StatisticsComponent::handle_new_value_(float value) {
+void StatisticsComponent::handle_new_value_(double value) {
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
     // If sliding window is larger than the capacity, evict until less
-    while (this->queue_->size() >= this->window_size_) {
-      this->queue_->evict();
+    while (this->size_() >= this->window_size_) {
+      this->evict_();
     }
   } else {
     ++this->reset_count_;
   }
 
   // Add new value to queue
-  this->queue_->insert(value);
+  this->insert_(value);
 
   // Ensure we only push updates for the sensors based on the configuration
   if (++this->send_at_ >= this->send_every_) {
-    Aggregate current_aggregate = this->queue_->compute_current_aggregate();
+    Aggregate current_aggregate = this->compute_current_aggregate_();
 
     this->send_at_ = 0;
 
@@ -218,15 +264,15 @@ void StatisticsComponent::handle_new_value_(float value) {
       this->std_dev_sensor_->publish_state(current_aggregate.compute_std_dev());
 
     if (this->covariance_sensor_) {
-      float covariance_ms = current_aggregate.compute_covariance();
-      float converted_covariance = covariance_ms / this->time_conversion_factor_;
+      double covariance_ms = current_aggregate.compute_covariance();
+      double converted_covariance = covariance_ms / this->time_conversion_factor_;
 
       this->covariance_sensor_->publish_state(converted_covariance);
     }
 
     if (this->trend_sensor_) {
-      float trend_ms = current_aggregate.compute_trend();
-      float converted_trend = trend_ms * this->time_conversion_factor_;
+      double trend_ms = current_aggregate.compute_trend();
+      double converted_trend = trend_ms * this->time_conversion_factor_;
 
       this->trend_sensor_->publish_state(converted_trend);
     }
