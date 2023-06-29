@@ -63,7 +63,7 @@ void DABALite::evict() {
   this->step_();
 }
 
-Aggregate DABALite::get_current_aggregate() {
+Aggregate DABALite::compute_current_aggregate() {
   if (this->size() > 0) {
     Aggregate alpha = this->get_alpha_();
     Aggregate back = this->get_back_();

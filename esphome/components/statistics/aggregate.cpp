@@ -310,6 +310,13 @@ template<typename T> bool AggregateQueue<T>::allocate_memory(size_t capacity, En
 }
 
 // avoids linking errors (https://isocpp.org/wiki/faq/templates)
+// template bool AggregateQueue<float>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
+// template void AggregateQueue<float>::clear();
+// template size_t AggregateQueue<float>::size() const;
+// template void AggregateQueue<float>::insert(float value);
+// template void AggregateQueue<float>::evict();
+// template Aggregate AggregateQueue<float>::compute_current_aggregate();
+
 template void AggregateQueue<float>::emplace(const Aggregate &value, size_t index);
 template Aggregate AggregateQueue<float>::lower(size_t index);
 template bool AggregateQueue<float>::allocate_memory(size_t capacity, EnabledAggregatesConfiguration config);

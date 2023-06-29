@@ -122,10 +122,7 @@ class StatisticsComponent : public Component {
   sensor::Sensor *covariance_sensor_{nullptr};
   sensor::Sensor *trend_sensor_{nullptr};
 
-  // DABA Lite implementation for storing measurements and computing aggregate statistics over the sliding window
-  DABALite partial_stats_queue_;
-
-  RunningQueue running_queue_;
+  AggregateQueue<float> *queue_;
 
   // mimic ESPHome's current filters behavior
   size_t window_size_{};
