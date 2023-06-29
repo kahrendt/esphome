@@ -17,21 +17,20 @@ class RunningQueue {
   //  - returns whether memory was successfully allocated
   bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 
-  // Clears all readings
+  // Clears all aggregates in the queue
   void clear();
 
-  // Insert a value at end
+  // Insert a value at end of the queue and consolidiate if necessary
   void insert(float value);
 
+  // Computes the summary statistics for all measurements stored in the queue
   Aggregate compute_current_aggregate();
 
  protected:
   uint8_t index_{0};
+  AggregateQueue queue_{};
 
   inline Aggregate get_end_();
-
-  AggregateQueue queue_{};
-  EnabledAggregatesConfiguration config_{};
 };
 
 }  // namespace statistics

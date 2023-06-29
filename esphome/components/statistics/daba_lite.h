@@ -16,23 +16,11 @@
 namespace esphome {
 namespace statistics {
 
-struct DABAEnabledAggregateConfiguration {
-  bool count{false};
-  bool max{false};
-  bool min{false};
-  bool mean{false};
-  bool m2{false};
-  bool timestamp_mean{false};
-  bool c2{false};
-  bool timestamp_m2{false};
-};
-
 class DABALite {
  public:
   // Sets the window size by adjusting the capacity of the underlying circular queues
   //  - returns whether memory was successfully allocated
-  bool set_capacity(size_t window_size);
-  void set_enabled_aggregates(EnabledAggregatesConfiguration config) { this->config_ = config; }
+  bool set_capacity(size_t window_size, EnabledAggregatesConfiguration config);
 
   // Clears all readings from the sliding window
   void clear();
@@ -49,8 +37,8 @@ class DABALite {
   Aggregate get_current_aggregate();
 
  protected:
+  // The queue_ stores aggregates values for the sliding window
   AggregateQueue queue_{};
-  EnabledAggregatesConfiguration config_{};
 
   // Maximum window capacity
   size_t window_size_{0};
