@@ -16,7 +16,7 @@
 namespace esphome {
 namespace statistics {
 
-class DABALite : public AggregateQueue<float> {
+template<typename T> class DABALite : public AggregateQueue<T> {
  public:
   // Sets the window size by adjusting the capacity of the underlying circular queues
   //  - returns whether memory was successfully allocated
@@ -29,7 +29,7 @@ class DABALite : public AggregateQueue<float> {
   size_t size() const override { return this->size_; }
 
   // Insert a value at end of circular queue and step the DABA Lite algorithm
-  void insert(float value) override;
+  void insert(T value) override;
 
   // Remove a value at start of circular queue and step the DABA Lite algorithm
   void evict() override;
@@ -37,9 +37,6 @@ class DABALite : public AggregateQueue<float> {
   Aggregate compute_current_aggregate() override;
 
  protected:
-  // The queue_ stores aggregates values for the sliding window
-  // AggregateQueue<double> queue_{};
-
   // Maximum window capacity
   size_t window_size_{0};
 

@@ -142,7 +142,7 @@ template<typename T> class AggregateQueue {
   virtual void clear();
   virtual size_t size() const { return 0; };
   virtual void insert(float value);
-  virtual void evict() {};
+  virtual void evict(){};
   virtual Aggregate compute_current_aggregate();
 
   void emplace(const Aggregate &value, size_t index);

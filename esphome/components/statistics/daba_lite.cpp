@@ -19,7 +19,7 @@ namespace statistics {
 
 // Set capacity (and reserve in memory) of the circular queues for the desired statistics
 //  - returns whether memory was successfully allocated
-bool DABALite::set_capacity(size_t window_size, EnabledAggregatesConfiguration config) {
+template<typename T> bool DABALite<T>::set_capacity(size_t window_size, EnabledAggregatesConfiguration config) {
   this->window_size_ = window_size;
 
   if (!this->allocate_memory(this->window_size_, config))
@@ -30,7 +30,7 @@ bool DABALite::set_capacity(size_t window_size, EnabledAggregatesConfiguration c
   return true;
 }
 
-void DABALite::clear() {
+template<typename T> void DABALite<T>::clear() {
   this->size_ = 0;  // set size of valid readings to 0
 
   // Reset Indices in the circular queue to the start
@@ -43,7 +43,7 @@ void DABALite::clear() {
 }
 
 // Insert value at end of circular queue and step DABA Lite algorithm
-void DABALite::insert(float value) {
+template<typename T> void DABALite<T>::insert(T value) {
   Aggregate lifted = Aggregate(value);
 
   this->back_sum_ = this->back_sum_ + lifted;
@@ -56,14 +56,14 @@ void DABALite::insert(float value) {
 }
 
 // Remove value at start of circular queue and step DABA Lite algorithm
-void DABALite::evict() {
+template<typename T> void DABALite<T>::evict() {
   ++this->f_;
   --this->size_;
 
   this->step_();
 }
 
-Aggregate DABALite::compute_current_aggregate() {
+template<typename T> Aggregate DABALite<T>::compute_current_aggregate() {
   if (this->size() > 0) {
     Aggregate alpha = this->get_alpha_();
     Aggregate back = this->get_back_();
@@ -74,7 +74,7 @@ Aggregate DABALite::compute_current_aggregate() {
 }
 
 // DABA Lite algorithm method
-void DABALite::step_() {
+template<typename T> void DABALite<T>::step_() {
   // this->debug_pointers_();
   if (this->l_ == this->b_) {
     this->flip_();
@@ -107,7 +107,7 @@ void DABALite::step_() {
 }
 
 // DABA Lite algorithm method
-void DABALite::flip_() {
+template<typename T> void DABALite<T>::flip_() {
   this->l_ = this->f_;
   this->r_ = this->b_;
   this->a_ = this->e_;
@@ -122,15 +122,26 @@ void DABALite::flip_() {
 // Checks if the b_ index is equal to the front index f_;
 //  - Note if window size == size of queue, then the front and end indices point to the same index,
 //    so we verify that this is not the case
-inline bool DABALite::is_front_empty_() { return (this->b_ == this->f_) && (this->size_ != this->window_size_); }
+template<typename T> inline bool DABALite<T>::is_front_empty_() {
+  return (this->b_ == this->f_) && (this->size_ != this->window_size_);
+}
 
-inline bool DABALite::is_delta_empty_() { return this->a_ == this->b_; }
-inline Aggregate DABALite::get_back_() { return this->back_sum_; }
-inline Aggregate DABALite::get_alpha_() {
+template<typename T> inline bool DABALite<T>::is_delta_empty_() { return this->a_ == this->b_; }
+template<typename T> inline Aggregate DABALite<T>::get_back_() { return this->back_sum_; }
+template<typename T> inline Aggregate DABALite<T>::get_alpha_() {
   return this->is_front_empty_() ? this->identity_class_ : this->lower(this->f_.get_index());
 }
-inline Aggregate DABALite::get_delta_() {
+template<typename T> inline Aggregate DABALite<T>::get_delta_() {
   return this->is_delta_empty_() ? this->identity_class_ : this->lower(this->a_.get_index());
 }
+
+// avoids linking errors (https://isocpp.org/wiki/faq/templates)
+template bool DABALite<float>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
+template void DABALite<float>::clear();
+template size_t DABALite<float>::size() const;
+template void DABALite<float>::insert(float value);
+template void DABALite<float>::evict();
+template Aggregate DABALite<float>::compute_current_aggregate();
+
 }  // namespace statistics
 }  // namespace esphome
