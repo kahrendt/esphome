@@ -22,9 +22,6 @@ class RunningQueue : public AggregateQueue<float> {
   // Clears all aggregates in the queue
   void clear() override;
 
-  void evict() override { ESP_LOGI("test", "test"); };
-  size_t size() const override { return 0; };
-
   // Insert a value at end of the queue and consolidiate if necessary
   void insert(float value) override;
 
