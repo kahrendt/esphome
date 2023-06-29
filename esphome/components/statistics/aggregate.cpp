@@ -26,7 +26,8 @@
 
 #include "aggregate.h"
 
-#include "esphome/core/hal.h"  // necessary for millis()
+#include "esphome/core/hal.h"      // necessary for millis()
+#include "esphome/core/helpers.h"  // necessary for ExternalRAMAllocator
 #include "esphome/core/log.h"
 
 #include <algorithm>  // necessary for std::min and std::max functions
@@ -34,6 +35,124 @@
 
 namespace esphome {
 namespace statistics {
+
+bool AggregateQueue::set_capacity(const size_t capacity, const EnabledAggregatesConfiguration config) {
+  this->config_ = config;
+
+  // Mimics ESPHome's rp2040_pio_led_strip component's buf_ code (accessed June 2023)
+  ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
+  ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
+  ExternalRAMAllocator<uint32_t> uint32_t_allocator(ExternalRAMAllocator<uint32_t>::ALLOW_FAILURE);
+
+  if (this->config_.max) {
+    this->max_queue_ = float_allocator.allocate(capacity);
+    if (this->max_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (this->config_.min) {
+    this->min_queue_ = float_allocator.allocate(capacity);
+    if (this->min_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (this->config_.count) {
+    this->count_queue_ = size_t_allocator.allocate(capacity);
+    if (this->count_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (this->config_.mean) {
+    this->mean_queue_ = float_allocator.allocate(capacity);
+    if (this->mean_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (this->config_.m2) {
+    this->m2_queue_ = float_allocator.allocate(capacity);
+    if (this->m2_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (this->config_.c2) {
+    this->c2_queue_ = float_allocator.allocate(capacity);
+    if (this->c2_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (this->config_.timestamp_m2) {
+    this->timestamp_m2_queue_ = float_allocator.allocate(capacity);
+    if (this->timestamp_m2_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (this->config_.timestamp_mean) {
+    this->timestamp_mean_queue_ = float_allocator.allocate(capacity);
+    if (this->timestamp_mean_queue_ == nullptr) {
+      return false;
+    }
+
+    this->timestamp_reference_queue_ = uint32_t_allocator.allocate(capacity);
+    if (this->timestamp_reference_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+void AggregateQueue::emplace(const Aggregate &value, const size_t index) {
+  if (this->config_.max)
+    this->max_queue_[index] = value.get_max();
+  if (this->config_.min)
+    this->min_queue_[index] = value.get_min();
+  if (this->config_.count)
+    this->count_queue_[index] = value.get_count();
+  if (this->config_.mean)
+    this->mean_queue_[index] = value.get_mean();
+  if (this->config_.m2)
+    this->m2_queue_[index] = value.get_m2();
+  if (this->config_.c2)
+    this->c2_queue_[index] = value.get_c2();
+  if (this->config_.timestamp_mean) {
+    this->timestamp_mean_queue_[index] = value.get_timestamp_mean();
+    this->timestamp_reference_queue_[index] = value.get_timestamp_reference();
+  }
+  if (this->config_.timestamp_m2)
+    this->timestamp_m2_queue_[index] = value.get_timestamp_m2();
+}
+
+Aggregate AggregateQueue::lower(const size_t index) {
+  Aggregate aggregate = Aggregate();
+
+  if (this->config_.max)
+    aggregate.set_max(this->max_queue_[index]);
+  if (this->config_.min)
+    aggregate.set_min(this->min_queue_[index]);
+  if (this->config_.count)
+    aggregate.set_count(this->count_queue_[index]);
+  if (this->config_.mean)
+    aggregate.set_mean(this->mean_queue_[index]);
+  if (this->config_.m2)
+    aggregate.set_m2(this->m2_queue_[index]);
+  if (this->config_.c2)
+    aggregate.set_c2(this->c2_queue_[index]);
+  if (this->config_.timestamp_m2)
+    aggregate.set_timestamp_m2(this->timestamp_m2_queue_[index]);
+  if (this->config_.timestamp_mean) {
+    aggregate.set_timestamp_mean(this->timestamp_mean_queue_[index]);
+    aggregate.set_timestamp_reference(this->timestamp_reference_queue_[index]);
+  }
+
+  return aggregate;
+}
 
 Aggregate::Aggregate() {}
 

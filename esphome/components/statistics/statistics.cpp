@@ -152,7 +152,44 @@ void StatisticsComponent::setup() {
     }
 
   } else {
-    if (!this->running_queue_.set_capacity(this->reset_every_)) {
+    EnabledAggregatesConfiguration config;
+
+    if (this->count_sensor_)
+      config.count = true;
+
+    if (this->max_sensor_)
+      config.max = true;
+
+    if (this->min_sensor_)
+      config.min = true;
+
+    if (this->mean_sensor_) {
+      config.count = true;
+      config.mean = true;
+    }
+
+    if ((this->variance_sensor_) || (this->std_dev_sensor_)) {
+      config.count = true;
+      config.mean = true;
+      config.m2 = true;
+    }
+
+    if (this->covariance_sensor_) {
+      config.count = true;
+      config.mean = true;
+      config.timestamp_mean = true;
+      config.c2 = true;
+    }
+
+    if (this->trend_sensor_) {
+      config.count = true;
+      config.mean = true;
+      config.timestamp_mean = true;
+      config.c2 = true;
+      config.timestamp_m2 = true;
+    }
+
+    if (!this->running_queue_.set_capacity(this->reset_every_, config)) {
       ESP_LOGE(TAG, "Failed to allocate memory for running aggregates.");
       this->mark_failed();
       return;

@@ -32,6 +32,17 @@
 namespace esphome {
 namespace statistics {
 
+struct EnabledAggregatesConfiguration {
+  bool count{false};
+  bool max{false};
+  bool min{false};
+  bool mean{false};
+  bool m2{false};
+  bool timestamp_mean{false};
+  bool c2{false};
+  bool timestamp_m2{false};
+};
+
 class Aggregate {
  public:
   Aggregate();  // default constructor for a null measurement
@@ -122,6 +133,26 @@ class Aggregate {
   // returns the timestamp both sums are in reference to
   double normalize_timestamp_means_(double &a_mean, const uint32_t &a_timestamp_reference, const size_t &a_count,
                                     double &b_mean, const uint32_t &b_timestamp_reference, const size_t &b_count);
+};
+
+class AggregateQueue {
+ public:
+  bool set_capacity(const size_t capacity, const EnabledAggregatesConfiguration config);
+  void emplace(const Aggregate &value, const size_t index);
+  Aggregate lower(const size_t index);
+
+ protected:
+  size_t *count_queue_{nullptr};
+  float *max_queue_{nullptr};
+  float *min_queue_{nullptr};
+  float *mean_queue_{nullptr};
+  float *m2_queue_{nullptr};
+  float *c2_queue_{nullptr};
+  float *timestamp_m2_queue_{nullptr};
+  float *timestamp_mean_queue_{nullptr};
+  uint32_t *timestamp_reference_queue_{nullptr};
+
+  EnabledAggregatesConfiguration config_;
 };
 
 }  // namespace statistics
