@@ -32,8 +32,8 @@ template<typename T> bool RunningQueue<T>::set_capacity(size_t capacity, Enabled
 template<typename T> void RunningQueue<T>::clear() { this->index_ = 0; }
 
 // Insert a value at end of the queue and consolidiate if necessary
-template<typename T> void RunningQueue<T>::insert(T value) {
-  Aggregate new_aggregate = Aggregate(value);
+template<typename T> void RunningQueue<T>::insert(T value, uint32_t time_delta) {
+  Aggregate new_aggregate = Aggregate(value, time_delta);
 
   Aggregate most_recent = this->get_end_();
 
@@ -64,12 +64,12 @@ template<typename T> inline Aggregate RunningQueue<T>::get_end_() {
 // avoids linking errors (https://isocpp.org/wiki/faq/templates)
 template bool RunningQueue<float>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 template void RunningQueue<float>::clear();
-template void RunningQueue<float>::insert(float value);
+template void RunningQueue<float>::insert(float value, uint32_t time_delta);
 template Aggregate RunningQueue<float>::compute_current_aggregate();
 
 template bool RunningQueue<double>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 template void RunningQueue<double>::clear();
-template void RunningQueue<double>::insert(double value);
+template void RunningQueue<double>::insert(double value, uint32_t time_delta);
 template Aggregate RunningQueue<double>::compute_current_aggregate();
 
 }  // namespace statistics

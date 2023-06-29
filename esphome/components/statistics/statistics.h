@@ -54,12 +54,20 @@
 namespace esphome {
 namespace statistics {
 
+enum AverageType {
+  SIMPLE_AVERAGE,
+  TIME_WEIGHTED_AVERAGE,
+};
+
 enum StatisticsType {
   STATISTICS_TYPE_SLIDING_WINDOW,
   STATISTICS_TYPE_RUNNING,
 };
 
-enum Precision { FLOAT_PRECISION, DOUBLE_PRECISION };
+enum Precision {
+  FLOAT_PRECISION,
+  DOUBLE_PRECISION,
+};
 
 enum TimeConversionFactor {
   FACTOR_MS = 1,          // timestamps already are in ms
@@ -105,12 +113,13 @@ class StatisticsComponent : public Component {
 
   void set_statistics_type(StatisticsType type) { this->statistics_type_ = type; }
   void set_precision(Precision precision) { this->precision_ = precision; }
+  void set_average_type(AverageType type) { this->average_type_ = type; }
 
  protected:
   // given a new sensor measurements, add it to window, evict if window is full, and update sensors
   void handle_new_value_(double value);
 
-  TimeConversionFactor time_conversion_factor_;
+  TimeConversionFactor time_conversion_factor_{};
 
   // source sensor of measurement data
   sensor::Sensor *source_sensor_{nullptr};
@@ -142,8 +151,12 @@ class StatisticsComponent : public Component {
 
   Precision precision_{};
 
+  AverageType average_type_{};
+
+  uint32_t previous_timestamp_{0};
+
   void set_capacity_(size_t capacity, EnabledAggregatesConfiguration config);
-  void insert_(double value);
+  void insert_(double value, uint32_t time_delta);
   void evict_();
   size_t size_() const;
   Aggregate compute_current_aggregate_() const;
