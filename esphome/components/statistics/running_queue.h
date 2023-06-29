@@ -6,25 +6,30 @@
 
 #include "aggregate.h"
 
+#include "esphome/core/log.h"
+
 #include <vector>
 
 namespace esphome {
 namespace statistics {
 
-class RunningQueue : AggregateQueue<float> {
+class RunningQueue : public AggregateQueue<float> {
  public:
   // Sets the capacity of underlying queue; uses at most log_2(n)+1 aggregates
   //  - returns whether memory was successfully allocated
-  bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
+  bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config) override;
 
   // Clears all aggregates in the queue
-  void clear();
+  void clear() override;
+
+  void evict() override { ESP_LOGI("test", "test"); };
+  size_t size() const override { return 0; };
 
   // Insert a value at end of the queue and consolidiate if necessary
-  void insert(float value);
+  void insert(float value) override;
 
   // Computes the summary statistics for all measurements stored in the queue
-  Aggregate compute_current_aggregate();
+  Aggregate compute_current_aggregate() override;
 
  protected:
   uint8_t index_{0};
