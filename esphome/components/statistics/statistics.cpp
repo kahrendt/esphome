@@ -182,11 +182,11 @@ void StatisticsComponent::set_capacity_(size_t capacity, EnabledAggregatesConfig
   }
 }
 
-void StatisticsComponent::insert_(double value) {
+void StatisticsComponent::insert_(double value, uint32_t time_delta) {
   if (this->precision_ == FLOAT_PRECISION)
-    this->queue_.float_precision->insert(value);
+    this->queue_.float_precision->insert(value, time_delta);
   else
-    this->queue_.double_precision->insert(value);
+    this->queue_.double_precision->insert(value, time_delta);
 }
 
 void StatisticsComponent::evict_() {
@@ -219,6 +219,8 @@ void StatisticsComponent::reset() {
 
 // Given a new sensor measurement, evict if window is full, add new value to window, and update sensors
 void StatisticsComponent::handle_new_value_(double value) {
+  uint32_t now = millis();
+
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
     // If sliding window is larger than the capacity, evict until less
     while (this->size_() >= this->window_size_) {
@@ -228,8 +230,13 @@ void StatisticsComponent::handle_new_value_(double value) {
     ++this->reset_count_;
   }
 
+  uint32_t time_delta = 1;
+  if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
+    time_delta = now - this->previous_timestamp_;
+    this->previous_timestamp_ = now;
+  }
   // Add new value to queue
-  this->insert_(value);
+  this->insert_(value, time_delta);
 
   // Ensure we only push updates for the sensors based on the configuration
   if (++this->send_at_ >= this->send_every_) {

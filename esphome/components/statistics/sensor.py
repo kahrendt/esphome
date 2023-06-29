@@ -44,6 +44,16 @@ STATISTICS_TYPES = {
     CONF_RUNNING: StatisticsType.STATISTICS_TYPE_RUNNING,
 }
 
+CONF_AVERAGE_TYPE = "average_type"
+CONF_SIMPLE_AVERAGE = "simple"
+CONF_TIME_WEIGHTED_AVERAGE = "time_weighted"
+
+AverageType = statistics_ns.enum("AverageType")
+AVERAGE_TYPES = {
+    CONF_SIMPLE_AVERAGE: AverageType.SIMPLE_AVERAGE,
+    CONF_TIME_WEIGHTED_AVERAGE: AverageType.TIME_WEIGHTED_AVERAGE,
+}
+
 CONF_PRECISION = "precision"
 CONF_FLOAT = "float"
 CONF_DOUBLE = "double"
@@ -103,6 +113,9 @@ CONFIG_SCHEMA = cv.Schema(
         cv.GenerateID(): cv.declare_id(StatisticsComponent),
         cv.Optional(CONF_PRECISION, default=CONF_FLOAT): cv.enum(
             PRECISION_TYPES, lower=True
+        ),
+        cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE_AVERAGE): cv.enum(
+            AVERAGE_TYPES, lower=True
         ),
         cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
@@ -206,6 +219,7 @@ async def to_code(config):
     cg.add(var.set_source_sensor(source))
 
     cg.add(var.set_statistics_type(config[CONF_TYPE]))
+    cg.add(var.set_average_type(config[CONF_AVERAGE_TYPE]))
     cg.add(var.set_precision(config[CONF_PRECISION]))
 
     cg.add(var.set_reset_every(config[CONF_RESET_EVERY]))
