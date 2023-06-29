@@ -23,7 +23,7 @@ template<typename T> class RunningQueue : public AggregateQueue<T> {
   void clear() override;
 
   // Insert a value at end of the queue and consolidiate if necessary
-  void insert(T value) override;
+  void insert(T value, uint32_t time_delta) override;
 
   // Computes the summary statistics for all measurements stored in the queue
   Aggregate compute_current_aggregate() override;

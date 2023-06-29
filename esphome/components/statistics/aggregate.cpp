@@ -36,13 +36,11 @@
 namespace esphome {
 namespace statistics {
 
-Aggregate::Aggregate() {}
-
-Aggregate::Aggregate(double value) {
+Aggregate::Aggregate(double value, uint32_t time_delta) {
   if (!std::isnan(value)) {
     this->max_ = value;
     this->min_ = value;
-    this->count_ = 1;
+    this->count_ = time_delta;
     this->mean_ = value;
     this->m2_ = 0.0;
     this->c2_ = 0.0;
@@ -99,21 +97,18 @@ Aggregate Aggregate::operator+(const Aggregate &b) {
     combined.c2_ = NAN;
     combined.timestamp_m2_ = NAN;
     combined.timestamp_mean_ = NAN;
-    // combined.timestamp_reference_ = 0;
   } else if (a_count == 0) {
     combined.mean_ = b_mean;
     combined.m2_ = b_m2;
     combined.c2_ = b_c2;
     combined.timestamp_m2_ = b_timestamp_m2;
     combined.timestamp_mean_ = b_timestamp_mean;
-    // combined.timestamp_reference_ = b_timestamp_reference;
   } else if (b_count == 0) {
     combined.mean_ = a_mean;
     combined.m2_ = a_m2;
     combined.c2_ = a_c2;
     combined.timestamp_m2_ = a_m2;
     combined.timestamp_mean_ = a_timestamp_mean;
-    // combined.timestamp_reference_ = a_timestamp_reference;
   } else {
     double delta = b_mean - a_mean;
 

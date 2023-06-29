@@ -46,8 +46,8 @@ struct EnabledAggregatesConfiguration {
 
 class Aggregate {
  public:
-  Aggregate();  // default constructor for a null measurement
-  Aggregate(double value);
+  Aggregate(){};  // default constructor for a null measurement
+  Aggregate(double value, uint32_t time_delta);
 
   // Count of valid readings; i.e., not NaN, in the set of measurements
   size_t get_count() const { return this->count_; }
@@ -124,11 +124,13 @@ class Aggregate {
   // Quantity used in Welford's algorihtm for finding the variance of timestamps in the set of measurements
   double timestamp_m2_{NAN};
 
+  double timestamp_mean_{NAN};
+
   // The reference timestamp for the timestamp sum values;
   // e.g., if we have one raw timestamp at 5 ms and the reference is 5 ms, we store 0 ms in timestamp_sum
   uint32_t timestamp_reference_{0};
 
-  double timestamp_mean_{NAN};
+
 
   // Given two samples, normalize the timestamp sums so that they are both in reference to the larger timestamp
   // returns the timestamp both sums are in reference to
@@ -141,7 +143,7 @@ template<typename T> class AggregateQueue {
   virtual bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
   virtual void clear();
   virtual size_t size() const { return 0; };
-  virtual void insert(T value);
+  virtual void insert(T value, uint32_t time_delta);
   virtual void evict(){};
   virtual Aggregate compute_current_aggregate();
 
