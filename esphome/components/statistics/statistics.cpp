@@ -147,9 +147,9 @@ void StatisticsComponent::setup() {
   }
 
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
-    this->queue_ = new DABALite();
+    this->queue_ = new DABALite<float>();
   } else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING) {
-    this->queue_ = new RunningQueue();
+    this->queue_ = new RunningQueue<float>();
   }
 
   if (!this->queue_->set_capacity(this->window_size_, config)) {
