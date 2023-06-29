@@ -147,9 +147,7 @@ void StatisticsComponent::setup() {
   }
 
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
-    this->partial_stats_queue_.set_enabled_aggregates(config);
-
-    if (!this->partial_stats_queue_.set_capacity(this->window_size_)) {
+    if (!this->partial_stats_queue_.set_capacity(this->window_size_, config)) {
       ESP_LOGE(TAG, "Failed to allocate memory for sliding window aggregates of size %u", this->window_size_);
       this->mark_failed();
       return;

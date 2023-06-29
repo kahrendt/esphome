@@ -13,24 +13,25 @@
 namespace esphome {
 namespace statistics {
 
-// Set capacity (and reserve in memory) of the circular queues for the desired statistics
+// Sets the capacity of underlying queue; uses at most log_2(n)+1 aggregates
 //  - returns whether memory was successfully allocated
 bool RunningQueue::set_capacity(size_t capacity, EnabledAggregatesConfiguration config) {
-  this->config_ = config;
-
   uint8_t aggregate_capacity = 32;
   if (capacity > 0)
     aggregate_capacity = std::ceil(std::log2(capacity)) + 1;
 
-  if (!this->queue_.set_capacity(aggregate_capacity, this->config_))
+  if (!this->queue_.set_capacity(aggregate_capacity, config))
     return false;
+
+  this->clear();
 
   return true;
 }
 
+// Clears all aggregates in the queue
 void RunningQueue::clear() { this->index_ = 0; }
 
-// Insert value
+// Insert a value at end of the queue and consolidiate if necessary
 void RunningQueue::insert(float value) {
   Aggregate new_aggregate = Aggregate(value);
 
@@ -46,6 +47,7 @@ void RunningQueue::insert(float value) {
   ++this->index_;
 }
 
+// Computes the summary statistics for all measurements stored in the queue
 Aggregate RunningQueue::compute_current_aggregate() {
   Aggregate total = Aggregate();
   for (int i = this->index_ - 1; i >= 0; --i) {
