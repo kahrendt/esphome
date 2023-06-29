@@ -47,7 +47,7 @@ struct EnabledAggregatesConfiguration {
 class Aggregate {
  public:
   Aggregate();  // default constructor for a null measurement
-  Aggregate(float value);
+  Aggregate(double value);
 
   // Count of valid readings; i.e., not NaN, in the set of measurements
   size_t get_count() const { return this->count_; }
@@ -71,7 +71,7 @@ class Aggregate {
 
   // C2 from Welford's algorithm; used to compute the covariance of the measurements and timestamps
   double get_c2() const { return this->c2_; }
-  void set_c2(float c2) { this->c2_ = c2; }
+  void set_c2(double c2) { this->c2_ = c2; }
 
   // M2 from Welford's algorithm for timestamps; used to compute variance of timestamps
   double get_timestamp_m2() const { return this->timestamp_m2_; }
@@ -85,16 +85,16 @@ class Aggregate {
   void set_timestamp_mean(double timestamp_mean) { this->timestamp_mean_ = timestamp_mean; }
 
   // Return the sample variance of measurements
-  float compute_variance() const;
+  double compute_variance() const;
 
   // Return the sample standard deviation of measurements
-  float compute_std_dev() const;
+  double compute_std_dev() const;
 
   // Return the sample covariance of measurements and timestamps
-  float compute_covariance() const;
+  double compute_covariance() const;
 
   // Return the slope of the line of best fit over the window
-  float compute_trend() const;
+  double compute_trend() const;
 
   Aggregate operator+(const Aggregate &b);
 
@@ -108,8 +108,8 @@ class Aggregate {
   size_t count_{0};
 
   // Extrema of the set of measurements
-  float max_{std::numeric_limits<float>::infinity() * (-1)};  // the supremum of the empty set is -infinity
-  float min_{std::numeric_limits<float>::infinity()};         // the infimum of the empty set is +infinity
+  double max_{std::numeric_limits<double>::infinity() * (-1)};  // the supremum of the empty set is -infinity
+  double min_{std::numeric_limits<double>::infinity()};         // the infimum of the empty set is +infinity
 
   // Average of the set of measurements
   double mean_{NAN};
@@ -136,7 +136,7 @@ class Aggregate {
                                     double &b_mean, const uint32_t &b_timestamp_reference, const size_t &b_count);
 };
 
-class AggregateQueue {
+template<typename T> class AggregateQueue {
  public:
   void emplace(const Aggregate &value, size_t index);
   Aggregate lower(size_t index);
@@ -145,13 +145,20 @@ class AggregateQueue {
 
  protected:
   size_t *count_queue_{nullptr};
-  float *max_queue_{nullptr};
-  float *min_queue_{nullptr};
-  float *mean_queue_{nullptr};
-  float *m2_queue_{nullptr};
-  float *c2_queue_{nullptr};
-  float *timestamp_m2_queue_{nullptr};
-  float *timestamp_mean_queue_{nullptr};
+  // float *max_queue_{nullptr};
+  // float *min_queue_{nullptr};
+  // float *mean_queue_{nullptr};
+  // float *m2_queue_{nullptr};
+  // float *c2_queue_{nullptr};
+  // float *timestamp_m2_queue_{nullptr};
+  // float *timestamp_mean_queue_{nullptr};
+  T *max_queue_{nullptr};
+  T *min_queue_{nullptr};
+  T *mean_queue_{nullptr};
+  T *m2_queue_{nullptr};
+  T *c2_queue_{nullptr};
+  T *timestamp_m2_queue_{nullptr};
+  T *timestamp_mean_queue_{nullptr};
   uint32_t *timestamp_reference_queue_{nullptr};
 };
 
