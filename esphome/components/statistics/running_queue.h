@@ -28,7 +28,7 @@ class RunningQueue {
 
  protected:
   uint8_t index_{0};
-  AggregateQueue queue_{};
+  AggregateQueue<float> queue_{};
 
   inline Aggregate get_end_();
 };
