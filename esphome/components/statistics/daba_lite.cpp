@@ -19,10 +19,10 @@ namespace statistics {
 
 // Set capacity (and reserve in memory) of the circular queues for the desired statistics
 //  - returns whether memory was successfully allocated
-bool DABALite::set_capacity(size_t window_size) {
+bool DABALite::set_capacity(size_t window_size, EnabledAggregatesConfiguration config) {
   this->window_size_ = window_size;
 
-  if (!this->queue_.set_capacity(this->window_size_, this->config_))
+  if (!this->queue_.set_capacity(this->window_size_, config))
     return false;
 
   this->clear();
