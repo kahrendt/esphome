@@ -141,7 +141,7 @@ template<typename T> class AggregateQueue {
   virtual bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
   virtual void clear();
   virtual size_t size() const { return 0; };
-  virtual void insert(float value);
+  virtual void insert(T value);
   virtual void evict(){};
   virtual Aggregate compute_current_aggregate();
 
@@ -152,13 +152,6 @@ template<typename T> class AggregateQueue {
 
  protected:
   size_t *count_queue_{nullptr};
-  // float *max_queue_{nullptr};
-  // float *min_queue_{nullptr};
-  // float *mean_queue_{nullptr};
-  // float *m2_queue_{nullptr};
-  // float *c2_queue_{nullptr};
-  // float *timestamp_m2_queue_{nullptr};
-  // float *timestamp_mean_queue_{nullptr};
   T *max_queue_{nullptr};
   T *min_queue_{nullptr};
   T *mean_queue_{nullptr};

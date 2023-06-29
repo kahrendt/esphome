@@ -44,6 +44,16 @@ STATISTICS_TYPES = {
     CONF_RUNNING: StatisticsType.STATISTICS_TYPE_RUNNING,
 }
 
+CONF_PRECISION = "precision"
+CONF_FLOAT = "float"
+CONF_DOUBLE = "double"
+
+Precision = statistics_ns.enum("Precision")
+PRECISION_TYPES = {
+    CONF_FLOAT: Precision.FLOAT_PRECISION,
+    CONF_DOUBLE: Precision.DOUBLE_PRECISION,
+}
+
 ResetAction = statistics_ns.class_("ResetAction", automation.Action)
 
 
@@ -91,6 +101,9 @@ def validate_send_first_at(value):
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(StatisticsComponent),
+        cv.Optional(CONF_PRECISION, default=CONF_FLOAT): cv.enum(
+            PRECISION_TYPES, lower=True
+        ),
         cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
         cv.Optional(CONF_RESET_EVERY, default=1000): cv.positive_int,
@@ -193,6 +206,7 @@ async def to_code(config):
     cg.add(var.set_source_sensor(source))
 
     cg.add(var.set_statistics_type(config[CONF_TYPE]))
+    cg.add(var.set_precision(config[CONF_PRECISION]))
 
     cg.add(var.set_reset_every(config[CONF_RESET_EVERY]))
     cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))

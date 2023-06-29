@@ -13,7 +13,7 @@
 namespace esphome {
 namespace statistics {
 
-template<typename T> class RunningQueue : public AggregateQueue<float> {
+template<typename T> class RunningQueue : public AggregateQueue<T> {
  public:
   // Sets the capacity of underlying queue; uses at most log_2(n)+1 aggregates
   //  - returns whether memory was successfully allocated

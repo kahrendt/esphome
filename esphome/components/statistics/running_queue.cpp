@@ -67,5 +67,10 @@ template void RunningQueue<float>::clear();
 template void RunningQueue<float>::insert(float value);
 template Aggregate RunningQueue<float>::compute_current_aggregate();
 
+template bool RunningQueue<double>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
+template void RunningQueue<double>::clear();
+template void RunningQueue<double>::insert(double value);
+template Aggregate RunningQueue<double>::compute_current_aggregate();
+
 }  // namespace statistics
 }  // namespace esphome

@@ -143,5 +143,12 @@ template void DABALite<float>::insert(float value);
 template void DABALite<float>::evict();
 template Aggregate DABALite<float>::compute_current_aggregate();
 
+template bool DABALite<double>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
+template void DABALite<double>::clear();
+template size_t DABALite<double>::size() const;
+template void DABALite<double>::insert(double value);
+template void DABALite<double>::evict();
+template Aggregate DABALite<double>::compute_current_aggregate();
+
 }  // namespace statistics
 }  // namespace esphome
