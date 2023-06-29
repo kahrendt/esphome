@@ -41,6 +41,7 @@ struct EnabledAggregatesConfiguration {
   bool timestamp_mean{false};
   bool c2{false};
   bool timestamp_m2{false};
+  bool timestamp_reference{false};
 };
 
 class Aggregate {
@@ -137,9 +138,10 @@ class Aggregate {
 
 class AggregateQueue {
  public:
-  bool set_capacity(const size_t capacity, const EnabledAggregatesConfiguration config);
-  void emplace(const Aggregate &value, const size_t index);
-  Aggregate lower(const size_t index);
+  void emplace(const Aggregate &value, size_t index);
+  Aggregate lower(size_t index);
+
+  bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 
  protected:
   size_t *count_queue_{nullptr};
@@ -151,8 +153,6 @@ class AggregateQueue {
   float *timestamp_m2_queue_{nullptr};
   float *timestamp_mean_queue_{nullptr};
   uint32_t *timestamp_reference_queue_{nullptr};
-
-  EnabledAggregatesConfiguration config_;
 };
 
 }  // namespace statistics
