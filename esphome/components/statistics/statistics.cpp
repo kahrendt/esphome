@@ -147,18 +147,15 @@ void StatisticsComponent::setup() {
   }
 
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
-    if (!this->partial_stats_queue_.set_capacity(this->window_size_, config)) {
-      ESP_LOGE(TAG, "Failed to allocate memory for sliding window aggregates of size %u", this->window_size_);
-      this->mark_failed();
-      return;
-    }
+    this->queue_ = new DABALite();
+  } else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING) {
+    this->queue_ = new RunningQueue();
+  }
 
-  } else {
-    if (!this->running_queue_.set_capacity(this->reset_every_, config)) {
-      ESP_LOGE(TAG, "Failed to allocate memory for running aggregates.");
-      this->mark_failed();
-      return;
-    }
+  if (!this->queue_->set_capacity(this->window_size_, config)) {
+    ESP_LOGE(TAG, "Failed to allocate memory for statistics");
+    this->mark_failed();
+    return;
   }
 
   // On every source sensor update, call handle_new_value_()
@@ -168,38 +165,27 @@ void StatisticsComponent::setup() {
   this->set_first_at(this->send_every_ - this->send_at_);
 }
 
-void StatisticsComponent::reset() {
-  if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
-    this->partial_stats_queue_.clear();
-  else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING)
-    this->running_queue_.clear();
-}
+void StatisticsComponent::reset() { this->queue_->clear(); }
 
 // Given a new sensor measurement, evict if window is full, add new value to window, and update sensors
 void StatisticsComponent::handle_new_value_(float value) {
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
     // If sliding window is larger than the capacity, evict until less
-    while (this->partial_stats_queue_.size() >= this->window_size_) {
-      this->partial_stats_queue_.evict();
+    while (this->queue_->size() >= this->window_size_) {
+      this->queue_->evict();
     }
-
-    // Add new value to end of sliding window
-    this->partial_stats_queue_.insert(value);
   } else {
-    this->running_queue_.insert(value);
     ++this->reset_count_;
   }
 
+  // Add new value to queue
+  this->queue_->insert(value);
+
   // Ensure we only push updates for the sensors based on the configuration
   if (++this->send_at_ >= this->send_every_) {
-    Aggregate current_aggregate;
+    Aggregate current_aggregate = this->queue_->compute_current_aggregate();
 
     this->send_at_ = 0;
-
-    if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW)
-      current_aggregate = this->partial_stats_queue_.get_current_aggregate();
-    else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING)
-      current_aggregate = this->running_queue_.compute_current_aggregate();
 
     if (this->count_sensor_)
       this->count_sensor_->publish_state(current_aggregate.get_count());
