@@ -36,6 +36,11 @@
  *      - can be be used as an approximation for the rate of change (derivative) of the measurements
  *      - computed using the covariance of timestamps versus measurements and the variance of timestamps
  *
+ *
+ * Ideas to implement:
+ *  - reset based on a configured time interval
+ *  - sliding window controlled by a time interval
+ *
  * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
  */
 
@@ -62,6 +67,7 @@ enum AverageType {
 enum StatisticsType {
   STATISTICS_TYPE_SLIDING_WINDOW,
   STATISTICS_TYPE_RUNNING,
+  STATISTICS_TYPE_HYBRID,
 };
 
 enum Precision {
@@ -106,6 +112,7 @@ class StatisticsComponent : public Component {
   void set_first_at(size_t send_first_at) { this->send_at_ = send_first_at; }
 
   void set_reset_every(size_t reset_every) { this->reset_every_ = reset_every; }
+  void set_reset_after(size_t reset_after) { this->reset_after_ = reset_after; }
 
   void set_time_conversion_factor(TimeConversionFactor conversion_factor) {
     this->time_conversion_factor_ = conversion_factor;
@@ -114,6 +121,8 @@ class StatisticsComponent : public Component {
   void set_statistics_type(StatisticsType type) { this->statistics_type_ = type; }
   void set_precision(Precision precision) { this->precision_ = precision; }
   void set_average_type(AverageType type) { this->average_type_ = type; }
+
+  void set_chunk_size(size_t size) { this->chunk_size_ = size; }
 
  protected:
   // given a new sensor measurements, add it to window, evict if window is full, and update sensors
@@ -139,6 +148,9 @@ class StatisticsComponent : public Component {
     AggregateQueue<double> *double_precision;
   } queue_{nullptr};
 
+  Aggregate running_aggregate_{};
+  size_t chunk_size_{};
+
   // mimic ESPHome's current filters behavior
   size_t window_size_{};
   size_t send_every_{};
@@ -155,8 +167,11 @@ class StatisticsComponent : public Component {
 
   uint32_t previous_timestamp_{0};
 
+  uint32_t reset_after_{};
+
   void set_capacity_(size_t capacity, EnabledAggregatesConfiguration config);
   void insert_(double value, uint32_t time_delta);
+  void insert_(Aggregate value);
   void evict_();
   size_t size_() const;
   Aggregate compute_current_aggregate_() const;

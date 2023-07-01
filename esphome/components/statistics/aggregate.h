@@ -73,6 +73,9 @@ class Aggregate {
   double get_c2() const { return this->c2_; }
   void set_c2(double c2) { this->c2_ = c2; }
 
+  // uint32_t get_time_delta() const { return this->time_delta_; }
+  // void set_time_delta(uint32_t time_delta) { this->time_delta_ = time_delta; }
+
   // M2 from Welford's algorithm for timestamps; used to compute variance of timestamps
   double get_timestamp_m2() const { return this->timestamp_m2_; }
   void set_timestamp_m2(double timestamp_m2) { this->timestamp_m2_ = timestamp_m2; }
@@ -106,6 +109,7 @@ class Aggregate {
 
   // Count of non-NaN measurements in the set of measurements
   size_t count_{0};
+  // uint32_t time_delta_{0};
 
   // Extrema of the set of measurements
   double max_{std::numeric_limits<double>::infinity() * (-1)};  // the supremum of the empty set is -infinity
@@ -130,8 +134,6 @@ class Aggregate {
   // e.g., if we have one raw timestamp at 5 ms and the reference is 5 ms, we store 0 ms in timestamp_sum
   uint32_t timestamp_reference_{0};
 
-
-
   // Given two samples, normalize the timestamp sums so that they are both in reference to the larger timestamp
   // returns the timestamp both sums are in reference to
   double normalize_timestamp_means_(double &a_mean, const uint32_t &a_timestamp_reference, const size_t &a_count,
@@ -144,6 +146,7 @@ template<typename T> class AggregateQueue {
   virtual void clear();
   virtual size_t size() const { return 0; };
   virtual void insert(T value, uint32_t time_delta);
+  virtual void insert(Aggregate value);
   virtual void evict(){};
   virtual Aggregate compute_current_aggregate();
 

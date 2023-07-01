@@ -46,6 +46,19 @@ template<typename T> void RunningQueue<T>::insert(T value, uint32_t time_delta) 
   this->emplace(new_aggregate, this->index_);
   ++this->index_;
 }
+// Insert a value at end of the queue and consolidiate if necessary
+template<typename T> void RunningQueue<T>::insert(Aggregate new_aggregate) {
+  Aggregate most_recent = this->get_end_();
+
+  while ((this->index_ > 0) && (most_recent.get_count() <= new_aggregate.get_count())) {
+    --this->index_;
+    new_aggregate = most_recent + new_aggregate;
+    most_recent = this->get_end_();
+  }
+
+  this->emplace(new_aggregate, this->index_);
+  ++this->index_;
+}
 
 // Computes the summary statistics for all measurements stored in the queue
 template<typename T> Aggregate RunningQueue<T>::compute_current_aggregate() {
@@ -65,11 +78,13 @@ template<typename T> inline Aggregate RunningQueue<T>::get_end_() {
 template bool RunningQueue<float>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 template void RunningQueue<float>::clear();
 template void RunningQueue<float>::insert(float value, uint32_t time_delta);
+template void RunningQueue<float>::insert(Aggregate value);
 template Aggregate RunningQueue<float>::compute_current_aggregate();
 
 template bool RunningQueue<double>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 template void RunningQueue<double>::clear();
 template void RunningQueue<double>::insert(double value, uint32_t time_delta);
+template void RunningQueue<double>::insert(Aggregate value);
 template Aggregate RunningQueue<double>::compute_current_aggregate();
 
 }  // namespace statistics
