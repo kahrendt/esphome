@@ -165,6 +165,16 @@ void StatisticsComponent::setup() {
       this->queue_.double_precision = new RunningQueue<double>();
 
     this->set_capacity_(this->reset_every_, config);
+  } else if (this->statistics_type_ == STATISTICS_TYPE_HYBRID) {
+    if (this->precision_ == FLOAT_PRECISION)
+      this->queue_.float_precision = new DABALite<float>();
+    else
+      this->queue_.double_precision = new DABALite<double>();
+
+    if ((this->window_size_ % this->chunk_size_) == 0)
+      this->set_capacity_(this->window_size_ / this->chunk_size_, config);
+    else
+      this->set_capacity_(this->window_size_ / this->chunk_size_ + 1, config);
   }
 
   // On every source sensor update, call handle_new_value_()
@@ -189,6 +199,13 @@ void StatisticsComponent::insert_(double value, uint32_t time_delta) {
     this->queue_.double_precision->insert(value, time_delta);
 }
 
+void StatisticsComponent::insert_(Aggregate value) {
+  if (this->precision_ == FLOAT_PRECISION)
+    this->queue_.float_precision->insert(value);
+  else
+    this->queue_.double_precision->insert(value);
+}
+
 void StatisticsComponent::evict_() {
   if (this->precision_ == FLOAT_PRECISION)
     this->queue_.float_precision->evict();
@@ -197,9 +214,16 @@ void StatisticsComponent::evict_() {
 }
 
 Aggregate StatisticsComponent::compute_current_aggregate_() const {
-  if (this->precision_ == FLOAT_PRECISION)
-    return this->queue_.float_precision->compute_current_aggregate();
+  if (this->precision_ == FLOAT_PRECISION) {
+    if (this->statistics_type_ == STATISTICS_TYPE_HYBRID)
+      return this->queue_.float_precision->compute_current_aggregate() + this->running_aggregate_;
+    else
+      return this->queue_.float_precision->compute_current_aggregate();
+  }
 
+  if (this->statistics_type_ == STATISTICS_TYPE_HYBRID) {
+    return this->queue_.double_precision->compute_current_aggregate() + this->running_aggregate_;
+  }
   return this->queue_.double_precision->compute_current_aggregate();
 }
 
@@ -226,8 +250,19 @@ void StatisticsComponent::handle_new_value_(double value) {
     while (this->size_() >= this->window_size_) {
       this->evict_();
     }
-  } else {
+  } else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING) {
     ++this->reset_count_;
+  } else if (this->statistics_type_ == STATISTICS_TYPE_HYBRID) {
+    if (this->running_aggregate_.get_count() >= this->chunk_size_) {
+      while (this->size_() >=
+             this->window_size_ / this->chunk_size_ - 1) {  // will mess up when window size is not divisible by chunk
+        this->evict_();
+      }
+
+      this->insert_(this->running_aggregate_);
+
+      this->running_aggregate_ = Aggregate();
+    }
   }
 
   uint32_t time_delta = 1;
@@ -235,12 +270,17 @@ void StatisticsComponent::handle_new_value_(double value) {
     time_delta = now - this->previous_timestamp_;
     this->previous_timestamp_ = now;
   }
-  // Add new value to queue
-  this->insert_(value, time_delta);
 
+  // Add new value to queue
+  if (this->statistics_type_ == STATISTICS_TYPE_HYBRID) {
+    this->running_aggregate_ = this->running_aggregate_ + Aggregate(value, time_delta);
+  } else
+    this->insert_(value, time_delta);
+
+  Aggregate current_aggregate = this->compute_current_aggregate_();
   // Ensure we only push updates for the sensors based on the configuration
   if (++this->send_at_ >= this->send_every_) {
-    Aggregate current_aggregate = this->compute_current_aggregate_();
+    // Aggregate current_aggregate = this->compute_current_aggregate_();
 
     this->send_at_ = 0;
 
@@ -288,6 +328,10 @@ void StatisticsComponent::handle_new_value_(double value) {
       this->trend_sensor_->publish_state(converted_trend);
     }
   }
+
+  // if (current_aggregate.get_count() >= this->reset_after_) {
+  //   this->reset();
+  // }
 
   if (this->reset_count_ == this->reset_every_) {
     this->reset();
