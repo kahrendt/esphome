@@ -27,7 +27,10 @@ StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
 
 CONF_SLIDING_WINDOW = "sliding_window"
 CONF_RUNNING = "running"
+CONF_HYBRID = "hybrid"
+
 CONF_RESET_EVERY = "reset_every"
+CONF_RESET_AFTER = "reset_after"
 
 CONF_MEAN = "mean"
 CONF_MAX = "max"
@@ -38,10 +41,14 @@ CONF_TREND = "trend"
 CONF_COVARIANCE = "covariance"
 CONF_TIME_UNIT = "time_unit"
 
+CONF_CHUNK_SIZE = "chunk_size"
+CONF_CHUNK_TIME = "chunk_time"
+
 StatisticsType = statistics_ns.enum("StatisticsType")
 STATISTICS_TYPES = {
     CONF_SLIDING_WINDOW: StatisticsType.STATISTICS_TYPE_SLIDING_WINDOW,
     CONF_RUNNING: StatisticsType.STATISTICS_TYPE_RUNNING,
+    CONF_HYBRID: StatisticsType.STATISTICS_TYPE_HYBRID,
 }
 
 CONF_AVERAGE_TYPE = "average_type"
@@ -108,52 +115,171 @@ def validate_send_first_at(value):
     return value
 
 
-CONFIG_SCHEMA = cv.Schema(
+entry_common_sensor_parameters = {
+    cv.Optional(CONF_MEAN): sensor.sensor_schema(
+        state_class=STATE_CLASS_MEASUREMENT,
+    ),
+    cv.Optional(CONF_MAX): sensor.sensor_schema(
+        state_class=STATE_CLASS_MEASUREMENT,
+    ),
+    cv.Optional(CONF_MIN): sensor.sensor_schema(
+        state_class=STATE_CLASS_MEASUREMENT,
+    ),
+    cv.Optional(CONF_STD_DEV): sensor.sensor_schema(
+        state_class=STATE_CLASS_MEASUREMENT,
+    ),
+    cv.Optional(CONF_VARIANCE): sensor.sensor_schema(
+        state_class=STATE_CLASS_MEASUREMENT,
+    ),
+    cv.Optional(CONF_COUNT): sensor.sensor_schema(
+        state_class=STATE_CLASS_TOTAL,
+    ),
+    cv.Optional(CONF_TREND): sensor.sensor_schema(
+        state_class=STATE_CLASS_MEASUREMENT,
+    ),
+    cv.Optional(CONF_COVARIANCE): sensor.sensor_schema(
+        state_class=STATE_CLASS_MEASUREMENT,
+    ),
+}
+
+
+entry_common_configuration_options = {
+    cv.Optional(CONF_PRECISION, default=CONF_FLOAT): cv.enum(
+        PRECISION_TYPES, lower=True
+    ),
+    cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE_AVERAGE): cv.enum(
+        AVERAGE_TYPES, lower=True
+    ),
+    cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
+    cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
+        TIME_CONVERSION_FACTORS, lower=True
+    ),
+    cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
+    cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
+}
+
+SLIDING_WINDOW_SCHEMA = cv.All(
     {
-        cv.GenerateID(): cv.declare_id(StatisticsComponent),
-        cv.Optional(CONF_PRECISION, default=CONF_FLOAT): cv.enum(
-            PRECISION_TYPES, lower=True
-        ),
-        cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE_AVERAGE): cv.enum(
-            AVERAGE_TYPES, lower=True
-        ),
-        cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
+    }
+)
+
+RUNNING_SCHEMA = cv.All(
+    {
         cv.Optional(CONF_RESET_EVERY, default=1000): cv.positive_int,
-        cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
-        cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
-        cv.Optional(CONF_TYPE, default=CONF_SLIDING_WINDOW): cv.enum(
-            STATISTICS_TYPES, lower=True
-        ),
-        cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
-            TIME_CONVERSION_FACTORS, lower=True
-        ),
-        cv.Optional(CONF_MEAN): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_MAX): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_MIN): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_STD_DEV): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_VARIANCE): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_COUNT): sensor.sensor_schema(
-            state_class=STATE_CLASS_TOTAL,
-        ),
-        cv.Optional(CONF_TREND): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_COVARIANCE): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-    },
-).extend(cv.COMPONENT_SCHEMA)
+    }
+)
+
+
+TYPE_SCHEMA = cv.typed_schema(
+    {
+        CONF_SLIDING_WINDOW: SLIDING_WINDOW_SCHEMA,
+        CONF_RUNNING: RUNNING_SCHEMA,
+    }
+)
+
+# CONFIG_SCHEMA = cv.typed_schema(
+#     {
+#         CONF_SLIDING_WINDOW: cv.Schema(
+#             {
+#                 cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
+#             }
+#             #             cv.GenerateID(): cv.declare_id(StatisticsComponent),
+#             #             cv.Optional(CONF_PRECISION, default=CONF_FLOAT): cv.enum(
+#             #                 PRECISION_TYPES, lower=True
+#             #             ),
+#             #             cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE_AVERAGE): cv.enum(
+#             #                 AVERAGE_TYPES, lower=True
+#             #             ),
+#             #             cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
+#             #             cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
+#             #             cv.Optional(CONF_RESET_EVERY, default=1000): cv.positive_int,
+#             #             cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
+#             #             cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
+#             #             cv.Optional(CONF_TYPE, default=CONF_SLIDING_WINDOW): cv.enum(
+#             #                 STATISTICS_TYPES, lower=True
+#             #             ),
+#             #             cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
+#             #                 TIME_CONVERSION_FACTORS, lower=True
+#             #             ),
+#         )
+#         .extend(cv.COMPONENT_SCHEMA)
+#         .extend(entry_common_sensor_parameters)
+#         .extend(entry_common_configuration_options),
+#         CONF_RUNNING: cv.Schema(
+#             {
+#                 cv.Optional(CONF_RESET_EVERY, default=1000): cv.positive_int,
+#             }
+#         )
+#         .extend(cv.COMPONENT_SCHEMA)
+#         .extend(entry_common_sensor_parameters)
+#         .extend(entry_common_configuration_options),
+#     },
+#     lower=True,
+# )
+
+# CONFIG_SCHEMA = (
+#     cv.All(
+#         {
+#             cv.GenerateID(): cv.declare_id(StatisticsComponent),
+#             cv.typed_schema(
+#                 {
+#                     CONF_SLIDING_WINDOW: cv.Schema(
+#                         {
+#                             cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
+#                         }
+#                     ),
+#                     CONF_RUNNING: cv.Schema(
+#                         {
+#                             cv.Optional(CONF_RESET_EVERY, default=1000): cv.positive_int,
+#                         }
+#                     ),
+#                 }, lower=True,
+#            ),
+#         }
+#     )
+#     .extend(cv.COMPONENT_SCHEMA)
+#     .extend(entry_common_sensor_parameters)
+#     .extend(entry_common_configuration_options)
+# )
+
+# )
+
+
+def validate_type_options(value):
+    value = cv.positive_int(value)
+
+
+CONFIG_SCHEMA = (
+    cv.Schema(
+        {
+            cv.GenerateID(): cv.declare_id(StatisticsComponent),
+            cv.Optional(CONF_PRECISION, default=CONF_FLOAT): cv.enum(
+                PRECISION_TYPES, lower=True
+            ),
+            cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE_AVERAGE): cv.enum(
+                AVERAGE_TYPES, lower=True
+            ),
+            cv.Optional(CONF_CHUNK_SIZE, default=20): cv.positive_not_null_int,
+            cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
+            cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
+            cv.Optional(CONF_RESET_EVERY, default=1000): cv.positive_int,
+            cv.Optional(CONF_RESET_AFTER, default="3600s"): cv.time_period,
+            cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
+            cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
+            # cv.Required(CONF_TYPE): TYPE_SCHEMA,
+            cv.Optional(CONF_TYPE, default=CONF_SLIDING_WINDOW): cv.enum(
+                STATISTICS_TYPES, lower=True
+            ),
+            cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
+                TIME_CONVERSION_FACTORS, lower=True
+            ),
+        },
+    )
+    .extend(cv.COMPONENT_SCHEMA)
+    .extend(entry_common_sensor_parameters)
+)
+
 
 # approach orrowed from kalman sensor component
 properties_to_inherit_original_unit = [
@@ -222,7 +348,11 @@ async def to_code(config):
     cg.add(var.set_average_type(config[CONF_AVERAGE_TYPE]))
     cg.add(var.set_precision(config[CONF_PRECISION]))
 
+    cg.add(var.set_chunk_size(config[CONF_CHUNK_SIZE]))
+
     cg.add(var.set_reset_every(config[CONF_RESET_EVERY]))
+    cg.add(var.set_reset_after(config[CONF_RESET_AFTER].total_milliseconds))
+
     cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
     cg.add(var.set_send_every(config[CONF_SEND_EVERY]))
     cg.add(var.set_first_at(config[CONF_SEND_FIRST_AT]))

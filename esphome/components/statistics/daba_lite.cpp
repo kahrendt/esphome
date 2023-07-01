@@ -55,6 +55,15 @@ template<typename T> void DABALite<T>::insert(T value, uint32_t time_delta) {
   this->step_();
 }
 
+template<typename T> void DABALite<T>::insert(Aggregate value) {
+  this->back_sum_ = this->back_sum_ + value;
+  this->emplace(value, this->e_.get_index());
+
+  ++this->e_;
+  ++this->size_;
+  this->step_();
+}
+
 // Remove value at start of circular queue and step DABA Lite algorithm
 template<typename T> void DABALite<T>::evict() {
   ++this->f_;
@@ -140,6 +149,7 @@ template bool DABALite<float>::set_capacity(size_t capacity, EnabledAggregatesCo
 template void DABALite<float>::clear();
 template size_t DABALite<float>::size() const;
 template void DABALite<float>::insert(float value, uint32_t time_delta);
+template void DABALite<float>::insert(Aggregate value);
 template void DABALite<float>::evict();
 template Aggregate DABALite<float>::compute_current_aggregate();
 
@@ -147,6 +157,7 @@ template bool DABALite<double>::set_capacity(size_t capacity, EnabledAggregatesC
 template void DABALite<double>::clear();
 template size_t DABALite<double>::size() const;
 template void DABALite<double>::insert(double value, uint32_t time_delta);
+template void DABALite<double>::insert(Aggregate value);
 template void DABALite<double>::evict();
 template Aggregate DABALite<double>::compute_current_aggregate();
 

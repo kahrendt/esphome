@@ -30,6 +30,7 @@ template<typename T> class DABALite : public AggregateQueue<T> {
 
   // Insert a value at end of circular queue and step the DABA Lite algorithm
   void insert(T value, uint32_t time_delta) override;
+  void insert(Aggregate value) override;
 
   // Remove a value at start of circular queue and step the DABA Lite algorithm
   void evict() override;

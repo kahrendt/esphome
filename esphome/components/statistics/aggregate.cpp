@@ -50,6 +50,18 @@ Aggregate::Aggregate(double value, uint32_t time_delta) {
   }
 }
 
+// see https://en.wikipedia.org/wiki/2Sum and Kahan summation
+double two_sum(double a, double b) {
+  double s = a + b;
+  double a_prime = s - b;
+  double b_prime = s - a_prime;
+  double delta_a = a - a_prime;
+  double delta_b = b - b_prime;
+  double t = delta_a + delta_b;
+
+  return s + t;
+}
+
 Aggregate Aggregate::operator+(const Aggregate &b) {
   size_t a_count = this->get_count();
   size_t b_count = b.get_count();
@@ -85,6 +97,8 @@ Aggregate Aggregate::operator+(const Aggregate &b) {
 
   combined.count_ = a_count + b_count;
 
+  double cast_combined_count = static_cast<double>(combined.count_);
+
   combined.max_ = std::max(a_max, b_max);
   combined.min_ = std::min(a_min, b_min);
 
@@ -112,20 +126,28 @@ Aggregate Aggregate::operator+(const Aggregate &b) {
   } else {
     double delta = b_mean - a_mean;
 
-    combined.mean_ = a_mean + delta * cast_b_count / (cast_a_count + cast_b_count);
+    combined.mean_ = two_sum(a_mean, delta * cast_b_count / cast_combined_count);
+    // combined.mean_ = a_mean + delta * cast_b_count / (cast_combined_count);
 
     // compute M2 quantity for Welford's algorithm which can determine the variance
-    combined.m2_ = a_m2 + b_m2 + delta * delta * cast_a_count * cast_b_count / (cast_a_count + cast_b_count);
+    combined.m2_ = a_m2 + b_m2 + delta * delta * cast_a_count * cast_b_count / (cast_combined_count);
 
     double timestamp_delta = b_timestamp_mean - a_timestamp_mean;
-    combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta * cast_b_count / (cast_a_count + cast_b_count);
+    // combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta * cast_b_count / (cast_combined_count);
+    //  combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta * cast_b_count / (cast_a_count + cast_b_count);
 
     double timestamp_delta_squared = timestamp_delta * timestamp_delta;
 
-    combined.c2_ = a_c2 + b_c2 + timestamp_delta * delta * cast_a_count * cast_b_count / (cast_a_count + cast_b_count);
+    combined.c2_ = a_c2 + b_c2 + timestamp_delta * delta * cast_a_count * cast_b_count / (cast_combined_count);
 
-    combined.timestamp_m2_ = a_timestamp_m2 + b_timestamp_m2 +
-                             timestamp_delta_squared * cast_a_count * cast_b_count / (cast_a_count + cast_b_count);
+    combined.timestamp_m2_ =
+        a_timestamp_m2 + b_timestamp_m2 + timestamp_delta_squared * cast_a_count * cast_b_count / (cast_combined_count);
+
+    double chan_mean = two_sum(a_timestamp_mean, timestamp_delta * cast_b_count / cast_combined_count);
+    double weighted_mean = two_sum(a_timestamp_mean * cast_a_count / cast_combined_count,
+                                   b_timestamp_mean * cast_b_count / cast_combined_count);
+    // ESP_LOGI("mean algorithms", "chan-weighted=%.15f", (chan_mean - weighted_mean));
+    combined.timestamp_mean_ = weighted_mean;
   }
 
   return combined;
