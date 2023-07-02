@@ -43,10 +43,10 @@ template<typename T> void DABALite<T>::clear() {
 }
 
 // Insert value at end of circular queue and step DABA Lite algorithm
-template<typename T> void DABALite<T>::insert(T value, uint32_t time_delta) {
-  Aggregate lifted = Aggregate(value, time_delta);
+template<typename T> void DABALite<T>::insert(T value, uint32_t duration) {
+  Aggregate lifted = Aggregate(value, duration);
 
-  this->back_sum_ = this->back_sum_ + lifted;
+  this->back_sum_ = this->back_sum_.combine_with(lifted);  // = this->back_sum_ + lifted;
 
   this->emplace(lifted, this->e_.get_index());
 
@@ -56,7 +56,7 @@ template<typename T> void DABALite<T>::insert(T value, uint32_t time_delta) {
 }
 
 template<typename T> void DABALite<T>::insert(Aggregate value) {
-  this->back_sum_ = this->back_sum_ + value;
+  this->back_sum_ = this->back_sum_.combine_with(value);  //= this->back_sum_ + value;
   this->emplace(value, this->e_.get_index());
 
   ++this->e_;
@@ -77,7 +77,7 @@ template<typename T> Aggregate DABALite<T>::compute_current_aggregate() {
     Aggregate alpha = this->get_alpha_();
     Aggregate back = this->get_back_();
 
-    return alpha + back;
+    return alpha.combine_with(back, this->time_weighted_);
   }
   return this->identity_class_;
 }
@@ -96,13 +96,15 @@ template<typename T> void DABALite<T>::step_() {
       --this->a_;
       Aggregate old_a = this->lower(this->a_.get_index());
 
-      this->emplace(old_a + prev_delta, this->a_.get_index());
+      // this->emplace(old_a + prev_delta, this->a_.get_index());
+      this->emplace(old_a.combine_with(prev_delta, this->time_weighted_), this->a_.get_index());
     }
 
     if (this->l_ != this->r_) {
       Aggregate old_l = this->lower(this->l_.get_index());
 
-      this->emplace(old_l + this->mid_sum_, this->l_.get_index());
+      // this->emplace(old_l + this->mid_sum_, this->l_.get_index());
+      this->emplace(old_l.combine_with(this->mid_sum_, this->time_weighted_), this->l_.get_index());
       ++this->l_;
     } else {
       ++this->l_;
@@ -145,18 +147,20 @@ template<typename T> inline Aggregate DABALite<T>::get_delta_() {
 }
 
 // avoids linking errors (https://isocpp.org/wiki/faq/templates)
+template void DABALite<float>::enable_time_weighted();
 template bool DABALite<float>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 template void DABALite<float>::clear();
 template size_t DABALite<float>::size() const;
-template void DABALite<float>::insert(float value, uint32_t time_delta);
+template void DABALite<float>::insert(float value, uint32_t duration);
 template void DABALite<float>::insert(Aggregate value);
 template void DABALite<float>::evict();
 template Aggregate DABALite<float>::compute_current_aggregate();
 
+template void DABALite<double>::enable_time_weighted();
 template bool DABALite<double>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 template void DABALite<double>::clear();
 template size_t DABALite<double>::size() const;
-template void DABALite<double>::insert(double value, uint32_t time_delta);
+template void DABALite<double>::insert(double value, uint32_t duration);
 template void DABALite<double>::insert(Aggregate value);
 template void DABALite<double>::evict();
 template Aggregate DABALite<double>::compute_current_aggregate();

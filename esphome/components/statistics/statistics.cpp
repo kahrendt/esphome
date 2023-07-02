@@ -75,6 +75,10 @@ void StatisticsComponent::dump_config() {
     LOG_SENSOR("  ", "Count", this->count_sensor_);
   }
 
+  if (this->duration_sensor_) {
+    LOG_SENSOR("  ", "Duration", this->duration_sensor_);
+  }
+
   if (this->max_sensor_) {
     LOG_SENSOR("  ", "Max", this->max_sensor_);
   }
@@ -110,6 +114,9 @@ void StatisticsComponent::setup() {
 
   if (this->count_sensor_)
     config.count = true;
+
+  if (this->duration_sensor_)
+    config.duration = true;
 
   if (this->max_sensor_) {
     config.count = true;  // count is always needed for running type
@@ -150,6 +157,11 @@ void StatisticsComponent::setup() {
     config.timestamp_m2 = true;
   }
 
+  if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
+    config.duration = true;
+    config.duration_squared = true;
+  }
+
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
     if (this->precision_ == FLOAT_PRECISION)
       this->queue_.float_precision = new DABALite<float>();
@@ -177,6 +189,13 @@ void StatisticsComponent::setup() {
       this->set_capacity_(this->window_size_ / this->chunk_size_ + 1, config);
   }
 
+  if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
+    if (this->precision_ == FLOAT_PRECISION)
+      this->queue_.float_precision->enable_time_weighted();
+    else
+      this->queue_.double_precision->enable_time_weighted();
+  }
+
   // On every source sensor update, call handle_new_value_()
   this->source_sensor_->add_on_state_callback([this](float value) -> void { this->handle_new_value_(value); });
 
@@ -192,11 +211,11 @@ void StatisticsComponent::set_capacity_(size_t capacity, EnabledAggregatesConfig
   }
 }
 
-void StatisticsComponent::insert_(double value, uint32_t time_delta) {
+void StatisticsComponent::insert_(double value, uint32_t duration) {
   if (this->precision_ == FLOAT_PRECISION)
-    this->queue_.float_precision->insert(value, time_delta);
+    this->queue_.float_precision->insert(value, duration);
   else
-    this->queue_.double_precision->insert(value, time_delta);
+    this->queue_.double_precision->insert(value, duration);
 }
 
 void StatisticsComponent::insert_(Aggregate value) {
@@ -215,15 +234,9 @@ void StatisticsComponent::evict_() {
 
 Aggregate StatisticsComponent::compute_current_aggregate_() const {
   if (this->precision_ == FLOAT_PRECISION) {
-    if (this->statistics_type_ == STATISTICS_TYPE_HYBRID)
-      return this->queue_.float_precision->compute_current_aggregate() + this->running_aggregate_;
-    else
-      return this->queue_.float_precision->compute_current_aggregate();
+    return this->queue_.float_precision->compute_current_aggregate();
   }
 
-  if (this->statistics_type_ == STATISTICS_TYPE_HYBRID) {
-    return this->queue_.double_precision->compute_current_aggregate() + this->running_aggregate_;
-  }
   return this->queue_.double_precision->compute_current_aggregate();
 }
 
@@ -255,27 +268,37 @@ void StatisticsComponent::handle_new_value_(double value) {
   } else if (this->statistics_type_ == STATISTICS_TYPE_HYBRID) {
     if (this->running_aggregate_.get_count() >= this->chunk_size_) {
       while (this->size_() >=
-             this->window_size_ / this->chunk_size_ - 1) {  // will mess up when window size is not divisible by chunk
+             this->window_size_ / this->chunk_size_) {  // will mess up when window size is not divisible by chunk
         this->evict_();
       }
-
-      this->insert_(this->running_aggregate_);
-
-      this->running_aggregate_ = Aggregate();
     }
   }
 
-  uint32_t time_delta = 1;
+  uint32_t duration = now - this->previous_timestamp_;
+  // static_cast<double>(now - this->previous_timestamp_) / static_cast<double>(this->time_conversion_factor_);
+
+  float insert_value = value;
+
   if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
-    time_delta = now - this->previous_timestamp_;
-    this->previous_timestamp_ = now;
+    insert_value = this->previous_value_;
   }
 
   // Add new value to queue
   if (this->statistics_type_ == STATISTICS_TYPE_HYBRID) {
-    this->running_aggregate_ = this->running_aggregate_ + Aggregate(value, time_delta);
+    this->running_aggregate_ = this->running_aggregate_.combine_with(
+        Aggregate(insert_value, duration));  // this->running_aggregate_ + Aggregate(insert_value, duration);
+
+    if (this->running_aggregate_.get_count() >= this->chunk_size_) {
+      this->insert_(this->running_aggregate_);
+
+      this->running_aggregate_ = Aggregate();
+    }
+
   } else
-    this->insert_(value, time_delta);
+    this->insert_(insert_value, duration);
+
+  this->previous_timestamp_ = now;
+  this->previous_value_ = value;
 
   Aggregate current_aggregate = this->compute_current_aggregate_();
   // Ensure we only push updates for the sensors based on the configuration
@@ -286,6 +309,9 @@ void StatisticsComponent::handle_new_value_(double value) {
 
     if (this->count_sensor_)
       this->count_sensor_->publish_state(current_aggregate.get_count());
+
+    if (this->duration_sensor_)
+      this->duration_sensor_->publish_state(current_aggregate.get_duration());
 
     if (this->max_sensor_) {
       float max = current_aggregate.get_max();
@@ -309,13 +335,15 @@ void StatisticsComponent::handle_new_value_(double value) {
       this->mean_sensor_->publish_state(current_aggregate.get_mean());
 
     if (this->variance_sensor_)
-      this->variance_sensor_->publish_state(current_aggregate.compute_variance());
+      this->variance_sensor_->publish_state(
+          current_aggregate.compute_variance(this->average_type_ == TIME_WEIGHTED_AVERAGE));
 
     if (this->std_dev_sensor_)
-      this->std_dev_sensor_->publish_state(current_aggregate.compute_std_dev());
+      this->std_dev_sensor_->publish_state(
+          current_aggregate.compute_std_dev(this->average_type_ == TIME_WEIGHTED_AVERAGE));
 
     if (this->covariance_sensor_) {
-      double covariance_ms = current_aggregate.compute_covariance();
+      double covariance_ms = current_aggregate.compute_covariance(this->average_type_ == TIME_WEIGHTED_AVERAGE);
       double converted_covariance = covariance_ms / this->time_conversion_factor_;
 
       this->covariance_sensor_->publish_state(converted_covariance);

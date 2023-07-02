@@ -98,6 +98,7 @@ class StatisticsComponent : public Component {
 
   // sensors for aggregate statistics from sliding window
   void set_count_sensor(sensor::Sensor *count_sensor) { this->count_sensor_ = count_sensor; }
+  void set_duration_sensor(sensor::Sensor *duration_sensor) { this->duration_sensor_ = duration_sensor; }
   void set_max_sensor(sensor::Sensor *max_sensor) { this->max_sensor_ = max_sensor; }
   void set_min_sensor(sensor::Sensor *min_sensor) { this->min_sensor_ = min_sensor; }
   void set_mean_sensor(sensor::Sensor *mean_sensor) { this->mean_sensor_ = mean_sensor; }
@@ -135,6 +136,7 @@ class StatisticsComponent : public Component {
 
   // sensors for aggregate statistics from sliding window
   sensor::Sensor *count_sensor_{nullptr};
+  sensor::Sensor *duration_sensor_{nullptr};
   sensor::Sensor *max_sensor_{nullptr};
   sensor::Sensor *min_sensor_{nullptr};
   sensor::Sensor *mean_sensor_{nullptr};
@@ -165,12 +167,13 @@ class StatisticsComponent : public Component {
 
   AverageType average_type_{};
 
+  float previous_value_{NAN};
   uint32_t previous_timestamp_{0};
 
   uint32_t reset_after_{};
 
   void set_capacity_(size_t capacity, EnabledAggregatesConfiguration config);
-  void insert_(double value, uint32_t time_delta);
+  void insert_(double value, uint32_t duration);
   void insert_(Aggregate value);
   void evict_();
   size_t size_() const;

@@ -34,6 +34,8 @@ namespace statistics {
 
 struct EnabledAggregatesConfiguration {
   bool count{false};
+  bool duration{false};
+  bool duration_squared{false};
   bool max{false};
   bool min{false};
   bool mean{false};
@@ -47,7 +49,7 @@ struct EnabledAggregatesConfiguration {
 class Aggregate {
  public:
   Aggregate(){};  // default constructor for a null measurement
-  Aggregate(double value, uint32_t time_delta);
+  Aggregate(double value, uint32_t duration);
 
   // Count of valid readings; i.e., not NaN, in the set of measurements
   size_t get_count() const { return this->count_; }
@@ -73,8 +75,11 @@ class Aggregate {
   double get_c2() const { return this->c2_; }
   void set_c2(double c2) { this->c2_ = c2; }
 
-  // uint32_t get_time_delta() const { return this->time_delta_; }
-  // void set_time_delta(uint32_t time_delta) { this->time_delta_ = time_delta; }
+  uint32_t get_duration() const { return this->duration_; }
+  void set_duration(uint32_t duration) { this->duration_ = duration; }
+
+  size_t get_duration_squared() const { return this->duration_squared_; }
+  void set_duration_squared(size_t duration_squared) { this->duration_squared_ = duration_squared; }
 
   // M2 from Welford's algorithm for timestamps; used to compute variance of timestamps
   double get_timestamp_m2() const { return this->timestamp_m2_; }
@@ -88,16 +93,19 @@ class Aggregate {
   void set_timestamp_mean(double timestamp_mean) { this->timestamp_mean_ = timestamp_mean; }
 
   // Return the sample variance of measurements
-  double compute_variance() const;
+  double compute_variance(bool time_weighted) const;
 
   // Return the sample standard deviation of measurements
-  double compute_std_dev() const;
+  double compute_std_dev(bool time_weighted) const;
 
   // Return the sample covariance of measurements and timestamps
-  double compute_covariance() const;
+  double compute_covariance(bool time_weighted) const;
 
   // Return the slope of the line of best fit over the window
   double compute_trend() const;
+
+  Aggregate combine_with(const Aggregate &b, bool time_weighted = false);
+  void combine(const Aggregate &a, const Aggregate &b, bool time_weighted = false);
 
   Aggregate operator+(const Aggregate &b);
 
@@ -109,7 +117,9 @@ class Aggregate {
 
   // Count of non-NaN measurements in the set of measurements
   size_t count_{0};
-  // uint32_t time_delta_{0};
+  uint32_t duration_{0};
+
+  size_t duration_squared_{0};
 
   // Extrema of the set of measurements
   double max_{std::numeric_limits<double>::infinity() * (-1)};  // the supremum of the empty set is -infinity
@@ -142,10 +152,11 @@ class Aggregate {
 
 template<typename T> class AggregateQueue {
  public:
+  virtual void enable_time_weighted();
   virtual bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
   virtual void clear();
   virtual size_t size() const { return 0; };
-  virtual void insert(T value, uint32_t time_delta);
+  virtual void insert(T value, uint32_t duration);
   virtual void insert(Aggregate value);
   virtual void evict(){};
   virtual Aggregate compute_current_aggregate();
@@ -157,6 +168,8 @@ template<typename T> class AggregateQueue {
 
  protected:
   size_t *count_queue_{nullptr};
+  size_t *duration_squared_queue_{nullptr};
+  uint32_t *duration_queue_{nullptr};
   T *max_queue_{nullptr};
   T *min_queue_{nullptr};
   T *mean_queue_{nullptr};

@@ -17,6 +17,8 @@ from esphome.const import (
     STATE_CLASS_MEASUREMENT,
     STATE_CLASS_TOTAL,
     CONF_TYPE,
+    DEVICE_CLASS_DURATION,
+    UNIT_MILLISECOND,
 )
 from esphome.core.entity_helpers import inherit_property_from
 
@@ -40,6 +42,7 @@ CONF_VARIANCE = "variance"
 CONF_TREND = "trend"
 CONF_COVARIANCE = "covariance"
 CONF_TIME_UNIT = "time_unit"
+CONF_DURATION = "duration"
 
 CONF_CHUNK_SIZE = "chunk_size"
 CONF_CHUNK_TIME = "chunk_time"
@@ -139,6 +142,11 @@ entry_common_sensor_parameters = {
     ),
     cv.Optional(CONF_COVARIANCE): sensor.sensor_schema(
         state_class=STATE_CLASS_MEASUREMENT,
+    ),
+    cv.Optional(CONF_DURATION): sensor.sensor_schema(
+        state_class=STATE_CLASS_MEASUREMENT,
+        device_class=DEVICE_CLASS_DURATION,
+        unit_of_measurement=UNIT_MILLISECOND,
     ),
 }
 
@@ -363,6 +371,11 @@ async def to_code(config):
         conf = config[CONF_COUNT]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_count_sensor(sens))
+
+    if CONF_DURATION in config:
+        conf = config[CONF_DURATION]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_duration_sensor(sens))
 
     if CONF_MAX in config:
         conf = config[CONF_MAX]

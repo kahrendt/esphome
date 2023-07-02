@@ -15,6 +15,7 @@ namespace statistics {
 
 template<typename T> class RunningQueue : public AggregateQueue<T> {
  public:
+  void enable_time_weighted() override { this->time_weighted_ = true; }
   // Sets the capacity of underlying queue; uses at most log_2(n)+1 aggregates
   //  - returns whether memory was successfully allocated
   bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config) override;
@@ -23,7 +24,7 @@ template<typename T> class RunningQueue : public AggregateQueue<T> {
   void clear() override;
 
   // Insert a value at end of the queue and consolidiate if necessary
-  void insert(T value, uint32_t time_delta) override;
+  void insert(T value, uint32_t duration) override;
   void insert(Aggregate value) override;
 
   // Computes the summary statistics for all measurements stored in the queue
@@ -31,6 +32,8 @@ template<typename T> class RunningQueue : public AggregateQueue<T> {
 
  protected:
   uint8_t index_{0};
+
+  bool time_weighted_{false};
 
   inline Aggregate get_end_();
 };
