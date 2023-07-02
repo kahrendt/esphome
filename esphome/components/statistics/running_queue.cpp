@@ -32,14 +32,14 @@ template<typename T> bool RunningQueue<T>::set_capacity(size_t capacity, Enabled
 template<typename T> void RunningQueue<T>::clear() { this->index_ = 0; }
 
 // Insert a value at end of the queue and consolidiate if necessary
-template<typename T> void RunningQueue<T>::insert(T value, uint32_t time_delta) {
-  Aggregate new_aggregate = Aggregate(value, time_delta);
+template<typename T> void RunningQueue<T>::insert(T value, uint32_t duration) {
+  Aggregate new_aggregate = Aggregate(value, duration);
 
   Aggregate most_recent = this->get_end_();
 
   while ((this->index_ > 0) && (most_recent.get_count() <= new_aggregate.get_count())) {
     --this->index_;
-    new_aggregate = most_recent + new_aggregate;
+    new_aggregate = new_aggregate.combine_with(most_recent, this->time_weighted_);  // most_recent + new_aggregate;
     most_recent = this->get_end_();
   }
 
@@ -52,7 +52,7 @@ template<typename T> void RunningQueue<T>::insert(Aggregate new_aggregate) {
 
   while ((this->index_ > 0) && (most_recent.get_count() <= new_aggregate.get_count())) {
     --this->index_;
-    new_aggregate = most_recent + new_aggregate;
+    new_aggregate = new_aggregate.combine_with(most_recent, this->time_weighted_);  // most_recent + new_aggregate;
     most_recent = this->get_end_();
   }
 
@@ -64,7 +64,7 @@ template<typename T> void RunningQueue<T>::insert(Aggregate new_aggregate) {
 template<typename T> Aggregate RunningQueue<T>::compute_current_aggregate() {
   Aggregate total = Aggregate();
   for (int i = this->index_ - 1; i >= 0; --i) {
-    total = total + this->lower(i);
+    total = total.combine_with(this->lower(i), this->time_weighted_);  // total + this->lower(i);
   }
 
   return total;
@@ -75,15 +75,17 @@ template<typename T> inline Aggregate RunningQueue<T>::get_end_() {
 }
 
 // avoids linking errors (https://isocpp.org/wiki/faq/templates)
+template void RunningQueue<float>::enable_time_weighted();
 template bool RunningQueue<float>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 template void RunningQueue<float>::clear();
-template void RunningQueue<float>::insert(float value, uint32_t time_delta);
+template void RunningQueue<float>::insert(float value, uint32_t duration);
 template void RunningQueue<float>::insert(Aggregate value);
 template Aggregate RunningQueue<float>::compute_current_aggregate();
 
+template void RunningQueue<double>::enable_time_weighted();
 template bool RunningQueue<double>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 template void RunningQueue<double>::clear();
-template void RunningQueue<double>::insert(double value, uint32_t time_delta);
+template void RunningQueue<double>::insert(double value, uint32_t duration);
 template void RunningQueue<double>::insert(Aggregate value);
 template Aggregate RunningQueue<double>::compute_current_aggregate();
 

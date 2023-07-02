@@ -18,6 +18,7 @@ namespace statistics {
 
 template<typename T> class DABALite : public AggregateQueue<T> {
  public:
+  void enable_time_weighted() override { this->time_weighted_ = true; }
   // Sets the window size by adjusting the capacity of the underlying circular queues
   //  - returns whether memory was successfully allocated
   bool set_capacity(size_t window_size, EnabledAggregatesConfiguration config) override;
@@ -29,7 +30,7 @@ template<typename T> class DABALite : public AggregateQueue<T> {
   size_t size() const override { return this->size_; }
 
   // Insert a value at end of circular queue and step the DABA Lite algorithm
-  void insert(T value, uint32_t time_delta) override;
+  void insert(T value, uint32_t duration) override;
   void insert(Aggregate value) override;
 
   // Remove a value at start of circular queue and step the DABA Lite algorithm
@@ -38,6 +39,7 @@ template<typename T> class DABALite : public AggregateQueue<T> {
   Aggregate compute_current_aggregate() override;
 
  protected:
+  bool time_weighted_{false};
   // Maximum window capacity
   size_t window_size_{0};
 

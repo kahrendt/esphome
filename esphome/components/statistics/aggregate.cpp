@@ -36,11 +36,11 @@
 namespace esphome {
 namespace statistics {
 
-Aggregate::Aggregate(double value, uint32_t time_delta) {
+Aggregate::Aggregate(double value, uint32_t duration) {
   if (!std::isnan(value)) {
     this->max_ = value;
     this->min_ = value;
-    this->count_ = time_delta;
+    this->count_ = 1;
     this->mean_ = value;
     this->m2_ = 0.0;
     this->c2_ = 0.0;
@@ -48,6 +48,8 @@ Aggregate::Aggregate(double value, uint32_t time_delta) {
     this->timestamp_reference_ = millis();
     this->timestamp_mean_ = 0.0;
   }
+  this->duration_ = duration;  // even if reading is NaN, still count the time that has passed
+  this->duration_squared_ = duration * duration;
 }
 
 // see https://en.wikipedia.org/wiki/2Sum and Kahan summation
@@ -62,12 +64,12 @@ double two_sum(double a, double b) {
   return s + t;
 }
 
-Aggregate Aggregate::operator+(const Aggregate &b) {
+Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   size_t a_count = this->get_count();
   size_t b_count = b.get_count();
 
-  double cast_a_count = static_cast<double>(a_count);
-  double cast_b_count = static_cast<double>(b_count);
+  uint32_t a_duration = this->get_duration();
+  uint32_t b_duration = b.get_duration();
 
   double a_min = this->get_min();
   double b_min = b.get_min();
@@ -96,8 +98,20 @@ Aggregate Aggregate::operator+(const Aggregate &b) {
   Aggregate combined;
 
   combined.count_ = a_count + b_count;
+  combined.duration_ = a_duration + b_duration;
+  combined.duration_squared_ = this->get_duration_squared() + b.get_duration_squared();
 
-  double cast_combined_count = static_cast<double>(combined.count_);
+  double a_weight, b_weight, combined_weight;
+
+  if (time_weighted) {
+    a_weight = static_cast<double>(a_duration);
+    b_weight = static_cast<double>(b_duration);
+    combined_weight = static_cast<double>(combined.duration_);
+  } else {
+    a_weight = static_cast<double>(a_count);
+    b_weight = static_cast<double>(b_count);
+    combined_weight = static_cast<double>(combined.count_);
+  }
 
   combined.max_ = std::max(a_max, b_max);
   combined.min_ = std::min(a_min, b_min);
@@ -126,43 +140,81 @@ Aggregate Aggregate::operator+(const Aggregate &b) {
   } else {
     double delta = b_mean - a_mean;
 
-    combined.mean_ = two_sum(a_mean, delta * cast_b_count / cast_combined_count);
+    double delta_prime = delta * b_weight / combined_weight;
+
+    combined.mean_ = a_mean + delta_prime;  // two_sum(a_mean, delta_prime);
     // combined.mean_ = a_mean + delta * cast_b_count / (cast_combined_count);
 
+    combined.m2_ = a_m2 + b_m2 + a_weight * delta * delta_prime;
     // compute M2 quantity for Welford's algorithm which can determine the variance
-    combined.m2_ = a_m2 + b_m2 + delta * delta * cast_a_count * cast_b_count / (cast_combined_count);
+    // combined.m2_ = a_m2 + b_m2 + delta * delta * a_weight * b_weight / (combined_weight);
 
     double timestamp_delta = b_timestamp_mean - a_timestamp_mean;
     // combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta * cast_b_count / (cast_combined_count);
     //  combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta * cast_b_count / (cast_a_count + cast_b_count);
 
-    double timestamp_delta_squared = timestamp_delta * timestamp_delta;
+    double timestamp_delta_prime = timestamp_delta * b_weight / combined_weight;
+    combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta_prime;
 
-    combined.c2_ = a_c2 + b_c2 + timestamp_delta * delta * cast_a_count * cast_b_count / (cast_combined_count);
+    combined.timestamp_m2_ = a_timestamp_m2 + b_timestamp_m2 + a_weight * timestamp_delta * timestamp_delta_prime;
 
-    combined.timestamp_m2_ =
-        a_timestamp_m2 + b_timestamp_m2 + timestamp_delta_squared * cast_a_count * cast_b_count / (cast_combined_count);
+    combined.c2_ = a_c2 + b_c2 + a_weight * delta * timestamp_delta_prime;
 
-    double chan_mean = two_sum(a_timestamp_mean, timestamp_delta * cast_b_count / cast_combined_count);
-    double weighted_mean = two_sum(a_timestamp_mean * cast_a_count / cast_combined_count,
-                                   b_timestamp_mean * cast_b_count / cast_combined_count);
-    // ESP_LOGI("mean algorithms", "chan-weighted=%.15f", (chan_mean - weighted_mean));
-    combined.timestamp_mean_ = weighted_mean;
+    // double timestamp_delta_squared = timestamp_delta * timestamp_delta;
+
+    // combined.c2_ = a_c2 + b_c2 + timestamp_delta * delta * a_weight * b_weight / (combined_weight);
+
+    // combined.timestamp_m2_ =
+    //     a_timestamp_m2 + b_timestamp_m2 + timestamp_delta_squared * a_weight * b_weight / (combined_weight);
+
+    // // double chan_mean = two_sum(a_timestamp_mean, timestamp_delta * b_weight / combined_weight);
+    // double weighted_mean =
+    //     two_sum(a_timestamp_mean * a_weight / combined_weight, b_timestamp_mean * b_weight / combined_weight);
+    // // ESP_LOGI("mean algorithms", "chan-weighted=%.15f", (chan_mean - weighted_mean));
+    // combined.timestamp_mean_ = weighted_mean;
   }
 
   return combined;
 }
 
+Aggregate Aggregate::operator+(const Aggregate &b) {
+  Aggregate combine = this->combine_with(*this, false);
+
+  return combine;
+}
+
 // Sample variance using Welford's algorithm (Bessel's correction is applied)
-double Aggregate::compute_variance() const { return this->m2_ / (this->count_ - 1); }
+double Aggregate::compute_variance(bool time_weighted) const {
+  if (this->count_ > 1) {
+    // TO-DO: Move this to own function
+    double denominator = static_cast<double>(this->count_ - 1);  // Bessel's correction
+    if (time_weighted) {                                         // reliability weights:
+                          // https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Weighted_sample_variance
+      denominator = static_cast<double>(this->duration_) -
+                    static_cast<double>(this->duration_squared_) / static_cast<double>(this->duration_);
+    }
+    return this->m2_ / denominator;
+  }
+
+  return NAN;
+}
 
 // Sample standard deviation using Welford's algorithm (Bessel's correction is applied to the computed variance)
-double Aggregate::compute_std_dev() const { return std::sqrt(this->compute_variance()); }
+double Aggregate::compute_std_dev(bool time_weighted) const { return std::sqrt(this->compute_variance(time_weighted)); }
 
 // Sample covariance using an extension of Welford's algorithm (Bessel's correction is applied)
-double Aggregate::compute_covariance() const {
-  if (this->count_ > 1)
-    return this->c2_ / (this->count_ - 1);
+double Aggregate::compute_covariance(bool time_weighted) const {
+  if (this->count_ > 1) {
+    // TO-DO: Move this to own function
+    double denominator = static_cast<double>(this->count_ - 1);  // Bessel's correction
+    if (time_weighted) {                                         // reliability weights:
+                          // https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Weighted_sample_variance
+      denominator = static_cast<double>(this->duration_) -
+                    static_cast<double>(this->duration_squared_) / static_cast<double>(this->duration_);
+    }
+    return this->c2_ / denominator;
+  }
+
   return NAN;
 }
 
@@ -215,6 +267,10 @@ template<typename T> void AggregateQueue<T>::emplace(const Aggregate &value, siz
     this->min_queue_[index] = value.get_min();
   if (this->count_queue_ != nullptr)
     this->count_queue_[index] = value.get_count();
+  if (this->duration_queue_ != nullptr)
+    this->duration_queue_[index] = value.get_duration();
+  if (this->duration_squared_queue_ != nullptr)
+    this->duration_squared_queue_[index] = value.get_duration_squared();
   if (this->mean_queue_ != nullptr)
     this->mean_queue_[index] = value.get_mean();
   if (this->m2_queue_ != nullptr)
@@ -238,6 +294,10 @@ template<typename T> Aggregate AggregateQueue<T>::lower(size_t index) {
     aggregate.set_min(this->min_queue_[index]);
   if (this->count_queue_ != nullptr)
     aggregate.set_count(this->count_queue_[index]);
+  if (this->duration_queue_ != nullptr)
+    aggregate.set_duration(this->duration_queue_[index]);
+  if (this->duration_squared_queue_ != nullptr)
+    aggregate.set_duration_squared(this->duration_squared_queue_[index]);
   if (this->mean_queue_ != nullptr)
     aggregate.set_mean(this->mean_queue_[index]);
   if (this->m2_queue_ != nullptr)
@@ -277,6 +337,21 @@ template<typename T> bool AggregateQueue<T>::allocate_memory(size_t capacity, En
   if (config.count) {
     this->count_queue_ = size_t_allocator.allocate(capacity);
     if (this->count_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (config.duration) {
+    this->duration_queue_ = uint32_t_allocator.allocate(capacity);  // uint32_t_allocator.allocate(capacity);
+    if (this->duration_queue_ == nullptr) {
+      return false;
+    }
+  }
+
+  if (config.duration_squared) {
+    this->duration_squared_queue_ = size_t_allocator.allocate(capacity);
+    // size_t_allocator.allocate(capacity);
+    if (this->duration_squared_queue_ == nullptr) {
       return false;
     }
   }
