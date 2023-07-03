@@ -187,6 +187,8 @@ void StatisticsComponent::setup() {
       this->set_capacity_(this->window_size_ / this->chunk_size_, config);
     else
       this->set_capacity_(this->window_size_ / this->chunk_size_ + 1, config);
+  } else if (this->statistics_type_ == STATISTICS_TYPE_NAIVE) {
+    this->running_aggregate_ = Aggregate();
   }
 
   if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
@@ -285,26 +287,30 @@ void StatisticsComponent::handle_new_value_(double value) {
 
   // Add new value to queue
   if (this->statistics_type_ == STATISTICS_TYPE_HYBRID) {
-    this->running_aggregate_ = this->running_aggregate_.combine_with(
-        Aggregate(insert_value, duration));  // this->running_aggregate_ + Aggregate(insert_value, duration);
+    this->running_aggregate_ = this->running_aggregate_.combine_with(Aggregate(insert_value, duration));
 
     if (this->running_aggregate_.get_count() >= this->chunk_size_) {
       this->insert_(this->running_aggregate_);
 
       this->running_aggregate_ = Aggregate();
     }
-
+  } else if (this->statistics_type_ == STATISTICS_TYPE_NAIVE) {
+    this->running_aggregate_ = this->running_aggregate_.combine_with(Aggregate(insert_value, duration));
   } else
     this->insert_(insert_value, duration);
 
   this->previous_timestamp_ = now;
   this->previous_value_ = value;
 
-  Aggregate current_aggregate = this->compute_current_aggregate_();
+  Aggregate current_aggregate = Aggregate();
+
+  if (this->statistics_type_ == STATISTICS_TYPE_NAIVE) {
+    current_aggregate = this->running_aggregate_;
+  } else {
+    current_aggregate = this->compute_current_aggregate_();
+  }
   // Ensure we only push updates for the sensors based on the configuration
   if (++this->send_at_ >= this->send_every_) {
-    // Aggregate current_aggregate = this->compute_current_aggregate_();
-
     this->send_at_ = 0;
 
     if (this->count_sensor_)
@@ -333,17 +339,24 @@ void StatisticsComponent::handle_new_value_(double value) {
 
     if (this->mean_sensor_)
       this->mean_sensor_->publish_state(current_aggregate.get_mean());
+    if (this->mean2_sensor_)
+      this->mean2_sensor_->publish_state(current_aggregate.get_mean2());
+    if (this->mean3_sensor_)
+      this->mean3_sensor_->publish_state(current_aggregate.get_mean3());
+    if (this->mean4_sensor_)
+      this->mean4_sensor_->publish_state(current_aggregate.get_mean4());
 
     if (this->variance_sensor_)
       this->variance_sensor_->publish_state(
-          current_aggregate.compute_variance(this->average_type_ == TIME_WEIGHTED_AVERAGE));
+          current_aggregate.compute_variance(this->average_type_ == TIME_WEIGHTED_AVERAGE, this->group_type_));
 
     if (this->std_dev_sensor_)
       this->std_dev_sensor_->publish_state(
-          current_aggregate.compute_std_dev(this->average_type_ == TIME_WEIGHTED_AVERAGE));
+          current_aggregate.compute_std_dev(this->average_type_ == TIME_WEIGHTED_AVERAGE, this->group_type_));
 
     if (this->covariance_sensor_) {
-      double covariance_ms = current_aggregate.compute_covariance(this->average_type_ == TIME_WEIGHTED_AVERAGE);
+      double covariance_ms =
+          current_aggregate.compute_covariance(this->average_type_ == TIME_WEIGHTED_AVERAGE, this->group_type_);
       double converted_covariance = covariance_ms / this->time_conversion_factor_;
 
       this->covariance_sensor_->publish_state(converted_covariance);
