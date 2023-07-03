@@ -30,11 +30,15 @@ StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
 CONF_SLIDING_WINDOW = "sliding_window"
 CONF_RUNNING = "running"
 CONF_HYBRID = "hybrid"
+CONF_NAIVE = "naive"
 
 CONF_RESET_EVERY = "reset_every"
 CONF_RESET_AFTER = "reset_after"
 
 CONF_MEAN = "mean"
+CONF_MEAN2 = "mean2"
+CONF_MEAN3 = "mean3"
+CONF_MEAN4 = "mean4"
 CONF_MAX = "max"
 CONF_MIN = "min"
 CONF_STD_DEV = "std_dev"
@@ -44,6 +48,16 @@ CONF_COVARIANCE = "covariance"
 CONF_TIME_UNIT = "time_unit"
 CONF_DURATION = "duration"
 
+CONF_GROUP_TYPE = "group_type"
+CONF_SAMPLE_GROUP = "sample"
+CONF_POPULATION_GROUP = "population"
+
+GroupType = statistics_ns.enum("GroupType")
+GROUP_TYPES = {
+    CONF_SAMPLE_GROUP: GroupType.SAMPLE_GROUP_TYPE,
+    CONF_POPULATION_GROUP: GroupType.POPULATION_GROUP_TYPE,
+}
+
 CONF_CHUNK_SIZE = "chunk_size"
 CONF_CHUNK_TIME = "chunk_time"
 
@@ -52,6 +66,7 @@ STATISTICS_TYPES = {
     CONF_SLIDING_WINDOW: StatisticsType.STATISTICS_TYPE_SLIDING_WINDOW,
     CONF_RUNNING: StatisticsType.STATISTICS_TYPE_RUNNING,
     CONF_HYBRID: StatisticsType.STATISTICS_TYPE_HYBRID,
+    CONF_NAIVE: StatisticsType.STATISTICS_TYPE_NAIVE,
 }
 
 CONF_AVERAGE_TYPE = "average_type"
@@ -122,6 +137,15 @@ entry_common_sensor_parameters = {
     cv.Optional(CONF_MEAN): sensor.sensor_schema(
         state_class=STATE_CLASS_MEASUREMENT,
     ),
+    cv.Optional(CONF_MEAN2): sensor.sensor_schema(
+        state_class=STATE_CLASS_MEASUREMENT,
+    ),
+    cv.Optional(CONF_MEAN3): sensor.sensor_schema(
+        state_class=STATE_CLASS_MEASUREMENT,
+    ),
+    cv.Optional(CONF_MEAN4): sensor.sensor_schema(
+        state_class=STATE_CLASS_MEASUREMENT,
+    ),
     cv.Optional(CONF_MAX): sensor.sensor_schema(
         state_class=STATE_CLASS_MEASUREMENT,
     ),
@@ -151,20 +175,23 @@ entry_common_sensor_parameters = {
 }
 
 
-entry_common_configuration_options = {
-    cv.Optional(CONF_PRECISION, default=CONF_FLOAT): cv.enum(
-        PRECISION_TYPES, lower=True
-    ),
-    cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE_AVERAGE): cv.enum(
-        AVERAGE_TYPES, lower=True
-    ),
-    cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
-    cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
-        TIME_CONVERSION_FACTORS, lower=True
-    ),
-    cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
-    cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
-}
+# entry_common_configuration_options = {
+#     cv.Optional(CONF_PRECISION, default=CONF_FLOAT): cv.enum(
+#         PRECISION_TYPES, lower=True
+#     ),
+#     cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE_AVERAGE): cv.enum(
+#         AVERAGE_TYPES, lower=True
+#     ),
+#     cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
+#     cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
+#         TIME_CONVERSION_FACTORS, lower=True
+#     ),
+#     cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
+#     cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
+#     cv.Optional(CONF_GROUP_TYPE, default=CONF_SAMPLE_GROUP): cv.enum(
+#         GROUP_TYPES, lower=True
+#     ),
+# }
 
 SLIDING_WINDOW_SCHEMA = cv.All(
     {
@@ -275,6 +302,9 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_RESET_AFTER, default="3600s"): cv.time_period,
             cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
             cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
+            cv.Optional(CONF_GROUP_TYPE, default=CONF_SAMPLE_GROUP): cv.enum(
+                GROUP_TYPES, lower=True
+            ),
             # cv.Required(CONF_TYPE): TYPE_SCHEMA,
             cv.Optional(CONF_TYPE, default=CONF_SLIDING_WINDOW): cv.enum(
                 STATISTICS_TYPES, lower=True
@@ -304,7 +334,15 @@ properties_to_inherit_new_unit = [
     CONF_ICON,
 ]
 
-same_unit_sensor_list = [CONF_MEAN, CONF_MIN, CONF_MAX, CONF_STD_DEV]
+same_unit_sensor_list = [
+    CONF_MEAN,
+    CONF_MEAN2,
+    CONF_MEAN3,
+    CONF_MEAN4,
+    CONF_MIN,
+    CONF_MAX,
+    CONF_STD_DEV,
+]
 new_unit_sensor_list = [CONF_VARIANCE, CONF_COVARIANCE, CONF_TREND]
 
 inherit_schema_for_same_unit_sensors = [
@@ -356,6 +394,8 @@ async def to_code(config):
     cg.add(var.set_average_type(config[CONF_AVERAGE_TYPE]))
     cg.add(var.set_precision(config[CONF_PRECISION]))
 
+    cg.add(var.set_group_type(config[CONF_GROUP_TYPE]))
+
     cg.add(var.set_chunk_size(config[CONF_CHUNK_SIZE]))
 
     cg.add(var.set_reset_every(config[CONF_RESET_EVERY]))
@@ -391,6 +431,18 @@ async def to_code(config):
         conf = config[CONF_MEAN]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_mean_sensor(sens))
+    if CONF_MEAN2 in config:
+        conf = config[CONF_MEAN2]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_mean2_sensor(sens))
+    if CONF_MEAN3 in config:
+        conf = config[CONF_MEAN3]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_mean3_sensor(sens))
+    if CONF_MEAN4 in config:
+        conf = config[CONF_MEAN4]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_mean4_sensor(sens))
 
     if CONF_VARIANCE in config:
         conf = config[CONF_VARIANCE]

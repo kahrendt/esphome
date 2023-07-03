@@ -68,6 +68,7 @@ enum StatisticsType {
   STATISTICS_TYPE_SLIDING_WINDOW,
   STATISTICS_TYPE_RUNNING,
   STATISTICS_TYPE_HYBRID,
+  STATISTICS_TYPE_NAIVE,
 };
 
 enum Precision {
@@ -102,6 +103,9 @@ class StatisticsComponent : public Component {
   void set_max_sensor(sensor::Sensor *max_sensor) { this->max_sensor_ = max_sensor; }
   void set_min_sensor(sensor::Sensor *min_sensor) { this->min_sensor_ = min_sensor; }
   void set_mean_sensor(sensor::Sensor *mean_sensor) { this->mean_sensor_ = mean_sensor; }
+  void set_mean2_sensor(sensor::Sensor *mean_sensor) { this->mean2_sensor_ = mean_sensor; }
+  void set_mean3_sensor(sensor::Sensor *mean_sensor) { this->mean3_sensor_ = mean_sensor; }
+  void set_mean4_sensor(sensor::Sensor *mean_sensor) { this->mean4_sensor_ = mean_sensor; }
   void set_variance_sensor(sensor::Sensor *variance_sensor) { this->variance_sensor_ = variance_sensor; }
   void set_std_dev_sensor(sensor::Sensor *std_dev_sensor) { this->std_dev_sensor_ = std_dev_sensor; }
   void set_covariance_sensor(sensor::Sensor *covariance_senesor) { this->covariance_sensor_ = covariance_senesor; }
@@ -125,6 +129,8 @@ class StatisticsComponent : public Component {
 
   void set_chunk_size(size_t size) { this->chunk_size_ = size; }
 
+  void set_group_type(GroupType type) { this->group_type_ = type; }
+
  protected:
   // given a new sensor measurements, add it to window, evict if window is full, and update sensors
   void handle_new_value_(double value);
@@ -140,6 +146,9 @@ class StatisticsComponent : public Component {
   sensor::Sensor *max_sensor_{nullptr};
   sensor::Sensor *min_sensor_{nullptr};
   sensor::Sensor *mean_sensor_{nullptr};
+  sensor::Sensor *mean2_sensor_{nullptr};
+  sensor::Sensor *mean3_sensor_{nullptr};
+  sensor::Sensor *mean4_sensor_{nullptr};
   sensor::Sensor *variance_sensor_{nullptr};
   sensor::Sensor *std_dev_sensor_{nullptr};
   sensor::Sensor *covariance_sensor_{nullptr};
@@ -171,6 +180,8 @@ class StatisticsComponent : public Component {
   uint32_t previous_timestamp_{0};
 
   uint32_t reset_after_{};
+
+  GroupType group_type_{};
 
   void set_capacity_(size_t capacity, EnabledAggregatesConfiguration config);
   void insert_(double value, uint32_t duration);
