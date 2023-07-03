@@ -116,7 +116,6 @@ class StatisticsComponent : public Component {
   void set_send_every(size_t send_every) { this->send_every_ = send_every; }
   void set_first_at(size_t send_first_at) { this->send_at_ = send_first_at; }
 
-  void set_reset_every(size_t reset_every) { this->reset_every_ = reset_every; }
   void set_reset_after(size_t reset_after) { this->reset_after_ = reset_after; }
 
   void set_time_conversion_factor(TimeConversionFactor conversion_factor) {
@@ -160,15 +159,14 @@ class StatisticsComponent : public Component {
   } queue_{nullptr};
 
   Aggregate running_aggregate_{};
-  size_t chunk_size_{};
 
   // mimic ESPHome's current filters behavior
   size_t window_size_{};
   size_t send_every_{};
   size_t send_at_{};
 
-  size_t reset_every_{};
-  size_t reset_count_{0};
+  size_t chunk_size_{1};
+  size_t chunk_entries_{0};
 
   StatisticsType statistics_type_{};
 

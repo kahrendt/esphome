@@ -180,10 +180,10 @@ template<typename T> class AggregateQueue {
   virtual void enable_time_weighted();
   virtual bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
   virtual void clear();
-  virtual size_t size() const { return 0; };
+  virtual size_t size() const;
   virtual void insert(T value, uint32_t duration);
   virtual void insert(Aggregate value);
-  virtual void evict(){};
+  virtual void evict();
   virtual Aggregate compute_current_aggregate();
 
   void emplace(const Aggregate &value, size_t index);

@@ -65,7 +65,7 @@ void StatisticsComponent::dump_config() {
     ESP_LOGCONFIG(TAG, "  window_size: %u", this->window_size_);
   } else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING) {
     ESP_LOGCONFIG(TAG, "  statistics_type: running");
-    ESP_LOGCONFIG(TAG, "  reset_every: %u", this->reset_every_);
+    ESP_LOGCONFIG(TAG, "  reset_every: %u", this->window_size_);
   }
 
   ESP_LOGCONFIG(TAG, "  send_every: %u", this->send_every_);
@@ -176,17 +176,14 @@ void StatisticsComponent::setup() {
     else
       this->queue_.double_precision = new RunningQueue<double>();
 
-    this->set_capacity_(this->reset_every_, config);
+    this->set_capacity_(this->window_size_, config);
   } else if (this->statistics_type_ == STATISTICS_TYPE_HYBRID) {
     if (this->precision_ == FLOAT_PRECISION)
       this->queue_.float_precision = new DABALite<float>();
     else
       this->queue_.double_precision = new DABALite<double>();
 
-    if ((this->window_size_ % this->chunk_size_) == 0)
-      this->set_capacity_(this->window_size_ / this->chunk_size_, config);
-    else
-      this->set_capacity_(this->window_size_ / this->chunk_size_ + 1, config);
+    this->set_capacity_(this->window_size_, config);
   } else if (this->statistics_type_ == STATISTICS_TYPE_NAIVE) {
     this->running_aggregate_ = Aggregate();
   }
@@ -260,57 +257,55 @@ void StatisticsComponent::reset() {
 void StatisticsComponent::handle_new_value_(double value) {
   uint32_t now = millis();
 
-  if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
-    // If sliding window is larger than the capacity, evict until less
-    while (this->size_() >= this->window_size_) {
-      this->evict_();
-    }
-  } else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING) {
-    ++this->reset_count_;
-  } else if (this->statistics_type_ == STATISTICS_TYPE_HYBRID) {
-    if (this->running_aggregate_.get_count() >= this->chunk_size_) {
-      while (this->size_() >=
-             this->window_size_ / this->chunk_size_) {  // will mess up when window size is not divisible by chunk
-        this->evict_();
-      }
-    }
-  }
-
   uint32_t duration = now - this->previous_timestamp_;
-  // static_cast<double>(now - this->previous_timestamp_) / static_cast<double>(this->time_conversion_factor_);
-
   float insert_value = value;
 
   if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
     insert_value = this->previous_value_;
   }
 
-  // Add new value to queue
-  if (this->statistics_type_ == STATISTICS_TYPE_HYBRID) {
-    this->running_aggregate_ = this->running_aggregate_.combine_with(Aggregate(insert_value, duration));
-
-    if (this->running_aggregate_.get_count() >= this->chunk_size_) {
-      this->insert_(this->running_aggregate_);
-
-      this->running_aggregate_ = Aggregate();
-    }
-  } else if (this->statistics_type_ == STATISTICS_TYPE_NAIVE) {
-    this->running_aggregate_ = this->running_aggregate_.combine_with(Aggregate(insert_value, duration));
-  } else
-    this->insert_(insert_value, duration);
-
   this->previous_timestamp_ = now;
   this->previous_value_ = value;
 
-  Aggregate current_aggregate = Aggregate();
-
-  if (this->statistics_type_ == STATISTICS_TYPE_NAIVE) {
-    current_aggregate = this->running_aggregate_;
-  } else {
-    current_aggregate = this->compute_current_aggregate_();
+  //////////////////////////////////////////////////
+  // handle evicting elements if window is exceed //
+  //////////////////////////////////////////////////
+  if (this->statistics_type_ != STATISTICS_TYPE_NAIVE) {
+    while (this->size_() >= this->window_size_) {
+      this->evict_();
+    }
   }
+
+  ////////////////////////////
+  // Add new value to queue //
+  ////////////////////////////
+  if (this->statistics_type_ != STATISTICS_TYPE_NAIVE) {
+    this->running_aggregate_ = this->running_aggregate_.combine_with(Aggregate(insert_value, duration));
+    ++this->chunk_entries_;
+
+    if (this->chunk_entries_ >= this->chunk_size_) {
+      this->insert_(this->running_aggregate_);
+
+      this->running_aggregate_ = Aggregate();
+      this->chunk_entries_ = 0;
+
+      ++this->send_at_;  // only increment if a chunk has been inserted
+    }
+  } else {
+    this->running_aggregate_ = this->running_aggregate_.combine_with(Aggregate(insert_value, duration));
+    ++this->send_at_;
+  }
+
   // Ensure we only push updates for the sensors based on the configuration
-  if (++this->send_at_ >= this->send_every_) {
+  if (this->send_at_ >= this->send_every_) {
+    Aggregate current_aggregate = Aggregate();
+
+    if (this->statistics_type_ == STATISTICS_TYPE_NAIVE) {
+      current_aggregate = this->running_aggregate_;
+    } else {
+      current_aggregate = this->compute_current_aggregate_();
+    }
+
     this->send_at_ = 0;
 
     if (this->count_sensor_)
@@ -373,11 +368,6 @@ void StatisticsComponent::handle_new_value_(double value) {
   // if (current_aggregate.get_count() >= this->reset_after_) {
   //   this->reset();
   // }
-
-  if (this->reset_count_ == this->reset_every_) {
-    this->reset();
-    this->reset_count_ = 0;
-  }
 }
 
 }  // namespace statistics
