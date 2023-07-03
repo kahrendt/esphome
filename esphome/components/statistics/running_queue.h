@@ -22,16 +22,22 @@ template<typename T> class RunningQueue : public AggregateQueue<T> {
 
   // Clears all aggregates in the queue
   void clear() override;
+  void evict() override { this->clear(); }
 
   // Insert a value at end of the queue and consolidiate if necessary
   void insert(T value, uint32_t duration) override;
   void insert(Aggregate value) override;
+
+  // number of chunks stored in the queue
+  size_t size() const override { return size_; }
 
   // Computes the summary statistics for all measurements stored in the queue
   Aggregate compute_current_aggregate() override;
 
  protected:
   uint8_t index_{0};
+
+  size_t size_{0};
 
   bool time_weighted_{false};
 

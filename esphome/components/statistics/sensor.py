@@ -32,7 +32,7 @@ CONF_RUNNING = "running"
 CONF_HYBRID = "hybrid"
 CONF_NAIVE = "naive"
 
-CONF_RESET_EVERY = "reset_every"
+CONF_RESET_EVERY_CHUNK = "reset_every_chunk"
 CONF_RESET_AFTER = "reset_after"
 
 CONF_MEAN = "mean"
@@ -60,6 +60,7 @@ GROUP_TYPES = {
 
 CONF_CHUNK_SIZE = "chunk_size"
 CONF_CHUNK_TIME = "chunk_time"
+CONF_CHUNK_QUANTITY = "chunk_quantity"
 
 StatisticsType = statistics_ns.enum("StatisticsType")
 STATISTICS_TYPES = {
@@ -123,7 +124,8 @@ def transform_trend_unit_of_measurement(uom, config):
 
 
 # borrowed from sensor/__init__.py
-def validate_send_first_at(value):
+def validate_send_first_at(config):
+    value = config["window_parameters"]
     send_first_at = value.get(CONF_SEND_FIRST_AT)
     send_every = value[CONF_SEND_EVERY]
     if send_first_at is not None and send_first_at > send_every:
@@ -175,116 +177,6 @@ entry_common_sensor_parameters = {
 }
 
 
-# entry_common_configuration_options = {
-#     cv.Optional(CONF_PRECISION, default=CONF_FLOAT): cv.enum(
-#         PRECISION_TYPES, lower=True
-#     ),
-#     cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE_AVERAGE): cv.enum(
-#         AVERAGE_TYPES, lower=True
-#     ),
-#     cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
-#     cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
-#         TIME_CONVERSION_FACTORS, lower=True
-#     ),
-#     cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
-#     cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
-#     cv.Optional(CONF_GROUP_TYPE, default=CONF_SAMPLE_GROUP): cv.enum(
-#         GROUP_TYPES, lower=True
-#     ),
-# }
-
-SLIDING_WINDOW_SCHEMA = cv.All(
-    {
-        cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
-    }
-)
-
-RUNNING_SCHEMA = cv.All(
-    {
-        cv.Optional(CONF_RESET_EVERY, default=1000): cv.positive_int,
-    }
-)
-
-
-TYPE_SCHEMA = cv.typed_schema(
-    {
-        CONF_SLIDING_WINDOW: SLIDING_WINDOW_SCHEMA,
-        CONF_RUNNING: RUNNING_SCHEMA,
-    }
-)
-
-# CONFIG_SCHEMA = cv.typed_schema(
-#     {
-#         CONF_SLIDING_WINDOW: cv.Schema(
-#             {
-#                 cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
-#             }
-#             #             cv.GenerateID(): cv.declare_id(StatisticsComponent),
-#             #             cv.Optional(CONF_PRECISION, default=CONF_FLOAT): cv.enum(
-#             #                 PRECISION_TYPES, lower=True
-#             #             ),
-#             #             cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE_AVERAGE): cv.enum(
-#             #                 AVERAGE_TYPES, lower=True
-#             #             ),
-#             #             cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
-#             #             cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
-#             #             cv.Optional(CONF_RESET_EVERY, default=1000): cv.positive_int,
-#             #             cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
-#             #             cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
-#             #             cv.Optional(CONF_TYPE, default=CONF_SLIDING_WINDOW): cv.enum(
-#             #                 STATISTICS_TYPES, lower=True
-#             #             ),
-#             #             cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
-#             #                 TIME_CONVERSION_FACTORS, lower=True
-#             #             ),
-#         )
-#         .extend(cv.COMPONENT_SCHEMA)
-#         .extend(entry_common_sensor_parameters)
-#         .extend(entry_common_configuration_options),
-#         CONF_RUNNING: cv.Schema(
-#             {
-#                 cv.Optional(CONF_RESET_EVERY, default=1000): cv.positive_int,
-#             }
-#         )
-#         .extend(cv.COMPONENT_SCHEMA)
-#         .extend(entry_common_sensor_parameters)
-#         .extend(entry_common_configuration_options),
-#     },
-#     lower=True,
-# )
-
-# CONFIG_SCHEMA = (
-#     cv.All(
-#         {
-#             cv.GenerateID(): cv.declare_id(StatisticsComponent),
-#             cv.typed_schema(
-#                 {
-#                     CONF_SLIDING_WINDOW: cv.Schema(
-#                         {
-#                             cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
-#                         }
-#                     ),
-#                     CONF_RUNNING: cv.Schema(
-#                         {
-#                             cv.Optional(CONF_RESET_EVERY, default=1000): cv.positive_int,
-#                         }
-#                     ),
-#                 }, lower=True,
-#            ),
-#         }
-#     )
-#     .extend(cv.COMPONENT_SCHEMA)
-#     .extend(entry_common_sensor_parameters)
-#     .extend(entry_common_configuration_options)
-# )
-
-# )
-
-
-def validate_type_options(value):
-    value = cv.positive_int(value)
-
-
 CONFIG_SCHEMA = (
     cv.Schema(
         {
@@ -295,22 +187,74 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE_AVERAGE): cv.enum(
                 AVERAGE_TYPES, lower=True
             ),
-            cv.Optional(CONF_CHUNK_SIZE, default=20): cv.positive_not_null_int,
             cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
-            cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
-            cv.Optional(CONF_RESET_EVERY, default=1000): cv.positive_int,
-            cv.Optional(CONF_RESET_AFTER, default="3600s"): cv.time_period,
-            cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
-            cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
             cv.Optional(CONF_GROUP_TYPE, default=CONF_SAMPLE_GROUP): cv.enum(
                 GROUP_TYPES, lower=True
             ),
-            # cv.Required(CONF_TYPE): TYPE_SCHEMA,
-            cv.Optional(CONF_TYPE, default=CONF_SLIDING_WINDOW): cv.enum(
-                STATISTICS_TYPES, lower=True
-            ),
             cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
                 TIME_CONVERSION_FACTORS, lower=True
+            ),
+            cv.Required("window_parameters"): cv.typed_schema(
+                {
+                    CONF_SLIDING_WINDOW: cv.Schema(
+                        {
+                            cv.Optional(
+                                CONF_WINDOW_SIZE, default=15
+                            ): cv.positive_not_null_int,
+                            cv.Optional(
+                                CONF_SEND_EVERY, default=15
+                            ): cv.positive_not_null_int,
+                            cv.Optional(
+                                CONF_SEND_FIRST_AT, default=1
+                            ): cv.positive_not_null_int,
+                        }
+                    ),
+                    CONF_RUNNING: cv.Schema(
+                        {
+                            cv.Optional(
+                                CONF_RESET_EVERY_CHUNK, default=1000
+                            ): cv.positive_not_null_int,
+                            cv.Optional(
+                                CONF_CHUNK_SIZE, default=20
+                            ): cv.positive_not_null_int,
+                            cv.Optional(
+                                CONF_SEND_EVERY, default=15
+                            ): cv.positive_not_null_int,
+                            cv.Optional(
+                                CONF_SEND_FIRST_AT, default=1
+                            ): cv.positive_not_null_int,
+                            cv.Optional(
+                                CONF_RESET_AFTER, default="3600s"
+                            ): cv.time_period,
+                        }
+                    ),
+                    CONF_HYBRID: cv.Schema(
+                        {
+                            cv.Optional(
+                                CONF_CHUNK_SIZE, default=20
+                            ): cv.positive_not_null_int,
+                            cv.Optional(
+                                CONF_CHUNK_QUANTITY, default=50
+                            ): cv.positive_not_null_int,
+                            cv.Optional(
+                                CONF_SEND_EVERY, default=15
+                            ): cv.positive_not_null_int,
+                            cv.Optional(
+                                CONF_SEND_FIRST_AT, default=1
+                            ): cv.positive_not_null_int,
+                        }
+                    ),
+                    CONF_NAIVE: cv.Schema(
+                        {
+                            cv.Optional(
+                                CONF_SEND_EVERY, default=15
+                            ): cv.positive_not_null_int,
+                            cv.Optional(
+                                CONF_SEND_FIRST_AT, default=1
+                            ): cv.positive_not_null_int,
+                        }
+                    ),
+                }
             ),
         },
     )
@@ -390,22 +334,28 @@ async def to_code(config):
     source = await cg.get_variable(config[CONF_SOURCE_ID])
     cg.add(var.set_source_sensor(source))
 
-    cg.add(var.set_statistics_type(config[CONF_TYPE]))
     cg.add(var.set_average_type(config[CONF_AVERAGE_TYPE]))
     cg.add(var.set_precision(config[CONF_PRECISION]))
-
+    cg.add(var.set_time_conversion_factor(config[CONF_TIME_UNIT]))
     cg.add(var.set_group_type(config[CONF_GROUP_TYPE]))
 
-    cg.add(var.set_chunk_size(config[CONF_CHUNK_SIZE]))
+    conf = config["window_parameters"]
 
-    cg.add(var.set_reset_every(config[CONF_RESET_EVERY]))
-    cg.add(var.set_reset_after(config[CONF_RESET_AFTER].total_milliseconds))
+    constant = STATISTICS_TYPES[conf[CONF_TYPE]]
+    cg.add(var.set_statistics_type(constant))
 
-    cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
-    cg.add(var.set_send_every(config[CONF_SEND_EVERY]))
-    cg.add(var.set_first_at(config[CONF_SEND_FIRST_AT]))
+    if conf[CONF_TYPE] == CONF_SLIDING_WINDOW:
+        cg.add(var.set_window_size(conf[CONF_WINDOW_SIZE]))
+    elif conf[CONF_TYPE] == CONF_RUNNING:
+        cg.add(var.set_window_size(conf[CONF_RESET_EVERY_CHUNK]))
+        cg.add(var.set_chunk_size(conf[CONF_CHUNK_SIZE]))
+        cg.add(var.set_reset_after(conf[CONF_RESET_AFTER].total_milliseconds))
+    elif conf[CONF_TYPE] == CONF_HYBRID:
+        cg.add(var.set_chunk_size(conf[CONF_CHUNK_SIZE]))
+        cg.add(var.set_window_size(conf[CONF_CHUNK_QUANTITY]))
 
-    cg.add(var.set_time_conversion_factor(config[CONF_TIME_UNIT]))
+    cg.add(var.set_send_every(conf[CONF_SEND_EVERY]))
+    cg.add(var.set_first_at(conf[CONF_SEND_FIRST_AT]))
 
     if CONF_COUNT in config:
         conf = config[CONF_COUNT]
