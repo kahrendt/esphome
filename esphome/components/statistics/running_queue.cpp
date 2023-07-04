@@ -76,7 +76,6 @@ template<typename T> inline Aggregate RunningQueue<T>::get_end_() {
 }
 
 // avoids linking errors (https://isocpp.org/wiki/faq/templates)
-template void RunningQueue<float>::enable_time_weighted();
 template bool RunningQueue<float>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 template void RunningQueue<float>::clear();
 template void RunningQueue<float>::evict();
@@ -85,7 +84,6 @@ template void RunningQueue<float>::insert(float value, uint32_t duration);
 template void RunningQueue<float>::insert(Aggregate value);
 template Aggregate RunningQueue<float>::compute_current_aggregate();
 
-template void RunningQueue<double>::enable_time_weighted();
 template bool RunningQueue<double>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 template void RunningQueue<double>::clear();
 template void RunningQueue<double>::evict();
