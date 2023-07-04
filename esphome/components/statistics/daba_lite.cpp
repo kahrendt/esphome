@@ -46,7 +46,7 @@ template<typename T> void DABALite<T>::clear() {
 template<typename T> void DABALite<T>::insert(T value, uint32_t duration) {
   Aggregate lifted = Aggregate(value, duration);
 
-  this->back_sum_ = this->back_sum_.combine_with(lifted);  // = this->back_sum_ + lifted;
+  this->back_sum_ = this->back_sum_.combine_with(lifted, this->time_weighted_);  // = this->back_sum_ + lifted;
 
   this->emplace(lifted, this->e_.get_index());
 
@@ -56,7 +56,7 @@ template<typename T> void DABALite<T>::insert(T value, uint32_t duration) {
 }
 
 template<typename T> void DABALite<T>::insert(Aggregate value) {
-  this->back_sum_ = this->back_sum_.combine_with(value);  //= this->back_sum_ + value;
+  this->back_sum_ = this->back_sum_.combine_with(value, this->time_weighted_);  //= this->back_sum_ + value;
   this->emplace(value, this->e_.get_index());
 
   ++this->e_;

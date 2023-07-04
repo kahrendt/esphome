@@ -56,19 +56,6 @@ Aggregate::Aggregate(double value, uint32_t duration) {
   this->duration_squared_ = duration * duration;
 }
 
-// see https://en.wikipedia.org/wiki/2Sum and Kahan summation
-// returns the lost of precision in the floating point numbers after summing
-double two_sum(double a, double b) {
-  double s = a + b;
-  double a_prime = s - b;
-  double b_prime = s - a_prime;
-  double delta_a = a - a_prime;
-  double delta_b = b - b_prime;
-  double t = delta_a + delta_b;
-
-  return t;
-}
-
 Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   size_t a_count = this->get_count();
   size_t b_count = b.get_count();
@@ -84,9 +71,6 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
 
   double a_mean = static_cast<double>(this->get_mean());
   double b_mean = static_cast<double>(b.get_mean());
-
-  double a_mean_accumulator = this->get_mean_accumulator();
-  double b_mean_accumulator = b.get_mean_accumulator();
 
   double a_m2 = static_cast<double>(this->get_m2());
   double b_m2 = static_cast<double>(b.get_m2());
@@ -139,6 +123,7 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
     combined.c2_ = b_c2;
     combined.timestamp_m2_ = b_timestamp_m2;
     combined.timestamp_mean_ = b_timestamp_mean;
+
     combined.mean2 = b.get_mean2();
     combined.mean3 = b.get_mean3();
     combined.mean4 = b.get_mean4();
@@ -146,14 +131,24 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
     combined.mean_ = a_mean;
     combined.m2_ = a_m2;
     combined.c2_ = a_c2;
-    combined.timestamp_m2_ = a_m2;
+    combined.timestamp_m2_ = a_timestamp_m2;
     combined.timestamp_mean_ = a_timestamp_mean;
+
     combined.mean2 = this->get_mean2();
     combined.mean3 = this->get_mean3();
     combined.mean4 = this->get_mean4();
   } else {
     double delta = b_mean - a_mean;
     double delta_prime = delta * b_weight / combined_weight;
+
+    /*
+     * Simple weighted combination of the mean; can potentially avoid issues if a_weight = b_weight
+     *... but may pick up issues if a_weight or b_weight is small... try using accumlators?
+     */
+    double a_mean_weighted = a_mean * a_weight / combined_weight;
+    double b_mean_weighted = b_mean * b_weight / combined_weight;
+
+    combined.mean_ = a_mean_weighted + b_mean_weighted;
 
     /*
      * Basic Welford's version of mean.. may be unstable if a_weight = b_weight (see
@@ -164,83 +159,24 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
     combined.mean2 = this->get_mean2() + delta2_prime;
     // combined.mean_ = a_mean + delta_prime;
 
-    /*
-     * Using same Welford's version of the mean, but also trying to implement Kahan's summation method
-     * see (https://en.wikipedia.org/wiki/Kahan_summation_algorithm)
-     */
-    // double delta_accumulator = b_mean_accumulator - a_mean_accumulator;
-
-    // double delta_prime_accumulator = delta_accumulator * b_weight / combined_weight;
-
-    // double a_mean_compensated = a_mean - a_mean_accumulator;
-    // double delta_prime_compensated = delta_prime - delta_prime_accumulator;
-
-    // double welford_accumulated_mean = a_mean_compensated + delta_prime_compensated;
-    // double welford_accumulated_mean_accumulator = two_sum(a_mean_compensated, delta_prime_compensated);
-    // combined.mean_ = a_mean_compensated + delta_prime_compensated;
-    // combined.mean_accumulator_ = two_sum(a_mean_compensated, delta_prime_compensated);
-
-    /*
-     * Simple weighted combination of the mean; can potentially avoid issues if a_weight = b_weight
-     *... but may pick up issues if a_weight or b_weight is small... try using accumlators?
-     */
-    combined.mean3 = this->get_mean3() * (a_weight / combined_weight) + b.get_mean3() * (b_weight / combined_weight);
-    // combined.mean_ = a_mean * (a_weight / combined_weight) + b_mean * (b_weight / combined_weight);
-
-    /*
-     * Attempt at using the accumulators with the previous approach
-     */
-    double a_mean_compensated = a_mean - a_mean_accumulator;
-    double b_mean_compensated = b_mean - b_mean_accumulator;
-
-    double a_mean_weighted = a_mean_compensated * a_weight / combined_weight;
-    double b_mean_weighted = b_mean_compensated * b_weight / combined_weight;
-
-    combined.mean_ = a_mean_weighted + b_mean_weighted;
-
-    combined.mean_accumulator_ = two_sum(a_mean_weighted, b_mean_weighted);
-
-    // ESP_LOGI("mean versions", "welford_simple=%.8f", welford_basic_mean);
-    // ESP_LOGI("mean versions", " welford_accum=%.8f", welford_accumulated_mean);
-    // ESP_LOGI("mean versions", "weighted_simpl=%.8f", weighted_mean);
-    // ESP_LOGI("mean versions", "weighted_accum=%.8f", combined.mean_);
-
-    combined.m2_ = a_m2 + b_m2 + a_weight * delta * delta_prime;
     // compute M2 quantity for Welford's algorithm which can determine the variance
+    combined.m2_ = a_m2 + b_m2 + a_weight * delta * delta_prime;
     // combined.m2_ = a_m2 + b_m2 + delta * delta * a_weight * b_weight / (combined_weight);
 
     double timestamp_delta = b_timestamp_mean - a_timestamp_mean;
-    // combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta * cast_b_count / (cast_combined_count);
-    //  combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta * cast_b_count / (cast_a_count + cast_b_count);
-
     double timestamp_delta_prime = timestamp_delta * b_weight / combined_weight;
-    combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta_prime;
+
+    combined.timestamp_mean_ =
+        a_timestamp_mean * (a_weight / combined_weight) + b_timestamp_mean * (b_weight / combined_weight);
+    // combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta_prime;
 
     combined.timestamp_m2_ = a_timestamp_m2 + b_timestamp_m2 + a_weight * timestamp_delta * timestamp_delta_prime;
 
-    combined.c2_ = a_c2 + b_c2 + a_weight * delta * timestamp_delta_prime;
-
-    // double timestamp_delta_squared = timestamp_delta * timestamp_delta;
-
-    // combined.c2_ = a_c2 + b_c2 + timestamp_delta * delta * a_weight * b_weight / (combined_weight);
-
-    // combined.timestamp_m2_ =
-    //     a_timestamp_m2 + b_timestamp_m2 + timestamp_delta_squared * a_weight * b_weight / (combined_weight);
-
-    // // double chan_mean = two_sum(a_timestamp_mean, timestamp_delta * b_weight / combined_weight);
-    // double weighted_mean =
-    //     two_sum(a_timestamp_mean * a_weight / combined_weight, b_timestamp_mean * b_weight / combined_weight);
-    // // ESP_LOGI("mean algorithms", "chan-weighted=%.15f", (chan_mean - weighted_mean));
-    // combined.timestamp_mean_ = weighted_mean;
+    combined.c2_ = a_c2 + b_c2 + delta * timestamp_delta * (a_weight * b_weight / (combined_weight));
+    // combined.c2_ = a_c2 + b_c2 + a_weight * delta * timestamp_delta_prime;
   }
 
   return combined;
-}
-
-Aggregate Aggregate::operator+(const Aggregate &b) {
-  Aggregate combine = this->combine_with(*this, false);
-
-  return combine;
 }
 
 // Sample variance using Welford's algorithm (Bessel's correction is applied)
@@ -338,7 +274,6 @@ template<typename T> void AggregateQueue<T>::emplace(const Aggregate &value, siz
     this->duration_squared_queue_[index] = value.get_duration_squared();
   if (this->mean_queue_ != nullptr) {
     this->mean_queue_[index] = value.get_mean();
-    this->mean_accumulator_queue_[index] = value.get_mean_accumulator();
 
     this->mean2_queue_[index] = value.get_mean2();
     this->mean3_queue_[index] = value.get_mean3();
@@ -371,7 +306,6 @@ template<typename T> Aggregate AggregateQueue<T>::lower(size_t index) {
     aggregate.set_duration_squared(this->duration_squared_queue_[index]);
   if (this->mean_queue_ != nullptr) {
     aggregate.set_mean(this->mean_queue_[index]);
-    aggregate.set_mean_accumulator(this->mean_accumulator_queue_[index]);
 
     aggregate.set_mean2(this->mean2_queue_[index]);
     aggregate.set_mean3(this->mean3_queue_[index]);
@@ -427,7 +361,7 @@ template<typename T> bool AggregateQueue<T>::allocate_memory(size_t capacity, En
 
   if (config.duration_squared) {
     this->duration_squared_queue_ = size_t_allocator.allocate(capacity);
-    // size_t_allocator.allocate(capacity);
+
     if (this->duration_squared_queue_ == nullptr) {
       return false;
     }
@@ -435,13 +369,12 @@ template<typename T> bool AggregateQueue<T>::allocate_memory(size_t capacity, En
 
   if (config.mean) {
     this->mean_queue_ = decimal_allocator.allocate(capacity);
-    this->mean_accumulator_queue_ = decimal_allocator.allocate(capacity);
 
     this->mean2_queue_ = decimal_allocator.allocate(capacity);
     this->mean3_queue_ = decimal_allocator.allocate(capacity);
     this->mean4_queue_ = decimal_allocator.allocate(capacity);
 
-    if ((this->mean_queue_ == nullptr) || (this->mean_accumulator_queue_ == nullptr)) {
+    if (this->mean_queue_ == nullptr) {
       return false;
     }
   }

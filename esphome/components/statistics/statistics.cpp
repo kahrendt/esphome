@@ -185,10 +185,10 @@ void StatisticsComponent::setup() {
 
     this->set_capacity_(this->window_size_, config);
   } else if (this->statistics_type_ == STATISTICS_TYPE_NAIVE) {
-    this->running_aggregate_ = Aggregate();
+    this->current_chunk_aggregate_ = Aggregate();
   }
 
-  if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
+  if ((this->average_type_ == TIME_WEIGHTED_AVERAGE) && (this->statistics_type_ != STATISTICS_TYPE_NAIVE)) {
     if (this->precision_ == FLOAT_PRECISION)
       this->queue_.float_precision->enable_time_weighted();
     else
@@ -210,18 +210,22 @@ void StatisticsComponent::set_capacity_(size_t capacity, EnabledAggregatesConfig
   }
 }
 
-void StatisticsComponent::insert_(double value, uint32_t duration) {
-  if (this->precision_ == FLOAT_PRECISION)
-    this->queue_.float_precision->insert(value, duration);
-  else
-    this->queue_.double_precision->insert(value, duration);
-}
-
 void StatisticsComponent::insert_(Aggregate value) {
   if (this->precision_ == FLOAT_PRECISION)
     this->queue_.float_precision->insert(value);
   else
     this->queue_.double_precision->insert(value);
+}
+
+void StatisticsComponent::insert_chunk_and_reset_(Aggregate value) {
+  this->insert_(value);
+
+  // reset chunk
+  this->current_chunk_aggregate_ = Aggregate();
+  this->chunk_entries_ = 0;
+  this->chunk_duration_ = 0;
+
+  ++this->send_at_;  // only increment if a chunk has been inserted
 }
 
 void StatisticsComponent::evict_() {
@@ -271,8 +275,11 @@ void StatisticsComponent::handle_new_value_(double value) {
   // handle evicting elements if window is exceed //
   //////////////////////////////////////////////////
   if (this->statistics_type_ != STATISTICS_TYPE_NAIVE) {
-    while (this->size_() >= this->window_size_) {
-      this->evict_();
+    // if window_size_ == 0, then we have a running queue with no automatic reset, so we never evict/clear
+    if (this->window_size_ > 0) {
+      while (this->size_() >= this->window_size_) {
+        this->evict_();
+      }
     }
   }
 
@@ -280,28 +287,35 @@ void StatisticsComponent::handle_new_value_(double value) {
   // Add new value to queue //
   ////////////////////////////
   if (this->statistics_type_ != STATISTICS_TYPE_NAIVE) {
-    this->running_aggregate_ = this->running_aggregate_.combine_with(Aggregate(insert_value, duration));
+    this->current_chunk_aggregate_ = this->current_chunk_aggregate_.combine_with(
+        Aggregate(insert_value, duration), (this->average_type_ == TIME_WEIGHTED_AVERAGE));
     ++this->chunk_entries_;
+    this->chunk_duration_ += duration;
 
-    if (this->chunk_entries_ >= this->chunk_size_) {
-      this->insert_(this->running_aggregate_);
-
-      this->running_aggregate_ = Aggregate();
-      this->chunk_entries_ = 0;
-
-      ++this->send_at_;  // only increment if a chunk has been inserted
+    // if chunk_size_ == 0, then chunk aggregate insertion is controlled by a configured time delta
+    if (this->chunk_size_ > 0) {
+      if (this->chunk_entries_ >= this->chunk_size_) {
+        this->insert_chunk_and_reset_(this->current_chunk_aggregate_);
+      }
+    } else {
+      if (this->chunk_duration_ >= this->chunk_duration_size_) {
+        this->insert_chunk_and_reset_(this->current_chunk_aggregate_);
+      }
     }
   } else {
-    this->running_aggregate_ = this->running_aggregate_.combine_with(Aggregate(insert_value, duration));
+    this->current_chunk_aggregate_ = this->current_chunk_aggregate_.combine_with(
+        Aggregate(insert_value, duration), (this->average_type_ == TIME_WEIGHTED_AVERAGE));
     ++this->send_at_;
   }
 
   // Ensure we only push updates for the sensors based on the configuration
+  // send_at_ counts the number of chunks inserted into the appropriate queue
+  // after send_every_ chunks, each sensor is updated
   if (this->send_at_ >= this->send_every_) {
     Aggregate current_aggregate = Aggregate();
 
     if (this->statistics_type_ == STATISTICS_TYPE_NAIVE) {
-      current_aggregate = this->running_aggregate_;
+      current_aggregate = this->current_chunk_aggregate_;
     } else {
       current_aggregate = this->compute_current_aggregate_();
     }
@@ -364,10 +378,6 @@ void StatisticsComponent::handle_new_value_(double value) {
       this->trend_sensor_->publish_state(converted_trend);
     }
   }
-
-  // if (current_aggregate.get_count() >= this->reset_after_) {
-  //   this->reset();
-  // }
 }
 
 }  // namespace statistics
