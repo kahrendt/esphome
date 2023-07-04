@@ -148,7 +148,6 @@ template<typename T> inline Aggregate DABALite<T>::get_delta_() {
 }
 
 // avoids linking errors (https://isocpp.org/wiki/faq/templates)
-template void DABALite<float>::enable_time_weighted();
 template bool DABALite<float>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 template void DABALite<float>::clear();
 template size_t DABALite<float>::size() const;
@@ -157,7 +156,6 @@ template void DABALite<float>::insert(Aggregate value);
 template void DABALite<float>::evict();
 template Aggregate DABALite<float>::compute_current_aggregate();
 
-template void DABALite<double>::enable_time_weighted();
 template bool DABALite<double>::set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
 template void DABALite<double>::clear();
 template size_t DABALite<double>::size() const;

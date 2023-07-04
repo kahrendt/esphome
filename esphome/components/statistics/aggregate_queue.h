@@ -26,7 +26,7 @@ struct EnabledAggregatesConfiguration {
 
 template<typename T> class AggregateQueue {
  public:
-  virtual void enable_time_weighted();
+  virtual void enable_time_weighted() { this->time_weighted_ = true; }
   virtual bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
   virtual void clear();
   virtual size_t size() const;
@@ -41,6 +41,8 @@ template<typename T> class AggregateQueue {
   bool allocate_memory(size_t capacity, EnabledAggregatesConfiguration config);
 
  protected:
+  bool time_weighted_{false};
+
   size_t *count_queue_{nullptr};
   size_t *duration_squared_queue_{nullptr};
 

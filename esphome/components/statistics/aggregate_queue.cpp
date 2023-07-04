@@ -178,10 +178,12 @@ template<typename T> bool AggregateQueue<T>::allocate_memory(size_t capacity, En
 
 // avoids linking errors (https://isocpp.org/wiki/faq/templates)
 
+template void AggregateQueue<float>::enable_time_weighted();
 template void AggregateQueue<float>::emplace(const Aggregate &value, size_t index);
 template Aggregate AggregateQueue<float>::lower(size_t index);
 template bool AggregateQueue<float>::allocate_memory(size_t capacity, EnabledAggregatesConfiguration config);
 
+template void AggregateQueue<double>::enable_time_weighted();
 template void AggregateQueue<double>::emplace(const Aggregate &value, size_t index);
 template Aggregate AggregateQueue<double>::lower(size_t index);
 template bool AggregateQueue<double>::allocate_memory(size_t capacity, EnabledAggregatesConfiguration config);

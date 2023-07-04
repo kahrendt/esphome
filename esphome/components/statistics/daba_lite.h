@@ -19,7 +19,6 @@ namespace statistics {
 
 template<typename T> class DABALite : public AggregateQueue<T> {
  public:
-  void enable_time_weighted() override { this->time_weighted_ = true; }
   // Sets the window size by adjusting the capacity of the underlying circular queues
   //  - returns whether memory was successfully allocated
   bool set_capacity(size_t window_size, EnabledAggregatesConfiguration config) override;
@@ -40,7 +39,6 @@ template<typename T> class DABALite : public AggregateQueue<T> {
   Aggregate compute_current_aggregate() override;
 
  protected:
-  bool time_weighted_{false};
   // Maximum window capacity
   size_t window_size_{0};
 
