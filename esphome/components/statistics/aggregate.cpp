@@ -36,20 +36,22 @@ namespace statistics {
 
 Aggregate::Aggregate(double value, uint32_t duration) {
   if (!std::isnan(value)) {
-    this->max_ = value;
-    this->min_ = value;
-    this->count_ = 1;
-    this->mean_ = value;
-    this->m2_ = 0.0;
     this->c2_ = 0.0;
+    this->count_ = 1;
+    this->m2_ = 0.0;
+    this->max_ = value;
+    this->mean_ = value;
+    this->min_ = value;
     this->timestamp_m2_ = 0.0;
-    this->timestamp_reference_ = millis();
     this->timestamp_mean_ = 0.0;
+    this->timestamp_reference_ = millis();
 
+    // TEMPORARY
     this->mean2 = value;
     this->mean3 = value;
     this->mean4 = value;
   }
+
   this->duration_ = duration;  // even if reading is NaN, still count the time that has passed
   this->duration_squared_ = duration * duration;
 }
@@ -110,15 +112,15 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
                                                                    b_timestamp_mean, b_timestamp_reference, b_count);
 
   if ((a_count == 0) && (b_count == 0)) {
-    combined.mean_ = NAN;
-    combined.m2_ = NAN;
     combined.c2_ = NAN;
+    combined.m2_ = NAN;
+    combined.mean_ = NAN;
     combined.timestamp_m2_ = NAN;
     combined.timestamp_mean_ = NAN;
   } else if (a_count == 0) {
-    combined.mean_ = b_mean;
-    combined.m2_ = b_m2;
     combined.c2_ = b_c2;
+    combined.m2_ = b_m2;
+    combined.mean_ = b_mean;
     combined.timestamp_m2_ = b_timestamp_m2;
     combined.timestamp_mean_ = b_timestamp_mean;
 
@@ -126,9 +128,9 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
     combined.mean3 = b.get_mean3();
     combined.mean4 = b.get_mean4();
   } else if (b_count == 0) {
-    combined.mean_ = a_mean;
-    combined.m2_ = a_m2;
     combined.c2_ = a_c2;
+    combined.m2_ = a_m2;
+    combined.mean_ = a_mean;
     combined.timestamp_m2_ = a_timestamp_m2;
     combined.timestamp_mean_ = a_timestamp_mean;
 
@@ -139,14 +141,16 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
     double delta = b_mean - a_mean;
     double delta_prime = delta * b_weight / combined_weight;
 
+    double timestamp_delta = b_timestamp_mean - a_timestamp_mean;
+    double timestamp_delta_prime = timestamp_delta * b_weight / combined_weight;
+
     /*
      * Simple weighted combination of the mean; can potentially avoid issues if a_weight = b_weight
-     *... but may pick up issues if a_weight or b_weight is small... try using accumlators?
      */
-    double a_mean_weighted = a_mean * a_weight / combined_weight;
-    double b_mean_weighted = b_mean * b_weight / combined_weight;
+    combined.mean_ = a_mean * (a_weight / combined_weight) + b_mean * (b_weight / combined_weight);
 
-    combined.mean_ = a_mean_weighted + b_mean_weighted;
+    combined.timestamp_mean_ =
+        a_timestamp_mean * (a_weight / combined_weight) + b_timestamp_mean * (b_weight / combined_weight);
 
     /*
      * Basic Welford's version of mean.. may be unstable if a_weight = b_weight (see
@@ -155,42 +159,25 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
     double delta2 = b.get_mean2() - this->get_mean2();
     double delta2_prime = delta2 * b_weight / combined_weight;
     combined.mean2 = this->get_mean2() + delta2_prime;
-    // combined.mean_ = a_mean + delta_prime;
+
+    // combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta_prime;
 
     // compute M2 quantity for Welford's algorithm which can determine the variance
     combined.m2_ = a_m2 + b_m2 + a_weight * delta * delta_prime;
-    // combined.m2_ = a_m2 + b_m2 + delta * delta * a_weight * b_weight / (combined_weight);
-
-    double timestamp_delta = b_timestamp_mean - a_timestamp_mean;
-    double timestamp_delta_prime = timestamp_delta * b_weight / combined_weight;
-
-    combined.timestamp_mean_ =
-        a_timestamp_mean * (a_weight / combined_weight) + b_timestamp_mean * (b_weight / combined_weight);
-    // combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta_prime;
 
     combined.timestamp_m2_ = a_timestamp_m2 + b_timestamp_m2 + a_weight * timestamp_delta * timestamp_delta_prime;
 
-    combined.c2_ = a_c2 + b_c2 + delta * timestamp_delta * (a_weight * b_weight / (combined_weight));
-    // combined.c2_ = a_c2 + b_c2 + a_weight * delta * timestamp_delta_prime;
+    combined.c2_ = a_c2 + b_c2 + a_weight * delta * timestamp_delta_prime;
   }
 
   return combined;
 }
 
-// Sample variance using Welford's algorithm (Bessel's correction is applied)
-double Aggregate::compute_variance(bool time_weighted, GroupType type) const {
-  if (this->count_ > 1)
-    return this->m2_ / this->denominator_(time_weighted, type);
+/*
+ * Compute summary statistics from the stored aggregates
+ */
 
-  return NAN;
-}
-
-// Sample standard deviation using Welford's algorithm (Bessel's correction is applied to the computed variance)
-double Aggregate::compute_std_dev(bool time_weighted, GroupType type) const {
-  return std::sqrt(this->compute_variance(time_weighted, type));
-}
-
-// Sample covariance using an extension of Welford's algorithm (Bessel's correction is applied)
+// Covariance using an extension of Welford's algorithm
 double Aggregate::compute_covariance(bool time_weighted, GroupType type) const {
   if (this->count_ > 1)
     return this->c2_ / this->denominator_(time_weighted, type);
@@ -198,11 +185,50 @@ double Aggregate::compute_covariance(bool time_weighted, GroupType type) const {
   return NAN;
 }
 
+// Standard deviation using Welford's algorithm
+double Aggregate::compute_std_dev(bool time_weighted, GroupType type) const {
+  return std::sqrt(this->compute_variance(time_weighted, type));
+}
+
 // Slope of the line of best fit over sliding window
 double Aggregate::compute_trend() const {
   if (this->count_ > 1)
     return this->c2_ / this->timestamp_m2_;
   return NAN;
+}
+
+// Variance using Welford's algorithm
+double Aggregate::compute_variance(bool time_weighted, GroupType type) const {
+  if (this->count_ > 1)
+    return this->m2_ / this->denominator_(time_weighted, type);
+
+  return NAN;
+}
+
+/*
+ * Helper functions
+ */
+
+// Returns the appproriate denominator for the variance and covariance calculatioins
+//  - applies Bessel's correction if GroupType is sample and average type is not time weighted
+//  - uses reliability weights if GroupType is sample and average type is time weighted
+double Aggregate::denominator_(bool time_weighted, GroupType type) const {
+  // Bessel's correction for non-time weighted samples (https://en.wikipedia.org/wiki/Bessel%27s_correction)
+  double denominator = this->count_ - 1;
+
+  if (!time_weighted) {
+    if (type == POPULATION_GROUP_TYPE)
+      denominator = static_cast<double>(this->count_);
+  } else {
+    if (type == SAMPLE_GROUP_TYPE) {
+      // reliability weights: http://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Weighted_sample_variance
+      denominator = static_cast<double>(this->duration_) -
+                    static_cast<double>(this->duration_squared_) / static_cast<double>(this->duration_);
+    } else if (type == POPULATION_GROUP_TYPE)
+      denominator = static_cast<double>(this->duration_);
+  }
+
+  return denominator;
 }
 
 double Aggregate::normalize_timestamp_means_(double &a_mean, const uint32_t &a_timestamp_reference,
@@ -238,25 +264,6 @@ double Aggregate::normalize_timestamp_means_(double &a_mean, const uint32_t &a_t
 
     return a_timestamp_reference;
   }
-}
-
-double Aggregate::denominator_(bool time_weighted, GroupType type) const {
-  // Bessel's correction for non-time weighted samples (https://en.wikipedia.org/wiki/Bessel%27s_correction)
-  double denominator = this->count_ - 1;
-
-  if (!time_weighted) {
-    if (type == POPULATION_GROUP_TYPE)
-      denominator = static_cast<double>(this->count_);
-  } else {
-    if (type == SAMPLE_GROUP_TYPE) {
-      // reliability weights: http://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Weighted_sample_variance
-      denominator = static_cast<double>(this->duration_) -
-                    static_cast<double>(this->duration_squared_) / static_cast<double>(this->duration_);
-    } else if (type == POPULATION_GROUP_TYPE)
-      denominator = static_cast<double>(this->duration_);
-  }
-
-  return denominator;
 }
 
 }  // namespace statistics
