@@ -3,12 +3,8 @@
  */
 
 #include "aggregate.h"
+#include "aggregate_queue.h"
 #include "running_queue.h"
-
-#include "esphome/core/helpers.h"  // necessary for ExternalRAMAllocator
-
-#include <cmath>
-#include <vector>
 
 namespace esphome {
 namespace statistics {

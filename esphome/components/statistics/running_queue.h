@@ -5,10 +5,7 @@
 #pragma once
 
 #include "aggregate.h"
-
-#include "esphome/core/log.h"
-
-#include <vector>
+#include "aggregate_queue.h"
 
 namespace esphome {
 namespace statistics {
