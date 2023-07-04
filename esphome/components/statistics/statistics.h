@@ -116,7 +116,8 @@ class StatisticsComponent : public Component {
   void set_send_every(size_t send_every) { this->send_every_ = send_every; }
   void set_first_at(size_t send_first_at) { this->send_at_ = send_first_at; }
 
-  void set_reset_after(size_t reset_after) { this->reset_after_ = reset_after; }
+  void set_chunk_size(size_t size) { this->chunk_size_ = size; }
+  void set_chunk_duration_size(uint32_t time_delta) { this->chunk_duration_size_ = time_delta; }
 
   void set_time_conversion_factor(TimeConversionFactor conversion_factor) {
     this->time_conversion_factor_ = conversion_factor;
@@ -125,17 +126,9 @@ class StatisticsComponent : public Component {
   void set_statistics_type(StatisticsType type) { this->statistics_type_ = type; }
   void set_precision(Precision precision) { this->precision_ = precision; }
   void set_average_type(AverageType type) { this->average_type_ = type; }
-
-  void set_chunk_size(size_t size) { this->chunk_size_ = size; }
-
   void set_group_type(GroupType type) { this->group_type_ = type; }
 
  protected:
-  // given a new sensor measurements, add it to window, evict if window is full, and update sensors
-  void handle_new_value_(double value);
-
-  TimeConversionFactor time_conversion_factor_{};
-
   // source sensor of measurement data
   sensor::Sensor *source_sensor_{nullptr};
 
@@ -145,45 +138,53 @@ class StatisticsComponent : public Component {
   sensor::Sensor *max_sensor_{nullptr};
   sensor::Sensor *min_sensor_{nullptr};
   sensor::Sensor *mean_sensor_{nullptr};
-  sensor::Sensor *mean2_sensor_{nullptr};
-  sensor::Sensor *mean3_sensor_{nullptr};
-  sensor::Sensor *mean4_sensor_{nullptr};
   sensor::Sensor *variance_sensor_{nullptr};
   sensor::Sensor *std_dev_sensor_{nullptr};
   sensor::Sensor *covariance_sensor_{nullptr};
   sensor::Sensor *trend_sensor_{nullptr};
+
+  // temporary sensors to help compare various floating point operations for the mean
+  sensor::Sensor *mean2_sensor_{nullptr};
+  sensor::Sensor *mean3_sensor_{nullptr};
+  sensor::Sensor *mean4_sensor_{nullptr};
 
   union {
     AggregateQueue<float> *float_precision;
     AggregateQueue<double> *double_precision;
   } queue_{nullptr};
 
-  Aggregate running_aggregate_{};
+  Aggregate current_chunk_aggregate_{};
 
   // mimic ESPHome's current filters behavior
   size_t window_size_{};
   size_t send_every_{};
   size_t send_at_{};
 
-  size_t chunk_size_{1};
-  size_t chunk_entries_{0};
+  size_t chunk_size_{1};            // amount of measurements stored in a chunk before being inserted into the queue
+  uint32_t chunk_duration_size_{};  // duration of measurements stored in a chunk before being inserted into teh queue
 
+  size_t chunk_entries_{0};     // amount of measurements currently stored in the running aggregate chunk
+  uint32_t chunk_duration_{0};  // duration of measurements currently stored in the running aggregate chunk
+
+  TimeConversionFactor time_conversion_factor_{};  // covariance and trend have a unit involving a time unit
   StatisticsType statistics_type_{};
+  Precision precision_{};       // either float precision or double precision
+  AverageType average_type_{};  // either simple or time-weighted
+  GroupType group_type_{};      // measurements come from either a population or sample
 
-  Precision precision_{};
-
-  AverageType average_type_{};
-
+  // if the aggregates are time-weighted, these store info about the previous observation
   float previous_value_{NAN};
   uint32_t previous_timestamp_{0};
 
-  uint32_t reset_after_{};
+  // given a new sensor measurements, add it to window, evict if window is full, and update sensors
+  void handle_new_value_(double value);
 
-  GroupType group_type_{};
-
+  // functions to handle different precisions
   void set_capacity_(size_t capacity, EnabledAggregatesConfiguration config);
-  void insert_(double value, uint32_t duration);
+
   void insert_(Aggregate value);
+  void insert_chunk_and_reset_(Aggregate value);
+
   void evict_();
   size_t size_() const;
   Aggregate compute_current_aggregate_() const;

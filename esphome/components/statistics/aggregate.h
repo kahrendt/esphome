@@ -72,14 +72,11 @@ class Aggregate {
   double get_mean() const { return this->mean_; }
   void set_mean(double mean) { this->mean_ = mean; }
 
-  double get_mean_accumulator() const { return this->mean_accumulator_; }
-  void set_mean_accumulator(double mean_accumulator) { this->mean_accumulator_ = mean_accumulator; }
-
-  // M2 from Welford's algorithm; used to compute variance
+  // M2 from Welford's algorithm; used to compute variance weighted
   double get_m2() const { return this->m2_; }
   void set_m2(double m2) { this->m2_ = m2; }
 
-  // C2 from Welford's algorithm; used to compute the covariance of the measurements and timestamps
+  // C2 from Welford's algorithm; used to compute the covariance of the measurements and timestamps weighted
   double get_c2() const { return this->c2_; }
   void set_c2(double c2) { this->c2_ = c2; }
 
@@ -100,22 +97,18 @@ class Aggregate {
   double get_timestamp_mean() const { return this->timestamp_mean_; }
   void set_timestamp_mean(double timestamp_mean) { this->timestamp_mean_ = timestamp_mean; }
 
-  // Return the sample variance of measurements
-  double compute_variance(bool time_weighted, GroupType type) const;
-
   // Return the sample standard deviation of measurements
   double compute_std_dev(bool time_weighted, GroupType type) const;
 
   // Return the sample covariance of measurements and timestamps
   double compute_covariance(bool time_weighted, GroupType type) const;
 
+  double compute_variance(bool time_weighted, GroupType type) const;
+
   // Return the slope of the line of best fit over the window
   double compute_trend() const;
 
   Aggregate combine_with(const Aggregate &b, bool time_weighted = false);
-  void combine(const Aggregate &a, const Aggregate &b, bool time_weighted = false);
-
-  Aggregate operator+(const Aggregate &b);
 
   // average value in the set of measurements
   double get_mean2() const { return this->mean2; }
@@ -143,13 +136,10 @@ class Aggregate {
 
   // Average of the set of measurements
   double mean_{NAN};
-  // float mean_{NAN};
 
   double mean2{NAN};
   double mean3{NAN};
   double mean4{NAN};
-
-  double mean_accumulator_{0.0};
 
   // Quantity used in Welford's algorihtm for finding the variance of the set of measurements
   double m2_{NAN};
@@ -158,7 +148,7 @@ class Aggregate {
   // timestamps
   double c2_{NAN};
 
-  // Quantity used in Welford's algorihtm for finding the variance of timestamps in the set of measurements
+  // Quantity used in Welford's algorithm for finding the variance of timestamps in the set of measurements
   double timestamp_m2_{NAN};
 
   double timestamp_mean_{NAN};
@@ -198,7 +188,6 @@ template<typename T> class AggregateQueue {
   T *max_queue_{nullptr};
   T *min_queue_{nullptr};
   T *mean_queue_{nullptr};
-  T *mean_accumulator_queue_{nullptr};
   T *m2_queue_{nullptr};
   T *c2_queue_{nullptr};
   T *timestamp_m2_queue_{nullptr};
