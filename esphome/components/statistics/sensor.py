@@ -3,21 +3,21 @@ import esphome.config_validation as cv
 from esphome import automation
 from esphome.components import sensor
 from esphome.const import (
+    CONF_ACCURACY_DECIMALS,
+    CONF_COUNT,
+    CONF_DEVICE_CLASS,
+    CONF_ENTITY_CATEGORY,
+    CONF_ICON,
     CONF_ID,
     CONF_SEND_EVERY,
     CONF_SEND_FIRST_AT,
     CONF_SOURCE_ID,
-    CONF_WINDOW_SIZE,
-    CONF_ACCURACY_DECIMALS,
-    CONF_DEVICE_CLASS,
-    CONF_ENTITY_CATEGORY,
-    CONF_ICON,
+    CONF_TYPE,
     CONF_UNIT_OF_MEASUREMENT,
-    CONF_COUNT,
+    CONF_WINDOW_SIZE,
+    DEVICE_CLASS_DURATION,
     STATE_CLASS_MEASUREMENT,
     STATE_CLASS_TOTAL,
-    CONF_TYPE,
-    DEVICE_CLASS_DURATION,
     UNIT_MILLISECOND,
 )
 from esphome.core.entity_helpers import inherit_property_from
@@ -27,27 +27,28 @@ CODEOWNERS = ["@kahrendt"]
 statistics_ns = cg.esphome_ns.namespace("statistics")
 StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
 
-
-CONF_MEAN = "mean"
+# Definable sensors
+CONF_COVARIANCE = "covariance"
+CONF_DURATION = "duration"
 CONF_MAX = "max"
+CONF_MEAN = "mean"
 CONF_MIN = "min"
 CONF_STD_DEV = "std_dev"
-CONF_VARIANCE = "variance"
 CONF_TREND = "trend"
-CONF_COVARIANCE = "covariance"
-CONF_TIME_UNIT = "time_unit"
-CONF_DURATION = "duration"
+CONF_VARIANCE = "variance"
 
+# TEMPORARY DEBUGGING
 CONF_MEAN2 = "mean2"
 CONF_MEAN3 = "mean3"
 CONF_MEAN4 = "mean4"
 
-
+# Configuration options for aggregate chunks
 CONF_CHUNK_SIZE = "chunk_size"
 CONF_CHUNK_DURATION_SIZE = "chunk_duration_size"
 CONF_CHUNK_QUANTITY = "chunk_quantity"
 CONF_RESET_EVERY_CHUNK = "reset_every_chunk"
 
+# Type of measurement group; i.e., are the observations for a population or sample
 CONF_GROUP_TYPE = "group_type"
 CONF_SAMPLE_GROUP = "sample"
 CONF_POPULATION_GROUP = "population"
@@ -58,6 +59,7 @@ GROUP_TYPES = {
     CONF_POPULATION_GROUP: GroupType.POPULATION_GROUP_TYPE,
 }
 
+# Different types of statistics possible
 CONF_SLIDING_WINDOW = "sliding_window"
 CONF_RUNNING = "running"
 CONF_HYBRID = "hybrid"
@@ -71,6 +73,7 @@ STATISTICS_TYPES = {
     CONF_NAIVE: StatisticsType.STATISTICS_TYPE_NAIVE,
 }
 
+# Types of average; simple has every observation with the same weight, time_weighted weighs each observation by the duration of the observation
 CONF_AVERAGE_TYPE = "average_type"
 CONF_SIMPLE_AVERAGE = "simple"
 CONF_TIME_WEIGHTED_AVERAGE = "time_weighted"
@@ -81,6 +84,7 @@ AVERAGE_TYPES = {
     CONF_TIME_WEIGHTED_AVERAGE: AverageType.TIME_WEIGHTED_AVERAGE,
 }
 
+# Level of precision to store in the aggregate queues
 CONF_PRECISION = "precision"
 CONF_FLOAT = "float"
 CONF_DOUBLE = "double"
@@ -91,6 +95,8 @@ PRECISION_TYPES = {
     CONF_DOUBLE: Precision.DOUBLE_PRECISION,
 }
 
+# Time unit used for covariance and trend
+CONF_TIME_UNIT = "time_unit"
 
 TimeConversionFactor = statistics_ns.enum("TimeConversionFactor")
 TIME_CONVERSION_FACTORS = {
@@ -101,6 +107,7 @@ TIME_CONVERSION_FACTORS = {
     "d": TimeConversionFactor.FACTOR_DAY,
 }
 
+# Reset action that clears all queued aggragates
 ResetAction = statistics_ns.class_("ResetAction", automation.Action)
 
 
@@ -215,26 +222,8 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
             TIME_CONVERSION_FACTORS, lower=True
         ),
-        cv.Optional(CONF_MEAN): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_MAX): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_MIN): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_STD_DEV): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_VARIANCE): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
         cv.Optional(CONF_COUNT): sensor.sensor_schema(
             state_class=STATE_CLASS_TOTAL,
-        ),
-        cv.Optional(CONF_TREND): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_COVARIANCE): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
@@ -243,6 +232,24 @@ CONFIG_SCHEMA = cv.Schema(
             state_class=STATE_CLASS_MEASUREMENT,
             device_class=DEVICE_CLASS_DURATION,
             unit_of_measurement=UNIT_MILLISECOND,
+        ),
+        cv.Optional(CONF_MAX): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_MEAN): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_MIN): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_STD_DEV): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_TREND): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_VARIANCE): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_MEAN2): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
@@ -256,7 +263,8 @@ CONFIG_SCHEMA = cv.Schema(
     },
 ).extend(cv.COMPONENT_SCHEMA)
 
-# approach orrowed from kalman sensor component
+# approach borrowed from kalman sensor component
+
 properties_to_inherit_original_unit = [
     CONF_ACCURACY_DECIMALS,
     CONF_DEVICE_CLASS,
@@ -300,7 +308,6 @@ FINAL_VALIDATE_SCHEMA = cv.All(
         {cv.Required(CONF_ID): cv.use_id(StatisticsComponent)},
         extra=cv.ALLOW_EXTRA,
     ),
-    # inherit_property_for_defined_same_unit_sensors,
     *inherit_schema_for_new_unit_sensors,
     *inherit_schema_for_same_unit_sensors,
     inherit_property_from(
@@ -366,6 +373,11 @@ async def to_code(config):
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_count_sensor(sens))
 
+    if CONF_COVARIANCE in config:
+        conf = config[CONF_COVARIANCE]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_covariance_sensor(sens))
+
     if CONF_DURATION in config:
         conf = config[CONF_DURATION]
         sens = await sensor.new_sensor(conf)
@@ -376,35 +388,30 @@ async def to_code(config):
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_max_sensor(sens))
 
-    if CONF_MIN in config:
-        conf = config[CONF_MIN]
-        sens = await sensor.new_sensor(conf)
-        cg.add(var.set_min_sensor(sens))
-
     if CONF_MEAN in config:
         conf = config[CONF_MEAN]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_mean_sensor(sens))
 
-    if CONF_VARIANCE in config:
-        conf = config[CONF_VARIANCE]
+    if CONF_MIN in config:
+        conf = config[CONF_MIN]
         sens = await sensor.new_sensor(conf)
-        cg.add(var.set_variance_sensor(sens))
+        cg.add(var.set_min_sensor(sens))
 
     if CONF_STD_DEV in config:
         conf = config[CONF_STD_DEV]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_std_dev_sensor(sens))
 
-    if CONF_COVARIANCE in config:
-        conf = config[CONF_COVARIANCE]
-        sens = await sensor.new_sensor(conf)
-        cg.add(var.set_covariance_sensor(sens))
-
     if CONF_TREND in config:
         conf = config[CONF_TREND]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_trend_sensor(sens))
+
+    if CONF_VARIANCE in config:
+        conf = config[CONF_VARIANCE]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_variance_sensor(sens))
 
     if CONF_MEAN2 in config:
         conf = config[CONF_MEAN2]
