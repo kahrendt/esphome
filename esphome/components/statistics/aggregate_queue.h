@@ -11,16 +11,16 @@ namespace esphome {
 namespace statistics {
 
 struct EnabledAggregatesConfiguration {
+  bool c2{false};
   bool count{false};
   bool duration{false};
   bool duration_squared{false};
-  bool max{false};
-  bool min{false};
-  bool mean{false};
   bool m2{false};
-  bool timestamp_mean{false};
-  bool c2{false};
+  bool max{false};
+  bool mean{false};
+  bool min{false};
   bool timestamp_m2{false};
+  bool timestamp_mean{false};
   bool timestamp_reference{false};
 };
 
@@ -43,15 +43,18 @@ template<typename T> class AggregateQueue {
  protected:
   size_t *count_queue_{nullptr};
   size_t *duration_squared_queue_{nullptr};
+
   uint32_t *duration_queue_{nullptr};
-  T *max_queue_{nullptr};
-  T *min_queue_{nullptr};
-  T *mean_queue_{nullptr};
-  T *m2_queue_{nullptr};
+  uint32_t *timestamp_reference_queue_{nullptr};
+
   T *c2_queue_{nullptr};
+  T *m2_queue_{nullptr};
+  T *max_queue_{nullptr};
+  T *mean_queue_{nullptr};
+  T *min_queue_{nullptr};
   T *timestamp_m2_queue_{nullptr};
   T *timestamp_mean_queue_{nullptr};
-  uint32_t *timestamp_reference_queue_{nullptr};
+
   T *mean2_queue_{nullptr};
   T *mean3_queue_{nullptr};
   T *mean4_queue_{nullptr};
