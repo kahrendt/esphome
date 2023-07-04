@@ -1,7 +1,6 @@
 
 #include "zio_ultrasonic.h"
 
-#include "esphome/components/i2c/i2c.h"
 #include "esphome/core/log.h"
 
 namespace esphome {
@@ -19,8 +18,10 @@ void ZioUltrasonicComponent::dump_config() {
 void ZioUltrasonicComponent::update() {
   uint16_t distance;
 
+  // Read an unsigned two byte integerfrom register 0x01 which gives distance in mm
   if (!this->read_byte_16(0x01, &distance)) {
-    ESP_LOGE(TAG, "Error reading data from ZioUltrasonic");
+    ESP_LOGE(TAG, "Error reading data from Zio Ultrasonic");
+    this->publish_state(NAN);
   } else {
     this->publish_state(distance);
   }
