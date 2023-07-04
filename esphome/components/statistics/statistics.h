@@ -98,17 +98,18 @@ class StatisticsComponent : public Component {
 
   // sensors for aggregate statistics from sliding window
   void set_count_sensor(sensor::Sensor *count_sensor) { this->count_sensor_ = count_sensor; }
+  void set_covariance_sensor(sensor::Sensor *covariance_senesor) { this->covariance_sensor_ = covariance_senesor; }
   void set_duration_sensor(sensor::Sensor *duration_sensor) { this->duration_sensor_ = duration_sensor; }
   void set_max_sensor(sensor::Sensor *max_sensor) { this->max_sensor_ = max_sensor; }
-  void set_min_sensor(sensor::Sensor *min_sensor) { this->min_sensor_ = min_sensor; }
   void set_mean_sensor(sensor::Sensor *mean_sensor) { this->mean_sensor_ = mean_sensor; }
+  void set_min_sensor(sensor::Sensor *min_sensor) { this->min_sensor_ = min_sensor; }
+  void set_std_dev_sensor(sensor::Sensor *std_dev_sensor) { this->std_dev_sensor_ = std_dev_sensor; }
+  void set_trend_sensor(sensor::Sensor *trend_sensor) { this->trend_sensor_ = trend_sensor; }
+  void set_variance_sensor(sensor::Sensor *variance_sensor) { this->variance_sensor_ = variance_sensor; }
+
   void set_mean2_sensor(sensor::Sensor *mean_sensor) { this->mean2_sensor_ = mean_sensor; }
   void set_mean3_sensor(sensor::Sensor *mean_sensor) { this->mean3_sensor_ = mean_sensor; }
   void set_mean4_sensor(sensor::Sensor *mean_sensor) { this->mean4_sensor_ = mean_sensor; }
-  void set_variance_sensor(sensor::Sensor *variance_sensor) { this->variance_sensor_ = variance_sensor; }
-  void set_std_dev_sensor(sensor::Sensor *std_dev_sensor) { this->std_dev_sensor_ = std_dev_sensor; }
-  void set_covariance_sensor(sensor::Sensor *covariance_senesor) { this->covariance_sensor_ = covariance_senesor; }
-  void set_trend_sensor(sensor::Sensor *trend_sensor) { this->trend_sensor_ = trend_sensor; }
 
   // mimic ESPHome's current filter behavior
   void set_window_size(size_t window_size) { this->window_size_ = window_size; }
@@ -118,14 +119,13 @@ class StatisticsComponent : public Component {
   void set_chunk_size(size_t size) { this->chunk_size_ = size; }
   void set_chunk_duration_size(uint32_t time_delta) { this->chunk_duration_size_ = time_delta; }
 
+  void set_average_type(AverageType type) { this->average_type_ = type; }
+  void set_group_type(GroupType type) { this->group_type_ = type; }
+  void set_precision(Precision precision) { this->precision_ = precision; }
+  void set_statistics_type(StatisticsType type) { this->statistics_type_ = type; }
   void set_time_conversion_factor(TimeConversionFactor conversion_factor) {
     this->time_conversion_factor_ = conversion_factor;
   }
-
-  void set_statistics_type(StatisticsType type) { this->statistics_type_ = type; }
-  void set_precision(Precision precision) { this->precision_ = precision; }
-  void set_average_type(AverageType type) { this->average_type_ = type; }
-  void set_group_type(GroupType type) { this->group_type_ = type; }
 
  protected:
   // source sensor of measurement data
@@ -133,14 +133,14 @@ class StatisticsComponent : public Component {
 
   // sensors for aggregate statistics from sliding window
   sensor::Sensor *count_sensor_{nullptr};
+  sensor::Sensor *covariance_sensor_{nullptr};
   sensor::Sensor *duration_sensor_{nullptr};
   sensor::Sensor *max_sensor_{nullptr};
-  sensor::Sensor *min_sensor_{nullptr};
   sensor::Sensor *mean_sensor_{nullptr};
-  sensor::Sensor *variance_sensor_{nullptr};
+  sensor::Sensor *min_sensor_{nullptr};
   sensor::Sensor *std_dev_sensor_{nullptr};
-  sensor::Sensor *covariance_sensor_{nullptr};
   sensor::Sensor *trend_sensor_{nullptr};
+  sensor::Sensor *variance_sensor_{nullptr};
 
   // temporary sensors to help compare various floating point operations for the mean
   sensor::Sensor *mean2_sensor_{nullptr};
@@ -165,11 +165,11 @@ class StatisticsComponent : public Component {
   size_t chunk_entries_{0};     // amount of measurements currently stored in the running aggregate chunk
   uint32_t chunk_duration_{0};  // duration of measurements currently stored in the running aggregate chunk
 
-  TimeConversionFactor time_conversion_factor_{};  // covariance and trend have a unit involving a time unit
-  StatisticsType statistics_type_{};
-  Precision precision_{};       // either float precision or double precision
   AverageType average_type_{};  // either simple or time-weighted
   GroupType group_type_{};      // measurements come from either a population or sample
+  Precision precision_{};       // either float precision or double precision
+  StatisticsType statistics_type_{};
+  TimeConversionFactor time_conversion_factor_{};  // covariance and trend have a unit involving a time unit
 
   // if the aggregates are time-weighted, these store info about the previous observation
   float previous_value_{NAN};
