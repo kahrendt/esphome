@@ -11,6 +11,7 @@
 #pragma once
 
 #include "aggregate.h"
+#include "aggregate_queue.h"
 #include "circular_queue_index.h"
 
 namespace esphome {

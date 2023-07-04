@@ -47,14 +47,13 @@
 #pragma once
 
 #include "aggregate.h"
+#include "aggregate_queue.h"
 #include "daba_lite.h"
 #include "running_queue.h"
 
 #include "esphome/core/component.h"
 #include "esphome/core/automation.h"
 #include "esphome/components/sensor/sensor.h"
-
-#include <vector>
 
 namespace esphome {
 namespace statistics {
