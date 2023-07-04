@@ -40,6 +40,7 @@
  */
 
 #include "aggregate.h"
+#include "aggregate_queue.h"
 #include "daba_lite.h"
 #include "running_queue.h"
 #include "statistics.h"
@@ -47,8 +48,6 @@
 #include "esphome/core/log.h"
 #include "esphome/core/hal.h"
 #include "esphome/components/sensor/sensor.h"
-
-#include <vector>
 
 namespace esphome {
 namespace statistics {
