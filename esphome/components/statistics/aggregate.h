@@ -42,29 +42,13 @@ class Aggregate {
   Aggregate(){};  // default constructor for a null measurement
   Aggregate(double value, uint32_t duration);
 
-  // Count of valid readings; i.e., not NaN, in the set of measurements
-  size_t get_count() const { return this->count_; }
-  void set_count(size_t count) { this->count_ = count; }
-
-  // Maximum value of the set of measurements
-  double get_max() const { return this->max_; }
-  void set_max(double max) { this->max_ = max; }
-
-  // minimum value in the set of measurements
-  double get_min() const { return this->min_; }
-  void set_min(double min) { this->min_ = min; }
-
-  // average value in the set of measurements
-  double get_mean() const { return this->mean_; }
-  void set_mean(double mean) { this->mean_ = mean; }
-
-  // M2 from Welford's algorithm; used to compute variance weighted
-  double get_m2() const { return this->m2_; }
-  void set_m2(double m2) { this->m2_ = m2; }
-
   // C2 from Welford's algorithm; used to compute the covariance of the measurements and timestamps weighted
   double get_c2() const { return this->c2_; }
   void set_c2(double c2) { this->c2_ = c2; }
+
+  // Count of valid readings; i.e., not NaN, in the set of measurements
+  size_t get_count() const { return this->count_; }
+  void set_count(size_t count) { this->count_ = count; }
 
   uint32_t get_duration() const { return this->duration_; }
   void set_duration(uint32_t duration) { this->duration_ = duration; }
@@ -72,23 +56,44 @@ class Aggregate {
   size_t get_duration_squared() const { return this->duration_squared_; }
   void set_duration_squared(size_t duration_squared) { this->duration_squared_ = duration_squared; }
 
+  // M2 from Welford's algorithm; used to compute variance weighted
+  double get_m2() const { return this->m2_; }
+  void set_m2(double m2) { this->m2_ = m2; }
+
+  // Maximum value of the set of measurements
+  double get_max() const { return this->max_; }
+  void set_max(double max) { this->max_ = max; }
+
+  // average value in the set of measurements
+  double get_mean() const { return this->mean_; }
+  void set_mean(double mean) { this->mean_ = mean; }
+
+  // minimum value in the set of measurements
+  double get_min() const { return this->min_; }
+  void set_min(double min) { this->min_ = min; }
+
   // M2 from Welford's algorithm for timestamps; used to compute variance of timestamps
   double get_timestamp_m2() const { return this->timestamp_m2_; }
   void set_timestamp_m2(double timestamp_m2) { this->timestamp_m2_ = timestamp_m2; }
+
+  // Average timestamp for the aggregate; offset by timestamp_reference
+  double get_timestamp_mean() const { return this->timestamp_mean_; }
+  void set_timestamp_mean(double timestamp_mean) { this->timestamp_mean_ = timestamp_mean; }
 
   // The reference timestamp (in milliseconds) that all timestamps in the sum are offset by
   uint32_t get_timestamp_reference() const { return this->timestamp_reference_; }
   void set_timestamp_reference(uint32_t timestamp_reference) { this->timestamp_reference_ = timestamp_reference; }
 
-  double get_timestamp_mean() const { return this->timestamp_mean_; }
-  void set_timestamp_mean(double timestamp_mean) { this->timestamp_mean_ = timestamp_mean; }
-
-  // Return the sample standard deviation of measurements
-  double compute_std_dev(bool time_weighted, GroupType type) const;
-
-  // Return the sample covariance of measurements and timestamps
+  // Return the covariance of measurements and timestamps
+  //  - applies Bessel's correction if GroupType is sample
   double compute_covariance(bool time_weighted, GroupType type) const;
 
+  // Return the standard deviation of observations in aggregate
+  //  - applies Bessel's correction if GroupType is sample
+  double compute_std_dev(bool time_weighted, GroupType type) const;
+
+  // Return the variance of observations in aggregate
+  //  - applies Bessel's correction if GroupType is sample
   double compute_variance(bool time_weighted, GroupType type) const;
 
   // Return the slope of the line of best fit over the window
@@ -96,7 +101,7 @@ class Aggregate {
 
   Aggregate combine_with(const Aggregate &b, bool time_weighted = false);
 
-  // average value in the set of measurements
+  // TEMPORARY means for debugging floating point precision operations
   double get_mean2() const { return this->mean2; }
   void set_mean2(double mean) { this->mean2 = mean; }
   double get_mean3() const { return this->mean3; }
@@ -112,43 +117,48 @@ class Aggregate {
 
   // Count of non-NaN measurements in the set of measurements
   size_t count_{0};
-  uint32_t duration_{0};
 
   size_t duration_squared_{0};
+
+  uint32_t duration_{0};
+
+  // The reference timestamp for the timestamp sum values;
+  // e.g., if we have one raw timestamp at 5 ms and the reference is 5 ms, we store 0 ms in timestamp_sum
+  uint32_t timestamp_reference_{0};
+
+  // Quantity used in an extended Welford's algorithm for finding the covariance of the set of measurements and
+  // timestamps
+  double c2_{NAN};
 
   // Extrema of the set of measurements
   double max_{std::numeric_limits<double>::infinity() * (-1)};  // the supremum of the empty set is -infinity
   double min_{std::numeric_limits<double>::infinity()};         // the infimum of the empty set is +infinity
 
-  // Average of the set of measurements
-  double mean_{NAN};
-
-  double mean2{NAN};
-  double mean3{NAN};
-  double mean4{NAN};
-
   // Quantity used in Welford's algorihtm for finding the variance of the set of measurements
   double m2_{NAN};
 
-  // Quantity used in an extended Welford's algorithm for finding the covariance of the set of measurements and
-  // timestamps
-  double c2_{NAN};
+  // Average of the set of measurements
+  double mean_{NAN};
 
   // Quantity used in Welford's algorithm for finding the variance of timestamps in the set of measurements
   double timestamp_m2_{NAN};
 
   double timestamp_mean_{NAN};
 
-  // The reference timestamp for the timestamp sum values;
-  // e.g., if we have one raw timestamp at 5 ms and the reference is 5 ms, we store 0 ms in timestamp_sum
-  uint32_t timestamp_reference_{0};
+  // TEMPORARY
+  double mean2{NAN};
+  double mean3{NAN};
+  double mean4{NAN};
+
+  // Returns the appproriate denominator for the variance and covariance calculatioins
+  //  - applies Bessel's correction if GroupType is sample and average type is not time weighted
+  //  - uses reliability weights if GroupType is sample and average type is time weighted
+  double denominator_(bool time_weighted, GroupType type) const;
 
   // Given two samples, normalize the timestamp sums so that they are both in reference to the larger timestamp
   // returns the timestamp both sums are in reference to
   double normalize_timestamp_means_(double &a_mean, const uint32_t &a_timestamp_reference, const size_t &a_count,
                                     double &b_mean, const uint32_t &b_timestamp_reference, const size_t &b_count);
-
-  double denominator_(bool time_weighted, GroupType type) const;
 };
 
 }  // namespace statistics
