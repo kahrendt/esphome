@@ -74,6 +74,10 @@ void StatisticsComponent::dump_config() {
     LOG_SENSOR("  ", "Count", this->count_sensor_);
   }
 
+  if (this->covariance_sensor_) {
+    LOG_SENSOR("  ", "Covariance", this->covariance_sensor_);
+  }
+
   if (this->duration_sensor_) {
     LOG_SENSOR("  ", "Duration", this->duration_sensor_);
   }
@@ -82,49 +86,47 @@ void StatisticsComponent::dump_config() {
     LOG_SENSOR("  ", "Max", this->max_sensor_);
   }
 
-  if (this->min_sensor_) {
-    LOG_SENSOR("  ", "Min", this->min_sensor_);
-  }
-
   if (this->mean_sensor_) {
     LOG_SENSOR("  ", "Mean", this->mean_sensor_);
   }
 
-  if (this->variance_sensor_) {
-    LOG_SENSOR("  ", "Variance", this->variance_sensor_);
+  if (this->min_sensor_) {
+    LOG_SENSOR("  ", "Min", this->min_sensor_);
   }
 
   if (this->std_dev_sensor_) {
     LOG_SENSOR("  ", "Standard Deviation", this->std_dev_sensor_);
   }
 
-  if (this->covariance_sensor_) {
-    LOG_SENSOR("  ", "Covariance", this->covariance_sensor_);
-  }
-
   if (this->trend_sensor_) {
     LOG_SENSOR("  ", "Trend", this->trend_sensor_);
+  }
+
+  if (this->variance_sensor_) {
+    LOG_SENSOR("  ", "Variance", this->variance_sensor_);
   }
 }
 
 void StatisticsComponent::setup() {
-  // store aggregate data only necessary for the configured sensors
+  // store aggregate data in the queues only necessary for the configured sensors
   EnabledAggregatesConfiguration config;
 
   if (this->count_sensor_)
     config.count = true;
 
+  if (this->covariance_sensor_) {
+    config.c2 = true;
+    config.count = true;
+    config.mean = true;
+    config.timestamp_mean = true;
+    config.timestamp_reference = true;
+  }
+
   if (this->duration_sensor_)
     config.duration = true;
 
   if (this->max_sensor_) {
-    config.count = true;  // count is always needed for running type
     config.max = true;
-  }
-
-  if (this->min_sensor_) {
-    config.count = true;  // count is always needed for running type
-    config.min = true;
   }
 
   if (this->mean_sensor_) {
@@ -132,55 +134,45 @@ void StatisticsComponent::setup() {
     config.mean = true;
   }
 
-  if ((this->variance_sensor_) || (this->std_dev_sensor_)) {
-    config.count = true;
-    config.mean = true;
-    config.m2 = true;
+  if (this->min_sensor_) {
+    config.min = true;
   }
 
-  if (this->covariance_sensor_) {
+  if ((this->std_dev_sensor_) || (this->variance_sensor_)) {
     config.count = true;
+    config.m2 = true;
     config.mean = true;
-    config.timestamp_mean = true;
-    config.timestamp_reference = true;
-    config.c2 = true;
   }
 
   if (this->trend_sensor_) {
+    config.c2 = true;
     config.count = true;
-    config.mean = true;
     config.m2 = true;
+    config.mean = true;
+    config.timestamp_m2 = true;
     config.timestamp_mean = true;
     config.timestamp_reference = true;
-    config.c2 = true;
-    config.timestamp_m2 = true;
   }
 
+  // if averages are time weighted, then ensure we store duration info
   if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
     config.duration = true;
     config.duration_squared = true;
   }
 
-  if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
+  if ((this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) ||
+      (this->statistics_type_ == STATISTICS_TYPE_HYBRID)) {
     if (this->precision_ == FLOAT_PRECISION)
       this->queue_.float_precision = new DABALite<float>();
     else
       this->queue_.double_precision = new DABALite<double>();
 
     this->set_capacity_(this->window_size_, config);
-
   } else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING) {
     if (this->precision_ == FLOAT_PRECISION)
       this->queue_.float_precision = new RunningQueue<float>();
     else
       this->queue_.double_precision = new RunningQueue<double>();
-
-    this->set_capacity_(this->window_size_, config);
-  } else if (this->statistics_type_ == STATISTICS_TYPE_HYBRID) {
-    if (this->precision_ == FLOAT_PRECISION)
-      this->queue_.float_precision = new DABALite<float>();
-    else
-      this->queue_.double_precision = new DABALite<double>();
 
     this->set_capacity_(this->window_size_, config);
   } else if (this->statistics_type_ == STATISTICS_TYPE_NAIVE) {
@@ -311,18 +303,25 @@ void StatisticsComponent::handle_new_value_(double value) {
   // send_at_ counts the number of chunks inserted into the appropriate queue
   // after send_every_ chunks, each sensor is updated
   if (this->send_at_ >= this->send_every_) {
-    Aggregate current_aggregate = Aggregate();
+    this->send_at_ = 0;
 
+    Aggregate current_aggregate = Aggregate();
     if (this->statistics_type_ == STATISTICS_TYPE_NAIVE) {
       current_aggregate = this->current_chunk_aggregate_;
     } else {
       current_aggregate = this->compute_current_aggregate_();
     }
 
-    this->send_at_ = 0;
-
     if (this->count_sensor_)
       this->count_sensor_->publish_state(current_aggregate.get_count());
+
+    if (this->covariance_sensor_) {
+      double covariance_ms =
+          current_aggregate.compute_covariance(this->average_type_ == TIME_WEIGHTED_AVERAGE, this->group_type_);
+      double converted_covariance = covariance_ms / this->time_conversion_factor_;
+
+      this->covariance_sensor_->publish_state(converted_covariance);
+    }
 
     if (this->duration_sensor_)
       this->duration_sensor_->publish_state(current_aggregate.get_duration());
@@ -336,6 +335,9 @@ void StatisticsComponent::handle_new_value_(double value) {
       }
     }
 
+    if (this->mean_sensor_)
+      this->mean_sensor_->publish_state(current_aggregate.get_mean());
+
     if (this->min_sensor_) {
       float min = current_aggregate.get_min();
       if (std::isinf(min)) {  // default aggregated min for 0 measurements is infinity, switch to NaN for HA
@@ -345,30 +347,9 @@ void StatisticsComponent::handle_new_value_(double value) {
       }
     }
 
-    if (this->mean_sensor_)
-      this->mean_sensor_->publish_state(current_aggregate.get_mean());
-    if (this->mean2_sensor_)
-      this->mean2_sensor_->publish_state(current_aggregate.get_mean2());
-    if (this->mean3_sensor_)
-      this->mean3_sensor_->publish_state(current_aggregate.get_mean3());
-    if (this->mean4_sensor_)
-      this->mean4_sensor_->publish_state(current_aggregate.get_mean4());
-
-    if (this->variance_sensor_)
-      this->variance_sensor_->publish_state(
-          current_aggregate.compute_variance(this->average_type_ == TIME_WEIGHTED_AVERAGE, this->group_type_));
-
     if (this->std_dev_sensor_)
       this->std_dev_sensor_->publish_state(
           current_aggregate.compute_std_dev(this->average_type_ == TIME_WEIGHTED_AVERAGE, this->group_type_));
-
-    if (this->covariance_sensor_) {
-      double covariance_ms =
-          current_aggregate.compute_covariance(this->average_type_ == TIME_WEIGHTED_AVERAGE, this->group_type_);
-      double converted_covariance = covariance_ms / this->time_conversion_factor_;
-
-      this->covariance_sensor_->publish_state(converted_covariance);
-    }
 
     if (this->trend_sensor_) {
       double trend_ms = current_aggregate.compute_trend();
@@ -376,6 +357,17 @@ void StatisticsComponent::handle_new_value_(double value) {
 
       this->trend_sensor_->publish_state(converted_trend);
     }
+
+    if (this->variance_sensor_)
+      this->variance_sensor_->publish_state(
+          current_aggregate.compute_variance(this->average_type_ == TIME_WEIGHTED_AVERAGE, this->group_type_));
+
+    if (this->mean2_sensor_)
+      this->mean2_sensor_->publish_state(current_aggregate.get_mean2());
+    if (this->mean3_sensor_)
+      this->mean3_sensor_->publish_state(current_aggregate.get_mean3());
+    if (this->mean4_sensor_)
+      this->mean4_sensor_->publish_state(current_aggregate.get_mean4());
   }
 }
 
