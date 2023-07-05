@@ -1,9 +1,9 @@
 /*
  * This class stores a single running aggregate that can do two things:
- *  - Combine with a new aggregate (using the insert function)
- *  - Reset to a null aggregate
+ *  - Combine with a new aggregate (insert function)
+ *  - Reset to a null aggregate (clear function)
  *
- * This is used to aggregate ntinuously collected measurements into summary statistics, but it may lose accuracy for
+ * This is used to aggregate continuously collected measurements into summary statistics, but it may lose accuracy for
  * large sets of measurements
  *
  * Time complexity:
@@ -27,7 +27,7 @@ namespace statistics {
 class RunningSingular : public AggregateQueue {
  public:
   // No memory allocation is necessary in this singular running case, so always return true for success
-  bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config) override { return true; }
+  bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config) override;
 
   // Resets the running aggregate
   void clear() override;
