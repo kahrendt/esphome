@@ -11,13 +11,14 @@
  * it allocates enough memory for 2^32 aggregates.
  *
  * Time complexity (for n aggregate chunks, where each may aggregate multiple measurements):
- *  - insertion of new measurement: worst case log(n)
- *  - computing current aggregate: worst case log(n)
+ *  - insertion of new measurement: worst case O(log(n))
+ *  - clear queue: O(1)
+ *  - computing current aggregate: worst case O(log(n))
  *
  * Memory usage (for n aggregate chunks, where each may aggregate multiple measurements)::
  *  - log(n)+1 aggregates
  *
- * Implemented by Kevin Ahrendt for the ESPHome project, Summer 2023
+ * Implemented by Kevin Ahrendt for the ESPHome project, June and July 2023
  */
 
 #pragma once
