@@ -58,55 +58,72 @@ namespace statistics {
 static const char *const TAG = "statistics";
 
 void StatisticsComponent::dump_config() {
-  ESP_LOGCONFIG(TAG, "Statistics:");
+  ESP_LOGCONFIG(TAG, "Statistics Component:");
 
-  LOG_SENSOR("  ", "Source Sensor", this->source_sensor_);
+  LOG_SENSOR("  ", "Source Sensor:", this->source_sensor_);
 
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
-    ESP_LOGCONFIG(TAG, "  statistics_type: sliding_window");
-    ESP_LOGCONFIG(TAG, "  window_size: %u", this->window_size_);
+    ESP_LOGCONFIG(TAG, "  Statistics Type: sliding_window");
+    ESP_LOGCONFIG(TAG, "  Window Size: %u", this->window_size_);
+  } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_SLIDING_WINDOW) {
+    ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_sliding_window");
+    ESP_LOGCONFIG(TAG, "  Chunks in Window: %u", this->window_size_);
+    if (this->chunk_size_)
+      ESP_LOGCONFIG(TAG, "  Measurements per Chunk: %u", this->chunk_size_);
+    else
+      ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_size_);
+  } else if (this->statistics_type_ == STATISTICS_TYPE_CONTINUOUS) {
+    ESP_LOGCONFIG(TAG, "  Statistics Type: continuous");
+    ESP_LOGCONFIG(TAG, "  Chunks Before Reset: %u", this->window_size_);
+    if (this->chunk_size_)
+      ESP_LOGCONFIG(TAG, "  Measurements per Chunk: %u", this->chunk_size_);
+    else
+      ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_size_);
   } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS) {
-    ESP_LOGCONFIG(TAG, "  statistics_type: chunked_continuous");
-    ESP_LOGCONFIG(TAG, "  reset_every: %u", this->window_size_);
+    ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_continuous");
+    ESP_LOGCONFIG(TAG, "  Measurements Before Reset: %u", this->window_size_);
   }
 
-  ESP_LOGCONFIG(TAG, "  send_every: %u", this->send_every_);
-  ESP_LOGCONFIG(TAG, "  send_first_at: %u", this->send_at_);
+  ESP_LOGCONFIG(TAG, "  Send Every: %u", this->send_every_);
+
+  // To-Do: IMPLEMENT!
+  ESP_LOGCONFIG(TAG, "  Average Type: ");
+  ESP_LOGCONFIG(TAG, "  Time Conversion Factor: ");
 
   if (this->count_sensor_) {
-    LOG_SENSOR("  ", "Count", this->count_sensor_);
+    LOG_SENSOR("  ", "Count Sensor:", this->count_sensor_);
   }
 
   if (this->covariance_sensor_) {
-    LOG_SENSOR("  ", "Covariance", this->covariance_sensor_);
+    LOG_SENSOR("  ", "Covariance Sensor:", this->covariance_sensor_);
   }
 
   if (this->duration_sensor_) {
-    LOG_SENSOR("  ", "Duration", this->duration_sensor_);
+    LOG_SENSOR("  ", "Duration Sensor:", this->duration_sensor_);
   }
 
   if (this->max_sensor_) {
-    LOG_SENSOR("  ", "Max", this->max_sensor_);
+    LOG_SENSOR("  ", "Max Sensor:", this->max_sensor_);
   }
 
   if (this->mean_sensor_) {
-    LOG_SENSOR("  ", "Mean", this->mean_sensor_);
+    LOG_SENSOR("  ", "Mean Sensor:", this->mean_sensor_);
   }
 
   if (this->min_sensor_) {
-    LOG_SENSOR("  ", "Min", this->min_sensor_);
+    LOG_SENSOR("  ", "Min Sensor:", this->min_sensor_);
   }
 
   if (this->std_dev_sensor_) {
-    LOG_SENSOR("  ", "Standard Deviation", this->std_dev_sensor_);
+    LOG_SENSOR("  ", "Standard Deviation Sensor:", this->std_dev_sensor_);
   }
 
   if (this->trend_sensor_) {
-    LOG_SENSOR("  ", "Trend", this->trend_sensor_);
+    LOG_SENSOR("  ", "Trend Sensor:", this->trend_sensor_);
   }
 
   if (this->variance_sensor_) {
-    LOG_SENSOR("  ", "Variance", this->variance_sensor_);
+    LOG_SENSOR("  ", "Variance Sensor:", this->variance_sensor_);
   }
 }
 
