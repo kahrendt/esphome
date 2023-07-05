@@ -133,83 +133,20 @@ def transform_trend_unit_of_measurement(uom, config):
 
 # borrowed from sensor/__init__.py
 def validate_send_first_at(config):
-    value = config["window_parameters"]
-    send_first_at = value.get(CONF_SEND_FIRST_AT)
-    send_every = value[CONF_SEND_EVERY]
+    # value = config["window_parameters"]
+    send_first_at = config.get(CONF_SEND_FIRST_AT)
+    send_every = config[CONF_SEND_EVERY]
     if send_first_at is not None and send_first_at > send_every:
         raise cv.Invalid(
             f"send_first_at must be smaller than or equal to send_every! {send_first_at} <= {send_every}"
         )
-    return value
+    return config
 
 
-CONFIG_SCHEMA = cv.Schema(
+BASE_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(StatisticsComponent),
         cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
-        cv.Required("window_parameters"): cv.typed_schema(
-            {
-                CONF_SLIDING_WINDOW: cv.Schema(
-                    {
-                        cv.Optional(
-                            CONF_WINDOW_SIZE, default=15
-                        ): cv.positive_not_null_int,
-                        cv.Optional(
-                            CONF_SEND_EVERY, default=15
-                        ): cv.positive_not_null_int,
-                        cv.Optional(
-                            CONF_SEND_FIRST_AT, default=1
-                        ): cv.positive_not_null_int,
-                    }
-                ),
-                CONF_CHUNKED_CONTINUOUS: cv.Schema(
-                    {
-                        cv.Optional(
-                            CONF_RESET_EVERY_CHUNK, default=1000
-                        ): cv.positive_int,
-                        cv.Optional(
-                            CONF_CHUNK_SIZE, default=20
-                        ): cv.positive_not_null_int,
-                        cv.Optional(
-                            CONF_SEND_EVERY, default=15
-                        ): cv.positive_not_null_int,
-                        cv.Optional(
-                            CONF_SEND_FIRST_AT, default=1
-                        ): cv.positive_not_null_int,
-                        cv.Optional(
-                            CONF_CHUNK_DURATION_SIZE, default="60s"
-                        ): cv.time_period,
-                    }
-                ),
-                CONF_CHUNKED_SLIDING_WINDOW: cv.Schema(
-                    {
-                        cv.Optional(CONF_CHUNK_SIZE, default=20): cv.positive_int,
-                        cv.Optional(
-                            CONF_CHUNK_DURATION_SIZE, default="60s"
-                        ): cv.time_period,
-                        cv.Optional(
-                            CONF_CHUNK_QUANTITY, default=50
-                        ): cv.positive_not_null_int,
-                        cv.Optional(
-                            CONF_SEND_EVERY, default=15
-                        ): cv.positive_not_null_int,
-                        cv.Optional(
-                            CONF_SEND_FIRST_AT, default=1
-                        ): cv.positive_not_null_int,
-                    }
-                ),
-                CONF_CONTINUOUS: cv.Schema(
-                    {
-                        cv.Optional(
-                            CONF_SEND_EVERY, default=15
-                        ): cv.positive_not_null_int,
-                        cv.Optional(
-                            CONF_SEND_FIRST_AT, default=1
-                        ): cv.positive_not_null_int,
-                    }
-                ),
-            }
-        ),
         cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE_AVERAGE): cv.enum(
             AVERAGE_TYPES, lower=True
         ),
@@ -260,10 +197,62 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_MEAN4): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
         ),
-    },
+    }
 ).extend(cv.COMPONENT_SCHEMA)
 
-# approach borrowed from kalman sensor component
+CONFIG_SCHEMA = cv.All(
+    cv.typed_schema(
+        {
+            CONF_SLIDING_WINDOW: BASE_SCHEMA.extend(
+                {
+                    cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
+                    cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
+                    cv.Optional(
+                        CONF_SEND_FIRST_AT, default=1
+                    ): cv.positive_not_null_int,
+                }
+            ),
+            CONF_CHUNKED_SLIDING_WINDOW: BASE_SCHEMA.extend(
+                {
+                    cv.Optional(CONF_CHUNK_SIZE, default=20): cv.positive_int,
+                    cv.Optional(
+                        CONF_CHUNK_DURATION_SIZE, default="60s"
+                    ): cv.time_period,
+                    cv.Optional(
+                        CONF_CHUNK_QUANTITY, default=50
+                    ): cv.positive_not_null_int,
+                    cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
+                    cv.Optional(
+                        CONF_SEND_FIRST_AT, default=1
+                    ): cv.positive_not_null_int,
+                }
+            ),
+            CONF_CONTINUOUS: BASE_SCHEMA.extend(
+                {
+                    cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
+                    cv.Optional(
+                        CONF_SEND_FIRST_AT, default=1
+                    ): cv.positive_not_null_int,
+                }
+            ),
+            CONF_CHUNKED_CONTINUOUS: BASE_SCHEMA.extend(
+                {
+                    cv.Optional(CONF_RESET_EVERY_CHUNK, default=1000): cv.positive_int,
+                    cv.Optional(CONF_CHUNK_SIZE, default=20): cv.positive_not_null_int,
+                    cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
+                    cv.Optional(
+                        CONF_SEND_FIRST_AT, default=1
+                    ): cv.positive_not_null_int,
+                    cv.Optional(
+                        CONF_CHUNK_DURATION_SIZE, default="60s"
+                    ): cv.time_period,
+                }
+            ),
+        }
+    )
+)
+
+# approach for handling inheritance is borrowed from kalman sensor component
 
 properties_to_inherit_original_unit = [
     CONF_ACCURACY_DECIMALS,
@@ -304,10 +293,10 @@ inherit_schema_for_new_unit_sensors = [
 
 
 FINAL_VALIDATE_SCHEMA = cv.All(
-    CONFIG_SCHEMA.extend(
-        {cv.Required(CONF_ID): cv.use_id(StatisticsComponent)},
-        extra=cv.ALLOW_EXTRA,
-    ),
+    # CONFIG_SCHEMA.extend(
+    #     {cv.Required(CONF_ID): cv.use_id(StatisticsComponent)},
+    #     extra=cv.ALLOW_EXTRA,
+    # ),
     *inherit_schema_for_new_unit_sensors,
     *inherit_schema_for_same_unit_sensors,
     inherit_property_from(
@@ -341,32 +330,32 @@ async def to_code(config):
     cg.add(var.set_time_conversion_factor(config[CONF_TIME_UNIT]))
     cg.add(var.set_group_type(config[CONF_GROUP_TYPE]))
 
-    conf = config["window_parameters"]
+    # conf = config["window_parameters"]
 
-    constant = STATISTICS_TYPES[conf[CONF_TYPE]]
+    constant = STATISTICS_TYPES[config[CONF_TYPE]]
     cg.add(var.set_statistics_type(constant))
 
-    if conf[CONF_TYPE] == CONF_SLIDING_WINDOW:
-        cg.add(var.set_window_size(conf[CONF_WINDOW_SIZE]))
-    elif conf[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS:
-        cg.add(var.set_window_size(conf[CONF_RESET_EVERY_CHUNK]))
-        cg.add(var.set_chunk_size(conf[CONF_CHUNK_SIZE]))
+    if config[CONF_TYPE] == CONF_SLIDING_WINDOW:
+        cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
+    elif config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS:
+        cg.add(var.set_window_size(config[CONF_RESET_EVERY_CHUNK]))
+        cg.add(var.set_chunk_size(config[CONF_CHUNK_SIZE]))
         cg.add(
             var.set_chunk_duration_size(
-                conf[CONF_CHUNK_DURATION_SIZE].total_milliseconds
+                config[CONF_CHUNK_DURATION_SIZE].total_milliseconds
             )
         )
-    elif conf[CONF_TYPE] == CONF_CHUNKED_SLIDING_WINDOW:
-        cg.add(var.set_chunk_size(conf[CONF_CHUNK_SIZE]))
+    elif config[CONF_TYPE] == CONF_CHUNKED_SLIDING_WINDOW:
+        cg.add(var.set_chunk_size(config[CONF_CHUNK_SIZE]))
         cg.add(
             var.set_chunk_duration_size(
-                conf[CONF_CHUNK_DURATION_SIZE].total_milliseconds
+                config[CONF_CHUNK_DURATION_SIZE].total_milliseconds
             )
         )
-        cg.add(var.set_window_size(conf[CONF_CHUNK_QUANTITY]))
+        cg.add(var.set_window_size(config[CONF_CHUNK_QUANTITY]))
 
-    cg.add(var.set_send_every(conf[CONF_SEND_EVERY]))
-    cg.add(var.set_first_at(conf[CONF_SEND_FIRST_AT]))
+    cg.add(var.set_send_every(config[CONF_SEND_EVERY]))
+    cg.add(var.set_first_at(config[CONF_SEND_FIRST_AT]))
 
     if CONF_COUNT in config:
         conf = config[CONF_COUNT]
