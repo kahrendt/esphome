@@ -1,5 +1,19 @@
 /*
- * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
+ * This class stores a single running aggregate that can do two things:
+ *  - Combine with a new aggregate (using the insert function)
+ *  - Reset to a null aggregate
+ *
+ * This is used to aggregate ntinuously collected measurements into summary statistics, but it may lose accuracy for
+ * large sets of measurements
+ *
+ * Time complexity:
+ *  - insertion of new measurement: O(1)
+ *  - computing current aggregate: O(1)
+ *
+ * Memory usage:
+ *  - 1 aggregate for n measurement/chunks
+ *
+ * Implemented by Kevin Ahrendt for the ESPHome project, Summer 2023
  */
 
 #pragma once
@@ -12,17 +26,17 @@ namespace statistics {
 
 class RunningSingular : public AggregateQueue {
  public:
-  // no need to set capacity in the singular running case
+  // No memory allocation is necessary in this singular running case, so always return true for success
   bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config) override { return true; }
 
-  // Clears all aggregates in the queue
+  // Resets the running aggregate
   void clear() override;
   void evict() override { this->clear(); }
 
-  // Insert a value at end of the queue and consolidiate if necessary
+  // Add another measurement into the running aggregate
   void insert(Aggregate value) override;
 
-  // Computes the summary statistics for all aggregated measurements
+  // Returns the summary statistics for all aggregated measurements
   Aggregate compute_current_aggregate() override { return this->running_aggregate_; }
 
  protected:
