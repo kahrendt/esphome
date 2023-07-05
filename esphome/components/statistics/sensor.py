@@ -61,16 +61,16 @@ GROUP_TYPES = {
 
 # Different types of statistics possible
 CONF_SLIDING_WINDOW = "sliding_window"
-CONF_RUNNING = "running"
-CONF_HYBRID = "hybrid"
-CONF_NAIVE = "naive"
+CONF_CHUNKED_SLIDING_WINDOW = "chunked_sliding_window"
+CONF_CONTINUOUS = "continuous"
+CONF_CHUNKED_CONTINUOUS = "chunked_continuous"
 
 StatisticsType = statistics_ns.enum("StatisticsType")
 STATISTICS_TYPES = {
     CONF_SLIDING_WINDOW: StatisticsType.STATISTICS_TYPE_SLIDING_WINDOW,
-    CONF_RUNNING: StatisticsType.STATISTICS_TYPE_RUNNING,
-    CONF_HYBRID: StatisticsType.STATISTICS_TYPE_HYBRID,
-    CONF_NAIVE: StatisticsType.STATISTICS_TYPE_NAIVE,
+    CONF_CHUNKED_SLIDING_WINDOW: StatisticsType.STATISTICS_TYPE_CHUNKED_SLIDING_WINDOW,
+    CONF_CONTINUOUS: StatisticsType.STATISTICS_TYPE_CONTINUOUS,
+    CONF_CHUNKED_CONTINUOUS: StatisticsType.STATISTICS_TYPE_CHUNKED_CONTINUOUS,
 }
 
 # Types of average; simple has every observation with the same weight, time_weighted weighs each observation by the duration of the observation
@@ -162,7 +162,7 @@ CONFIG_SCHEMA = cv.Schema(
                         ): cv.positive_not_null_int,
                     }
                 ),
-                CONF_RUNNING: cv.Schema(
+                CONF_CHUNKED_CONTINUOUS: cv.Schema(
                     {
                         cv.Optional(
                             CONF_RESET_EVERY_CHUNK, default=1000
@@ -181,7 +181,7 @@ CONFIG_SCHEMA = cv.Schema(
                         ): cv.time_period,
                     }
                 ),
-                CONF_HYBRID: cv.Schema(
+                CONF_CHUNKED_SLIDING_WINDOW: cv.Schema(
                     {
                         cv.Optional(CONF_CHUNK_SIZE, default=20): cv.positive_int,
                         cv.Optional(
@@ -198,7 +198,7 @@ CONFIG_SCHEMA = cv.Schema(
                         ): cv.positive_not_null_int,
                     }
                 ),
-                CONF_NAIVE: cv.Schema(
+                CONF_CONTINUOUS: cv.Schema(
                     {
                         cv.Optional(
                             CONF_SEND_EVERY, default=15
@@ -348,7 +348,7 @@ async def to_code(config):
 
     if conf[CONF_TYPE] == CONF_SLIDING_WINDOW:
         cg.add(var.set_window_size(conf[CONF_WINDOW_SIZE]))
-    elif conf[CONF_TYPE] == CONF_RUNNING:
+    elif conf[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS:
         cg.add(var.set_window_size(conf[CONF_RESET_EVERY_CHUNK]))
         cg.add(var.set_chunk_size(conf[CONF_CHUNK_SIZE]))
         cg.add(
@@ -356,7 +356,7 @@ async def to_code(config):
                 conf[CONF_CHUNK_DURATION_SIZE].total_milliseconds
             )
         )
-    elif conf[CONF_TYPE] == CONF_HYBRID:
+    elif conf[CONF_TYPE] == CONF_CHUNKED_SLIDING_WINDOW:
         cg.add(var.set_chunk_size(conf[CONF_CHUNK_SIZE]))
         cg.add(
             var.set_chunk_duration_size(

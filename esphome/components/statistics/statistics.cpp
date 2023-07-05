@@ -62,8 +62,8 @@ void StatisticsComponent::dump_config() {
   if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
     ESP_LOGCONFIG(TAG, "  statistics_type: sliding_window");
     ESP_LOGCONFIG(TAG, "  window_size: %u", this->window_size_);
-  } else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING) {
-    ESP_LOGCONFIG(TAG, "  statistics_type: running");
+  } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS) {
+    ESP_LOGCONFIG(TAG, "  statistics_type: chunked_continuous");
     ESP_LOGCONFIG(TAG, "  reset_every: %u", this->window_size_);
   }
 
@@ -161,25 +161,25 @@ void StatisticsComponent::setup() {
   }
 
   if ((this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) ||
-      (this->statistics_type_ == STATISTICS_TYPE_HYBRID)) {
+      (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_SLIDING_WINDOW)) {
     if (this->precision_ == FLOAT_PRECISION)
       this->queue_.float_precision = new DABALite<float>();
     else
       this->queue_.double_precision = new DABALite<double>();
 
     this->set_capacity_(this->window_size_, config);
-  } else if (this->statistics_type_ == STATISTICS_TYPE_RUNNING) {
+  } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS) {
     if (this->precision_ == FLOAT_PRECISION)
       this->queue_.float_precision = new RunningQueue<float>();
     else
       this->queue_.double_precision = new RunningQueue<double>();
 
     this->set_capacity_(this->window_size_, config);
-  } else if (this->statistics_type_ == STATISTICS_TYPE_NAIVE) {
+  } else if (this->statistics_type_ == STATISTICS_TYPE_CONTINUOUS) {
     this->current_chunk_aggregate_ = Aggregate();
   }
 
-  if ((this->average_type_ == TIME_WEIGHTED_AVERAGE) && (this->statistics_type_ != STATISTICS_TYPE_NAIVE)) {
+  if ((this->average_type_ == TIME_WEIGHTED_AVERAGE) && (this->statistics_type_ != STATISTICS_TYPE_CONTINUOUS)) {
     if (this->precision_ == FLOAT_PRECISION)
       this->queue_.float_precision->enable_time_weighted();
     else
@@ -265,7 +265,7 @@ void StatisticsComponent::handle_new_value_(double value) {
   //////////////////////////////////////////////////
   // handle evicting elements if window is exceed //
   //////////////////////////////////////////////////
-  if (this->statistics_type_ != STATISTICS_TYPE_NAIVE) {
+  if (this->statistics_type_ != STATISTICS_TYPE_CONTINUOUS) {
     // if window_size_ == 0, then we have a running queue with no automatic reset, so we never evict/clear
     if (this->window_size_ > 0) {
       while (this->size_() >= this->window_size_) {
@@ -277,7 +277,7 @@ void StatisticsComponent::handle_new_value_(double value) {
   ////////////////////////////
   // Add new value to queue //
   ////////////////////////////
-  if (this->statistics_type_ != STATISTICS_TYPE_NAIVE) {
+  if (this->statistics_type_ != STATISTICS_TYPE_CONTINUOUS) {
     this->current_chunk_aggregate_ = this->current_chunk_aggregate_.combine_with(
         Aggregate(insert_value, duration), (this->average_type_ == TIME_WEIGHTED_AVERAGE));
     ++this->chunk_entries_;
@@ -306,7 +306,7 @@ void StatisticsComponent::handle_new_value_(double value) {
     this->send_at_ = 0;
 
     Aggregate current_aggregate = Aggregate();
-    if (this->statistics_type_ == STATISTICS_TYPE_NAIVE) {
+    if (this->statistics_type_ == STATISTICS_TYPE_CONTINUOUS) {
       current_aggregate = this->current_chunk_aggregate_;
     } else {
       current_aggregate = this->compute_current_aggregate_();
