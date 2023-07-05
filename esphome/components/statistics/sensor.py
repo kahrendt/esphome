@@ -112,7 +112,7 @@ ResetAction = statistics_ns.class_("ResetAction", automation.Action)
 
 
 # covarance's unit is original unit of measurement multiplied by time unit of measurement
-# borrowed from sensor/ntegration/sensor.py
+# borrowed from sensor/integration/sensor.py
 def transform_covariance_unit_of_measurement(uom, config):
     suffix = config[CONF_TIME_UNIT]
     if uom.endswith("/" + suffix):
@@ -133,7 +133,6 @@ def transform_trend_unit_of_measurement(uom, config):
 
 # borrowed from sensor/__init__.py
 def validate_send_first_at(config):
-    # value = config["window_parameters"]
     send_first_at = config.get(CONF_SEND_FIRST_AT)
     send_every = config[CONF_SEND_EVERY]
     if send_first_at is not None and send_first_at > send_every:
@@ -252,8 +251,6 @@ CONFIG_SCHEMA = cv.All(
     )
 )
 
-# approach for handling inheritance is borrowed from kalman sensor component
-
 properties_to_inherit_original_unit = [
     CONF_ACCURACY_DECIMALS,
     CONF_DEVICE_CLASS,
@@ -293,10 +290,6 @@ inherit_schema_for_new_unit_sensors = [
 
 
 FINAL_VALIDATE_SCHEMA = cv.All(
-    # CONFIG_SCHEMA.extend(
-    #     {cv.Required(CONF_ID): cv.use_id(StatisticsComponent)},
-    #     extra=cv.ALLOW_EXTRA,
-    # ),
     *inherit_schema_for_new_unit_sensors,
     *inherit_schema_for_same_unit_sensors,
     inherit_property_from(
@@ -329,8 +322,6 @@ async def to_code(config):
     cg.add(var.set_precision(config[CONF_PRECISION]))
     cg.add(var.set_time_conversion_factor(config[CONF_TIME_UNIT]))
     cg.add(var.set_group_type(config[CONF_GROUP_TYPE]))
-
-    # conf = config["window_parameters"]
 
     constant = STATISTICS_TYPES[config[CONF_TYPE]]
     cg.add(var.set_statistics_type(constant))
