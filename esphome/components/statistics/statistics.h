@@ -47,8 +47,10 @@
 #pragma once
 
 #include "aggregate.h"
+
 #include "aggregate_queue.h"
 #include "daba_lite.h"
+#include "running_singular.h"
 #include "running_queue.h"
 
 #include "esphome/core/component.h"

@@ -40,9 +40,12 @@
  */
 
 #include "aggregate.h"
+
 #include "aggregate_queue.h"
 #include "daba_lite.h"
+#include "running_singular.h"
 #include "running_queue.h"
+
 #include "statistics.h"
 
 #include "esphome/core/log.h"
@@ -176,10 +179,16 @@ void StatisticsComponent::setup() {
 
     this->set_capacity_(this->window_size_, config);
   } else if (this->statistics_type_ == STATISTICS_TYPE_CONTINUOUS) {
-    this->current_chunk_aggregate_ = Aggregate();
+    if (this->precision_ == FLOAT_PRECISION)
+      this->queue_.float_precision = new RunningSingular<float>();
+    else
+      this->queue_.double_precision = new RunningSingular<double>();
+
+    this->set_capacity_(this->window_size_, config);
   }
 
-  if ((this->average_type_ == TIME_WEIGHTED_AVERAGE) && (this->statistics_type_ != STATISTICS_TYPE_CONTINUOUS)) {
+  // if ((this->average_type_ == TIME_WEIGHTED_AVERAGE) && (this->statistics_type_ != STATISTICS_TYPE_CONTINUOUS)) {
+  if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
     if (this->precision_ == FLOAT_PRECISION)
       this->queue_.float_precision->enable_time_weighted();
     else
@@ -265,39 +274,39 @@ void StatisticsComponent::handle_new_value_(double value) {
   //////////////////////////////////////////////////
   // handle evicting elements if window is exceed //
   //////////////////////////////////////////////////
-  if (this->statistics_type_ != STATISTICS_TYPE_CONTINUOUS) {
-    // if window_size_ == 0, then we have a running queue with no automatic reset, so we never evict/clear
-    if (this->window_size_ > 0) {
-      while (this->size_() >= this->window_size_) {
-        this->evict_();
-      }
+  // if (this->statistics_type_ != STATISTICS_TYPE_CONTINUOUS) {
+  //  If window_size_ == 0, then we have a running queue with no automatic reset, so we never evict/clear
+  if (this->window_size_ > 0) {
+    while (this->size_() >= this->window_size_) {
+      this->evict_();
     }
   }
+  //}
 
   ////////////////////////////
   // Add new value to queue //
   ////////////////////////////
-  if (this->statistics_type_ != STATISTICS_TYPE_CONTINUOUS) {
-    this->current_chunk_aggregate_ = this->current_chunk_aggregate_.combine_with(
-        Aggregate(insert_value, duration), (this->average_type_ == TIME_WEIGHTED_AVERAGE));
-    ++this->chunk_entries_;
-    this->chunk_duration_ += duration;
+  // if (this->statistics_type_ != STATISTICS_TYPE_CONTINUOUS) {
+  this->current_chunk_aggregate_ = this->current_chunk_aggregate_.combine_with(
+      Aggregate(insert_value, duration), (this->average_type_ == TIME_WEIGHTED_AVERAGE));
+  ++this->chunk_entries_;
+  this->chunk_duration_ += duration;
 
-    // if chunk_size_ == 0, then chunk aggregate insertion is controlled by a configured time delta
-    if (this->chunk_size_ > 0) {
-      if (this->chunk_entries_ >= this->chunk_size_) {
-        this->insert_chunk_and_reset_(this->current_chunk_aggregate_);
-      }
-    } else {
-      if (this->chunk_duration_ >= this->chunk_duration_size_) {
-        this->insert_chunk_and_reset_(this->current_chunk_aggregate_);
-      }
+  // If chunk_size_ == 0, then chunk aggregate insertion is controlled by a configured time delta
+  if (this->chunk_size_ > 0) {
+    if (this->chunk_entries_ >= this->chunk_size_) {
+      this->insert_chunk_and_reset_(this->current_chunk_aggregate_);
     }
   } else {
-    this->current_chunk_aggregate_ = this->current_chunk_aggregate_.combine_with(
-        Aggregate(insert_value, duration), (this->average_type_ == TIME_WEIGHTED_AVERAGE));
-    ++this->send_at_;
+    if (this->chunk_duration_ >= this->chunk_duration_size_) {
+      this->insert_chunk_and_reset_(this->current_chunk_aggregate_);
+    }
   }
+  // } else {
+  //   this->current_chunk_aggregate_ = this->current_chunk_aggregate_.combine_with(
+  //       Aggregate(insert_value, duration), (this->average_type_ == TIME_WEIGHTED_AVERAGE));
+  //   ++this->send_at_;
+  // }
 
   // Ensure we only push updates for the sensors based on the configuration
   // send_at_ counts the number of chunks inserted into the appropriate queue

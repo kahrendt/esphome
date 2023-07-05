@@ -10,10 +10,7 @@
 
 #include "aggregate.h"
 #include "aggregate_queue.h"
-// #include "circular_queue_index.h"
 #include "daba_lite.h"
-
-#include "esphome/core/helpers.h"  // necessary for ExternalRAMAllocator
 
 namespace esphome {
 namespace statistics {
