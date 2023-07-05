@@ -10,7 +10,7 @@
 
 #include "aggregate.h"
 #include "aggregate_queue.h"
-#include "circular_queue_index.h"
+// #include "circular_queue_index.h"
 #include "daba_lite.h"
 
 #include "esphome/core/helpers.h"  // necessary for ExternalRAMAllocator
@@ -163,6 +163,64 @@ template void DABALite<double>::insert(double value, uint32_t duration);
 template void DABALite<double>::insert(Aggregate value);
 template void DABALite<double>::evict();
 template Aggregate DABALite<double>::compute_current_aggregate();
+
+/*
+ * Circular Queue Index Methods
+ */
+
+// Default constructor
+CircularQueueIndex::CircularQueueIndex() {
+  this->index_ = 0;
+  this->capacity_ = 0;
+}
+
+// General constructor
+CircularQueueIndex::CircularQueueIndex(size_t index, size_t capacity) {
+  this->index_ = index;
+  this->capacity_ = capacity;
+}
+
+// Overloaded prefix increment operator
+CircularQueueIndex &CircularQueueIndex::operator++() {
+  if (this->index_ == (this->capacity_ - 1)) {
+    this->index_ = 0;
+    return *this;
+  }
+
+  ++this->index_;
+  return *this;
+}
+
+// Overloaded prefix decrement operator
+CircularQueueIndex &CircularQueueIndex::operator--() {
+  if (this->index_ == 0) {
+    this->index_ = this->capacity_ - 1;
+    return *this;
+  }
+
+  --this->index_;
+  return *this;
+}
+
+// Overloaded equality operator
+CircularQueueIndex &CircularQueueIndex::operator=(const CircularQueueIndex &i) {
+  if (this == &i)
+    return *this;
+  this->index_ = i.index_;
+  this->capacity_ = i.capacity_;
+
+  return *this;
+}
+
+// Overloaded equality comparison operator
+bool CircularQueueIndex::operator==(const CircularQueueIndex &i) const {
+  return (this->index_ == i.get_index()) && this->capacity_ == i.get_capacity();
+}
+
+// Overloaded inequality comparison operator
+bool CircularQueueIndex::operator!=(const CircularQueueIndex &i) const {
+  return (this->index_ != i.get_index()) || this->capacity_ != i.get_capacity();
+}
 
 }  // namespace statistics
 }  // namespace esphome
