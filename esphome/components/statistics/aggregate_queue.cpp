@@ -11,7 +11,7 @@
 namespace esphome {
 namespace statistics {
 
-template<typename T> void AggregateQueue<T>::emplace(const Aggregate &value, size_t index) {
+void AggregateQueue::emplace(const Aggregate &value, size_t index) {
   if (this->c2_queue_ != nullptr)
     this->c2_queue_[index] = value.get_c2();
 
@@ -50,7 +50,7 @@ template<typename T> void AggregateQueue<T>::emplace(const Aggregate &value, siz
     this->mean4_queue_[index] = value.get_mean4();
 }
 
-template<typename T> Aggregate AggregateQueue<T>::lower(size_t index) {
+Aggregate AggregateQueue::lower(size_t index) {
   Aggregate aggregate = Aggregate();
 
   if (this->c2_queue_ != nullptr)
@@ -93,14 +93,15 @@ template<typename T> Aggregate AggregateQueue<T>::lower(size_t index) {
   return aggregate;
 }
 
-template<typename T> bool AggregateQueue<T>::allocate_memory(size_t capacity, EnabledAggregatesConfiguration config) {
+bool AggregateQueue::allocate_memory(size_t capacity, EnabledAggregatesConfiguration config) {
   // Mimics ESPHome's rp2040_pio_led_strip component's buf_ code (accessed June 2023)
-  ExternalRAMAllocator<T> decimal_allocator(ExternalRAMAllocator<T>::ALLOW_FAILURE);
+  ExternalRAMAllocator<double> double_allocator(ExternalRAMAllocator<double>::ALLOW_FAILURE);
+  ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
   ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<uint32_t> uint32_t_allocator(ExternalRAMAllocator<uint32_t>::ALLOW_FAILURE);
 
   if (config.c2) {
-    this->c2_queue_ = decimal_allocator.allocate(capacity);
+    this->c2_queue_ = double_allocator.allocate(capacity);
     if (this->c2_queue_ == nullptr)
       return false;
   }
@@ -125,38 +126,38 @@ template<typename T> bool AggregateQueue<T>::allocate_memory(size_t capacity, En
   }
 
   if (config.m2) {
-    this->m2_queue_ = decimal_allocator.allocate(capacity);
+    this->m2_queue_ = double_allocator.allocate(capacity);
     if (this->m2_queue_ == nullptr)
       return false;
   }
 
   if (config.max) {
-    this->max_queue_ = decimal_allocator.allocate(capacity);
+    this->max_queue_ = float_allocator.allocate(capacity);
     if (this->max_queue_ == nullptr)
       return false;
   }
 
   if (config.mean) {
-    this->mean_queue_ = decimal_allocator.allocate(capacity);
+    this->mean_queue_ = float_allocator.allocate(capacity);
 
     if (this->mean_queue_ == nullptr)
       return false;
   }
 
   if (config.min) {
-    this->min_queue_ = decimal_allocator.allocate(capacity);
+    this->min_queue_ = float_allocator.allocate(capacity);
     if (this->min_queue_ == nullptr)
       return false;
   }
 
   if (config.timestamp_m2) {
-    this->timestamp_m2_queue_ = decimal_allocator.allocate(capacity);
+    this->timestamp_m2_queue_ = double_allocator.allocate(capacity);
     if (this->timestamp_m2_queue_ == nullptr)
       return false;
   }
 
   if (config.timestamp_mean) {
-    this->timestamp_mean_queue_ = decimal_allocator.allocate(capacity);
+    this->timestamp_mean_queue_ = double_allocator.allocate(capacity);
     if (this->timestamp_mean_queue_ == nullptr)
       return false;
   }
@@ -168,25 +169,13 @@ template<typename T> bool AggregateQueue<T>::allocate_memory(size_t capacity, En
   }
 
   if (config.mean) {
-    this->mean2_queue_ = decimal_allocator.allocate(capacity);
-    this->mean3_queue_ = decimal_allocator.allocate(capacity);
-    this->mean4_queue_ = decimal_allocator.allocate(capacity);
+    this->mean2_queue_ = float_allocator.allocate(capacity);
+    this->mean3_queue_ = float_allocator.allocate(capacity);
+    this->mean4_queue_ = float_allocator.allocate(capacity);
   }
 
   return true;
 }
-
-// avoids linking errors (https://isocpp.org/wiki/faq/templates)
-
-template void AggregateQueue<float>::enable_time_weighted();
-template void AggregateQueue<float>::emplace(const Aggregate &value, size_t index);
-template Aggregate AggregateQueue<float>::lower(size_t index);
-template bool AggregateQueue<float>::allocate_memory(size_t capacity, EnabledAggregatesConfiguration config);
-
-template void AggregateQueue<double>::enable_time_weighted();
-template void AggregateQueue<double>::emplace(const Aggregate &value, size_t index);
-template Aggregate AggregateQueue<double>::lower(size_t index);
-template bool AggregateQueue<double>::allocate_memory(size_t capacity, EnabledAggregatesConfiguration config);
 
 }  // namespace statistics
 }  // namespace esphome

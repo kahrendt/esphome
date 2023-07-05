@@ -24,16 +24,17 @@ struct EnabledAggregatesConfiguration {
   bool timestamp_reference{false};
 };
 
-template<typename T> class AggregateQueue {
+class AggregateQueue {
  public:
-  virtual void enable_time_weighted() { this->time_weighted_ = true; }
-  virtual bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config);
-  virtual void clear();
-  virtual size_t size() const;
-  virtual void insert(T value, uint32_t duration);
-  virtual void insert(Aggregate value);
-  virtual void evict();
-  virtual Aggregate compute_current_aggregate();
+  void enable_time_weighted() { this->time_weighted_ = true; }
+  size_t size() const { return this->size_; };
+
+  virtual bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config) = 0;
+  virtual void clear() = 0;
+  virtual void insert(float value, uint32_t duration) = 0;
+  virtual void insert(Aggregate value) = 0;
+  virtual void evict() = 0;
+  virtual Aggregate compute_current_aggregate() = 0;
 
   void emplace(const Aggregate &value, size_t index);
   Aggregate lower(size_t index);
@@ -43,23 +44,26 @@ template<typename T> class AggregateQueue {
  protected:
   bool time_weighted_{false};
 
+  size_t size_{0};
+
   size_t *count_queue_{nullptr};
   size_t *duration_squared_queue_{nullptr};
 
   uint32_t *duration_queue_{nullptr};
   uint32_t *timestamp_reference_queue_{nullptr};
 
-  T *c2_queue_{nullptr};
-  T *m2_queue_{nullptr};
-  T *max_queue_{nullptr};
-  T *mean_queue_{nullptr};
-  T *min_queue_{nullptr};
-  T *timestamp_m2_queue_{nullptr};
-  T *timestamp_mean_queue_{nullptr};
+  float *max_queue_{nullptr};
+  float *mean_queue_{nullptr};
+  float *min_queue_{nullptr};
 
-  T *mean2_queue_{nullptr};
-  T *mean3_queue_{nullptr};
-  T *mean4_queue_{nullptr};
+  double *c2_queue_{nullptr};
+  double *m2_queue_{nullptr};
+  double *timestamp_m2_queue_{nullptr};
+  double *timestamp_mean_queue_{nullptr};
+
+  float *mean2_queue_{nullptr};
+  float *mean3_queue_{nullptr};
+  float *mean4_queue_{nullptr};
 };
 
 }  // namespace statistics

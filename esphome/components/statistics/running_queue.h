@@ -10,7 +10,7 @@
 namespace esphome {
 namespace statistics {
 
-template<typename T> class RunningQueue : public AggregateQueue<T> {
+class RunningQueue : public AggregateQueue {
  public:
   // Sets the capacity of underlying queue; uses at most log_2(n)+1 aggregates
   //  - returns whether memory was successfully allocated
@@ -21,19 +21,14 @@ template<typename T> class RunningQueue : public AggregateQueue<T> {
   void evict() override { this->clear(); }
 
   // Insert a value at end of the queue and consolidiate if necessary
-  void insert(T value, uint32_t duration) override;
+  void insert(float value, uint32_t duration) override;
   void insert(Aggregate value) override;
-
-  // number of chunks stored in the queue
-  size_t size() const override { return size_; }
 
   // Computes the summary statistics for all measurements stored in the queue
   Aggregate compute_current_aggregate() override;
 
  protected:
   uint8_t index_{0};
-
-  size_t size_{0};
 
   inline Aggregate get_end_();
 };

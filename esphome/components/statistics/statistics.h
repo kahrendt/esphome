@@ -72,11 +72,6 @@ enum StatisticsType {
   STATISTICS_TYPE_CHUNKED_CONTINUOUS,
 };
 
-enum Precision {
-  FLOAT_PRECISION,
-  DOUBLE_PRECISION,
-};
-
 enum TimeConversionFactor {
   FACTOR_MS = 1,          // timestamps already are in ms
   FACTOR_S = 1000,        // 1000 ms per second
@@ -123,7 +118,6 @@ class StatisticsComponent : public Component {
 
   void set_average_type(AverageType type) { this->average_type_ = type; }
   void set_group_type(GroupType type) { this->group_type_ = type; }
-  void set_precision(Precision precision) { this->precision_ = precision; }
   void set_statistics_type(StatisticsType type) { this->statistics_type_ = type; }
   void set_time_conversion_factor(TimeConversionFactor conversion_factor) {
     this->time_conversion_factor_ = conversion_factor;
@@ -149,10 +143,7 @@ class StatisticsComponent : public Component {
   sensor::Sensor *mean3_sensor_{nullptr};
   sensor::Sensor *mean4_sensor_{nullptr};
 
-  union {
-    AggregateQueue<float> *float_precision;
-    AggregateQueue<double> *double_precision;
-  } queue_{nullptr};
+  AggregateQueue *queue_{nullptr};
 
   Aggregate current_chunk_aggregate_{};
 
@@ -169,7 +160,6 @@ class StatisticsComponent : public Component {
 
   AverageType average_type_{};  // either simple or time-weighted
   GroupType group_type_{};      // measurements come from either a population or sample
-  Precision precision_{};       // either float precision or double precision
   StatisticsType statistics_type_{};
   TimeConversionFactor time_conversion_factor_{};  // covariance and trend have a unit involving a time unit
 
@@ -180,15 +170,7 @@ class StatisticsComponent : public Component {
   // given a new sensor measurements, add it to window, evict if window is full, and update sensors
   void handle_new_value_(double value);
 
-  // functions to handle different precisions
-  void set_capacity_(size_t capacity, EnabledAggregatesConfiguration config);
-
-  void insert_(Aggregate value);
   void insert_chunk_and_reset_(Aggregate value);
-
-  void evict_();
-  size_t size_() const;
-  Aggregate compute_current_aggregate_() const;
 };
 
 // Based on the integration component reset action

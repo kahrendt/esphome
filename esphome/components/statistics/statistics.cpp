@@ -165,34 +165,17 @@ void StatisticsComponent::setup() {
 
   if ((this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) ||
       (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_SLIDING_WINDOW)) {
-    if (this->precision_ == FLOAT_PRECISION)
-      this->queue_.float_precision = new DABALite<float>();
-    else
-      this->queue_.double_precision = new DABALite<double>();
-
-    this->set_capacity_(this->window_size_, config);
+    this->queue_ = new DABALite();
   } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS) {
-    if (this->precision_ == FLOAT_PRECISION)
-      this->queue_.float_precision = new RunningQueue<float>();
-    else
-      this->queue_.double_precision = new RunningQueue<double>();
-
-    this->set_capacity_(this->window_size_, config);
+    this->queue_ = new RunningQueue();
   } else if (this->statistics_type_ == STATISTICS_TYPE_CONTINUOUS) {
-    if (this->precision_ == FLOAT_PRECISION)
-      this->queue_.float_precision = new RunningSingular<float>();
-    else
-      this->queue_.double_precision = new RunningSingular<double>();
-
-    this->set_capacity_(this->window_size_, config);
+    this->queue_ = new RunningSingular();
   }
 
-  // if ((this->average_type_ == TIME_WEIGHTED_AVERAGE) && (this->statistics_type_ != STATISTICS_TYPE_CONTINUOUS)) {
+  this->queue_->set_capacity(this->window_size_, config);
+
   if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
-    if (this->precision_ == FLOAT_PRECISION)
-      this->queue_.float_precision->enable_time_weighted();
-    else
-      this->queue_.double_precision->enable_time_weighted();
+    this->queue_->enable_time_weighted();
   }
 
   // On every source sensor update, call handle_new_value_()
@@ -202,23 +185,8 @@ void StatisticsComponent::setup() {
   this->set_first_at(this->send_every_ - this->send_at_);
 }
 
-void StatisticsComponent::set_capacity_(size_t capacity, EnabledAggregatesConfiguration config) {
-  if (this->precision_ == FLOAT_PRECISION) {
-    this->queue_.float_precision->set_capacity(capacity, config);
-  } else {
-    this->queue_.double_precision->set_capacity(capacity, config);
-  }
-}
-
-void StatisticsComponent::insert_(Aggregate value) {
-  if (this->precision_ == FLOAT_PRECISION)
-    this->queue_.float_precision->insert(value);
-  else
-    this->queue_.double_precision->insert(value);
-}
-
 void StatisticsComponent::insert_chunk_and_reset_(Aggregate value) {
-  this->insert_(value);
+  this->queue_->insert(value);
 
   // reset chunk
   this->current_chunk_aggregate_ = Aggregate();
@@ -228,34 +196,7 @@ void StatisticsComponent::insert_chunk_and_reset_(Aggregate value) {
   ++this->send_at_;  // only increment if a chunk has been inserted
 }
 
-void StatisticsComponent::evict_() {
-  if (this->precision_ == FLOAT_PRECISION)
-    this->queue_.float_precision->evict();
-  else
-    this->queue_.double_precision->evict();
-}
-
-Aggregate StatisticsComponent::compute_current_aggregate_() const {
-  if (this->precision_ == FLOAT_PRECISION) {
-    return this->queue_.float_precision->compute_current_aggregate();
-  }
-
-  return this->queue_.double_precision->compute_current_aggregate();
-}
-
-size_t StatisticsComponent::size_() const {
-  if (this->precision_ == FLOAT_PRECISION)
-    return this->queue_.float_precision->size();
-
-  return this->queue_.double_precision->size();
-}
-
-void StatisticsComponent::reset() {
-  if (this->precision_ == FLOAT_PRECISION)
-    this->queue_.float_precision->clear();
-  else
-    this->queue_.double_precision->clear();
-}
+void StatisticsComponent::reset() { this->queue_->clear(); }
 
 // Given a new sensor measurement, evict if window is full, add new value to window, and update sensors
 void StatisticsComponent::handle_new_value_(double value) {
@@ -274,25 +215,22 @@ void StatisticsComponent::handle_new_value_(double value) {
   //////////////////////////////////////////////////
   // handle evicting elements if window is exceed //
   //////////////////////////////////////////////////
-  // if (this->statistics_type_ != STATISTICS_TYPE_CONTINUOUS) {
   //  If window_size_ == 0, then we have a running queue with no automatic reset, so we never evict/clear
   if (this->window_size_ > 0) {
-    while (this->size_() >= this->window_size_) {
-      this->evict_();
+    while (this->queue_->size() >= this->window_size_) {
+      this->queue_->evict();
     }
   }
-  //}
 
   ////////////////////////////
   // Add new value to queue //
   ////////////////////////////
-  // if (this->statistics_type_ != STATISTICS_TYPE_CONTINUOUS) {
   this->current_chunk_aggregate_ = this->current_chunk_aggregate_.combine_with(
       Aggregate(insert_value, duration), (this->average_type_ == TIME_WEIGHTED_AVERAGE));
   ++this->chunk_entries_;
   this->chunk_duration_ += duration;
 
-  // If chunk_size_ == 0, then chunk aggregate insertion is controlled by a configured time delta
+  // If the chunk_size_ == 0, then our running chunk resets based on a duration
   if (this->chunk_size_ > 0) {
     if (this->chunk_entries_ >= this->chunk_size_) {
       this->insert_chunk_and_reset_(this->current_chunk_aggregate_);
@@ -302,11 +240,6 @@ void StatisticsComponent::handle_new_value_(double value) {
       this->insert_chunk_and_reset_(this->current_chunk_aggregate_);
     }
   }
-  // } else {
-  //   this->current_chunk_aggregate_ = this->current_chunk_aggregate_.combine_with(
-  //       Aggregate(insert_value, duration), (this->average_type_ == TIME_WEIGHTED_AVERAGE));
-  //   ++this->send_at_;
-  // }
 
   // Ensure we only push updates for the sensors based on the configuration
   // send_at_ counts the number of chunks inserted into the appropriate queue
@@ -314,12 +247,7 @@ void StatisticsComponent::handle_new_value_(double value) {
   if (this->send_at_ >= this->send_every_) {
     this->send_at_ = 0;
 
-    Aggregate current_aggregate = Aggregate();
-    if (this->statistics_type_ == STATISTICS_TYPE_CONTINUOUS) {
-      current_aggregate = this->current_chunk_aggregate_;
-    } else {
-      current_aggregate = this->compute_current_aggregate_();
-    }
+    Aggregate current_aggregate = this->queue_->compute_current_aggregate();
 
     if (this->count_sensor_)
       this->count_sensor_->publish_state(current_aggregate.get_count());
