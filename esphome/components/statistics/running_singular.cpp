@@ -5,6 +5,12 @@
 namespace esphome {
 namespace statistics {
 
+// No memory allocation is necessary in this singular running case, so always return true for success
+bool RunningSingular::set_capacity(size_t capacity, EnabledAggregatesConfiguration config) {
+  this->clear();
+  return true;
+}
+
 // Resets the running aggregate
 void RunningSingular::clear() {
   this->running_aggregate_ = Aggregate();

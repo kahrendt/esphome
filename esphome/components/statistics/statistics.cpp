@@ -68,17 +68,19 @@ void StatisticsComponent::dump_config() {
   } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_SLIDING_WINDOW) {
     ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_sliding_window");
     ESP_LOGCONFIG(TAG, "  Chunks in Window: %u", this->window_size_);
-    if (this->chunk_size_)
+    if (this->chunk_size_) {
       ESP_LOGCONFIG(TAG, "  Measurements per Chunk: %u", this->chunk_size_);
-    else
+    } else {
       ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_size_);
+    }
   } else if (this->statistics_type_ == STATISTICS_TYPE_CONTINUOUS) {
     ESP_LOGCONFIG(TAG, "  Statistics Type: continuous");
     ESP_LOGCONFIG(TAG, "  Chunks Before Reset: %u", this->window_size_);
-    if (this->chunk_size_)
+    if (this->chunk_size_) {
       ESP_LOGCONFIG(TAG, "  Measurements per Chunk: %u", this->chunk_size_);
-    else
+    } else {
       ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_size_);
+    }
   } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS) {
     ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_continuous");
     ESP_LOGCONFIG(TAG, "  Measurements Before Reset: %u", this->window_size_);
@@ -147,6 +149,9 @@ void StatisticsComponent::setup() {
 
   if (this->max_sensor_) {
     config.max = true;
+
+    if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS)
+      config.count = true;  // necessary for consolidation
   }
 
   if (this->mean_sensor_) {
@@ -156,6 +161,9 @@ void StatisticsComponent::setup() {
 
   if (this->min_sensor_) {
     config.min = true;
+
+    if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS)
+      config.count = true;  // necessary for consolidation
   }
 
   if ((this->std_dev_sensor_) || (this->variance_sensor_)) {
