@@ -1,11 +1,32 @@
 /*
- * Sliding window aggregates are stored and computed using the De-Amortized Banker's Aggregator Lite (DABA Lite)
- * algorithm
- *  - space requirements: n+2 aggregates
- *  - time complexity: worse-case O(1)
- *  - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
+ * This class stores an array of aggregates for a sliding window of measurements/aggregate chunks. It has two main
+ * functions:
+ *  - Add a new aggregate chunk to sliding window queue (insert function)
+ *  - Evict oldest aggregate chunk from the sliding window queue (evict function)
  *
- * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
+ * This is used to aggregate continuously collected measurements into summary statistics over a sliding window. The
+ * oldest measurements/aggregate chunks can be evicted and new measurements/aggregate chunks can be inserted. Its
+ * calculations are numerically stable with minimal computational complexity. Each measurement/aggregate chunk in the
+ * window is stored in memory along with two additional aggregates (mid_sum_ and back_sum_).
+ *
+ * The approach is based on the De-Amortized Banker's Aggregator (DABA) Lite algorithm. The code is based on
+ * https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License, accessed June
+ * 2023) and the reference paper "In-order sliding-window aggregation in worst-case constant time," by Kanat
+ * Tangwongsan, Martin Hirzel, and Scott Schneider (https://doi.org/10.1007/s00778-021-00668-3).
+ *
+ * The measurements/aggregate chunks are stored in a circular queue that is allocated in memory in advance. The DABA
+ * Lite algorithm keeps track of 6 indices, and the CircularQueueIndex class implements the details.
+ *
+ * Time complexity (for n aggregate chunks, where each may aggregate multiple measurements):
+ *  - insertion of new measurement/aggregate chunk: O(1)
+ *  - evicting oldest measurement/aggreate chunk: O(1)
+ *  - clearing entire queue: O(1)
+ *  - computing current aggregate: O(1)
+ *
+ * Memory usage (for n aggregate chunks, where each may aggregate multiple measurements):
+ *  - n+2 aggregates
+ *
+ * Implemented by Kevin Ahrendt for the ESPHome project, June and July 2023
  */
 
 #pragma once

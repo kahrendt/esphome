@@ -8,12 +8,13 @@
  *
  * Time complexity:
  *  - insertion of new measurement: O(1)
+ *  - clear current aggregate: O(1)
  *  - computing current aggregate: O(1)
  *
  * Memory usage:
  *  - 1 aggregate for n measurement/chunks
  *
- * Implemented by Kevin Ahrendt for the ESPHome project, Summer 2023
+ * Implemented by Kevin Ahrendt for the ESPHome project, June and July 2023
  */
 
 #pragma once

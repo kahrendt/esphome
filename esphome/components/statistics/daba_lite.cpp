@@ -1,13 +1,3 @@
-/*
- * Sliding window aggregates are stored and computed using the De-Amortized Banker's Aggregator Lite (DABA Lite)
- * algorithm
- *  - space requirements: n+2 aggregates
- *  - time complexity: worse-case O(1)
- *  - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
- *
- * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
- */
-
 #include "aggregate.h"
 #include "aggregate_queue.h"
 #include "daba_lite.h"
