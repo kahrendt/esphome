@@ -235,7 +235,18 @@ bool MQTTComponent::is_connected_() const { return global_mqtt_client->is_connec
 std::string MQTTComponent::friendly_name() const { return this->get_entity()->get_name(); }
 std::string MQTTComponent::get_icon() const { return this->get_entity()->get_icon(); }
 bool MQTTComponent::is_disabled_by_default() const { return this->get_entity()->is_disabled_by_default(); }
-bool MQTTComponent::is_internal() { return this->get_entity()->is_internal(); }
+bool MQTTComponent::is_internal() {
+  // we are never internal if we opt in to send
+  if (this->send_override_)
+    return false;
+
+  // if we we do set opt in by default, then the sensor is internal
+  if (global_mqtt_client->get_opt_in_send())
+    return true;
+
+  // otherwise return entitie's internal setting
+  return this->get_entity()->is_internal();
+}
 
 }  // namespace mqtt
 }  // namespace esphome

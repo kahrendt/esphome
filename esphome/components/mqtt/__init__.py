@@ -54,6 +54,9 @@ AUTO_LOAD = ["json"]
 CONF_IDF_SEND_ASYNC = "idf_send_async"
 CONF_SKIP_CERT_CN_CHECK = "skip_cert_cn_check"
 
+CONF_OPT_IN_SEND = "opt_in_send"
+CONF_SEND_OVERRIDE = "send_override"
+
 
 def validate_message_just_topic(value):
     value = cv.publish_topic(value)
@@ -175,6 +178,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_USERNAME, default=""): cv.string,
             cv.Optional(CONF_PASSWORD, default=""): cv.string,
             cv.Optional(CONF_CLIENT_ID): cv.string,
+            cv.Optional(CONF_OPT_IN_SEND, default=False): cv.boolean,
             cv.SplitDefault(CONF_IDF_SEND_ASYNC, esp32_idf=False): cv.All(
                 cv.boolean, cv.only_with_esp_idf
             ),
@@ -283,6 +287,7 @@ async def to_code(config):
     cg.add(var.set_broker_port(config[CONF_PORT]))
     cg.add(var.set_username(config[CONF_USERNAME]))
     cg.add(var.set_password(config[CONF_PASSWORD]))
+    cg.add(var.set_opt_in_send(config[CONF_OPT_IN_SEND]))
     if CONF_CLIENT_ID in config:
         cg.add(var.set_client_id(config[CONF_CLIENT_ID]))
 
@@ -462,6 +467,8 @@ async def register_mqtt_component(var, config):
 
     if CONF_RETAIN in config:
         cg.add(var.set_retain(config[CONF_RETAIN]))
+    if CONF_SEND_OVERRIDE in config:
+        cg.add(var.set_send_override(config[CONF_SEND_OVERRIDE]))
     if not config.get(CONF_DISCOVERY, True):
         cg.add(var.disable_discovery())
     if CONF_STATE_TOPIC in config:

@@ -87,6 +87,9 @@ class MQTTComponent : public Component {
   /// Override this method to return the component type (e.g. "light", "sensor", ...)
   virtual std::string component_type() const = 0;
 
+  /// Set send override flag to still send despite being marked internal
+  void set_send_override(bool send_override) { this->send_override_ = send_override; }
+
   /// Set a custom state topic. Set to "" for default behavior.
   void set_custom_state_topic(const std::string &custom_state_topic);
   /// Set a custom command topic. Set to "" for default behavior.
@@ -182,6 +185,9 @@ class MQTTComponent : public Component {
 
   /// Internal method to start sending discovery info, this will call send_discovery().
   bool send_discovery_();
+
+  /// Override and still send this specific internal component
+  bool send_override_{false};
 
   // ========== INTERNAL METHODS ==========
   // (In most use cases you won't need these)
