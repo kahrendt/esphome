@@ -40,19 +40,6 @@ void DABALite::clear() {
   this->e_ = CircularQueueIndex(0, this->window_size_);
 }
 
-// Insert value at end of circular queue and step DABA Lite algorithm
-void DABALite::insert(float value, uint32_t duration) {
-  Aggregate lifted = Aggregate(value, duration);
-
-  this->back_sum_ = this->back_sum_.combine_with(lifted, this->time_weighted_);  // = this->back_sum_ + lifted;
-
-  this->emplace(lifted, this->e_.get_index());
-
-  ++this->e_;
-  ++this->size_;
-  this->step_();
-}
-
 void DABALite::insert(Aggregate value) {
   this->back_sum_ = this->back_sum_.combine_with(value, this->time_weighted_);  //= this->back_sum_ + value;
   this->emplace(value, this->e_.get_index());

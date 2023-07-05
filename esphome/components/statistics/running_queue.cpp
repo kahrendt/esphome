@@ -31,22 +31,6 @@ void RunningQueue::clear() {
 }
 
 // Insert a value at end of the queue and consolidiate if necessary
-void RunningQueue::insert(float value, uint32_t duration) {
-  Aggregate new_aggregate = Aggregate(value, duration);
-
-  Aggregate most_recent = this->get_end_();
-
-  while ((this->index_ > 0) && (most_recent.get_count() <= new_aggregate.get_count())) {
-    --this->index_;
-    new_aggregate = new_aggregate.combine_with(most_recent, this->time_weighted_);  // most_recent + new_aggregate;
-    most_recent = this->get_end_();
-  }
-
-  this->emplace(new_aggregate, this->index_);
-  ++this->index_;
-  ++this->size_;
-}
-// Insert a value at end of the queue and consolidiate if necessary
 void RunningQueue::insert(Aggregate new_aggregate) {
   Aggregate most_recent = this->get_end_();
 

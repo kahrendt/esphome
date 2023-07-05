@@ -71,7 +71,6 @@ class DABALite : public AggregateQueue {
   void clear() override;
 
   // Insert a value at end of circular queue and step the DABA Lite algorithm
-  void insert(float value, uint32_t duration) override;
   void insert(Aggregate value) override;
 
   // Remove a value at start of circular queue and step the DABA Lite algorithm
