@@ -61,7 +61,7 @@ class CircularQueueIndex {
   size_t capacity_;  // capacity of the circular queue
 };
 
-template<typename T> class DABALite : public AggregateQueue<T> {
+class DABALite : public AggregateQueue {
  public:
   // Sets the window size by adjusting the capacity of the underlying circular queues
   //  - returns whether memory was successfully allocated
@@ -70,11 +70,8 @@ template<typename T> class DABALite : public AggregateQueue<T> {
   // Clears all readings from the sliding window
   void clear() override;
 
-  // Number of measurements currently in the window
-  size_t size() const override { return this->size_; }
-
   // Insert a value at end of circular queue and step the DABA Lite algorithm
-  void insert(T value, uint32_t duration) override;
+  void insert(float value, uint32_t duration) override;
   void insert(Aggregate value) override;
 
   // Remove a value at start of circular queue and step the DABA Lite algorithm
@@ -85,9 +82,6 @@ template<typename T> class DABALite : public AggregateQueue<T> {
  protected:
   // Maximum window capacity
   size_t window_size_{0};
-
-  // Number of measurements currently stored in window
-  size_t size_{0};
 
   // DABA Lite - raw Indices for queues; i.e., not offset by the head index
   CircularQueueIndex f_;  // front of queue

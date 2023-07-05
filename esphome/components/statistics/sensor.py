@@ -87,17 +87,6 @@ AVERAGE_TYPES = {
     CONF_TIME_WEIGHTED_AVERAGE: AverageType.TIME_WEIGHTED_AVERAGE,
 }
 
-# Level of precision to store in the aggregate queues
-CONF_PRECISION = "precision"
-CONF_FLOAT = "float"
-CONF_DOUBLE = "double"
-
-Precision = statistics_ns.enum("Precision")
-PRECISION_TYPES = {
-    CONF_FLOAT: Precision.FLOAT_PRECISION,
-    CONF_DOUBLE: Precision.DOUBLE_PRECISION,
-}
-
 # Time unit used for covariance and trend
 CONF_TIME_UNIT = "time_unit"
 
@@ -154,9 +143,6 @@ BASE_SCHEMA = cv.Schema(
         ),
         cv.Optional(CONF_GROUP_TYPE, default=CONF_SAMPLE_GROUP): cv.enum(
             GROUP_TYPES, lower=True
-        ),
-        cv.Optional(CONF_PRECISION, default=CONF_FLOAT): cv.enum(
-            PRECISION_TYPES, lower=True
         ),
         cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
             TIME_CONVERSION_FACTORS, lower=True
@@ -339,7 +325,6 @@ async def to_code(config):
     cg.add(var.set_source_sensor(source))
 
     cg.add(var.set_average_type(config[CONF_AVERAGE_TYPE]))
-    cg.add(var.set_precision(config[CONF_PRECISION]))
     cg.add(var.set_time_conversion_factor(config[CONF_TIME_UNIT]))
     cg.add(var.set_group_type(config[CONF_GROUP_TYPE]))
 
