@@ -43,10 +43,13 @@ CONF_MEAN3 = "mean3"
 CONF_MEAN4 = "mean4"
 
 # Configuration options for aggregate chunks
-CONF_CHUNK_SIZE = "chunk_size"
-CONF_CHUNK_DURATION_SIZE = "chunk_duration_size"
-CONF_CHUNK_QUANTITY = "chunk_quantity"
-CONF_RESET_EVERY_CHUNK = "reset_every_chunk"
+CONF_CHUNK_SIZE = "measurements_per_chunk"
+CONF_CHUNK_DURATION = "duration_of_chunk"
+CONF_CHUNKS_IN_WINDOW = "chunks_in_window"
+CONF_CHUNKS_BEFORE_RESET = "chunks_before_reset"
+
+CONF_DURATION_BEFORE_RESET = "duration_before_reset"
+CONF_MEASUREMENTS_BEFORE_RESET = "measurements_before_reset"
 
 # Type of measurement group; i.e., are the observations for a population or sample
 CONF_GROUP_TYPE = "group_type"
@@ -211,41 +214,58 @@ CONFIG_SCHEMA = cv.All(
                     ): cv.positive_not_null_int,
                 }
             ),
-            CONF_CHUNKED_SLIDING_WINDOW: BASE_SCHEMA.extend(
-                {
-                    cv.Optional(CONF_CHUNK_SIZE, default=20): cv.positive_int,
-                    cv.Optional(
-                        CONF_CHUNK_DURATION_SIZE, default="60s"
-                    ): cv.time_period,
-                    cv.Optional(
-                        CONF_CHUNK_QUANTITY, default=50
-                    ): cv.positive_not_null_int,
-                    cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
-                    cv.Optional(
-                        CONF_SEND_FIRST_AT, default=1
-                    ): cv.positive_not_null_int,
-                }
+            CONF_CHUNKED_SLIDING_WINDOW: cv.All(
+                BASE_SCHEMA.extend(
+                    {
+                        cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
+                        cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
+                        cv.Optional(
+                            CONF_CHUNKS_IN_WINDOW, default=50
+                        ): cv.positive_not_null_int,
+                        cv.Optional(
+                            CONF_SEND_EVERY, default=15
+                        ): cv.positive_not_null_int,
+                        cv.Optional(
+                            CONF_SEND_FIRST_AT, default=1
+                        ): cv.positive_not_null_int,
+                    },
+                ),
+                cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
             ),
-            CONF_CONTINUOUS: BASE_SCHEMA.extend(
-                {
-                    cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
-                    cv.Optional(
-                        CONF_SEND_FIRST_AT, default=1
-                    ): cv.positive_not_null_int,
-                }
+            CONF_CONTINUOUS: cv.All(
+                BASE_SCHEMA.extend(
+                    {
+                        cv.Optional(CONF_MEASUREMENTS_BEFORE_RESET): cv.positive_int,
+                        cv.Optional(CONF_DURATION_BEFORE_RESET): cv.time_period,
+                        cv.Optional(
+                            CONF_SEND_EVERY, default=15
+                        ): cv.positive_not_null_int,
+                        cv.Optional(
+                            CONF_SEND_FIRST_AT, default=1
+                        ): cv.positive_not_null_int,
+                    }
+                ),
+                cv.has_exactly_one_key(
+                    CONF_MEASUREMENTS_BEFORE_RESET, CONF_DURATION_BEFORE_RESET
+                ),
             ),
-            CONF_CHUNKED_CONTINUOUS: BASE_SCHEMA.extend(
-                {
-                    cv.Optional(CONF_RESET_EVERY_CHUNK, default=1000): cv.positive_int,
-                    cv.Optional(CONF_CHUNK_SIZE, default=20): cv.positive_not_null_int,
-                    cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
-                    cv.Optional(
-                        CONF_SEND_FIRST_AT, default=1
-                    ): cv.positive_not_null_int,
-                    cv.Optional(
-                        CONF_CHUNK_DURATION_SIZE, default="60s"
-                    ): cv.time_period,
-                }
+            CONF_CHUNKED_CONTINUOUS: cv.All(
+                BASE_SCHEMA.extend(
+                    {
+                        cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
+                        cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
+                        cv.Optional(
+                            CONF_CHUNKS_BEFORE_RESET, default=1000
+                        ): cv.positive_int,
+                        cv.Optional(
+                            CONF_SEND_EVERY, default=15
+                        ): cv.positive_not_null_int,
+                        cv.Optional(
+                            CONF_SEND_FIRST_AT, default=1
+                        ): cv.positive_not_null_int,
+                    },
+                ),
+                cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
             ),
         }
     )
@@ -328,22 +348,41 @@ async def to_code(config):
 
     if config[CONF_TYPE] == CONF_SLIDING_WINDOW:
         cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
-    elif config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS:
-        cg.add(var.set_window_size(config[CONF_RESET_EVERY_CHUNK]))
-        cg.add(var.set_chunk_size(config[CONF_CHUNK_SIZE]))
-        cg.add(
-            var.set_chunk_duration_size(
-                config[CONF_CHUNK_DURATION_SIZE].total_milliseconds
-            )
-        )
     elif config[CONF_TYPE] == CONF_CHUNKED_SLIDING_WINDOW:
-        cg.add(var.set_chunk_size(config[CONF_CHUNK_SIZE]))
-        cg.add(
-            var.set_chunk_duration_size(
-                config[CONF_CHUNK_DURATION_SIZE].total_milliseconds
+        chunk_size = 15  # default is 15 measurements in a chunk
+        if CONF_CHUNK_SIZE in config:
+            chunk_size = config[CONF_CHUNK_SIZE]
+        elif CONF_CHUNK_DURATION in config:
+            chunk_size = 0
+            cg.add(
+                var.set_chunk_duration_size(
+                    config[CONF_CHUNK_DURATION].total_milliseconds
+                )
             )
-        )
-        cg.add(var.set_window_size(config[CONF_CHUNK_QUANTITY]))
+        cg.add(var.set_chunk_size(chunk_size))
+        cg.add(var.set_window_size(config[CONF_CHUNKS_IN_WINDOW]))
+    elif config[CONF_TYPE] == CONF_CONTINUOUS:
+        cg.add(var.set_window_size(config[CONF_MEASUREMENTS_BEFORE_RESET]))
+    elif config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS:
+        chunk_size = 15  # default is 15 measurements in a chunk
+        if CONF_CHUNK_SIZE in config:
+            chunk_size = config[CONF_CHUNK_SIZE]
+        elif CONF_CHUNK_DURATION in config:
+            chunk_size = 0
+            cg.add(
+                var.set_chunk_duration_size(
+                    config[CONF_CHUNK_DURATION].total_milliseconds
+                )
+            )
+        cg.add(var.set_chunk_size(chunk_size))
+        cg.add(var.set_window_size(config[CONF_CHUNKS_BEFORE_RESET]))
+        # cg.add(var.set_window_size(config[CONF_CHUNKS_BEFORE_RESET]))
+        # cg.add(var.set_chunk_size(config[CONF_CHUNK_SIZE]))
+        # cg.add(
+        #     var.set_chunk_duration_size(
+        #         config[CONF_CHUNK_DURATION].total_milliseconds
+        #     )
+        # )
 
     cg.add(var.set_send_every(config[CONF_SEND_EVERY]))
     cg.add(var.set_first_at(config[CONF_SEND_FIRST_AT]))
