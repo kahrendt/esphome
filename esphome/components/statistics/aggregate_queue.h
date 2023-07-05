@@ -31,7 +31,6 @@ class AggregateQueue {
 
   virtual bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config) = 0;
   virtual void clear() = 0;
-  virtual void insert(float value, uint32_t duration) = 0;
   virtual void insert(Aggregate value) = 0;
   virtual void evict() = 0;
   virtual Aggregate compute_current_aggregate() = 0;

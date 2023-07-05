@@ -21,7 +21,6 @@ class RunningQueue : public AggregateQueue {
   void evict() override { this->clear(); }
 
   // Insert a value at end of the queue and consolidiate if necessary
-  void insert(float value, uint32_t duration) override;
   void insert(Aggregate value) override;
 
   // Computes the summary statistics for all measurements stored in the queue
