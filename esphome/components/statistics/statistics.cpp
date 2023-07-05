@@ -172,7 +172,10 @@ void StatisticsComponent::setup() {
     this->queue_ = new RunningSingular();
   }
 
-  this->queue_->set_capacity(this->window_size_, config);
+  if (!this->queue_->set_capacity(this->window_size_, config)) {
+    ESP_LOGE(TAG, "Failed to allocate memory for statistics.");
+    this->mark_failed();
+  }
 
   if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
     this->queue_->enable_time_weighted();
