@@ -326,13 +326,6 @@ void StatisticsComponent::handle_new_value_(double value) {
     if (this->variance_sensor_)
       this->variance_sensor_->publish_state(
           current_aggregate.compute_variance(this->average_type_ == TIME_WEIGHTED_AVERAGE, this->group_type_));
-
-    if (this->mean2_sensor_)
-      this->mean2_sensor_->publish_state(current_aggregate.get_mean2());
-    if (this->mean3_sensor_)
-      this->mean3_sensor_->publish_state(current_aggregate.get_mean3());
-    if (this->mean4_sensor_)
-      this->mean4_sensor_->publish_state(current_aggregate.get_mean4());
   }
 }
 

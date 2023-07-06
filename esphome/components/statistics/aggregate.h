@@ -111,14 +111,6 @@ class Aggregate {
   // Binary operation that combines two aggregates storing statistics from non-overlapping sets of measuremnts
   Aggregate combine_with(const Aggregate &b, bool time_weighted = false);
 
-  // TEMPORARY means for debugging floating point precision operations
-  double get_mean2() const { return this->mean2; }
-  void set_mean2(double mean) { this->mean2 = mean; }
-  double get_mean3() const { return this->mean3; }
-  void set_mean3(double mean) { this->mean3 = mean; }
-  double get_mean4() const { return this->mean4; }
-  void set_mean4(double mean) { this->mean4 = mean; }
-
  protected:
   /*
    * Default values for the aggregates are the values for a null measurement or the empty set of measurements;
@@ -156,11 +148,6 @@ class Aggregate {
   double timestamp_m2_{NAN};
 
   double timestamp_mean_{NAN};
-
-  // TEMPORARY
-  double mean2{NAN};
-  double mean3{NAN};
-  double mean4{NAN};
 
   // Returns the appproriate denominator for the variance and covariance calculatioins
   //  - applies Bessel's correction if GroupType is sample and average type is not time weighted

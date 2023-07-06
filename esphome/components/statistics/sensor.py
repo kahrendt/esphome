@@ -37,11 +37,6 @@ CONF_STD_DEV = "std_dev"
 CONF_TREND = "trend"
 CONF_VARIANCE = "variance"
 
-# TEMPORARY DEBUGGING
-CONF_MEAN2 = "mean2"
-CONF_MEAN3 = "mean3"
-CONF_MEAN4 = "mean4"
-
 # Configuration options for aggregate chunks
 CONF_CHUNK_SIZE = "measurements_per_chunk"
 CONF_CHUNK_DURATION = "duration_of_chunk"
@@ -176,15 +171,6 @@ BASE_SCHEMA = cv.Schema(
         cv.Optional(CONF_VARIANCE): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
         ),
-        cv.Optional(CONF_MEAN2): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_MEAN3): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_MEAN4): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -276,9 +262,6 @@ same_unit_sensor_list = [
     CONF_MIN,
     CONF_MAX,
     CONF_STD_DEV,
-    CONF_MEAN2,
-    CONF_MEAN3,
-    CONF_MEAN4,
 ]
 
 new_unit_sensor_list = [CONF_VARIANCE, CONF_COVARIANCE, CONF_TREND]
@@ -416,19 +399,6 @@ async def to_code(config):
         conf = config[CONF_VARIANCE]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_variance_sensor(sens))
-
-    if CONF_MEAN2 in config:
-        conf = config[CONF_MEAN2]
-        sens = await sensor.new_sensor(conf)
-        cg.add(var.set_mean2_sensor(sens))
-    if CONF_MEAN3 in config:
-        conf = config[CONF_MEAN3]
-        sens = await sensor.new_sensor(conf)
-        cg.add(var.set_mean3_sensor(sens))
-    if CONF_MEAN4 in config:
-        conf = config[CONF_MEAN4]
-        sens = await sensor.new_sensor(conf)
-        cg.add(var.set_mean4_sensor(sens))
 
 
 @automation.register_action(

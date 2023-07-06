@@ -49,7 +49,6 @@ class AggregateQueue {
   size_t *duration_queue_{nullptr};
   size_t *duration_squared_queue_{nullptr};
 
-
   uint32_t *timestamp_reference_queue_{nullptr};
 
   float *max_queue_{nullptr};
@@ -60,10 +59,6 @@ class AggregateQueue {
   double *m2_queue_{nullptr};
   double *timestamp_m2_queue_{nullptr};
   double *timestamp_mean_queue_{nullptr};
-
-  float *mean2_queue_{nullptr};
-  float *mean3_queue_{nullptr};
-  float *mean4_queue_{nullptr};
 };
 
 }  // namespace statistics

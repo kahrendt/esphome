@@ -104,10 +104,6 @@ class StatisticsComponent : public Component {
   void set_trend_sensor(sensor::Sensor *trend_sensor) { this->trend_sensor_ = trend_sensor; }
   void set_variance_sensor(sensor::Sensor *variance_sensor) { this->variance_sensor_ = variance_sensor; }
 
-  void set_mean2_sensor(sensor::Sensor *mean_sensor) { this->mean2_sensor_ = mean_sensor; }
-  void set_mean3_sensor(sensor::Sensor *mean_sensor) { this->mean3_sensor_ = mean_sensor; }
-  void set_mean4_sensor(sensor::Sensor *mean_sensor) { this->mean4_sensor_ = mean_sensor; }
-
   // mimic ESPHome's current filter behavior
   void set_window_size(size_t window_size) { this->window_size_ = window_size; }
   void set_send_every(size_t send_every) { this->send_every_ = send_every; }
@@ -137,11 +133,6 @@ class StatisticsComponent : public Component {
   sensor::Sensor *std_dev_sensor_{nullptr};
   sensor::Sensor *trend_sensor_{nullptr};
   sensor::Sensor *variance_sensor_{nullptr};
-
-  // temporary sensors to help compare various floating point operations for the mean
-  sensor::Sensor *mean2_sensor_{nullptr};
-  sensor::Sensor *mean3_sensor_{nullptr};
-  sensor::Sensor *mean4_sensor_{nullptr};
 
   AggregateQueue *queue_{nullptr};
 
