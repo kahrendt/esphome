@@ -17,10 +17,9 @@ Aggregate::Aggregate(double value, size_t duration, uint32_t timestamp) {
     this->timestamp_m2_ = 0.0;
     this->timestamp_mean_ = 0.0;
     this->timestamp_reference_ = timestamp;
+    this->duration_ = duration;
+    this->duration_squared_ = duration * duration;
   }
-
-  this->duration_ = duration;  // even if reading is NaN, still count the time that has passed
-  this->duration_squared_ = duration * duration;
 }
 
 Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {

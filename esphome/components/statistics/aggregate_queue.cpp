@@ -12,11 +12,10 @@ namespace esphome {
 namespace statistics {
 
 void AggregateQueue::emplace(const Aggregate &value, size_t index) {
+  this->count_queue_[index] = value.get_count();
+
   if (this->c2_queue_ != nullptr)
     this->c2_queue_[index] = value.get_c2();
-
-  if (this->count_queue_ != nullptr)
-    this->count_queue_[index] = value.get_count();
 
   if (this->duration_queue_ != nullptr)
     this->duration_queue_[index] = value.get_duration();
@@ -46,11 +45,10 @@ void AggregateQueue::emplace(const Aggregate &value, size_t index) {
 Aggregate AggregateQueue::lower(size_t index) {
   Aggregate aggregate = Aggregate();
 
+  aggregate.set_count(this->count_queue_[index]);
+
   if (this->c2_queue_ != nullptr)
     aggregate.set_c2(this->c2_queue_[index]);
-
-  if (this->count_queue_ != nullptr)
-    aggregate.set_count(this->count_queue_[index]);
 
   if (this->duration_queue_ != nullptr)
     aggregate.set_duration(this->duration_queue_[index]);
@@ -86,15 +84,14 @@ bool AggregateQueue::allocate_memory(size_t capacity, EnabledAggregatesConfigura
   ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<uint32_t> uint32_t_allocator(ExternalRAMAllocator<uint32_t>::ALLOW_FAILURE);
 
+  // count is always enabled
+  this->count_queue_ = size_t_allocator.allocate(capacity);
+  if (this->count_queue_ == nullptr)
+    return false;
+
   if (config.c2) {
     this->c2_queue_ = double_allocator.allocate(capacity);
     if (this->c2_queue_ == nullptr)
-      return false;
-  }
-
-  if (config.count) {
-    this->count_queue_ = size_t_allocator.allocate(capacity);
-    if (this->count_queue_ == nullptr)
       return false;
   }
 

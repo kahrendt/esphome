@@ -12,7 +12,6 @@ namespace statistics {
 
 struct EnabledAggregatesConfiguration {
   bool c2{false};
-  bool count{false};
   bool duration{false};
   bool duration_squared{false};
   bool m2{false};
