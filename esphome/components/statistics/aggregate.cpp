@@ -60,8 +60,8 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   size_t a_count = this->get_count();
   size_t b_count = b.get_count();
 
-  uint32_t a_duration = this->get_duration();
-  uint32_t b_duration = b.get_duration();
+  size_t a_duration = this->get_duration();
+  size_t b_duration = b.get_duration();
 
   double a_min = this->get_min();
   double b_min = b.get_min();

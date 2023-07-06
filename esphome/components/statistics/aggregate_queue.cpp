@@ -113,7 +113,7 @@ bool AggregateQueue::allocate_memory(size_t capacity, EnabledAggregatesConfigura
   }
 
   if (config.duration) {
-    this->duration_queue_ = uint32_t_allocator.allocate(capacity);  // uint32_t_allocator.allocate(capacity);
+    this->duration_queue_ = size_t_allocator.allocate(capacity);  // uint32_t_allocator.allocate(capacity);
     if (this->duration_queue_ == nullptr)
       return false;
   }
