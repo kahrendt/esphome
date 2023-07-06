@@ -133,12 +133,8 @@ void StatisticsComponent::setup() {
   // store aggregate data in the queues only necessary for the configured sensors
   EnabledAggregatesConfiguration config;
 
-  if (this->count_sensor_)
-    config.count = true;
-
   if (this->covariance_sensor_) {
     config.c2 = true;
-    config.count = true;
     config.mean = true;
     config.timestamp_mean = true;
     config.timestamp_reference = true;
@@ -149,32 +145,23 @@ void StatisticsComponent::setup() {
 
   if (this->max_sensor_) {
     config.max = true;
-
-    if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS)
-      config.count = true;  // necessary for consolidation
   }
 
   if (this->mean_sensor_) {
-    config.count = true;
     config.mean = true;
   }
 
   if (this->min_sensor_) {
     config.min = true;
-
-    if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS)
-      config.count = true;  // necessary for consolidation
   }
 
   if ((this->std_dev_sensor_) || (this->variance_sensor_)) {
-    config.count = true;
     config.m2 = true;
     config.mean = true;
   }
 
   if (this->trend_sensor_) {
     config.c2 = true;
-    config.count = true;
     config.m2 = true;
     config.mean = true;
     config.timestamp_m2 = true;
