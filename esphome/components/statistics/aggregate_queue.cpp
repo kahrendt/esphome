@@ -41,13 +41,6 @@ void AggregateQueue::emplace(const Aggregate &value, size_t index) {
     this->timestamp_mean_queue_[index] = value.get_timestamp_mean();
   if (this->timestamp_reference_queue_ != nullptr)
     this->timestamp_reference_queue_[index] = value.get_timestamp_reference();
-
-  if (this->mean2_queue_ != nullptr)
-    this->mean2_queue_[index] = value.get_mean2();
-  if (this->mean3_queue_ != nullptr)
-    this->mean3_queue_[index] = value.get_mean3();
-  if (this->mean4_queue_ != nullptr)
-    this->mean4_queue_[index] = value.get_mean4();
 }
 
 Aggregate AggregateQueue::lower(size_t index) {
@@ -82,13 +75,6 @@ Aggregate AggregateQueue::lower(size_t index) {
     aggregate.set_timestamp_mean(this->timestamp_mean_queue_[index]);
   if (this->timestamp_reference_queue_ != nullptr)
     aggregate.set_timestamp_reference(this->timestamp_reference_queue_[index]);
-
-  if (this->mean2_queue_ != nullptr)
-    aggregate.set_mean2(this->mean2_queue_[index]);
-  if (this->mean3_queue_ != nullptr)
-    aggregate.set_mean3(this->mean3_queue_[index]);
-  if (this->mean4_queue_ != nullptr)
-    aggregate.set_mean4(this->mean4_queue_[index]);
 
   return aggregate;
 }
@@ -166,12 +152,6 @@ bool AggregateQueue::allocate_memory(size_t capacity, EnabledAggregatesConfigura
     this->timestamp_reference_queue_ = uint32_t_allocator.allocate(capacity);
     if (this->timestamp_reference_queue_ == nullptr)
       return false;
-  }
-
-  if (config.mean) {
-    this->mean2_queue_ = float_allocator.allocate(capacity);
-    this->mean3_queue_ = float_allocator.allocate(capacity);
-    this->mean4_queue_ = float_allocator.allocate(capacity);
   }
 
   return true;
