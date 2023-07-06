@@ -254,7 +254,7 @@ void StatisticsComponent::handle_new_value_(double value) {
   // Add new value to queue //
   ////////////////////////////
   this->current_chunk_aggregate_ = this->current_chunk_aggregate_.combine_with(
-      Aggregate(insert_value, duration), (this->average_type_ == TIME_WEIGHTED_AVERAGE));
+      Aggregate(insert_value, duration, now), (this->average_type_ == TIME_WEIGHTED_AVERAGE));
   ++this->chunk_entries_;
   this->chunk_duration_ += duration;
 

@@ -1,14 +1,12 @@
 #include "aggregate.h"
 
-#include "esphome/core/hal.h"  // necessary for millis()
-
 #include <algorithm>  // necessary for std::min and std::max functions
 #include <cmath>      // necessary for NaN
 
 namespace esphome {
 namespace statistics {
 
-Aggregate::Aggregate(double value, uint32_t duration) {
+Aggregate::Aggregate(double value, size_t duration, uint32_t timestamp) {
   if (!std::isnan(value)) {
     this->c2_ = 0.0;
     this->count_ = 1;
@@ -18,7 +16,7 @@ Aggregate::Aggregate(double value, uint32_t duration) {
     this->min_ = value;
     this->timestamp_m2_ = 0.0;
     this->timestamp_mean_ = 0.0;
-    this->timestamp_reference_ = millis();
+    this->timestamp_reference_ = timestamp;
   }
 
   this->duration_ = duration;  // even if reading is NaN, still count the time that has passed
