@@ -344,13 +344,6 @@ async def to_code(config):
             )
         cg.add(var.set_chunk_size(chunk_size))
         cg.add(var.set_window_size(config[CONF_CHUNKS_BEFORE_RESET]))
-        # cg.add(var.set_window_size(config[CONF_CHUNKS_BEFORE_RESET]))
-        # cg.add(var.set_chunk_size(config[CONF_CHUNK_SIZE]))
-        # cg.add(
-        #     var.set_chunk_duration_size(
-        #         config[CONF_CHUNK_DURATION].total_milliseconds
-        #     )
-        # )
 
     cg.add(var.set_send_every(config[CONF_SEND_EVERY]))
     cg.add(var.set_first_at(config[CONF_SEND_FIRST_AT]))

@@ -49,7 +49,7 @@ enum GroupType {
 class Aggregate {
  public:
   Aggregate(){};  // default constructor for a null measurement
-  Aggregate(double value, uint32_t duration);
+  Aggregate(double value, size_t duration, uint32_t timestamp);
 
   // C2 from Welford's algorithm; used to compute the covariance of the measurements and timestamps weighted
   double get_c2() const { return this->c2_; }
