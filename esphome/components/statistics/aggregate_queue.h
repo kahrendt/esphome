@@ -46,9 +46,10 @@ class AggregateQueue {
   size_t size_{0};
 
   size_t *count_queue_{nullptr};
+  size_t *duration_queue_{nullptr};
   size_t *duration_squared_queue_{nullptr};
 
-  uint32_t *duration_queue_{nullptr};
+
   uint32_t *timestamp_reference_queue_{nullptr};
 
   float *max_queue_{nullptr};

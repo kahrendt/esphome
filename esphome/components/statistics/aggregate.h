@@ -1,27 +1,36 @@
 /*
- * Aggregate class for computing summary statistics for a set of measurements
- *  - Three main roles:
- *    1) Set a default value for a null measurement; i.e., for an empty set of measurements
- *    2) Combine two aggregates from two disjoint sets of measurements
- *    3) Compute summary statistics from the stored aggregates
+ * Aggregate class stores summary statistics for a set of measurements. It is mathematically a monoid paired with a
+ * binary operation and an identity. It has three main functions
+ *  - Set a default value for a null measurement (a set with 0 measurements) - Aggregate method
+ *    - this is the identity monoid
+ *  - Combine two aggregates from two disjoint sets of measurements - combine_with method
+ *    - this is the binary operation
+ *    - summary statistics are combined using parallel algorithms
+ *      - See the article "Numerically Stable Parallel Computation of (Co-)Variance" by Schubert and Gertz for details.
+ *  - Compute summary statistics from the stored aggregates - get_* and compute_* methods
+ *    - Some summary statistics are directly stored
+ *      - count, duration, min, mean, and max aggrates are directly stored
+ *      - use get_* methods for retrieval
+ *    - Some of the stored summary statistics in the monoid are not useful immediately, but can be combined with other
+ *      stored measurements to compute the useful statistic
+ *      - variance and standard deviation are computed using the stored count (or duration if time-weighted) and m2
+ *        statistics
+ *        - m2 additionally requires the mean statistic for the combine operation
+ *      - covariance is computed using the stored count (or duration if time-weighted) and c2 statistics
+ *        - c2 additionally requires the mean and timestamp mean for the combine operation
+ *      - trend is computed using c2 and timestamp m2 statistics
+ *        - timestamp m2 statistic additionally requies the timestamp mean and count (or duration if time-weighted)
+ *          for the combine operation
  *
- *  - Means are calculated in a manner that avoids catastrophic cancellation with a large number of measurements.
- *  - Variance and covariance aggregates are computed using a variation of Welford's alogorithm for parallel computing.
- *    - See the article "Numerically Stable Parallel Computation of (Co-)Variance" by Schubert and Gertz for details.
- *  - Two timestamp quantities are stored: timestamp_sum & timestamp_reference
- *    - timestamp_sum is the sum of the timestamps (in milliseconds) in the set of measurements all offset by the
- * reference.
- *    - timestamp_reference is the offset (in milliseconds) is the offset for timestamp_sum.
- *    - timestamp_sums need to normalized before comparing so that they reference the same timestamp
- *      - The normalizing process involves finding the time delta between the two references; this avoids issues from
- *        millis() rolling over
- *    - This approach ensures one of timestamps included in the timestamp_sum is 0.
- *      - timestamp_sum is as small as possible to minimize floating point operations losing significant digits.
- *    - timestamp_sum and timestamp_reference are stored as integers.
- *      - Operations on integers are performed as much as possible before switching to (slower) floating point
- *          operations.
+ * For any statistic that uses timestamp_mean, the aggregate also stores timestamp_reference
+ *  - timestamp_reference is the offset (in milliseconds) for the timestamp_mean
+ *  - timestamp_mean's need to normalized before combined so that they reference the same timestamp
+ *    - The normalizing process involves finding the time delta between the two references; this avoids issues from
+ *      millis() rolling over
+ *  - This approach ensures one fo the timestamp_reference's is 0 when combining two aggregates
+ *    - This makes timestamp_means as small as possible to minimize floating point precision issues
  *
- * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
+ * Implemented by Kevin Ahrendt for the ESPHome project, June and July 2023
  */
 
 #pragma once
@@ -50,8 +59,8 @@ class Aggregate {
   size_t get_count() const { return this->count_; }
   void set_count(size_t count) { this->count_ = count; }
 
-  uint32_t get_duration() const { return this->duration_; }
-  void set_duration(uint32_t duration) { this->duration_ = duration; }
+  size_t get_duration() const { return this->duration_; }
+  void set_duration(size_t duration) { this->duration_ = duration; }
 
   size_t get_duration_squared() const { return this->duration_squared_; }
   void set_duration_squared(size_t duration_squared) { this->duration_squared_ = duration_squared; }
@@ -99,6 +108,7 @@ class Aggregate {
   // Return the slope of the line of best fit over the window
   double compute_trend() const;
 
+  // Binary operation that combines two aggregates storing statistics from non-overlapping sets of measuremnts
   Aggregate combine_with(const Aggregate &b, bool time_weighted = false);
 
   // TEMPORARY means for debugging floating point precision operations
@@ -118,12 +128,14 @@ class Aggregate {
   // Count of non-NaN measurements in the set of measurements
   size_t count_{0};
 
+  // Sum of the durations between successive measurements in the set; kept as milliseconds
+  size_t duration_{0};
+
+  // Sum of the druations between successive measuremnts squred in the set; necessary for reliability weights
   size_t duration_squared_{0};
 
-  uint32_t duration_{0};
-
-  // The reference timestamp for the timestamp sum values;
-  // e.g., if we have one raw timestamp at 5 ms and the reference is 5 ms, we store 0 ms in timestamp_sum
+  // The reference timestamp for the timestamp mean values
+  // e.g., if we have one raw timestamp at 5 ms and the reference is 5 ms, we store 0 ms in timestamp_mean
   uint32_t timestamp_reference_{0};
 
   // Quantity used in an extended Welford's algorithm for finding the covariance of the set of measurements and
@@ -155,7 +167,7 @@ class Aggregate {
   //  - uses reliability weights if GroupType is sample and average type is time weighted
   double denominator_(bool time_weighted, GroupType type) const;
 
-  // Given two samples, normalize the timestamp sums so that they are both in reference to the larger timestamp
+  // Given two samples, normalize the timestamp means so that they are both in reference to the larger timestamp
   // returns the timestamp both sums are in reference to
   double normalize_timestamp_means_(double &a_mean, const uint32_t &a_timestamp_reference, const size_t &a_count,
                                     double &b_mean, const uint32_t &b_timestamp_reference, const size_t &b_count);
