@@ -68,12 +68,17 @@
 #include "running_singular.h"
 #include "running_queue.h"
 
-#include "esphome/core/component.h"
 #include "esphome/core/automation.h"
+#include "esphome/core/component.h"
+#include "esphome/core/preferences.h"
 #include "esphome/components/sensor/sensor.h"
 
 namespace esphome {
 namespace statistics {
+
+// from esphome/components/servo/servo.h
+// see https://github.com/esphome/esphome/pull/3416
+extern uint32_t global_statistics_id;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 enum AverageType {
   SIMPLE_AVERAGE,
@@ -134,6 +139,8 @@ class StatisticsComponent : public Component {
     this->time_conversion_factor_ = conversion_factor;
   }
 
+  void set_restore(bool restore) { this->restore_ = restore; }
+
  protected:
   // source sensor of measurement data
   sensor::Sensor *source_sensor_{nullptr};
@@ -172,6 +179,9 @@ class StatisticsComponent : public Component {
   // if the aggregates are time-weighted, these store info about the previous observation
   float previous_value_{NAN};
   uint32_t previous_timestamp_{0};
+
+  bool restore_{false};
+  ESPPreferenceObject pref_;
 
   // given a new sensor measurements, add it to queue, evict/clear if queue is full, and update sensors
   void handle_new_value_(double value);

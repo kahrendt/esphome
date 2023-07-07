@@ -9,6 +9,7 @@ from esphome.const import (
     CONF_ENTITY_CATEGORY,
     CONF_ICON,
     CONF_ID,
+    CONF_RESTORE,
     CONF_SEND_EVERY,
     CONF_SEND_FIRST_AT,
     CONF_SOURCE_ID,
@@ -226,6 +227,7 @@ CONFIG_SCHEMA = cv.All(
                         cv.Optional(
                             CONF_SEND_FIRST_AT, default=1
                         ): cv.positive_not_null_int,
+                        cv.Optional(CONF_RESTORE, default=False): cv.boolean,
                     },
                 ),
                 cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
@@ -335,6 +337,7 @@ async def to_code(config):
             )
         cg.add(var.set_chunk_size(chunk_size))
         cg.add(var.set_window_size(config[CONF_CHUNKS_BEFORE_RESET]))
+        cg.add(var.set_restore(config[CONF_RESTORE]))
 
     cg.add(var.set_send_every(config[CONF_SEND_EVERY]))
     cg.add(var.set_first_at(config[CONF_SEND_FIRST_AT]))

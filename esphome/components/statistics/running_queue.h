@@ -9,8 +9,8 @@
  * samples, this approach is numerically stable for any quantity of measurements. It has a small penalty in terms of
  * computational complexity and memory usage. Memory is allocated at the start. If no specific capacity is set,
  * it allocates enough memory for 2^(QUEUE_CAPACITY_IF_NONE_SPECIFIED)) aggregates to be inserted. If that is exceeded,
- * then an overflow is handled by aggregating everything in the queue into one aggregate. If the overflow handling
- * happens repeatedly, the aggregates can become numerically unstable.
+ * then an overflow is handled by aggregating everything in the queue into one aggregate. Repeated overflow handling
+ * can cause numerical instability.
  *
  *
  * Example run: At each numbered step, a new aggregate with count=1 is inserted. queue_ is the set of aggregates in the
@@ -48,6 +48,7 @@
  * Memory usage (for n aggregate chunks, where each may aggregate multiple measurements):
  *  - log(n)+1 aggregates
  *
+ *
  * Implemented by Kevin Ahrendt for the ESPHome project, June and July 2023
  */
 
@@ -59,10 +60,8 @@
 namespace esphome {
 namespace statistics {
 
-// If no capacity is specified, we alloce memory for this many aggregates in our queue.
-// If the queue is going to overflow, then the entire queue is aggregated into one aggregate.
-//    - If this repeatedly occurs, then the statistics may not be numerically stable.
-// The queue can hold 2^(QUEUE_CAPACITY_IF_NONE_SPECIFIED) aggregates before the overflow handling occurs.
+// If no capacity is specified, we allocate memory for this amount of stored aggregates in our queue.
+// The queue can insert 2^(QUEUE_CAPACITY_IF_NONE_SPECIFIED) aggregates before the overflow handling occurs.
 static const uint8_t QUEUE_CAPACITY_IF_NONE_SPECIFIED = 32;
 
 class RunningQueue : public AggregateQueue {
