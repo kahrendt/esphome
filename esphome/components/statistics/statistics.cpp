@@ -15,6 +15,7 @@ namespace esphome {
 namespace statistics {
 
 static const char *const TAG = "statistics";
+uint32_t global_statistics_id = 3141044017ULL;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 void StatisticsComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "Statistics Component:");
@@ -152,6 +153,16 @@ void StatisticsComponent::setup() {
     this->queue_->enable_time_weighted();
   }
 
+  if (this->restore_) {
+    this->pref_ = global_preferences->make_preference<Aggregate>(global_statistics_id);
+    global_statistics_id++;
+
+    Aggregate restored_value;
+    this->pref_.load(&restored_value);
+
+    this->queue_->insert(restored_value);
+  }
+
   // On every source sensor update, call handle_new_value_()
   this->source_sensor_->add_on_state_callback([this](float value) -> void { this->handle_new_value_(value); });
 
@@ -260,6 +271,9 @@ void StatisticsComponent::handle_new_value_(double value) {
     if (this->variance_sensor_)
       this->variance_sensor_->publish_state(
           current_aggregate.compute_variance(this->is_time_weighted_(), this->group_type_));
+
+    if (this->restore_)
+      this->pref_.save(&current_aggregate);
   }
 }
 

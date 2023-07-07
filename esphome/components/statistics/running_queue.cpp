@@ -8,7 +8,8 @@ namespace statistics {
 // Sets the capacity of underlying queue; needs at most log_2(n)+1 aggregates to store n aggregates
 //  - returns whether memory was successfully allocated
 bool RunningQueue::set_capacity(size_t chunk_capacity, EnabledAggregatesConfiguration enabled_config) {
-  // capacity is the max number of aggregate chunks that can be aggregated into the queue
+  // chunk_capacity is the max number of aggregate chunks that can be inserted into the queue before overflows are
+  // handled
   // enabled_config ensures only memory is allocated for the necessary statistics
 
   uint8_t queue_capacity = QUEUE_CAPACITY_IF_NONE_SPECIFIED;
