@@ -43,7 +43,6 @@ CONF_CHUNK_DURATION = "duration_of_chunk"
 CONF_CHUNKS_IN_WINDOW = "chunks_in_window"
 CONF_CHUNKS_BEFORE_RESET = "chunks_before_reset"
 
-CONF_DURATION_BEFORE_RESET = "duration_before_reset"
 CONF_MEASUREMENTS_BEFORE_RESET = "measurements_before_reset"
 
 # Type of measurement group; i.e., are the observations for a population or sample
@@ -204,22 +203,14 @@ CONFIG_SCHEMA = cv.All(
                 ),
                 cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
             ),
-            CONF_CONTINUOUS: cv.All(
-                BASE_SCHEMA.extend(
-                    {
-                        cv.Optional(CONF_MEASUREMENTS_BEFORE_RESET): cv.positive_int,
-                        cv.Optional(CONF_DURATION_BEFORE_RESET): cv.time_period,
-                        cv.Optional(
-                            CONF_SEND_EVERY, default=15
-                        ): cv.positive_not_null_int,
-                        cv.Optional(
-                            CONF_SEND_FIRST_AT, default=1
-                        ): cv.positive_not_null_int,
-                    }
-                ),
-                cv.has_exactly_one_key(
-                    CONF_MEASUREMENTS_BEFORE_RESET, CONF_DURATION_BEFORE_RESET
-                ),
+            CONF_CONTINUOUS: BASE_SCHEMA.extend(
+                {
+                    cv.Optional(CONF_MEASUREMENTS_BEFORE_RESET): cv.positive_int,
+                    cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
+                    cv.Optional(
+                        CONF_SEND_FIRST_AT, default=1
+                    ): cv.positive_not_null_int,
+                }
             ),
             CONF_CHUNKED_CONTINUOUS: cv.All(
                 BASE_SCHEMA.extend(

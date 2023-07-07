@@ -1,8 +1,3 @@
-/*
-
- * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
- */
-
 #include "aggregate.h"
 #include "aggregate_queue.h"
 
@@ -84,7 +79,7 @@ bool AggregateQueue::allocate_memory(size_t capacity, EnabledAggregatesConfigura
   ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<uint32_t> uint32_t_allocator(ExternalRAMAllocator<uint32_t>::ALLOW_FAILURE);
 
-  // count is always enabled
+  // Count is always enabled as it is needed for the combine operation
   this->count_queue_ = size_t_allocator.allocate(capacity);
   if (this->count_queue_ == nullptr)
     return false;

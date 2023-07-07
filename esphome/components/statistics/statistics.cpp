@@ -1,44 +1,3 @@
-/*
- * ESPHome component to compute several summary statistics of a single sensor in an effecient (computationally and
- * memory-wise) manner
- *  - Works over a sliding window of incoming values; i.e., it is an online algorithm
- *  - Data is stored in a circular queue to be memory effecient by avoiding using std::deque
- *    - The queue itself is an array allocated during componenet setup for the specified window size
- *      - The circular queue is implemented by keeping track of the indices (circular_queue_index.h)
- *   - Performs push_back and pop_front operations in constant time
- *    - Each summary statistic (or the aggregate they are derived from) is stored in a separate queue
- *      - This avoids reserving large amounts of pointless memory if some sensors are not configured
- *      - Configuring a sensor in ESPHome only stores the aggregates it needs and no more
- *        - If multiple sensors require the same intermediate aggregates, it is only stored once
- *  - Implements the DABA Lite algorithm over a circular queue for computing online statistics
- *    - space requirements: n+2 aggregates
- *    - time complexity: worse-case O(1)
- *    - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
- *  - Uses variations of Welford's algorithm for parallel computing to find variance and covariance (with respect to
- *    time) to avoid catastrophic cancellation
- *  - The mean is computed to avoid catstrophic cancellation for large windows and/or large values
- *
- * Available statistics computed over the sliding window:
- *  - max: maximum measurement
- *  - min: minimum measurement
- *  - mean: average of the measurements
- *  - count: number of valid measurements in the window (component ignores NaN values in the window)
- *  - variance: sample variance of the measurements (Bessel's correction is applied)
- *  - std_dev: sample standard deviation of the measurements (Bessel's correction is applied)
- *  - covariance: sample covariance of the measurements compared to the timestamps of each reading
- *      - timestamps are stored as milliseconds
- *      - computed by keeping a rolling sum of the timestamps and a reference timestamp
- *      - the reference timestamp allows the rolling sum to always have one timestamp at 0
- *          - keeping offset rolling sum close to 0 should reduce the chance of floating point numbers losing
- *            signficant digits
- *      - integer operations are used as much as possible before switching to floating point arithemtic
- *  - trend: the slope of the line of best fit for the measurement values versus timestamps
- *      - can be be used as an approximation for the rate of change (derivative) of the measurements
- *      - computed using the covariance of timestamps versus measurements and the variance of timestamps
- *
- * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
- */
-
 #include "aggregate.h"
 
 #include "aggregate_queue.h"
@@ -170,7 +129,7 @@ void StatisticsComponent::setup() {
   }
 
   // if averages are time weighted, then ensure we store duration info
-  if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
+  if (this->is_time_weighted_()) {
     config.duration = true;
     config.duration_squared = true;
   }
@@ -189,7 +148,7 @@ void StatisticsComponent::setup() {
     this->mark_failed();
   }
 
-  if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
+  if (this->is_time_weighted_()) {
     this->queue_->enable_time_weighted();
   }
 
@@ -198,17 +157,6 @@ void StatisticsComponent::setup() {
 
   // Ensure we send our first reading when configured
   this->set_first_at(this->send_every_ - this->send_at_);
-}
-
-void StatisticsComponent::insert_chunk_and_reset_(Aggregate value) {
-  this->queue_->insert(value);
-
-  // reset chunk
-  this->current_chunk_aggregate_ = Aggregate();
-  this->chunk_entries_ = 0;
-  this->chunk_duration_ = 0;
-
-  ++this->send_at_;  // only increment if a chunk has been inserted
 }
 
 void StatisticsComponent::reset() { this->queue_->clear(); }
@@ -220,17 +168,17 @@ void StatisticsComponent::handle_new_value_(double value) {
   uint32_t duration = now - this->previous_timestamp_;
   float insert_value = value;
 
-  if (this->average_type_ == TIME_WEIGHTED_AVERAGE) {
+  if (this->is_time_weighted_()) {
     insert_value = this->previous_value_;
   }
 
   this->previous_timestamp_ = now;
   this->previous_value_ = value;
 
-  //////////////////////////////////////////////////
-  // handle evicting elements if window is exceed //
-  //////////////////////////////////////////////////
-  //  If window_size_ == 0, then we have a running queue with no automatic reset, so we never evict/clear
+  ////////////////////////////////////////////////
+  // Evict elements or reset queue if too large //
+  ////////////////////////////////////////////////
+  //  If window_size_ == 0, then we have a running type queue with no automatic reset, so we never evict/clear
   if (this->window_size_ > 0) {
     while (this->queue_->size() >= this->window_size_) {
       this->queue_->evict();
@@ -238,27 +186,27 @@ void StatisticsComponent::handle_new_value_(double value) {
   }
 
   ////////////////////////////
-  // Add new value to queue //
+  // Add new chunk to a queue //
   ////////////////////////////
-  this->current_chunk_aggregate_ = this->current_chunk_aggregate_.combine_with(
-      Aggregate(insert_value, duration, now), (this->average_type_ == TIME_WEIGHTED_AVERAGE));
-  ++this->chunk_entries_;
-  this->chunk_duration_ += duration;
+  this->running_chunk_aggregate_ =
+      this->running_chunk_aggregate_.combine_with(Aggregate(insert_value, duration, now), this->is_time_weighted_());
+  ++this->running_chunk_count_;
+  this->running_chunk_duration += duration;
 
-  // If the chunk_size_ == 0, then our running chunk resets based on a duration
-  if (this->chunk_size_ > 0) {
-    if (this->chunk_entries_ >= this->chunk_size_) {
-      this->insert_chunk_and_reset_(this->current_chunk_aggregate_);
-    }
-  } else {
-    if (this->chunk_duration_ >= this->chunk_duration_size_) {
-      this->insert_chunk_and_reset_(this->current_chunk_aggregate_);
-    }
+  if (this->is_running_chunk_ready_()) {
+    this->queue_->insert(this->running_chunk_aggregate_);
+
+    // Reset counters and chunk to a null measurement
+    this->running_chunk_aggregate_ = Aggregate();
+    this->running_chunk_count_ = 0;
+    this->running_chunk_duration = 0;
+
+    ++this->send_at_;  // only incremented if a chunk has been inserted
   }
 
-  // Ensure we only push updates for the sensors based on the configuration
-  // send_at_ counts the number of chunks inserted into the appropriate queue
-  // after send_every_ chunks, each sensor is updated
+  // Ensure we only push updates at the rate configured
+  //  - send_at_ counts the number of chunks inserted into the appropriate queue
+  //  - after send_every_ chunks, each sensor is updated
   if (this->send_at_ >= this->send_every_) {
     this->send_at_ = 0;
 
@@ -268,8 +216,7 @@ void StatisticsComponent::handle_new_value_(double value) {
       this->count_sensor_->publish_state(current_aggregate.get_count());
 
     if (this->covariance_sensor_) {
-      double covariance_ms =
-          current_aggregate.compute_covariance(this->average_type_ == TIME_WEIGHTED_AVERAGE, this->group_type_);
+      double covariance_ms = current_aggregate.compute_covariance(this->is_time_weighted_(), this->group_type_);
       double converted_covariance = covariance_ms / this->time_conversion_factor_;
 
       this->covariance_sensor_->publish_state(converted_covariance);
@@ -301,7 +248,7 @@ void StatisticsComponent::handle_new_value_(double value) {
 
     if (this->std_dev_sensor_)
       this->std_dev_sensor_->publish_state(
-          current_aggregate.compute_std_dev(this->average_type_ == TIME_WEIGHTED_AVERAGE, this->group_type_));
+          current_aggregate.compute_std_dev(this->is_time_weighted_(), this->group_type_));
 
     if (this->trend_sensor_) {
       double trend_ms = current_aggregate.compute_trend();
@@ -312,8 +259,29 @@ void StatisticsComponent::handle_new_value_(double value) {
 
     if (this->variance_sensor_)
       this->variance_sensor_->publish_state(
-          current_aggregate.compute_variance(this->average_type_ == TIME_WEIGHTED_AVERAGE, this->group_type_));
+          current_aggregate.compute_variance(this->is_time_weighted_(), this->group_type_));
   }
+}
+
+// Returns true if the summary statistics should be weighted based on the measurement's duration
+inline bool StatisticsComponent::is_time_weighted_() { return (this->average_type_ == TIME_WEIGHTED_AVERAGE); }
+
+// Determines whether the current running aggregate chunk is full; i.e., has aggregated enough measurements or the
+// configured duration has been exceeded
+inline bool StatisticsComponent::is_running_chunk_ready_() {
+  // If the chunk_size_ == 0, then our running chunk resets based on a duration
+  if (this->chunk_size_ > 0) {
+    if (this->running_chunk_count_ >= this->chunk_size_) {
+      return true;
+    }
+  } else {
+    if (this->running_chunk_duration >= this->chunk_duration_size_) {
+      if (this->running_chunk_count_ > 0)  // ensure we have aggregated at least one measurement in this timespan
+        return true;
+    }
+  }
+
+  return false;
 }
 
 }  // namespace statistics

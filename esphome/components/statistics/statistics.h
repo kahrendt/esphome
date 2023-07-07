@@ -1,47 +1,62 @@
 /*
- * ESPHome component to compute several summary statistics of a single sensor in an effecient (computationally and
- * memory-wise) manner
- *  - Works over a sliding window of incoming values; i.e., it is an online algorithm
- *  - Data is stored in a circular queue to be memory effecient by avoiding using std::deque
- *    - The queue itself is an array allocated during componenet setup for the specified window size
- *      - The circular queue is implemented by keeping track of the indices (circular_queue_index.h)
- *   - Performs push_back and pop_front operations in constant time
- *    - Each summary statistic (or the aggregate they are derived from) is stored in a separate queue
- *      - This avoids reserving large amounts of pointless memory if some sensors are not configured
- *      - Configuring a sensor in ESPHome only stores the aggregates it needs and no more
- *        - If multiple sensors require the same intermediate aggregates, it is only stored once
- *  - Implements the DABA Lite algorithm over a circular queue for computing online statistics
- *    - space requirements: n+2 aggregates
- *    - time complexity: worse-case O(1)
- *    - based on: https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License)
- *  - Uses variations of Welford's algorithm for parallel computing to find variance and covariance (with respect to
- *    time) to avoid catastrophic cancellation
- *  - The mean is computed to avoid catstrophic cancellation for large windows and/or large values
+ * ESPHome component to compute several summary statistics for a set of measurements from a sensor in an effecient
+ * (computationally and memory-wise) manner while being numerically stable and accurate. The set of measurements can be
+ * collected over a sliding window or as a resetable running total. Each measurement can be set to have equal weight or
+ * to be weighted by their duration.
  *
- * Available statistics computed over the sliding window:
- *  - max: maximum measurement
- *  - min: minimum measurement
- *  - mean: average of the measurements
+ * Available statistics as sensors
  *  - count: number of valid measurements in the window (component ignores NaN values in the window)
- *  - variance: sample variance of the measurements (Bessel's correction is applied)
- *  - std_dev: sample standard deviation of the measurements (Bessel's correction is applied)
- *  - covariance: sample covariance of the measurements compared to the timestamps of each reading
- *      - timestamps are stored as milliseconds
- *      - computed by keeping a rolling sum of the timestamps and a reference timestamp
- *      - the reference timestamp allows the rolling sum to always have one timestamp at 0
- *          - keeping offset rolling sum close to 0 should reduce the chance of floating point numbers losing
- *            signficant digits
- *      - integer operations are used as much as possible before switching to floating point arithemtic
+ *  - covariance: sample or population covariance of the measurements compared to the timestamps of each reading
+ *  - duration: the duration in milliseconds between the first and last measurement's timestamps
+ *  - min: minimum of the set of measurements
+ *  - mean: average of the set of measurements
+ *  - max: maximum of the set of measurements*
+ *  - std_dev: sample or population standard deviation of the set of measurements
  *  - trend: the slope of the line of best fit for the measurement values versus timestamps
  *      - can be be used as an approximation for the rate of change (derivative) of the measurements
  *      - computed using the covariance of timestamps versus measurements and the variance of timestamps
+ *  - variance: sample or population variance of the set of measurements
  *
+ * Term and definitions used in this component:
+ *  - measurement: a single reading from a sensor
+ *  - observation: a single reading from a sensor
+ *  - set of measurements: a collection of measurements from a sensor
+ *    - it can be the null set; i.e., it does not contain a measurement
+ *  - summary statistic: a numerical value that summarizes a set of measurements
+ *  - aggregate: a collection of summary statistics for a set of measurements
+ *  - to aggregate: adding a measurement to the set of measurements and updating the aggregate to include the new
+ *    measurement
+ *  - queue: a set of aggregates that can compute all summmary statistics for all aggregates in the set combined
+ *  - to insert: adding an aggregate to a queue
+ *  - to evict: remove the oldest aggregate from a queue
+ *  - chunk: an aggregate that specifically aggregates incoming measurements and inserted into a queue
+ *  - chunk size: the number of measurements to aggregate in a chunk before it is inserted into a queue
+ *  - chunk duration: the timespan between the first and last measurement in a chunk before being inserted into a queue
+ *  - sliding window queue: a queue that can insert new aggregates and evict the oldest aggregate
+ *  - sliding window aggregate: an agggregate that stores the summary statistics for all aggregates in a sliding
+ *    window queue
+ *  - continuous queue: a queue that can only insert new aggregates and be cleared
+ *  - continuous aggregate: an aggregate that stores the summary statistics for all aggregates in a continuous queue
+ *  - simple average: every measurement has equal weight when computing summary statistics
+ *  - time-weighted average: each measurement is weighted by the time until the next measurement is observed
  *
- * Ideas to implement:
- *  - reset based on a configured time interval
- *  - sliding window controlled by a time interval
+ * Component code structure: (see specific header files for more detailed descriptions):
+ *  - statistics.h - Statistics is a class that sets up the component by allocating memory for a configured queue and
+ *    handles new measurements
+ *  - aggregate.h - Aggregate is a class that stores a collection of summary statistics and can combine two aggregates
+ *    into one
+ *  - aggregate_queue.h - AggregateQueue is a class that allocates memory for a set of aggregates for the enabled
+ *    sensors, as well as stores and retrieves aggregates from the memory
+ *  - daba_lite.h - DABALite is a child of AggregateQueue. It implements the De-Amortized Banker's Aggregator (DABA)
+ *    Lite algorithm for sliding window queues
+ *  - running_queue.h - RunningQueue is a child of AggregateQueue. It stores aggregates and combines them when they have
+ *    the same number of measurements. Numerically stable for long-term aggregation of measurements in a continuous
+ *    queue, but not as effecient computationally or memory-wise
+ *  - running_singular.h - RunningSingular is a child of AggregateQueue. It stores a single running aggregate. Memory
+ *    and computationally effecient for continuous aggregates, but is not numerically stable for long-term aggregation
+ *    of measurements.
  *
- * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
+ * Implemented by Kevin Ahrendt for the ESPHome project, June and July of 2023
  */
 
 #pragma once
@@ -90,10 +105,10 @@ class StatisticsComponent : public Component {
 
   void reset();
 
-  // source sensor of measurement data
+  // source sensor of measurements
   void set_source_sensor(sensor::Sensor *source_sensor) { this->source_sensor_ = source_sensor; }
 
-  // sensors for aggregate statistics from sliding window
+  // sensors for aggregate statistics
   void set_count_sensor(sensor::Sensor *count_sensor) { this->count_sensor_ = count_sensor; }
   void set_covariance_sensor(sensor::Sensor *covariance_senesor) { this->covariance_sensor_ = covariance_senesor; }
   void set_duration_sensor(sensor::Sensor *duration_sensor) { this->duration_sensor_ = duration_sensor; }
@@ -136,7 +151,7 @@ class StatisticsComponent : public Component {
 
   AggregateQueue *queue_{nullptr};
 
-  Aggregate current_chunk_aggregate_{};
+  Aggregate running_chunk_aggregate_{};
 
   // mimic ESPHome's current filters behavior
   size_t window_size_{};
@@ -146,8 +161,8 @@ class StatisticsComponent : public Component {
   size_t chunk_size_{1};            // amount of measurements stored in a chunk before being inserted into the queue
   uint32_t chunk_duration_size_{};  // duration of measurements stored in a chunk before being inserted into teh queue
 
-  size_t chunk_entries_{0};     // amount of measurements currently stored in the running aggregate chunk
-  uint32_t chunk_duration_{0};  // duration of measurements currently stored in the running aggregate chunk
+  size_t running_chunk_count_{0};      // amount of measurements currently stored in the running aggregate chunk
+  uint32_t running_chunk_duration{0};  // duration of measurements currently stored in the running aggregate chunk
 
   AverageType average_type_{};  // either simple or time-weighted
   GroupType group_type_{};      // measurements come from either a population or sample
@@ -158,10 +173,12 @@ class StatisticsComponent : public Component {
   float previous_value_{NAN};
   uint32_t previous_timestamp_{0};
 
-  // given a new sensor measurements, add it to window, evict if window is full, and update sensors
+  // given a new sensor measurements, add it to queue, evict/clear if queue is full, and update sensors
   void handle_new_value_(double value);
 
-  void insert_chunk_and_reset_(Aggregate value);
+  inline bool is_time_weighted_();
+
+  inline bool is_running_chunk_ready_();
 };
 
 // Based on the integration component reset action
