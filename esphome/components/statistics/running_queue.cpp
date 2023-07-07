@@ -5,20 +5,20 @@
 namespace esphome {
 namespace statistics {
 
-// Sets the capacity of underlying queue; uses at most log_2(n)+1 aggregates
+// Sets the capacity of underlying queue; needs at most log_2(n)+1 aggregates to store n aggregates
 //  - returns whether memory was successfully allocated
-bool RunningQueue::set_capacity(size_t capacity, EnabledAggregatesConfiguration config) {
-  // capacity is the max number of aggregate chunks that can be stored
-  // config ensures only memory is allocated for the necessary statistics
+bool RunningQueue::set_capacity(size_t chunk_capacity, EnabledAggregatesConfiguration enabled_config) {
+  // capacity is the max number of aggregate chunks that can be aggregated into the queue
+  // enabled_config ensures only memory is allocated for the necessary statistics
 
-  uint8_t aggregate_capacity = 32;  // A capacity of 0 is limited to 2^32 aggregate chunks
-  if (capacity > 0)
-    aggregate_capacity = std::ceil(std::log2(capacity)) + 1;
+  uint8_t queue_capacity = QUEUE_CAPACITY_IF_NONE_SPECIFIED;
+  if (chunk_capacity > 0)
+    queue_capacity = std::ceil(std::log2(chunk_capacity)) + 1;
 
-  if (!this->allocate_memory(aggregate_capacity, config))
+  if (!this->allocate_memory(queue_capacity, enabled_config))
     return false;
 
-  this->max_index_ = aggregate_capacity;  // largest index before running out of allocated memory
+  this->max_index_ = queue_capacity;  // largest index before running out of allocated memory
 
   this->clear();
 
@@ -47,14 +47,20 @@ void RunningQueue::insert(Aggregate new_aggregate) {
     most_recent = this->get_end_();
   }
 
-  // Ensure that we do not insert an aggregate in non-allocated memory
-  if (this->index_ < this->max_index_) {
-    // Store the new aggregate (which may have been combined with previous ones)
-    this->emplace(new_aggregate, this->index_);
-
-    ++this->index_;  // increase index for next insertion
-    ++this->size_;   // increase the count of number of stored aggregate chunks
+  // If the queue is full, consolidate everything in the queue into one aggregate, even if the counts do not dictate to
+  // do so. If repeatedly done, then numerical stability can be lost. Set the capacity larger to avoid this overflow
+  // handling.
+  if (this->index_ == this->max_index_) {
+    Aggregate total = this->compute_current_aggregate();
+    this->emplace(total, 0);
+    this->index_ = 1;
   }
+
+  // Store the new aggregate (which may have been combined with previous ones)
+  this->emplace(new_aggregate, this->index_);
+
+  ++this->index_;  // increase index for next insertion
+  ++this->size_;   // increase the count of number of stored aggregate chunks
 }
 
 // Computes the summary statistics for all measurements stored in the queue
