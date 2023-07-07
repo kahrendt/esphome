@@ -1,6 +1,5 @@
 /*
-
- * Implemented by Kevin Ahrendt for the ESPHome project, June 2023
+ * Implemented by Kevin Ahrendt for the ESPHome project, June and July 2023
  */
 
 #pragma once
@@ -54,6 +53,7 @@ class AggregateQueue {
   float *mean_queue_{nullptr};
   float *min_queue_{nullptr};
 
+  // By experimentation, using doubles for these improves accuracy in a measurable way
   double *c2_queue_{nullptr};
   double *m2_queue_{nullptr};
   double *timestamp_m2_queue_{nullptr};
