@@ -27,20 +27,35 @@ namespace statistics {
 
 class ContinuousSingular : public AggregateQueue {
  public:
-  // No memory allocation is necessary in this continuous singular case, so always return true for success
-  bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config) override;
+  //////////////////////////////////////////////////////////
+  // Overridden virtual methods from AggregateQueue class //
+  //////////////////////////////////////////////////////////
 
-  // Resets the running aggregate
-  void clear() override;
-  void evict() override { this->clear(); }
-
-  // Add another measurement into the running aggregate
-  void insert(Aggregate value) override;
-
-  // Returns the summary statistics for all aggregated measurements
+  /// @brief Return the summary statistics for the running aggregate.
+  /// @return the current running aggregate
   Aggregate compute_current_aggregate() override { return this->running_aggregate_; }
 
+  /// @brief Clear all aggregates in the queue.
+  void clear() override;
+
+  /// @brief Equivalent to clearing all aggregates in the queue
+  void evict() override { this->clear(); }
+
+  /** Insert aggregate into running aggegrate.
+   *
+   * <value> is aggregated into <running_aggregate_>
+   * @param value the aggregate to be inserted
+   */
+  void insert(Aggregate value) override;
+
+  /// @brief No memory allocation is necessary in the continuous singular case
+  /// @param capacity not applicable to class
+  /// @param config not applicable to class
+  /// @return true always
+  bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config) override;
+
  protected:
+  // Stores summary statistics for all inserted aggregate chunks into this queue structure
   Aggregate running_aggregate_{};
 };
 
