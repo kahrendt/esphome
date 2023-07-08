@@ -31,7 +31,6 @@ void DABALiteQueue::clear() {
   this->e_ = CircularQueueIndex(0, this->window_size_);
 }
 
-// Remove value at start of circular queue and step DABA Lite algorithm
 void DABALiteQueue::evict() {
   ++this->f_;
   --this->size_;

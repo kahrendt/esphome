@@ -66,27 +66,51 @@ static const uint8_t QUEUE_CAPACITY_IF_NONE_SPECIFIED = 32;
 
 class ContinuousQueue : public AggregateQueue {
  public:
-  // Sets the capacity of underlying queue; uses at most log_2(n)+1 aggregates
-  //  - returns whether memory was successfully allocated
-  bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config) override;
+  //////////////////////////////////////////////////////////
+  // Overridden virtual methods from AggregateQueue class //
+  //////////////////////////////////////////////////////////
 
-  // Clears all aggregates in the queue and resets
-  void clear() override;
-  void evict() override { this->clear(); }
-
-  // Insert a value at end of the queue and consolidates if necessary
-  void insert(Aggregate value) override;
-
-  // Computes the summary statistics for all measurements stored in the queue
+  /** Compute the aggregate summarizing all entries in the queue.
+   *
+   * Compute the summary statistics of all aggregates in the queue by combining them.
+   * @return the aggregate summary of all elements in the queue
+   */
   Aggregate compute_current_aggregate() override;
 
+  /// @brief Clear all aggregates in the queue.
+  void clear() override;
+
+  /// @brief Equivalent to clearing all aggregates in the queue
+  void evict() override { this->clear(); }
+
+  /** Insert aggregate at end of queue.
+   *
+   * A new aggregate is added to the queue, and consolidates previous queue elements if necessary
+   * @param value the aggregate to be inserted
+   */
+  void insert(Aggregate value) override;
+
+  /** Set the queue's size and preallocates memory.
+   *
+   * This queue uses at most log_2(<window_size>)+1 aggregates to store <chunk_capacity> aggregate chunks.
+   * @param chunk_capacity the total amount of aggregate chunks that can be inserted into the queue
+   * @param config which summary statistics should be saved into the queue
+   * @return true if memory was sucecessfuly allocated, false otherwise
+   */
+  bool set_capacity(size_t chunk_capacity, EnabledAggregatesConfiguration enabled_config) override;
+
  protected:
+  // Largest possible index before running out of memory
   size_t max_index_;
 
   // Stores the index one past the most recently inserted aggregate chunk
   uint8_t index_{0};
 
-  // Returns the most recent aggregate chunk stored in the queue
+  //////////////////////////////////////////
+  // Internal Methods for Continous Queue //
+  //////////////////////////////////////////
+
+  /// @brief Returns the most recent aggregate chunk stored in the queue
   inline Aggregate get_end_();
 };
 
