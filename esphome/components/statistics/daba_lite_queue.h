@@ -138,7 +138,7 @@ class DABALiteQueue : public AggregateQueue {
 
   /** Set the queue's size and preallocates memory.
    *
-   * @param window_size the total amount of aggregates that can be stored in the queue
+   * @param window_size the total amount of aggregates that can be inserted into the queue
    * @param config which summary statistics should be saved into the queue
    * @return true if memory was sucecessfuly allocated, false otherwise
    */
