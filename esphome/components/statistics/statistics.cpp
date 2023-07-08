@@ -1,9 +1,21 @@
+/*
+To-do:
+  - test whether time weighted averages with no sensor updates in a chunk duration is handled properly
+  - verify accuracy of stats using mqtt and python
+  - add/improve comments in aggregate_queue.h
+  - update documentation draft in esphome-docs repository
+    - add table describing when each type of queue should be used
+  - use a consistent commenting style
+  - spell/grammar check comments and documentation
+  - write a cookbook documentation example for humidity detection using a trend sensor
+*/
+
 #include "aggregate.h"
 
 #include "aggregate_queue.h"
-#include "daba_lite.h"
-#include "running_singular.h"
-#include "running_queue.h"
+#include "daba_lite_queue.h"
+#include "continuous_singular.h"
+#include "continuous_queue.h"
 
 #include "statistics.h"
 
@@ -137,11 +149,11 @@ void StatisticsComponent::setup() {
 
   if ((this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) ||
       (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_SLIDING_WINDOW)) {
-    this->queue_ = new DABALite();
+    this->queue_ = new DABALiteQueue();
   } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS) {
-    this->queue_ = new RunningQueue();
+    this->queue_ = new ContinuousQueue();
   } else if (this->statistics_type_ == STATISTICS_TYPE_CONTINUOUS) {
-    this->queue_ = new RunningSingular();
+    this->queue_ = new ContinuousSingular();
   }
 
   if (!this->queue_->set_capacity(this->window_size_, config)) {
@@ -189,10 +201,10 @@ void StatisticsComponent::handle_new_value_(double value) {
   ////////////////////////////////////////////////
   // Evict elements or reset queue if too large //
   ////////////////////////////////////////////////
-  //  If window_size_ == 0, then we have a running type queue with no automatic reset, so we never evict/clear
+  //  If window_size_ == 0, then we have a continuous type queue with no automatic reset, so we never evict/clear
   if (this->window_size_ > 0) {
     while (this->queue_->size() >= this->window_size_) {
-      this->queue_->evict();  // evict is equivalent to clearing the queue for running_queue and running_singular
+      this->queue_->evict();  // evict is equivalent to clearing the queue for continuous_queue and continuous_singular
     }
   }
 
