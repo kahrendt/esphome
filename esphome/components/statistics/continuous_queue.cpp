@@ -2,6 +2,8 @@
 #include "aggregate_queue.h"
 #include "continuous_queue.h"
 
+#include "esphome/core/hal.h"
+
 namespace esphome {
 namespace statistics {
 
@@ -26,14 +28,14 @@ void ContinuousQueue::clear() {
   this->size_ = 0;   // reset the count of aggregate chunks stored
 }
 
-void ContinuousQueue::insert(Aggregate new_aggregate) {
+void ContinuousQueue::insert(Aggregate value) {
   Aggregate most_recent = this->get_end_();
 
-  // If the most recently stored aggregate has less than or equal to the number of aggregates in new_aggregate, we
+  // If the most recently stored aggregate has less than or equal to the number of aggregates in value, we
   // consolidate
-  while ((this->index_ > 0) && (most_recent.get_count() <= new_aggregate.get_count())) {
-    // combine new_aggregate with most_recent
-    new_aggregate = new_aggregate.combine_with(most_recent, this->time_weighted_);
+  while ((this->index_ > 0) && (most_recent.get_count() <= value.get_count())) {
+    // combine value with most_recent
+    value = value.combine_with(most_recent, this->time_weighted_);
 
     // store the next most_recent aggregate in the queue in most_recent
     --this->index_;
@@ -50,7 +52,7 @@ void ContinuousQueue::insert(Aggregate new_aggregate) {
   }
 
   // Store the new aggregate (which may have been combined with previous ones)
-  this->emplace(new_aggregate, this->index_);
+  this->emplace(value, this->index_);
 
   ++this->index_;  // increase index for next insertion
   ++this->size_;   // increase the count of number of stored aggregate chunks

@@ -57,6 +57,8 @@
 #include "aggregate.h"
 #include "aggregate_queue.h"
 
+#include "esphome/core/hal.h"
+
 namespace esphome {
 namespace statistics {
 

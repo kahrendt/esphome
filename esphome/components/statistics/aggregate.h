@@ -35,6 +35,8 @@
 
 #pragma once
 
+#include "esphome/core/hal.h"
+
 #include <cmath>   // necessary for NaN
 #include <limits>  // necessary for std::numeric_limits infinity
 
