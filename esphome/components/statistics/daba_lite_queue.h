@@ -66,7 +66,6 @@ class CircularQueueIndex {
   void set_index(size_t index) { this->index_ = index; }
   size_t get_index() const { return this->index_; }
 
-  void set_capacity(size_t capacity) { this->capacity_ = capacity; }
   size_t get_capacity() const { return this->capacity_; }
 
   /** Overloaded prefix increment operator
