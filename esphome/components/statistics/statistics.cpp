@@ -182,15 +182,22 @@ void StatisticsComponent::setup() {
   this->set_first_at(this->send_every_ - this->send_at_);
 }
 
-void StatisticsComponent::reset() { this->queue_->clear(); }
+void StatisticsComponent::reset() {
+  this->queue_->clear();                         // clear the queue
+  this->running_chunk_aggregate_ = Aggregate();  // reset the running aggregate to the identity
+}
 
-// Given a new sensor measurement, evict if window is full, add new value to window, and update sensors
-void StatisticsComponent::handle_new_value_(double value) {
+void StatisticsComponent::handle_new_value_(float value) {
+  //////////////////////////////////////////////
+  // Prepare incoming values to be aggregated //
+  //////////////////////////////////////////////
+
   uint32_t now = millis();
+  uint32_t duration_since_last_measurement = now - this->previous_timestamp_;
 
-  uint32_t duration = now - this->previous_timestamp_;
   float insert_value = value;
 
+  // If averages are time weighted, then insert the previous value as it has duration of duration_since_last_measurement
   if (this->is_time_weighted_()) {
     insert_value = this->previous_value_;
   }
@@ -201,6 +208,7 @@ void StatisticsComponent::handle_new_value_(double value) {
   ////////////////////////////////////////////////
   // Evict elements or reset queue if too large //
   ////////////////////////////////////////////////
+
   //  If window_size_ == 0, then we have a continuous type queue with no automatic reset, so we never evict/clear
   if (this->window_size_ > 0) {
     while (this->queue_->size() >= this->window_size_) {
@@ -217,14 +225,20 @@ void StatisticsComponent::handle_new_value_(double value) {
     }
   }
 
-  ////////////////////////////
-  // Add new chunk to a queue //
-  ////////////////////////////
-  this->running_chunk_aggregate_ =
-      this->running_chunk_aggregate_.combine_with(Aggregate(insert_value, duration, now), this->is_time_weighted_());
+  ////////////////////////////////////////////
+  // Aggregate new value into running chunk //
+  ////////////////////////////////////////////
+
+  this->running_chunk_aggregate_ = this->running_chunk_aggregate_.combine_with(
+      Aggregate(insert_value, duration_since_last_measurement, now), this->is_time_weighted_());
+
   ++this->running_chunk_count_;
-  this->running_chunk_duration_ += duration;
-  this->continuous_queue_duration_ += duration;
+  this->running_chunk_duration_ += duration_since_last_measurement;
+  this->continuous_queue_duration_ += duration_since_last_measurement;
+
+  //////////////////////////////
+  // Add new chunk to a queue //
+  //////////////////////////////
 
   if (this->is_running_chunk_ready_()) {
     this->queue_->insert(this->running_chunk_aggregate_);
@@ -237,73 +251,77 @@ void StatisticsComponent::handle_new_value_(double value) {
     ++this->send_at_;  // only incremented if a chunk has been inserted
   }
 
-  // Ensure we only push updates at the rate configured
-  //  - send_at_ counts the number of chunks inserted into the appropriate queue
-  //  - after send_every_ chunks, each sensor is updated
+  ////////////////////////////////////
+  // Publish and save sensor values //
+  ////////////////////////////////////
+
   if (this->send_at_ >= this->send_every_) {
-    this->send_at_ = 0;
+    // Ensures we only push updates at the rate configured
+    //  - send_at_ counts the number of chunks inserted into the appropriate queue
+    //  - after send_every_ chunks, each sensor is updated
 
-    Aggregate current_aggregate = this->queue_->compute_current_aggregate();
+    this->send_at_ = 0;  // reset send_at_
 
-    if (this->count_sensor_)
-      this->count_sensor_->publish_state(current_aggregate.get_count());
-
-    if (this->covariance_sensor_) {
-      double covariance_ms = current_aggregate.compute_covariance(this->is_time_weighted_(), this->group_type_);
-      double converted_covariance = covariance_ms / this->time_conversion_factor_;
-
-      this->covariance_sensor_->publish_state(converted_covariance);
-    }
-
-    if (this->duration_sensor_)
-      this->duration_sensor_->publish_state(current_aggregate.get_duration());
-
-    if (this->max_sensor_) {
-      float max = current_aggregate.get_max();
-      if (std::isinf(max)) {  // default aggregated max for 0 measuremnts is -infinity, switch to NaN for HA
-        this->max_sensor_->publish_state(NAN);
-      } else {
-        this->max_sensor_->publish_state(max);
-      }
-    }
-
-    if (this->mean_sensor_)
-      this->mean_sensor_->publish_state(current_aggregate.get_mean());
-
-    if (this->min_sensor_) {
-      float min = current_aggregate.get_min();
-      if (std::isinf(min)) {  // default aggregated min for 0 measurements is infinity, switch to NaN for HA
-        this->min_sensor_->publish_state(NAN);
-      } else {
-        this->min_sensor_->publish_state(min);
-      }
-    }
-
-    if (this->std_dev_sensor_)
-      this->std_dev_sensor_->publish_state(
-          current_aggregate.compute_std_dev(this->is_time_weighted_(), this->group_type_));
-
-    if (this->trend_sensor_) {
-      double trend_ms = current_aggregate.compute_trend();
-      double converted_trend = trend_ms * this->time_conversion_factor_;
-
-      this->trend_sensor_->publish_state(converted_trend);
-    }
-
-    if (this->variance_sensor_)
-      this->variance_sensor_->publish_state(
-          current_aggregate.compute_variance(this->is_time_weighted_(), this->group_type_));
-
-    if (this->restore_)
-      this->pref_.save(&current_aggregate);
+    this->publish_and_save_(this->queue_->compute_current_aggregate());
   }
 }
 
-// Returns true if the summary statistics should be weighted based on the measurement's duration
+void StatisticsComponent::publish_and_save_(Aggregate value) {
+  // Publish new states for all enabled sensors
+  if (this->count_sensor_)
+    this->count_sensor_->publish_state(value.get_count());
+
+  if (this->covariance_sensor_) {
+    double covariance_ms = value.compute_covariance(this->is_time_weighted_(), this->group_type_);
+    double converted_covariance = covariance_ms / this->time_conversion_factor_;
+
+    this->covariance_sensor_->publish_state(converted_covariance);
+  }
+
+  if (this->duration_sensor_)
+    this->duration_sensor_->publish_state(value.get_duration());
+
+  if (this->max_sensor_) {
+    float max = value.get_max();
+    if (std::isinf(max)) {  // default aggregated max for 0 measuremnts is -infinity, switch to NaN for HA
+      this->max_sensor_->publish_state(NAN);
+    } else {
+      this->max_sensor_->publish_state(max);
+    }
+  }
+
+  if (this->mean_sensor_)
+    this->mean_sensor_->publish_state(value.get_mean());
+
+  if (this->min_sensor_) {
+    float min = value.get_min();
+    if (std::isinf(min)) {  // default aggregated min for 0 measurements is infinity, switch to NaN for HA
+      this->min_sensor_->publish_state(NAN);
+    } else {
+      this->min_sensor_->publish_state(min);
+    }
+  }
+
+  if (this->std_dev_sensor_)
+    this->std_dev_sensor_->publish_state(value.compute_std_dev(this->is_time_weighted_(), this->group_type_));
+
+  if (this->trend_sensor_) {
+    double trend_ms = value.compute_trend();
+    double converted_trend = trend_ms * this->time_conversion_factor_;
+
+    this->trend_sensor_->publish_state(converted_trend);
+  }
+
+  if (this->variance_sensor_)
+    this->variance_sensor_->publish_state(value.compute_variance(this->is_time_weighted_(), this->group_type_));
+
+  // If saving to flash is enabled, do so
+  if (this->restore_)
+    this->pref_.save(&value);
+}
+
 inline bool StatisticsComponent::is_time_weighted_() { return (this->average_type_ == TIME_WEIGHTED_AVERAGE); }
 
-// Determines whether the current running aggregate chunk is full; i.e., has aggregated enough measurements or the
-// configured duration has been exceeded
 inline bool StatisticsComponent::is_running_chunk_ready_() {
   // If the chunk_size_ == 0, then our running chunk resets based on a duration
   if (this->chunk_size_ > 0) {
