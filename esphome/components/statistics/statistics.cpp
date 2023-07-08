@@ -2,10 +2,9 @@
 To-do:
   - test whether time weighted averages with no sensor updates in a chunk duration is handled properly
   - verify accuracy of stats using mqtt and python
-  - add/improve comments in aggregate_queue.h
+  - add/improve comments in aggregate_queue.h (just need a class description)
   - update documentation draft in esphome-docs repository
     - add table describing when each type of queue should be used
-  - use a consistent commenting style
   - spell/grammar check comments and documentation
   - write a cookbook documentation example for humidity detection using a trend sensor
 */
@@ -212,7 +211,7 @@ void StatisticsComponent::handle_new_value_(float value) {
   //  If window_size_ == 0, then we have a continuous type queue with no automatic reset, so we never evict/clear
   if (this->window_size_ > 0) {
     while (this->queue_->size() >= this->window_size_) {
-      this->queue_->evict();  // evict is equivalent to clearing the queue for continuous_queue and continuous_singular
+      this->queue_->evict();  // evict is equivalent to clearing the queue for ContinuousQueue and ContinuousSingular
     }
   }
 
@@ -236,9 +235,9 @@ void StatisticsComponent::handle_new_value_(float value) {
   this->running_chunk_duration_ += duration_since_last_measurement;
   this->continuous_queue_duration_ += duration_since_last_measurement;
 
-  //////////////////////////////
-  // Add new chunk to a queue //
-  //////////////////////////////
+  ////////////////////////////
+  // Add new chunk to queue //
+  ////////////////////////////
 
   if (this->is_running_chunk_ready_()) {
     this->queue_->insert(this->running_chunk_aggregate_);
@@ -267,7 +266,10 @@ void StatisticsComponent::handle_new_value_(float value) {
 }
 
 void StatisticsComponent::publish_and_save_(Aggregate value) {
-  // Publish new states for all enabled sensors
+  ////////////////////////////////////////////////
+  // Publish new states for all enabled sensors //
+  ////////////////////////////////////////////////
+
   if (this->count_sensor_)
     this->count_sensor_->publish_state(value.get_count());
 
@@ -315,7 +317,10 @@ void StatisticsComponent::publish_and_save_(Aggregate value) {
   if (this->variance_sensor_)
     this->variance_sensor_->publish_state(value.compute_variance(this->is_time_weighted_(), this->group_type_));
 
-  // If saving to flash is enabled, do so
+  //////////////////////////////
+  // Save to flash if enabled //
+  //////////////////////////////
+
   if (this->restore_)
     this->pref_.save(&value);
 }
