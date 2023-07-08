@@ -1,5 +1,7 @@
 #include "aggregate.h"
 
+#include "esphome/core/hal.h"
+
 #include <algorithm>  // necessary for std::min and std::max functions
 #include <cmath>      // necessary for NaN
 
