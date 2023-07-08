@@ -47,14 +47,14 @@
  *    into one
  *  - aggregate_queue.h - AggregateQueue is a class that allocates memory for a set of aggregates for the enabled
  *    sensors, as well as stores and retrieves aggregates from the memory
- *  - daba_lite.h - DABALite is a child of AggregateQueue. It implements the De-Amortized Banker's Aggregator (DABA)
- *    Lite algorithm for sliding window queues
- *  - running_queue.h - RunningQueue is a child of AggregateQueue. It stores aggregates and combines them when they have
- *    the same number of measurements. Numerically stable for long-term aggregation of measurements in a continuous
- *    queue, but not as effecient computationally or memory-wise
- *  - running_singular.h - RunningSingular is a child of AggregateQueue. It stores a single running aggregate. Memory
- *    and computationally effecient for continuous aggregates, but is not numerically stable for long-term aggregation
- *    of measurements.
+ *  - daba_lite_queue.h - DABALiteQueue is a child of AggregateQueue. It implements the De-Amortized Banker's Aggregator
+ *    (DABA) Lite algorithm for sliding window queues
+ *  - continuous_queue.h - ContinuousQueue is a child of AggregateQueue. It stores aggregates and combines them when
+ *    they have the same number of measurements. Numerically stable for long-term aggregation of measurements in a
+ *    continuous queue, but not as effecient computationally or memory-wise
+ *  - continous_singular.h - ContinuousSingular is a child of AggregateQueue. It stores a single running aggregate.
+ *    Memory and computationally effecient for continuous aggregates, but is not numerically stable for long-term
+ *    aggregation of measurements.
  *
  * Implemented by Kevin Ahrendt for the ESPHome project, June and July of 2023
  */
@@ -62,11 +62,7 @@
 #pragma once
 
 #include "aggregate.h"
-
 #include "aggregate_queue.h"
-#include "daba_lite.h"
-#include "running_singular.h"
-#include "running_queue.h"
 
 #include "esphome/core/automation.h"
 #include "esphome/core/component.h"

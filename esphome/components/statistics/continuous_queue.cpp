@@ -1,13 +1,13 @@
 #include "aggregate.h"
 #include "aggregate_queue.h"
-#include "running_queue.h"
+#include "continuous_queue.h"
 
 namespace esphome {
 namespace statistics {
 
 // Sets the capacity of underlying queue; needs at most log_2(n)+1 aggregates to store n aggregates
 //  - returns whether memory was successfully allocated
-bool RunningQueue::set_capacity(size_t chunk_capacity, EnabledAggregatesConfiguration enabled_config) {
+bool ContinuousQueue::set_capacity(size_t chunk_capacity, EnabledAggregatesConfiguration enabled_config) {
   // chunk_capacity is the max number of aggregate chunks that can be inserted into the queue before overflows are
   // handled
   // enabled_config ensures only memory is allocated for the necessary statistics
@@ -27,13 +27,13 @@ bool RunningQueue::set_capacity(size_t chunk_capacity, EnabledAggregatesConfigur
 }
 
 // Clears all aggregates in the queue
-void RunningQueue::clear() {
+void ContinuousQueue::clear() {
   this->index_ = 0;  // resets the index
   this->size_ = 0;   // reset the count of aggregate chunks stored
 }
 
 // Insert a value at end of the queue and consolidates if necessary
-void RunningQueue::insert(Aggregate new_aggregate) {
+void ContinuousQueue::insert(Aggregate new_aggregate) {
   Aggregate most_recent = this->get_end_();
 
   // If the most recently stored aggregate has less than or equal to the number of aggregates in new_aggregate, we
@@ -65,7 +65,7 @@ void RunningQueue::insert(Aggregate new_aggregate) {
 }
 
 // Computes the summary statistics for all measurements stored in the queue
-Aggregate RunningQueue::compute_current_aggregate() {
+Aggregate ContinuousQueue::compute_current_aggregate() {
   Aggregate total = Aggregate();
 
   // starts with the most recent aggregates so that the combine steps have as close to equal weights as possible
@@ -78,7 +78,9 @@ Aggregate RunningQueue::compute_current_aggregate() {
 }
 
 // Returns the most recent aggregate chunk stored in the queue
-inline Aggregate RunningQueue::get_end_() { return (this->index_ == 0) ? Aggregate() : this->lower(this->index_ - 1); }
+inline Aggregate ContinuousQueue::get_end_() {
+  return (this->index_ == 0) ? Aggregate() : this->lower(this->index_ - 1);
+}
 
 }  // namespace statistics
 }  // namespace esphome
