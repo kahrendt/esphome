@@ -102,8 +102,11 @@ class StatisticsComponent : public Component {
 
   void dump_config() override;
 
+  /// @brief Determine which statistics need to be stored, sets up the appropriate queue, and configures various
+  /// options.
   void setup() override;
 
+  /// @brief Reset the queue by clearing it.
   void reset();
 
   // source sensor of measurements
@@ -184,11 +187,20 @@ class StatisticsComponent : public Component {
   bool restore_{false};
   ESPPreferenceObject pref_;
 
-  // given a new sensor measurements, add it to queue, evict/clear if queue is full, and update sensors
-  void handle_new_value_(double value);
+  /// @brief Insert new sensor measurement and update sensors.
+  void handle_new_value_(float value);
 
+  /** Publish sensor values and save to flash (if configured).
+   *
+   * Saves value to flash only if <restore_> is true.
+   * @param value aggregate value to published and saved
+   */
+  void publish_and_save_(Aggregate value);
+
+  /// @brief Return if averages should be weighted by measurement duration.
   inline bool is_time_weighted_();
 
+  /// @brief Return if the running aggregate chunk is ready to be inserted into the queue.
   inline bool is_running_chunk_ready_();
 };
 
