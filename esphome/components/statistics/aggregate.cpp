@@ -47,6 +47,8 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
       this->normalize_timestamp_means_(a_timestamp_mean, this->get_timestamp_reference(), this->get_count(),
                                        b_timestamp_mean, b.get_timestamp_reference(), b.get_count());
 
+  // If the averages should be time weighted, then use measurement durations.
+  // Otherwise, use the measurement counts as the weights.
   if (time_weighted) {
     a_weight = static_cast<double>(this->get_duration());
     b_weight = static_cast<double>(b.get_duration());
@@ -63,10 +65,7 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   double timestamp_delta = b_timestamp_mean - a_timestamp_mean;
   double timestamp_delta_prime = timestamp_delta * b_weight / combined_weight;
 
-  /*
-   * Variation of Welford's algorithm for computing the combined mean
-   */
-
+  // Variation of Welford's algorithm for computing the mean online
   combined.mean_ = this->get_mean() + delta_prime;
   combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta_prime;
 
@@ -78,32 +77,17 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   // combined.timestamp_mean_ =
   //     a_timestamp_mean * (a_weight / combined_weight) + b_timestamp_mean * (b_weight / combined_weight);
 
-  // /*
-  //  * Basic Welford's version of mean.. may be unstable if a_weight = b_weight (see
-  //  * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm)
-  //  */
-  // double delta2 = b.get_mean2() - this->get_mean2();
-  // double delta2_prime = delta2 * b_weight / combined_weight;
-  // combined.mean2 = this->get_mean2() + delta2_prime;
-
-  // combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta_prime;
-
-  // compute M2 quantity for Welford's algorithm which can determine the variance
+  // Compute M2 quantity for Welford's algorithm which can determine the variance
   combined.m2_ = this->get_m2() + b.get_m2() + a_weight * delta * delta_prime;
-
   combined.timestamp_m2_ =
       this->get_timestamp_m2() + b.get_timestamp_m2() + a_weight * timestamp_delta * timestamp_delta_prime;
 
+  // Compute C2 quantity for a variation of Welford's algorithm which can determine the covariance
   combined.c2_ = this->get_c2() + b.get_c2() + a_weight * delta * timestamp_delta_prime;
 
   return combined;
 }
 
-/*
- * Compute summary statistics from the stored aggregates
- */
-
-// Covariance using an extension of Welford's algorithm
 double Aggregate::compute_covariance(bool time_weighted, GroupType type) const {
   if (this->count_ > 1)
     return this->c2_ / this->denominator_(time_weighted, type);
@@ -111,19 +95,16 @@ double Aggregate::compute_covariance(bool time_weighted, GroupType type) const {
   return NAN;
 }
 
-// Standard deviation using Welford's algorithm
 double Aggregate::compute_std_dev(bool time_weighted, GroupType type) const {
   return std::sqrt(this->compute_variance(time_weighted, type));
 }
 
-// Slope of the line of best fit over sliding window
 double Aggregate::compute_trend() const {
   if (this->count_ > 1)
     return this->c2_ / this->timestamp_m2_;
   return NAN;
 }
 
-// Variance using Welford's algorithm
 double Aggregate::compute_variance(bool time_weighted, GroupType type) const {
   if (this->count_ > 1)
     return this->m2_ / this->denominator_(time_weighted, type);
@@ -131,13 +112,10 @@ double Aggregate::compute_variance(bool time_weighted, GroupType type) const {
   return NAN;
 }
 
-/*
- * Helper functions
- */
+//////////////////////
+// Internal Methods //
+//////////////////////
 
-// Returns the appproriate denominator for the variance and covariance calculatioins
-//  - applies Bessel's correction if GroupType is sample and average type is not time weighted
-//  - uses reliability weights if GroupType is sample and average type is time weighted
 double Aggregate::denominator_(bool time_weighted, GroupType type) const {
   // Bessel's correction for non-time weighted samples (https://en.wikipedia.org/wiki/Bessel%27s_correction)
   double denominator = this->count_ - 1;
