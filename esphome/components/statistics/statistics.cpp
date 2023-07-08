@@ -31,7 +31,7 @@ void StatisticsComponent::dump_config() {
     if (this->chunk_size_) {
       ESP_LOGCONFIG(TAG, "  Measurements per Chunk: %u", this->chunk_size_);
     } else {
-      ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_size_);
+      ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_);
     }
   } else if (this->statistics_type_ == STATISTICS_TYPE_CONTINUOUS) {
     ESP_LOGCONFIG(TAG, "  Statistics Type: continuous");
@@ -39,7 +39,7 @@ void StatisticsComponent::dump_config() {
     if (this->chunk_size_) {
       ESP_LOGCONFIG(TAG, "  Measurements per Chunk: %u", this->chunk_size_);
     } else {
-      ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_size_);
+      ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_);
     }
   } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS) {
     ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_continuous");
@@ -145,7 +145,7 @@ void StatisticsComponent::setup() {
   }
 
   if (!this->queue_->set_capacity(this->window_size_, config)) {
-    ESP_LOGE(TAG, "Failed to allocate memory for statistics.");
+    ESP_LOGE(TAG, "Failed to allocate memory for statistical aggregates.");
     this->mark_failed();
   }
 
@@ -192,7 +192,16 @@ void StatisticsComponent::handle_new_value_(double value) {
   //  If window_size_ == 0, then we have a running type queue with no automatic reset, so we never evict/clear
   if (this->window_size_ > 0) {
     while (this->queue_->size() >= this->window_size_) {
-      this->queue_->evict();
+      this->queue_->evict();  // evict is equivalent to clearing the queue for running_queue and running_singular
+    }
+  }
+
+  // If the continuous_queue_reset_duration_ == 0, then we are not a continuous queue or we are not resetting by
+  // duration
+  if (this->continuous_queue_reset_duration_ > 0) {
+    if (this->continuous_queue_duration_ >= this->continuous_queue_reset_duration_) {
+      this->queue_->clear();
+      this->continuous_queue_duration_ = 0;
     }
   }
 
@@ -202,7 +211,8 @@ void StatisticsComponent::handle_new_value_(double value) {
   this->running_chunk_aggregate_ =
       this->running_chunk_aggregate_.combine_with(Aggregate(insert_value, duration, now), this->is_time_weighted_());
   ++this->running_chunk_count_;
-  this->running_chunk_duration += duration;
+  this->running_chunk_duration_ += duration;
+  this->continuous_queue_duration_ += duration;
 
   if (this->is_running_chunk_ready_()) {
     this->queue_->insert(this->running_chunk_aggregate_);
@@ -210,7 +220,7 @@ void StatisticsComponent::handle_new_value_(double value) {
     // Reset counters and chunk to a null measurement
     this->running_chunk_aggregate_ = Aggregate();
     this->running_chunk_count_ = 0;
-    this->running_chunk_duration = 0;
+    this->running_chunk_duration_ = 0;
 
     ++this->send_at_;  // only incremented if a chunk has been inserted
   }
@@ -289,7 +299,7 @@ inline bool StatisticsComponent::is_running_chunk_ready_() {
       return true;
     }
   } else {
-    if (this->running_chunk_duration >= this->chunk_duration_size_) {
+    if (this->running_chunk_duration_ >= this->chunk_duration_) {
       if (this->running_chunk_count_ > 0)  // ensure we have aggregated at least one measurement in this timespan
         return true;
     }
