@@ -25,9 +25,9 @@
 namespace esphome {
 namespace statistics {
 
-class RunningSingular : public AggregateQueue {
+class ContinuousSingular : public AggregateQueue {
  public:
-  // No memory allocation is necessary in this singular running case, so always return true for success
+  // No memory allocation is necessary in this continuous singular case, so always return true for success
   bool set_capacity(size_t capacity, EnabledAggregatesConfiguration config) override;
 
   // Resets the running aggregate

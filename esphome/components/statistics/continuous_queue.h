@@ -64,7 +64,7 @@ namespace statistics {
 // The queue can insert 2^(QUEUE_CAPACITY_IF_NONE_SPECIFIED) aggregates before the overflow handling occurs.
 static const uint8_t QUEUE_CAPACITY_IF_NONE_SPECIFIED = 32;
 
-class RunningQueue : public AggregateQueue {
+class ContinuousQueue : public AggregateQueue {
  public:
   // Sets the capacity of underlying queue; uses at most log_2(n)+1 aggregates
   //  - returns whether memory was successfully allocated

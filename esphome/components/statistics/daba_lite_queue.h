@@ -82,7 +82,7 @@ class CircularQueueIndex {
   size_t capacity_;  // capacity of the circular queue
 };
 
-class DABALite : public AggregateQueue {
+class DABALiteQueue : public AggregateQueue {
  public:
   // Sets the window size by adjusting the capacity of the underlying circular queues
   //  - returns whether memory was successfully allocated
