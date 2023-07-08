@@ -1344,6 +1344,18 @@ sensor:
     name: "Distance"
     update_interval: 60s
     i2c_id: i2c_bus
+  - platform: statistics
+    source_id: dht_temperature
+    time_unit: h
+    type: chunked_sliding_window
+    duration_of_chunk: 1min
+    chunks_in_window: 15
+    send_every: 1
+    send_first_at: 1
+    mean:
+      name: "DHT Temperature Mean"
+    trend:
+      name: "DHT Temperature Trend"
 
 esp32_touch:
   setup_mode: false
