@@ -50,10 +50,17 @@ namespace statistics {
  */
 class CircularQueueIndex {
  public:
-  // Default constructor
+  /** Construct a default CircularQueueIndex.
+   *
+   * <index_> and <capacity_> are both 0
+   */
   CircularQueueIndex();
 
-  // General constructor
+  /** Construct a CircularQueueIndex.
+   *
+   * @param index Initial index number
+   * @param capacity Size of the queue
+   */
   CircularQueueIndex(size_t index, size_t capacity);
 
   void set_index(size_t index) { this->index_ = index; }
@@ -62,20 +69,35 @@ class CircularQueueIndex {
   void set_capacity(size_t capacity) { this->capacity_ = capacity; }
   size_t get_capacity() const { return this->capacity_; }
 
-  // Overloaded prefix increment operator
+  /** Overloaded prefix increment operator
+   *
+   * Increases the index to point at the next item in the queue.
+   */
   CircularQueueIndex &operator++();
 
-  // Overloaded prefix decrement operator
+  /** Overloaded prefix decrement operator
+   *
+   * Decreases the index to point at the previous item in the queue.
+   */
   CircularQueueIndex &operator--();
 
-  // Overloaded equality operator
-  CircularQueueIndex &operator=(const CircularQueueIndex &i);
+  /** Overloaded equality operator
+   *
+   * Sets index_ and capacity_ equal to <rhs>'s values.
+   */
+  CircularQueueIndex &operator=(const CircularQueueIndex &rhs);
 
-  // Overloaded equality comparison operator
-  bool operator==(const CircularQueueIndex &i) const;
+  /** Overloaded equality comparison operator
+   *
+   * @return true if index_ and capacity_ are equivalent to <rhs>'s values, false otherwise
+   */
+  bool operator==(const CircularQueueIndex &rhs) const;
 
-  // Overloaded inequality comparison operator
-  bool operator!=(const CircularQueueIndex &i) const;
+  /** Overloaded inequality comparison operator
+   *
+   * @return true if index_ and capacity_ are not equivalent to <rhs>'s values, false otherwise
+   */
+  bool operator!=(const CircularQueueIndex &rhs) const;
 
  private:
   size_t index_;     // index of value in circular queue
@@ -84,20 +106,43 @@ class CircularQueueIndex {
 
 class DABALiteQueue : public AggregateQueue {
  public:
-  // Sets the window size by adjusting the capacity of the underlying circular queues
-  //  - returns whether memory was successfully allocated
-  bool set_capacity(size_t window_size, EnabledAggregatesConfiguration config) override;
+  //////////////////////////////////////////////////////////
+  // Overridden virtual methods from AggregateQueue class //
+  //////////////////////////////////////////////////////////
 
-  // Clears all readings from the sliding window
+  /** Compute the aggregate summarizing all entries in the queue.
+   *
+   * Follows DABA Lite algorithm to compute the summary statistics of all aggregates in the queue.
+   * @return the aggregate summary of all elements in the queue
+   */
+  Aggregate compute_current_aggregate() override;
+
+  /** Clear all aggregates in the queue.
+   *
+   * All inserted aggregates are removed and the queue only stores the null measurement.
+   */
   void clear() override;
 
-  // Insert a value at end of circular queue and step the DABA Lite algorithm
-  void insert(Aggregate value) override;
-
-  // Remove a value at start of circular queue and step the DABA Lite algorithm
+  /** Remove the oldest value in the queue.
+   *
+   * The oldest aggregate is removed from the queue, and the DABA Lite algorithm steps to update running aggregates.
+   */
   void evict() override;
 
-  Aggregate compute_current_aggregate() override;
+  /** Insert aggregate at end of queue.
+   *
+   * A new aggregate is added to the queue, and the DABA Lite algorithm steps to update running aggregates.
+   * @param value the aggregate to be inserted
+   */
+  void insert(Aggregate value) override;
+
+  /** Set the queue's size and preallocates memory.
+   *
+   * @param window_size the total amount of aggregates that can be stored in the queue
+   * @param config which summary statistics should be saved into the queue
+   * @return true if memory was sucecessfuly allocated, false otherwise
+   */
+  bool set_capacity(size_t window_size, EnabledAggregatesConfiguration config) override;
 
  protected:
   // Maximum window capacity
@@ -116,6 +161,10 @@ class DABALiteQueue : public AggregateQueue {
 
   // Running aggregates for DABA Lite algorithm
   Aggregate mid_sum_, back_sum_;
+
+  //////////////////////////////////////////////
+  // Internal Methods for DABA Lite algorithm //
+  //////////////////////////////////////////////
 
   // DABA Lite algorithm method
   void step_();

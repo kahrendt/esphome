@@ -5,47 +5,9 @@
 namespace esphome {
 namespace statistics {
 
-// Set capacity (and reserve in memory) of the circular queues for the desired statistics
-//  - returns whether memory was successfully allocated
-bool DABALiteQueue::set_capacity(size_t window_size, EnabledAggregatesConfiguration config) {
-  this->window_size_ = window_size;
-
-  if (!this->allocate_memory(this->window_size_, config))
-    return false;
-
-  this->clear();
-
-  return true;
-}
-
-void DABALiteQueue::clear() {
-  this->size_ = 0;  // set size of valid readings to 0
-
-  // Reset Indices in the circular queue to the start
-  this->f_ = CircularQueueIndex(0, this->window_size_);
-  this->l_ = CircularQueueIndex(0, this->window_size_);
-  this->r_ = CircularQueueIndex(0, this->window_size_);
-  this->a_ = CircularQueueIndex(0, this->window_size_);
-  this->b_ = CircularQueueIndex(0, this->window_size_);
-  this->e_ = CircularQueueIndex(0, this->window_size_);
-}
-
-void DABALiteQueue::insert(Aggregate value) {
-  this->back_sum_ = this->back_sum_.combine_with(value, this->time_weighted_);  //= this->back_sum_ + value;
-  this->emplace(value, this->e_.get_index());
-
-  ++this->e_;
-  ++this->size_;
-  this->step_();
-}
-
-// Remove value at start of circular queue and step DABA Lite algorithm
-void DABALiteQueue::evict() {
-  ++this->f_;
-  --this->size_;
-
-  this->step_();
-}
+//////////////////////////////////////////////////////////
+// Overridden virtual methods from AggregateQueue class //
+//////////////////////////////////////////////////////////
 
 Aggregate DABALiteQueue::compute_current_aggregate() {
   if (this->size() > 0) {
@@ -57,9 +19,51 @@ Aggregate DABALiteQueue::compute_current_aggregate() {
   return this->identity_class_;
 }
 
-// DABA Lite algorithm method
+void DABALiteQueue::clear() {
+  this->size_ = 0;  // set size of inserted aggregates to 0
+
+  // Reset Indices in the circular queue to the start
+  this->f_ = CircularQueueIndex(0, this->window_size_);
+  this->l_ = CircularQueueIndex(0, this->window_size_);
+  this->r_ = CircularQueueIndex(0, this->window_size_);
+  this->a_ = CircularQueueIndex(0, this->window_size_);
+  this->b_ = CircularQueueIndex(0, this->window_size_);
+  this->e_ = CircularQueueIndex(0, this->window_size_);
+}
+
+// Remove value at start of circular queue and step DABA Lite algorithm
+void DABALiteQueue::evict() {
+  ++this->f_;
+  --this->size_;
+
+  this->step_();
+}
+
+void DABALiteQueue::insert(Aggregate value) {
+  this->back_sum_ = this->back_sum_.combine_with(value, this->time_weighted_);
+  this->emplace(value, this->e_.get_index());
+
+  ++this->e_;
+  ++this->size_;
+  this->step_();
+}
+
+bool DABALiteQueue::set_capacity(size_t window_size, EnabledAggregatesConfiguration config) {
+  this->window_size_ = window_size;
+
+  if (!this->allocate_memory(this->window_size_, config))
+    return false;
+
+  this->clear();
+
+  return true;
+}
+
+//////////////////////////////////////////////
+// Internal Methods for DABA Lite algorithm //
+//////////////////////////////////////////////
+
 void DABALiteQueue::step_() {
-  // this->debug_pointers_();
   if (this->l_ == this->b_) {
     this->flip_();
   }
@@ -71,14 +75,12 @@ void DABALiteQueue::step_() {
       --this->a_;
       Aggregate old_a = this->lower(this->a_.get_index());
 
-      // this->emplace(old_a + prev_delta, this->a_.get_index());
       this->emplace(old_a.combine_with(prev_delta, this->time_weighted_), this->a_.get_index());
     }
 
     if (this->l_ != this->r_) {
       Aggregate old_l = this->lower(this->l_.get_index());
 
-      // this->emplace(old_l + this->mid_sum_, this->l_.get_index());
       this->emplace(old_l.combine_with(this->mid_sum_, this->time_weighted_), this->l_.get_index());
       ++this->l_;
     } else {
@@ -92,7 +94,6 @@ void DABALiteQueue::step_() {
   }
 }
 
-// DABA Lite algorithm method
 void DABALiteQueue::flip_() {
   this->l_ = this->f_;
   this->r_ = this->b_;
@@ -119,23 +120,20 @@ inline Aggregate DABALiteQueue::get_delta_() {
   return this->is_delta_empty_() ? this->identity_class_ : this->lower(this->a_.get_index());
 }
 
-/*
- * Circular Queue Index Methods
- */
+//////////////////////////////////
+// Circular Queue Index Methods //
+//////////////////////////////////
 
-// Default constructor
 CircularQueueIndex::CircularQueueIndex() {
   this->index_ = 0;
   this->capacity_ = 0;
 }
 
-// General constructor
 CircularQueueIndex::CircularQueueIndex(size_t index, size_t capacity) {
   this->index_ = index;
   this->capacity_ = capacity;
 }
 
-// Overloaded prefix increment operator
 CircularQueueIndex &CircularQueueIndex::operator++() {
   if (this->index_ == (this->capacity_ - 1)) {
     this->index_ = 0;
@@ -146,7 +144,6 @@ CircularQueueIndex &CircularQueueIndex::operator++() {
   return *this;
 }
 
-// Overloaded prefix decrement operator
 CircularQueueIndex &CircularQueueIndex::operator--() {
   if (this->index_ == 0) {
     this->index_ = this->capacity_ - 1;
@@ -157,24 +154,21 @@ CircularQueueIndex &CircularQueueIndex::operator--() {
   return *this;
 }
 
-// Overloaded equality operator
-CircularQueueIndex &CircularQueueIndex::operator=(const CircularQueueIndex &i) {
-  if (this == &i)
+CircularQueueIndex &CircularQueueIndex::operator=(const CircularQueueIndex &rhs) {
+  if (this == &rhs)
     return *this;
-  this->index_ = i.index_;
-  this->capacity_ = i.capacity_;
+  this->index_ = rhs.index_;
+  this->capacity_ = rhs.capacity_;
 
   return *this;
 }
 
-// Overloaded equality comparison operator
-bool CircularQueueIndex::operator==(const CircularQueueIndex &i) const {
-  return (this->index_ == i.get_index()) && this->capacity_ == i.get_capacity();
+bool CircularQueueIndex::operator==(const CircularQueueIndex &rhs) const {
+  return (this->index_ == rhs.get_index()) && this->capacity_ == rhs.get_capacity();
 }
 
-// Overloaded inequality comparison operator
-bool CircularQueueIndex::operator!=(const CircularQueueIndex &i) const {
-  return (this->index_ != i.get_index()) || this->capacity_ != i.get_capacity();
+bool CircularQueueIndex::operator!=(const CircularQueueIndex &rhs) const {
+  return (this->index_ != rhs.get_index()) || this->capacity_ != rhs.get_capacity();
 }
 
 }  // namespace statistics
