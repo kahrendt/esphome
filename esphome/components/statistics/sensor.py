@@ -42,10 +42,11 @@ CONF_VARIANCE = "variance"
 CONF_CHUNK_SIZE = "measurements_per_chunk"
 CONF_CHUNK_DURATION = "duration_of_chunk"
 CONF_CHUNKS_IN_WINDOW = "chunks_in_window"
-CONF_CHUNKS_BEFORE_RESET = "chunks_before_reset"
 
-CONF_MEASUREMENTS_BEFORE_RESET = "measurements_before_reset"
+CONF_CHUNKS_BEFORE_RESET = "chunks_before_reset"
 CONF_DURATION_BEFORE_RESET = "duration_before_reset"
+CONF_MEASUREMENTS_BEFORE_RESET = "measurements_before_reset"
+
 
 # Type of measurement group; i.e., are the observations for a population or sample
 CONF_GROUP_TYPE = "group_type"
@@ -180,7 +181,7 @@ CONFIG_SCHEMA = cv.All(
         {
             CONF_SLIDING_WINDOW: BASE_SCHEMA.extend(
                 {
-                    cv.Optional(CONF_WINDOW_SIZE, default=15): cv.positive_not_null_int,
+                    cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
                     cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
                     cv.Optional(
                         CONF_SEND_FIRST_AT, default=1
@@ -190,11 +191,9 @@ CONFIG_SCHEMA = cv.All(
             CONF_CHUNKED_SLIDING_WINDOW: cv.All(
                 BASE_SCHEMA.extend(
                     {
+                        cv.Required(CONF_CHUNKS_IN_WINDOW): cv.positive_not_null_int,
                         cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
                         cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
-                        cv.Optional(
-                            CONF_CHUNKS_IN_WINDOW, default=50
-                        ): cv.positive_not_null_int,
                         cv.Optional(
                             CONF_SEND_EVERY, default=15
                         ): cv.positive_not_null_int,
@@ -220,9 +219,9 @@ CONFIG_SCHEMA = cv.All(
             CONF_CHUNKED_CONTINUOUS: cv.All(
                 BASE_SCHEMA.extend(
                     {
-                        cv.Optional(CONF_DURATION_BEFORE_RESET): cv.time_period,
                         cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
                         cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
+                        cv.Optional(CONF_DURATION_BEFORE_RESET): cv.time_period,
                         cv.Optional(
                             CONF_CHUNKS_BEFORE_RESET, default=0
                         ): cv.positive_int,
