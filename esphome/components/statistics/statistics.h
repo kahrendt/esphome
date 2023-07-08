@@ -130,7 +130,9 @@ class StatisticsComponent : public Component {
   void set_first_at(size_t send_first_at) { this->send_at_ = send_first_at; }
 
   void set_chunk_size(size_t size) { this->chunk_size_ = size; }
-  void set_chunk_duration_size(uint32_t time_delta) { this->chunk_duration_size_ = time_delta; }
+  void set_chunk_duration(uint32_t time_delta) { this->chunk_duration_ = time_delta; }
+
+  void set_continuous_reset_duration(size_t duration) { this->continuous_queue_reset_duration_ = duration; }
 
   void set_average_type(AverageType type) { this->average_type_ = type; }
   void set_group_type(GroupType type) { this->group_type_ = type; }
@@ -165,11 +167,14 @@ class StatisticsComponent : public Component {
   size_t send_every_{};
   size_t send_at_{};
 
-  size_t chunk_size_{1};            // amount of measurements stored in a chunk before being inserted into the queue
-  uint32_t chunk_duration_size_{};  // duration of measurements stored in a chunk before being inserted into teh queue
+  size_t chunk_size_{1};       // amount of measurements stored in a chunk before being inserted into the queue
+  uint32_t chunk_duration_{};  // duration of measurements stored in a chunk before being inserted into the queue
 
-  size_t running_chunk_count_{0};      // amount of measurements currently stored in the running aggregate chunk
-  uint32_t running_chunk_duration{0};  // duration of measurements currently stored in the running aggregate chunk
+  size_t running_chunk_count_{0};       // amount of measurements currently stored in the running aggregate chunk
+  uint32_t running_chunk_duration_{0};  // duration of measurements currently stored in the running aggregate chunk
+
+  size_t continuous_queue_duration_{0};
+  size_t continuous_queue_reset_duration_{0};
 
   AverageType average_type_{};  // either simple or time-weighted
   GroupType group_type_{};      // measurements come from either a population or sample

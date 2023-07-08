@@ -45,6 +45,7 @@ CONF_CHUNKS_IN_WINDOW = "chunks_in_window"
 CONF_CHUNKS_BEFORE_RESET = "chunks_before_reset"
 
 CONF_MEASUREMENTS_BEFORE_RESET = "measurements_before_reset"
+CONF_DURATION_BEFORE_RESET = "duration_before_reset"
 
 # Type of measurement group; i.e., are the observations for a population or sample
 CONF_GROUP_TYPE = "group_type"
@@ -206,7 +207,10 @@ CONFIG_SCHEMA = cv.All(
             ),
             CONF_CONTINUOUS: BASE_SCHEMA.extend(
                 {
-                    cv.Optional(CONF_MEASUREMENTS_BEFORE_RESET): cv.positive_int,
+                    cv.Optional(
+                        CONF_MEASUREMENTS_BEFORE_RESET, default=500
+                    ): cv.positive_int,
+                    cv.Optional(CONF_DURATION_BEFORE_RESET): cv.time_period,
                     cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
                     cv.Optional(
                         CONF_SEND_FIRST_AT, default=1
@@ -216,10 +220,11 @@ CONFIG_SCHEMA = cv.All(
             CONF_CHUNKED_CONTINUOUS: cv.All(
                 BASE_SCHEMA.extend(
                     {
+                        cv.Optional(CONF_DURATION_BEFORE_RESET): cv.time_period,
                         cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
                         cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
                         cv.Optional(
-                            CONF_CHUNKS_BEFORE_RESET, default=1000
+                            CONF_CHUNKS_BEFORE_RESET, default=0
                         ): cv.positive_int,
                         cv.Optional(
                             CONF_SEND_EVERY, default=15
@@ -227,7 +232,7 @@ CONFIG_SCHEMA = cv.All(
                         cv.Optional(
                             CONF_SEND_FIRST_AT, default=1
                         ): cv.positive_not_null_int,
-                        cv.Optional(CONF_RESTORE, default=False): cv.boolean,
+                        cv.Optional(CONF_RESTORE): cv.boolean,
                     },
                 ),
                 cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
@@ -316,14 +321,18 @@ async def to_code(config):
         elif CONF_CHUNK_DURATION in config:
             chunk_size = 0
             cg.add(
-                var.set_chunk_duration_size(
-                    config[CONF_CHUNK_DURATION].total_milliseconds
-                )
+                var.set_chunk_duration(config[CONF_CHUNK_DURATION].total_milliseconds)
             )
         cg.add(var.set_chunk_size(chunk_size))
         cg.add(var.set_window_size(config[CONF_CHUNKS_IN_WINDOW]))
     elif config[CONF_TYPE] == CONF_CONTINUOUS:
         cg.add(var.set_window_size(config[CONF_MEASUREMENTS_BEFORE_RESET]))
+        if CONF_DURATION_BEFORE_RESET in config:
+            cg.add(
+                var.set_continuous_reset_duration(
+                    config[CONF_DURATION_BEFORE_RESET].total_milliseconds
+                )
+            )
     elif config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS:
         chunk_size = 15  # default is 15 measurements in a chunk
         if CONF_CHUNK_SIZE in config:
@@ -331,13 +340,18 @@ async def to_code(config):
         elif CONF_CHUNK_DURATION in config:
             chunk_size = 0
             cg.add(
-                var.set_chunk_duration_size(
-                    config[CONF_CHUNK_DURATION].total_milliseconds
-                )
+                var.set_chunk_duration(config[CONF_CHUNK_DURATION].total_milliseconds)
             )
         cg.add(var.set_chunk_size(chunk_size))
         cg.add(var.set_window_size(config[CONF_CHUNKS_BEFORE_RESET]))
-        cg.add(var.set_restore(config[CONF_RESTORE]))
+        if CONF_DURATION_BEFORE_RESET in config:
+            cg.add(
+                var.set_continuous_reset_duration(
+                    config[CONF_DURATION_BEFORE_RESET].total_milliseconds
+                )
+            )
+        if CONF_RESTORE in config:
+            cg.add(var.set_restore(config[CONF_RESTORE]))
 
     cg.add(var.set_send_every(config[CONF_SEND_EVERY]))
     cg.add(var.set_first_at(config[CONF_SEND_FIRST_AT]))
