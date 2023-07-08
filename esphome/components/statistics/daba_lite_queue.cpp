@@ -20,7 +20,7 @@ Aggregate DABALiteQueue::compute_current_aggregate() {
 }
 
 void DABALiteQueue::clear() {
-  this->size_ = 0;  // set size of inserted aggregates to 0
+  this->size_ = 0;  // set count of inserted aggregates to 0
 
   // Reset Indices in the circular queue to the start
   this->f_ = CircularQueueIndex(0, this->window_size_);
@@ -103,8 +103,6 @@ void DABALiteQueue::flip_() {
   this->back_sum_ = this->identity_class_;
 }
 
-// DABA Lite algorithm methods
-
 // Checks if the b_ index is equal to the front index f_;
 //  - Note if window size == size of queue, then the front and end indices point to the same index,
 //    so we verify that this is not the case
@@ -156,8 +154,8 @@ CircularQueueIndex &CircularQueueIndex::operator--() {
 CircularQueueIndex &CircularQueueIndex::operator=(const CircularQueueIndex &rhs) {
   if (this == &rhs)
     return *this;
-  this->index_ = rhs.index_;
-  this->capacity_ = rhs.capacity_;
+  this->index_ = rhs.get_index();
+  this->capacity_ = rhs.get_capacity();
 
   return *this;
 }
