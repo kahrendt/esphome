@@ -1,8 +1,6 @@
-#include "aggregate.h"
-#include "aggregate_queue.h"
 #include "continuous_queue.h"
 
-#include "esphome/core/hal.h"
+#include "aggregate.h"
 
 namespace esphome {
 namespace statistics {

@@ -9,14 +9,12 @@ To-do:
   - write a cookbook documentation example for humidity detection using a trend sensor
 */
 
-#include "aggregate.h"
+#include "statistics.h"
 
-#include "aggregate_queue.h"
+#include "aggregate.h"
 #include "daba_lite_queue.h"
 #include "continuous_singular.h"
 #include "continuous_queue.h"
-
-#include "statistics.h"
 
 #include "esphome/core/log.h"
 #include "esphome/core/hal.h"
@@ -27,6 +25,23 @@ namespace statistics {
 
 static const char *const TAG = "statistics";
 uint32_t global_statistics_id = 3141044017ULL;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
+static const LogString *time_conversion_factor_to_string(TimeConversionFactor factor) {
+  switch (factor) {
+    case FACTOR_MS:
+      return LOG_STR("milliseconds");
+    case FACTOR_S:
+      return LOG_STR("seconds");
+    case FACTOR_MIN:
+      return LOG_STR("minutes");
+    case FACTOR_HOUR:
+      return LOG_STR("hours");
+    case FACTOR_DAY:
+      return LOG_STR("days");
+    default:
+      return LOG_STR("");
+  }
+}
 
 void StatisticsComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "Statistics Component:");
@@ -59,9 +74,12 @@ void StatisticsComponent::dump_config() {
 
   ESP_LOGCONFIG(TAG, "  Send Every: %u", this->send_every_);
 
-  // To-Do: IMPLEMENT!
-  ESP_LOGCONFIG(TAG, "  Average Type: ");
-  ESP_LOGCONFIG(TAG, "  Time Conversion Factor: ");
+  if (this->average_type_ == SIMPLE_AVERAGE)
+    ESP_LOGCONFIG(TAG, "  Average Type: simple");
+  else
+    ESP_LOGCONFIG(TAG, "  Average Type: time_weighted");
+
+  ESP_LOGCONFIG(TAG, "  Time Unit: %s", LOG_STR_ARG(time_conversion_factor_to_string(this->time_conversion_factor_)));
 
   if (this->count_sensor_) {
     LOG_SENSOR("  ", "Count Sensor:", this->count_sensor_);
@@ -187,6 +205,8 @@ void StatisticsComponent::reset() {
 
   this->running_chunk_aggregate_ = Aggregate();  // reset the running aggregate to the identity/null measurement
   this->running_chunk_count_ = 0;                // reset the running chunk count
+
+  this->send_at_ = 0;  // reset the inserted chunk counter
 }
 
 void StatisticsComponent::handle_new_value_(float value) {
@@ -223,8 +243,6 @@ void StatisticsComponent::handle_new_value_(float value) {
   if (this->continuous_queue_reset_duration_ > 0) {
     if (this->continuous_queue_duration_ >= this->continuous_queue_reset_duration_) {
       this->reset();
-
-      this->send_at_ = 0;  // reset send_at_ counter
     }
   }
 
@@ -237,6 +255,7 @@ void StatisticsComponent::handle_new_value_(float value) {
 
   ++this->running_chunk_count_;
   this->running_chunk_duration_ += duration_since_last_measurement;
+
   this->continuous_queue_duration_ += duration_since_last_measurement;
 
   ////////////////////////////
@@ -251,7 +270,7 @@ void StatisticsComponent::handle_new_value_(float value) {
     this->running_chunk_count_ = 0;
     this->running_chunk_duration_ = 0;
 
-    ++this->send_at_;  // only incremented if a chunk has been inserted
+    ++this->send_at_;
   }
 
   ////////////////////////////////////

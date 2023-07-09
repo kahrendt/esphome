@@ -6,8 +6,6 @@
 
 #include "aggregate.h"
 
-#include "esphome/core/hal.h"
-
 namespace esphome {
 namespace statistics {
 
