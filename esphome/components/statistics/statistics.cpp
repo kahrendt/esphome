@@ -1,9 +1,9 @@
 /*
 To-do:
   - test whether time weighted averages with no sensor updates in a chunk duration is handled properly
-  - verify accuracy of stats using mqtt and python
   - add/improve comments in aggregate_queue.h (just need a class description)
   - update documentation draft in esphome-docs repository
+    - add reset action description
     - add table describing when each type of queue should be used
   - spell/grammar check comments and documentation
   - write a cookbook documentation example for humidity detection using a trend sensor
@@ -182,8 +182,11 @@ void StatisticsComponent::setup() {
 }
 
 void StatisticsComponent::reset() {
-  this->queue_->clear();                         // clear the queue
-  this->running_chunk_aggregate_ = Aggregate();  // reset the running aggregate to the identity
+  this->queue_->clear();
+  this->continuous_queue_duration_ = 0;  // reset the duration of measurements in queue
+
+  this->running_chunk_aggregate_ = Aggregate();  // reset the running aggregate to the identity/null measurement
+  this->running_chunk_count_ = 0;                // reset the running chunk count
 }
 
 void StatisticsComponent::handle_new_value_(float value) {
@@ -219,8 +222,9 @@ void StatisticsComponent::handle_new_value_(float value) {
   // duration
   if (this->continuous_queue_reset_duration_ > 0) {
     if (this->continuous_queue_duration_ >= this->continuous_queue_reset_duration_) {
-      this->queue_->clear();
-      this->continuous_queue_duration_ = 0;
+      this->reset();
+
+      this->send_at_ = 0;  // reset send_at_ counter
     }
   }
 
