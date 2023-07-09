@@ -1,5 +1,6 @@
-#include "aggregate.h"
 #include "aggregate_queue.h"
+
+#include "aggregate.h"
 
 #include "esphome/core/helpers.h"  // necessary for ExternalRAMAllocator
 

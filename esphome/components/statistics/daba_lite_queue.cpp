@@ -1,6 +1,6 @@
-#include "aggregate.h"
-#include "aggregate_queue.h"
 #include "daba_lite_queue.h"
+
+#include "aggregate.h"
 
 namespace esphome {
 namespace statistics {
