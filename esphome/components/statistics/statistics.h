@@ -1,8 +1,8 @@
 /*
- * ESPHome component to compute several summary statistics for a set of measurements from a sensor in an effecient
+ * ESPHome component to compute several summary statistics for a set of measurements from a sensor in an efficient
  * (computationally and memory-wise) manner while being numerically stable and accurate. The set of measurements can be
- * collected over a sliding window or as a resetable running total. Each measurement can be set to have equal weight or
- * to be weighted by their duration.
+ * collected over a sliding window or as a resettable running total. Each measurement can have equal weight or
+ * have weights given by their duration.
  *
  * Available statistics as sensors
  *  - count: number of valid measurements in the window (component ignores NaN values in the window)
@@ -13,47 +13,48 @@
  *  - max: maximum of the set of measurements*
  *  - std_dev: sample or population standard deviation of the set of measurements
  *  - trend: the slope of the line of best fit for the measurement values versus timestamps
- *      - can be be used as an approximation for the rate of change (derivative) of the measurements
+ *      - can be used as an approximation for the rate of change (derivative) of the measurements
  *      - computed using the covariance of timestamps versus measurements and the variance of timestamps
  *  - variance: sample or population variance of the set of measurements
  *
- * Term and definitions used in this component:
+ * Terms and definitions used in this component:
  *  - measurement: a single reading from a sensor
  *  - observation: a single reading from a sensor
  *  - set of measurements: a collection of measurements from a sensor
  *    - it can be the null set; i.e., it does not contain a measurement
  *  - summary statistic: a numerical value that summarizes a set of measurements
- *  - aggregate: a collection of summary statistics for a set of measurements
- *  - to aggregate: adding a measurement to the set of measurements and updating the aggregate to include the new
+ *  - Aggregate: a collection of summary statistics for a set of measurements
+ *  - to aggregate: adding a measurement to the set of measurements and updating the Aggregate to include the new
  *    measurement
- *  - queue: a set of aggregates that can compute all summmary statistics for all aggregates in the set combined
- *  - to insert: adding an aggregate to a queue
- *  - to evict: remove the oldest aggregate from a queue
- *  - chunk: an aggregate that specifically aggregates incoming measurements and inserted into a queue
- *  - chunk size: the number of measurements to aggregate in a chunk before it is inserted into a queue
+ *  - queue: a set of Aggregates that can compute all summary statistics for all Aggregates in the set combined
+ *  - to insert: adding an Aggregate to a queue
+ *  - to evict: remove the oldest Aggregate from a queue
+ *  - chunk: an Aggregate that specifically aggregates incoming measurements and is inserted into a queue
+ *  - chunk size: the number of measurements to Aggregate in a chunk before it inserted into a queue
  *  - chunk duration: the timespan between the first and last measurement in a chunk before being inserted into a queue
- *  - sliding window queue: a queue that can insert new aggregates and evict the oldest aggregate
- *  - sliding window aggregate: an agggregate that stores the summary statistics for all aggregates in a sliding
+ *  - sliding window queue: a queue that can insert new Aggregates and evict the oldest aggregate
+ *  - sliding window aggregate: an Aggregate that stores the summary statistics for all Aggregates in a sliding
  *    window queue
- *  - continuous queue: a queue that can only insert new aggregates and be cleared
- *  - continuous aggregate: an aggregate that stores the summary statistics for all aggregates in a continuous queue
+ *  - continuous queue: a queue that can only insert new Aggregates and reset
+ *  - continuous aggregate: an Aggregate that stores the summary statistics for all Aggregates in a continuous queue
  *  - simple average: every measurement has equal weight when computing summary statistics
- *  - time-weighted average: each measurement is weighted by the time until the next measurement is observed
+ *  - time-weighted average: each measurement is weighted by the time until the next observed measurement
+ *  - window: a sliding window queue or a continuous queue
  *
  * Component code structure: (see specific header files for more detailed descriptions):
  *  - statistics.h - Statistics is a class that sets up the component by allocating memory for a configured queue and
  *    handles new measurements
  *  - aggregate.h - Aggregate is a class that stores a collection of summary statistics and can combine two aggregates
  *    into one
- *  - aggregate_queue.h - AggregateQueue is a class that allocates memory for a set of aggregates for the enabled
- *    sensors, as well as stores and retrieves aggregates from the memory
+ *  - aggregate_queue.h - AggregateQueue is a class that allocates memory for a set of Aggregates for the enabled
+ *    sensors, as well as store and retrieve Aggregates from the memory
  *  - daba_lite_queue.h - DABALiteQueue is a child of AggregateQueue. It implements the De-Amortized Banker's Aggregator
  *    (DABA) Lite algorithm for sliding window queues
- *  - continuous_queue.h - ContinuousQueue is a child of AggregateQueue. It stores aggregates and combines them when
+ *  - continuous_queue.h - ContinuousQueue is a child of AggregateQueue. It stores Aggregates and combines them when
  *    they have the same number of measurements. Numerically stable for long-term aggregation of measurements in a
- *    continuous queue, but not as effecient computationally or memory-wise
- *  - continous_singular.h - ContinuousSingular is a child of AggregateQueue. It stores a single running aggregate.
- *    Memory and computationally effecient for continuous aggregates, but is not numerically stable for long-term
+ *    continuous queue, but not as efficient computationally or memory-wise
+ *  - continous_singular.h - ContinuousSingular is a child of AggregateQueue. It stores a single running Aggregate.
+ *    Memory and computationally efficient for continuous aggregates, but is not numerically stable for long-term
  *    aggregation of measurements.
  *
  * Implemented by Kevin Ahrendt for the ESPHome project, June and July of 2023
@@ -98,11 +99,11 @@ class StatisticsComponent : public Component {
 
   void dump_config() override;
 
-  /// @brief Determine which statistics need to be stored, sets up the appropriate queue, and configures various
+  /// @brief Determine which statistics need to be stored, set up the appropriate queue, and configure various
   /// options.
   void setup() override;
 
-  /// @brief Reset the queue by clearing it.
+  /// @brief Reset the window by clearing it.
   void reset();
 
   // source sensor of measurements
@@ -164,19 +165,21 @@ class StatisticsComponent : public Component {
   size_t send_at_chunks_counter_{};
 
   size_t window_reset_duration_{0};  // max duration of measurements in window
-  size_t chunk_size_{1};             // amount of measurements stored in a chunk before being inserted into the queue
-  uint32_t chunk_duration_{};        // duration of measurements stored in a chunk before being inserted into the queue
 
-  size_t running_window_duration_{0};   // duration of measurements currently stored in the running window
-  size_t running_chunk_count_{0};       // amount of measurements currently stored in the running aggregate chunk
+  size_t chunk_size_{1};       // number of measurements aggregated in a chunk before being inserted into the queue
+  uint32_t chunk_duration_{};  // duration of measurements agggregated in a chunk before being inserted into the queue
+
+  size_t running_window_duration_{0};  // duration of measurements currently stored in the running window
+
+  size_t running_chunk_count_{0};       // number of measurements currently stored in the running aggregate chunk
   uint32_t running_chunk_duration_{0};  // duration of measurements currently stored in the running aggregate chunk
 
   AverageType average_type_{};                     // either simple or time-weighted
-  GroupType group_type_{};                         // measurements come from either a population or sample
-  StatisticsType statistics_type_{};               // what type of queue we store measurements/chunks in
-  TimeConversionFactor time_conversion_factor_{};  // covariance and trend have a unit involving a time unit
+  GroupType group_type_{};                         // measurements come from either a population or a sample
+  StatisticsType statistics_type_{};               // type of queue to store measurements/chunks in
+  TimeConversionFactor time_conversion_factor_{};  // time unit conversion for covariance and trend
 
-  // if the aggregates are time-weighted, these store info about the previous observation
+  // If the Aggregates are time-weighted, store info about the previous observation
   float previous_value_{NAN};
   uint32_t previous_timestamp_{0};
 
@@ -188,21 +191,21 @@ class StatisticsComponent : public Component {
 
   /** Enable the statistics needed for the configured sensors.
    *
-   * @return EnabledAGgregatesConfiguration for AggregateQueue children classes
+   * @return EnabledAggregatesConfiguration for AggregateQueue children classes
    */
   EnabledAggregatesConfiguration determine_enabled_statistics_config_();
 
-  /// @brief Insert new sensor measurement and update sensors.
+  /// @brief Insert new sensor measurements and update sensors.
   void handle_new_value_(float value);
 
-  /** Publish sensor values and save to flash (if configured).
+  /** Publish sensor values and save to flash memory (if configured).
    *
-   * Saves value to flash only if <restore_> is true.
+   * Saves value to flash memory only if <restore_> is true.
    * @param value aggregate value to published and saved
    */
   void publish_and_save_(Aggregate value);
 
-  /// @brief Return if averages should be weighted by measurement duration.
+  /// @brief Return if averages are weighted by measurement duration.
   inline bool is_time_weighted_();
 
   /// @brief Return if the running aggregate chunk is ready to be inserted into the queue.
