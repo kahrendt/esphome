@@ -41,7 +41,7 @@ CONF_VARIANCE = "variance"
 # Configuration options for aggregate chunks
 CONF_CHUNK_SIZE = "measurements_per_chunk"
 CONF_CHUNK_DURATION = "duration_of_chunk"
-CONF_CHUNKS_IN_WINDOW = "chunks_in_window"
+# CONF_CHUNKS_IN_WINDOW = "chunks_in_window"
 
 CONF_RESET_AFTER = "reset_after"
 CONF_RESET_AFTER_DURATION = "reset_after_duration"
@@ -194,7 +194,7 @@ CONFIG_SCHEMA = cv.All(
             CONF_CHUNKED_SLIDING_WINDOW: cv.All(
                 BASE_SCHEMA.extend(
                     {
-                        cv.Required(CONF_CHUNKS_IN_WINDOW): cv.positive_not_null_int,
+                        cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
                         cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
                         cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
                         cv.Optional(
@@ -322,7 +322,7 @@ async def to_code(config):
                 var.set_chunk_duration(config[CONF_CHUNK_DURATION].total_milliseconds)
             )
         cg.add(var.set_chunk_size(chunk_size))
-        cg.add(var.set_window_size(config[CONF_CHUNKS_IN_WINDOW]))
+        cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
     elif config[CONF_TYPE] == CONF_CONTINUOUS:
         cg.add(var.set_window_size(config[CONF_RESET_AFTER]))
         if CONF_RESET_AFTER_DURATION in config:
