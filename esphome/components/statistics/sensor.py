@@ -43,9 +43,12 @@ CONF_CHUNK_SIZE = "measurements_per_chunk"
 CONF_CHUNK_DURATION = "duration_of_chunk"
 CONF_CHUNKS_IN_WINDOW = "chunks_in_window"
 
-CONF_CHUNKS_BEFORE_RESET = "chunks_before_reset"
-CONF_DURATION_BEFORE_RESET = "duration_before_reset"
-CONF_MEASUREMENTS_BEFORE_RESET = "measurements_before_reset"
+CONF_RESET_AFTER = "reset_after"
+CONF_RESET_AFTER_DURATION = "reset_after_duration"
+
+# CONF_CHUNKS_BEFORE_RESET = "chunks_before_reset"
+# CONF_DURATION_BEFORE_RESET = "duration_before_reset"
+# CONF_MEASUREMENTS_BEFORE_RESET = "measurements_before_reset"
 
 
 # Type of measurement group; i.e., are the observations for a population or sample
@@ -206,10 +209,8 @@ CONFIG_SCHEMA = cv.All(
             ),
             CONF_CONTINUOUS: BASE_SCHEMA.extend(
                 {
-                    cv.Optional(
-                        CONF_MEASUREMENTS_BEFORE_RESET, default=500
-                    ): cv.positive_int,
-                    cv.Optional(CONF_DURATION_BEFORE_RESET): cv.time_period,
+                    cv.Optional(CONF_RESET_AFTER, default=500): cv.positive_int,
+                    cv.Optional(CONF_RESET_AFTER_DURATION): cv.time_period,
                     cv.Optional(CONF_SEND_EVERY, default=15): cv.positive_not_null_int,
                     cv.Optional(
                         CONF_SEND_FIRST_AT, default=1
@@ -221,10 +222,8 @@ CONFIG_SCHEMA = cv.All(
                     {
                         cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
                         cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
-                        cv.Optional(CONF_DURATION_BEFORE_RESET): cv.time_period,
-                        cv.Optional(
-                            CONF_CHUNKS_BEFORE_RESET, default=0
-                        ): cv.positive_int,
+                        cv.Optional(CONF_RESET_AFTER_DURATION): cv.time_period,
+                        cv.Optional(CONF_RESET_AFTER, default=0): cv.positive_int,
                         cv.Optional(
                             CONF_SEND_EVERY, default=15
                         ): cv.positive_not_null_int,
@@ -325,11 +324,11 @@ async def to_code(config):
         cg.add(var.set_chunk_size(chunk_size))
         cg.add(var.set_window_size(config[CONF_CHUNKS_IN_WINDOW]))
     elif config[CONF_TYPE] == CONF_CONTINUOUS:
-        cg.add(var.set_window_size(config[CONF_MEASUREMENTS_BEFORE_RESET]))
-        if CONF_DURATION_BEFORE_RESET in config:
+        cg.add(var.set_window_size(config[CONF_RESET_AFTER]))
+        if CONF_RESET_AFTER_DURATION in config:
             cg.add(
                 var.set_continuous_reset_duration(
-                    config[CONF_DURATION_BEFORE_RESET].total_milliseconds
+                    config[CONF_RESET_AFTER_DURATION].total_milliseconds
                 )
             )
     elif config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS:
@@ -342,11 +341,11 @@ async def to_code(config):
                 var.set_chunk_duration(config[CONF_CHUNK_DURATION].total_milliseconds)
             )
         cg.add(var.set_chunk_size(chunk_size))
-        cg.add(var.set_window_size(config[CONF_CHUNKS_BEFORE_RESET]))
-        if CONF_DURATION_BEFORE_RESET in config:
+        cg.add(var.set_window_size(config[CONF_RESET_AFTER]))
+        if CONF_RESET_AFTER_DURATION in config:
             cg.add(
                 var.set_continuous_reset_duration(
-                    config[CONF_DURATION_BEFORE_RESET].total_milliseconds
+                    config[CONF_RESET_AFTER_DURATION].total_milliseconds
                 )
             )
         if CONF_RESTORE in config:
