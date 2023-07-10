@@ -113,7 +113,7 @@ class AggregateQueue {
   // Timestamps from millis() are always type uint32_t
   uint32_t *timestamp_reference_queue_{nullptr};
 
-  // Floating point precision is only needed here, as that is what sensor->publish has as input
+  // Floating point precision is only needed here, as that is what sensor->publish_state has as input
   float *max_queue_{nullptr};
   float *mean_queue_{nullptr};
   float *min_queue_{nullptr};
