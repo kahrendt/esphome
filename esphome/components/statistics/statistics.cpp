@@ -6,12 +6,13 @@ To-do:
     x exlain chunk options
   - spell/grammar check comments and documentation
     - Statistics
-    - ContinuousSingular
+
     - documentation
     x AggregateQueue
     x Aggregate
     x DABALiteQueue
     x ContinuousQueue
+    x ContinuousSingular
   - write a cookbook documentation example for humidity detection using a trend sensor
 
   x improve mean calculation for numerical stability
