@@ -1,9 +1,10 @@
 /*
 To-do:
-  - rename config options to be more uniform across types
-  - rename send_at_ to send_at_chunks_ in code
+  - update documentation to reflect unified names
+  - updated required options in sensor.py to match documentation
   - use at_least_one config for measurements_before_reset/chunks_before_reset and duration_before_reset
-  - rename measurements_before_reset and chunks_before_reset to unify them
+
+  - rename send_at_ to send_at_chunks_ in code
   - test whether time weighted averages with no sensor updates in a chunk duration is handled properly
   - add/improve comments in aggregate_queue.h (just need a class description)
   - update documentation draft in esphome-docs repository
@@ -11,8 +12,11 @@ To-do:
     - add table describing when each type of queue should be used
   - spell/grammar check comments and documentation
   - write a cookbook documentation example for humidity detection using a trend sensor
+
+  x rename config options to be more uniform across types
   x move statistics config dump to own function
   x move enable aggregate config to own function
+  x rename measurements_before_reset and chunks_before_reset to unify them
 */
 
 #include "statistics.h"
