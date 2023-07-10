@@ -23,6 +23,7 @@ Aggregate::Aggregate(double value, size_t duration, uint32_t timestamp) {
 }
 
 Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
+  // If either of the Aggregates are the identity, return the other Aggregate.
   if (b.get_count() == 0) {
     return *this;
   } else if (this->get_count() == 0) {
@@ -65,24 +66,24 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   double timestamp_delta = b_timestamp_mean - a_timestamp_mean;
   double timestamp_delta_prime = timestamp_delta * b_weight / combined_weight;
 
-  // Variation of Welford's algorithm for computing the mean online
-  combined.mean_ = this->get_mean() + delta_prime;
-  combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta_prime;
+  // Compute the mean and timestamp mean.
+  if ((b.get_count() < combined.count_ / 4) || (this->get_count() < combined.count_ / 4)) {
+    // If either count is signficantly smaller than the other, then use a variation of Welford's algorithm for speed.
+    combined.mean_ = this->get_mean() + delta_prime;
+    combined.timestamp_mean_ = a_timestamp_mean + timestamp_delta_prime;
+  } else {
+    // Otherwise, use a weighted average for numerical stability.
+    combined.mean_ = this->get_mean() * (a_weight / combined_weight) + b.get_mean() * (b_weight / combined_weight);
+    combined.timestamp_mean_ =
+        a_timestamp_mean * (a_weight / combined_weight) + b_timestamp_mean * (b_weight / combined_weight);
+  }
 
-  // /*
-  //  * Simple weighted combination of the mean; can potentially avoid issues if a_weight = b_weight
-  //  */
-  // combined.mean_ = a_mean * (a_weight / combined_weight) + b_mean * (b_weight / combined_weight);
-
-  // combined.timestamp_mean_ =
-  //     a_timestamp_mean * (a_weight / combined_weight) + b_timestamp_mean * (b_weight / combined_weight);
-
-  // Compute M2 quantity for Welford's algorithm which can determine the variance
+  // Compute M2 quantity for Welford's algorithm which determines the variance.
   combined.m2_ = this->get_m2() + b.get_m2() + a_weight * delta * delta_prime;
   combined.timestamp_m2_ =
       this->get_timestamp_m2() + b.get_timestamp_m2() + a_weight * timestamp_delta * timestamp_delta_prime;
 
-  // Compute C2 quantity for a variation of Welford's algorithm which can determine the covariance
+  // Compute C2 quantity for a variation of Welford's algorithm which determines the covariance.
   combined.c2_ = this->get_c2() + b.get_c2() + a_weight * delta * timestamp_delta_prime;
 
   return combined;

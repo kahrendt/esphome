@@ -1,9 +1,9 @@
 /*
 To-do:
   - update documentation draft in esphome-docs repository
-    - exlain chunk options
     - add table describing when each type of queue should be used
     x add reset action description
+    x exlain chunk options
   - spell/grammar check comments and documentation
     - Statistics
     - ContinuousSingular
@@ -14,6 +14,8 @@ To-do:
     x AggregateQueue
   - write a cookbook documentation example for humidity detection using a trend sensor
 
+  x improve mean calculation for numerical stability
+  x ?move duration into AggregateQueue? => no, doesn't make sense to quickly compute this for DABALiteQueues
   x test whether time weighted averages with no sensor updates in a chunk duration is handled properly
   x add/improve comments in aggregate_queue.h (just need a class description)
   x rename send_at_ to send_at_chunks_ in code
