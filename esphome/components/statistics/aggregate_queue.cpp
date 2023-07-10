@@ -82,7 +82,7 @@ bool AggregateQueue::allocate_memory(size_t capacity, EnabledAggregatesConfigura
   ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<uint32_t> uint32_t_allocator(ExternalRAMAllocator<uint32_t>::ALLOW_FAILURE);
 
-  // Count is always enabled as it is needed for the combine Aggregate method
+  // Count is always enabled as it is necessary for the combine Aggregate method
   this->count_queue_ = size_t_allocator.allocate(capacity);
 
   if (this->count_queue_ == nullptr)
