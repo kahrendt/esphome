@@ -294,6 +294,9 @@ async def to_code(config):
     await cg.register_component(var, config)
 
     source = await cg.get_variable(config[CONF_SOURCE_ID])
+
+    cg.add(var.set_hash(str(config[CONF_ID])))
+
     cg.add(var.set_source_sensor(source))
 
     cg.add(var.set_average_type(config[CONF_AVERAGE_TYPE]))
