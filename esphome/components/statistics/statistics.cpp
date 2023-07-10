@@ -8,10 +8,10 @@ To-do:
     - Statistics
     - ContinuousSingular
     - ContinuousQueue
-    - DABALiteQueue
     - documentation
     x AggregateQueue
     x Aggregate
+    x DABALiteQueue
   - write a cookbook documentation example for humidity detection using a trend sensor
 
   x improve mean calculation for numerical stability

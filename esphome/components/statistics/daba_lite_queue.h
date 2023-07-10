@@ -1,25 +1,25 @@
 /*
  * This class stores an array of aggregates for a sliding window of measurements/aggregate chunks. It has two main
  * functions:
- *  - Add a new aggregate chunk to sliding window queue (insert function)
- *  - Evict oldest aggregate chunk from the sliding window queue (evict function)
+ *  - Add a new aggregate chunk to the sliding window queue (insert function)
+ *  - Evict the oldest aggregate chunk from the sliding window queue (evict function)
  *
- * This is used to aggregate continuously collected measurements into summary statistics over a sliding window. The
- * oldest measurements/aggregate chunks can be evicted and new measurements/aggregate chunks can be inserted. Its
+ * The class can continuously collect measurements and compute summary statistics over a sliding window. The
+ * oldest measurements/aggregate chunks can be evicted, and new measurements/aggregate chunks can be inserted. Its
  * calculations are numerically stable with minimal computational complexity. Each measurement/aggregate chunk in the
  * window is stored in memory along with two additional aggregates (mid_sum_ and back_sum_).
  *
- * The approach is based on the De-Amortized Banker's Aggregator (DABA) Lite algorithm. The code is based on
+ * The approach is based on the De-Amortized Banker's Aggregator (DABA) Lite algorithm. The code follows
  * https://github.com/IBM/sliding-window-aggregators/blob/master/cpp/src/DABALite.hpp (Apache License, accessed June
- * 2023) and the reference paper "In-order sliding-window aggregation in worst-case constant time," by Kanat
+ * 2023) and the reference paper "In-order sliding-window aggregation in worst-case constant time" by Kanat
  * Tangwongsan, Martin Hirzel, and Scott Schneider (https://doi.org/10.1007/s00778-021-00668-3).
  *
- * The measurements/aggregate chunks are stored in a circular queue that is allocated in memory in advance. The DABA
- * Lite algorithm keeps track of 6 indices, and the CircularQueueIndex class implements the details.
+ * The measurements/aggregate chunks are stored in a pre-allocated circular queue. The DABA Lite algorithm keeps track
+ * of 6 indices, and the CircularQueueIndex class implements the details.
  *
  * Time complexity (for n aggregate chunks, where each may aggregate multiple measurements):
  *  - insertion of new measurement/aggregate chunk: O(1)
- *  - evicting oldest measurement/aggreate chunk: O(1)
+ *  - evicting oldest measurement/aggregate chunk: O(1)
  *  - clearing entire queue: O(1)
  *  - computing current aggregate: O(1)
  *
@@ -45,7 +45,7 @@ namespace statistics {
  *       is the first index of the array structure; i.e., it loops around
  *    - An example implementation: https://towardsdatascience.com/circular-queue-or-ring-buffer-92c7b0193326
  *  - Overloads operators to handle index operations respecting the circular queue structure
- *  - Should work on any array like structure with element access
+ *  - Should work on any array-like structure with element access
  *
  */
 class CircularQueueIndex {
@@ -58,8 +58,8 @@ class CircularQueueIndex {
 
   /** Construct a CircularQueueIndex.
    *
-   * @param index Initial index number
-   * @param capacity Size of the queue
+   * @param index initial index number
+   * @param capacity size of the queue
    */
   CircularQueueIndex(size_t index, size_t capacity);
 
@@ -109,45 +109,45 @@ class DABALiteQueue : public AggregateQueue {
   // Overridden virtual methods from AggregateQueue class //
   //////////////////////////////////////////////////////////
 
-  /** Compute the aggregate summarizing all entries in the queue.
+  /** Compute the Aggregate summarizing all entries in the queue.
    *
-   * Follows DABA Lite algorithm to compute the summary statistics of all aggregates in the queue.
-   * @return the aggregate summary of all elements in the queue
+   * Follows DABA Lite algorithm to compute the summary statistics of all Aggregates in the queue.
+   * @return the Aggregate summary of all elements in the queue
    */
   Aggregate compute_current_aggregate() override;
 
-  /** Clear all aggregates in the queue.
+  /** Clear all Aggregates in the queue.
    *
-   * All inserted aggregates are removed and the queue only stores the null measurement.
+   * Removes all inserted Aggregates. The queue only stores the null measurement. Resets all indices.
    */
   void clear() override;
 
-  /** Remove the oldest value in the queue.
+  /** Remove the oldest Aggregate in the queue.
    *
-   * The oldest aggregate is removed from the queue, and the DABA Lite algorithm steps to update running aggregates.
+   * The oldest Aggregate is removed from the queue, and the DABA Lite algorithm steps to update running Aggregates.
    */
   void evict() override;
 
-  /** Insert aggregate at end of queue.
+  /** Insert Aggregate at the end of the queue.
    *
-   * A new aggregate is added to the queue, and the DABA Lite algorithm steps to update running aggregates.
-   * @param value the aggregate to be inserted
+   * A new Aggregate is added to the queue, and the DABA Lite algorithm steps to update running Aggregates.
+   * @param value the Aggregate to insert
    */
   void insert(Aggregate value) override;
 
-  /** Set the queue's size and preallocates memory.
+  /** Set the queue's size and pre-allocate memory.
    *
-   * @param window_size the total amount of aggregates that can be inserted into the queue
-   * @param config which summary statistics should be saved into the queue
-   * @return true if memory was sucecessfuly allocated, false otherwise
+   * @param window_size the total amount of Aggregates that can be inserted into the queue
+   * @param config which summary statistics are in the queue
+   * @return true if memory was successfully allocated, false otherwise
    */
   bool set_capacity(size_t window_size, EnabledAggregatesConfiguration config) override;
 
  protected:
-  // Maximum window capacity
+  // Maximum window capacity; i.e., the total number of Aggregates that can be inserted
   size_t window_size_{0};
 
-  // DABA Lite - raw Indices for queues; i.e., not offset by the head index
+  // DABA Lite - raw indices for queue; i.e., not offset by the head index
   CircularQueueIndex f_;  // front of queue
   CircularQueueIndex l_;
   CircularQueueIndex r_;
@@ -158,7 +158,7 @@ class DABALiteQueue : public AggregateQueue {
   // Default values for an empty set of measurements
   const Aggregate identity_class_;
 
-  // Running aggregates for DABA Lite algorithm
+  // Running aggregates for the DABA Lite algorithm
   Aggregate mid_sum_, back_sum_;
 
   //////////////////////////////////////////////
@@ -167,6 +167,7 @@ class DABALiteQueue : public AggregateQueue {
 
   // DABA Lite algorithm method
   void step_();
+
   // DABA Lite algorithm method
   void flip_();
 

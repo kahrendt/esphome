@@ -22,7 +22,7 @@ Aggregate DABALiteQueue::compute_current_aggregate() {
 void DABALiteQueue::clear() {
   this->size_ = 0;  // set count of inserted aggregates to 0
 
-  // Reset Indices in the circular queue to the start
+  // Reset indices in the circular queue
   this->f_ = CircularQueueIndex(0, this->window_size_);
   this->l_ = CircularQueueIndex(0, this->window_size_);
   this->r_ = CircularQueueIndex(0, this->window_size_);
@@ -104,7 +104,7 @@ void DABALiteQueue::flip_() {
 }
 
 // Checks if the b_ index is equal to the front index f_;
-//  - Note if window size == size of queue, then the front and end indices point to the same index,
+//  - If window size == size of the queue, then the front and end indices point to the same index,
 //    so we verify that this is not the case
 inline bool DABALiteQueue::is_front_empty_() { return (this->b_ == this->f_) && (this->size_ != this->window_size_); }
 
@@ -132,6 +132,7 @@ CircularQueueIndex::CircularQueueIndex(size_t index, size_t capacity) {
 }
 
 CircularQueueIndex &CircularQueueIndex::operator++() {
+  // Rollover
   if (this->index_ == (this->capacity_ - 1)) {
     this->index_ = 0;
     return *this;
@@ -142,6 +143,7 @@ CircularQueueIndex &CircularQueueIndex::operator++() {
 }
 
 CircularQueueIndex &CircularQueueIndex::operator--() {
+  // Rollover
   if (this->index_ == 0) {
     this->index_ = this->capacity_ - 1;
     return *this;
