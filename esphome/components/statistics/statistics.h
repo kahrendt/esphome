@@ -72,10 +72,6 @@
 namespace esphome {
 namespace statistics {
 
-// from esphome/components/servo/servo.h
-// see https://github.com/esphome/esphome/pull/3416
-extern uint32_t global_statistics_id;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-
 enum AverageType {
   SIMPLE_AVERAGE,
   TIME_WEIGHTED_AVERAGE,
@@ -139,6 +135,7 @@ class StatisticsComponent : public Component {
     this->time_conversion_factor_ = conversion_factor;
   }
 
+  void set_hash(const std::string &config_id) { this->hash_ = fnv1_hash("statistics_component_" + config_id); }
   void set_restore(bool restore) { this->restore_ = restore; }
 
  protected:
@@ -159,6 +156,8 @@ class StatisticsComponent : public Component {
   AggregateQueue *queue_{nullptr};
 
   Aggregate running_chunk_aggregate_{};
+
+  uint32_t hash_{};
 
   size_t window_size_{0};
   size_t send_every_{};

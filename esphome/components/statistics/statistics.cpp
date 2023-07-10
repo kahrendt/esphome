@@ -1,7 +1,5 @@
 /*
 To-do:
-  - test whether time weighted averages with no sensor updates in a chunk duration is handled properly
-  - add/improve comments in aggregate_queue.h (just need a class description)
   - update documentation draft in esphome-docs repository
     - exlain chunk options
     - add table describing when each type of queue should be used
@@ -9,6 +7,8 @@ To-do:
   - spell/grammar check comments and documentation
   - write a cookbook documentation example for humidity detection using a trend sensor
 
+  x test whether time weighted averages with no sensor updates in a chunk duration is handled properly
+  x add/improve comments in aggregate_queue.h (just need a class description)
   x rename send_at_ to send_at_chunks_ in code
   x rename config options to be more uniform across types
   x move statistics config dump to own function
@@ -34,7 +34,6 @@ namespace esphome {
 namespace statistics {
 
 static const char *const TAG = "statistics";
-uint32_t global_statistics_id = 3141044017ULL;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 static const LogString *time_conversion_factor_to_string(TimeConversionFactor factor) {
   switch (factor) {
@@ -130,6 +129,9 @@ void StatisticsComponent::dump_config() {
 
   ESP_LOGCONFIG(TAG, "  Time Unit: %s", LOG_STR_ARG(time_conversion_factor_to_string(this->time_conversion_factor_)));
 
+  if (this->restore_)
+    ESP_LOGCONFIG(TAG, "  Restore Hash: %u", this->hash_);
+
   this->dump_enabled_sensors_();
 }
 
@@ -155,13 +157,13 @@ void StatisticsComponent::setup() {
   }
 
   if (this->restore_) {
-    this->pref_ = global_preferences->make_preference<Aggregate>(global_statistics_id);
-    global_statistics_id++;
+    this->pref_ = global_preferences->make_preference<Aggregate>(this->hash_);
 
     Aggregate restored_value;
-    this->pref_.load(&restored_value);
 
-    this->queue_->insert(restored_value);
+    // If loading saved value works, insert it into queue
+    if (this->pref_.load(&restored_value))
+      this->queue_->insert(restored_value);
   }
 
   // On every source sensor update, call handle_new_value_()
