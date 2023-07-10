@@ -1,5 +1,9 @@
 /*
 To-do:
+  - rename config options to be more uniform across types
+  - rename send_at_ to send_at_chunks_ in code
+  - use at_least_one config for measurements_before_reset/chunks_before_reset and duration_before_reset
+  - rename measurements_before_reset and chunks_before_reset to unify them
   - test whether time weighted averages with no sensor updates in a chunk duration is handled properly
   - add/improve comments in aggregate_queue.h (just need a class description)
   - update documentation draft in esphome-docs repository
@@ -7,6 +11,8 @@ To-do:
     - add table describing when each type of queue should be used
   - spell/grammar check comments and documentation
   - write a cookbook documentation example for humidity detection using a trend sensor
+  x move statistics config dump to own function
+  x move enable aggregate config to own function
 */
 
 #include "statistics.h"
@@ -43,44 +49,7 @@ static const LogString *time_conversion_factor_to_string(TimeConversionFactor fa
   }
 }
 
-void StatisticsComponent::dump_config() {
-  ESP_LOGCONFIG(TAG, "Statistics Component:");
-
-  LOG_SENSOR("  ", "Source Sensor:", this->source_sensor_);
-
-  if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
-    ESP_LOGCONFIG(TAG, "  Statistics Type: sliding_window");
-    ESP_LOGCONFIG(TAG, "  Window Size: %u", this->window_size_);
-  } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_SLIDING_WINDOW) {
-    ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_sliding_window");
-    ESP_LOGCONFIG(TAG, "  Chunks in Window: %u", this->window_size_);
-    if (this->chunk_size_) {
-      ESP_LOGCONFIG(TAG, "  Measurements per Chunk: %u", this->chunk_size_);
-    } else {
-      ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_);
-    }
-  } else if (this->statistics_type_ == STATISTICS_TYPE_CONTINUOUS) {
-    ESP_LOGCONFIG(TAG, "  Statistics Type: continuous");
-    ESP_LOGCONFIG(TAG, "  Chunks Before Reset: %u", this->window_size_);
-    if (this->chunk_size_) {
-      ESP_LOGCONFIG(TAG, "  Measurements per Chunk: %u", this->chunk_size_);
-    } else {
-      ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_);
-    }
-  } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS) {
-    ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_continuous");
-    ESP_LOGCONFIG(TAG, "  Measurements Before Reset: %u", this->window_size_);
-  }
-
-  ESP_LOGCONFIG(TAG, "  Send Every: %u", this->send_every_);
-
-  if (this->average_type_ == SIMPLE_AVERAGE)
-    ESP_LOGCONFIG(TAG, "  Average Type: simple");
-  else
-    ESP_LOGCONFIG(TAG, "  Average Type: time_weighted");
-
-  ESP_LOGCONFIG(TAG, "  Time Unit: %s", LOG_STR_ARG(time_conversion_factor_to_string(this->time_conversion_factor_)));
-
+void StatisticsComponent::dump_enabled_sensors_() {
   if (this->count_sensor_) {
     LOG_SENSOR("  ", "Count Sensor:", this->count_sensor_);
   }
@@ -118,51 +87,50 @@ void StatisticsComponent::dump_config() {
   }
 }
 
+void StatisticsComponent::dump_config() {
+  ESP_LOGCONFIG(TAG, "Statistics Component:");
+
+  LOG_SENSOR("  ", "Source Sensor:", this->source_sensor_);
+
+  if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
+    ESP_LOGCONFIG(TAG, "  Statistics Type: sliding_window");
+    ESP_LOGCONFIG(TAG, "  Window Size: %u", this->window_size_);
+  } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_SLIDING_WINDOW) {
+    ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_sliding_window");
+    ESP_LOGCONFIG(TAG, "  Chunks in Window: %u", this->window_size_);
+    if (this->chunk_size_) {
+      ESP_LOGCONFIG(TAG, "  Measurements per Chunk: %u", this->chunk_size_);
+    } else {
+      ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_);
+    }
+  } else if (this->statistics_type_ == STATISTICS_TYPE_CONTINUOUS) {
+    ESP_LOGCONFIG(TAG, "  Statistics Type: continuous");
+    ESP_LOGCONFIG(TAG, "  Chunks Before Reset: %u", this->window_size_);
+    if (this->chunk_size_) {
+      ESP_LOGCONFIG(TAG, "  Measurements per Chunk: %u", this->chunk_size_);
+    } else {
+      ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_);
+    }
+  } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS) {
+    ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_continuous");
+    ESP_LOGCONFIG(TAG, "  Measurements Before Reset: %u", this->window_size_);
+  }
+
+  ESP_LOGCONFIG(TAG, "  Send Every: %u", this->send_every_);
+
+  if (this->average_type_ == SIMPLE_AVERAGE)
+    ESP_LOGCONFIG(TAG, "  Average Type: simple");
+  else {
+    ESP_LOGCONFIG(TAG, "  Average Type: time_weighted");
+  }
+
+  ESP_LOGCONFIG(TAG, "  Time Unit: %s", LOG_STR_ARG(time_conversion_factor_to_string(this->time_conversion_factor_)));
+
+  this->dump_enabled_sensors_();
+}
+
 void StatisticsComponent::setup() {
-  // store aggregate data in the queues only necessary for the configured sensors
-  EnabledAggregatesConfiguration config;
-
-  if (this->covariance_sensor_) {
-    config.c2 = true;
-    config.mean = true;
-    config.timestamp_mean = true;
-    config.timestamp_reference = true;
-  }
-
-  if (this->duration_sensor_)
-    config.duration = true;
-
-  if (this->max_sensor_) {
-    config.max = true;
-  }
-
-  if (this->mean_sensor_) {
-    config.mean = true;
-  }
-
-  if (this->min_sensor_) {
-    config.min = true;
-  }
-
-  if ((this->std_dev_sensor_) || (this->variance_sensor_)) {
-    config.m2 = true;
-    config.mean = true;
-  }
-
-  if (this->trend_sensor_) {
-    config.c2 = true;
-    config.m2 = true;
-    config.mean = true;
-    config.timestamp_m2 = true;
-    config.timestamp_mean = true;
-    config.timestamp_reference = true;
-  }
-
-  // if averages are time weighted, then ensure we store duration info
-  if (this->is_time_weighted_()) {
-    config.duration = true;
-    config.duration_squared = true;
-  }
+  EnabledAggregatesConfiguration config = this->determine_enabled_statistics_config_();
 
   if ((this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) ||
       (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_SLIDING_WINDOW)) {
@@ -346,6 +314,54 @@ void StatisticsComponent::publish_and_save_(Aggregate value) {
 
   if (this->restore_)
     this->pref_.save(&value);
+}
+
+EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics_config_() {
+  EnabledAggregatesConfiguration config;
+
+  if (this->covariance_sensor_) {
+    config.c2 = true;
+    config.mean = true;
+    config.timestamp_mean = true;
+    config.timestamp_reference = true;
+  }
+
+  if (this->duration_sensor_)
+    config.duration = true;
+
+  if (this->max_sensor_) {
+    config.max = true;
+  }
+
+  if (this->mean_sensor_) {
+    config.mean = true;
+  }
+
+  if (this->min_sensor_) {
+    config.min = true;
+  }
+
+  if ((this->std_dev_sensor_) || (this->variance_sensor_)) {
+    config.m2 = true;
+    config.mean = true;
+  }
+
+  if (this->trend_sensor_) {
+    config.c2 = true;
+    config.m2 = true;
+    config.mean = true;
+    config.timestamp_m2 = true;
+    config.timestamp_mean = true;
+    config.timestamp_reference = true;
+  }
+
+  // if averages are time weighted, then ensure we store duration info
+  if (this->is_time_weighted_()) {
+    config.duration = true;
+    config.duration_squared = true;
+  }
+
+  return config;
 }
 
 inline bool StatisticsComponent::is_time_weighted_() { return (this->average_type_ == TIME_WEIGHTED_AVERAGE); }

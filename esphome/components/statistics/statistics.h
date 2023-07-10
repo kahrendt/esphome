@@ -187,6 +187,15 @@ class StatisticsComponent : public Component {
   bool restore_{false};
   ESPPreferenceObject pref_;
 
+  /// @brief  Use log_sensor to dump information about all enabled statistics sensors.
+  void dump_enabled_sensors_();
+
+  /** Enable the statistics needed for the configured sensors.
+   *
+   * @return EnabledAGgregatesConfiguration for AggregateQueue children classes
+   */
+  EnabledAggregatesConfiguration determine_enabled_statistics_config_();
+
   /// @brief Insert new sensor measurement and update sensors.
   void handle_new_value_(float value);
 
