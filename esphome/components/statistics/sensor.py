@@ -306,7 +306,6 @@ async def to_code(config):
     if config[CONF_TYPE] == CONF_SLIDING_WINDOW:
         cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
     elif config[CONF_TYPE] == CONF_CHUNKED_SLIDING_WINDOW:
-        chunk_size = 15  # default is 15 measurements in a chunk
         if CONF_CHUNK_SIZE in config:
             chunk_size = config[CONF_CHUNK_SIZE]
         elif CONF_CHUNK_DURATION in config:
@@ -320,12 +319,9 @@ async def to_code(config):
         cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
         if CONF_WINDOW_DURATION in config:
             cg.add(
-                var.set_continuous_reset_duration(
-                    config[CONF_WINDOW_DURATION].total_milliseconds
-                )
+                var.set_window_duration(config[CONF_WINDOW_DURATION].total_milliseconds)
             )
     elif config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS:
-        chunk_size = 15  # default is 15 measurements in a chunk
         if CONF_CHUNK_SIZE in config:
             chunk_size = config[CONF_CHUNK_SIZE]
         elif CONF_CHUNK_DURATION in config:
@@ -337,9 +333,7 @@ async def to_code(config):
         cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
         if CONF_WINDOW_DURATION in config:
             cg.add(
-                var.set_continuous_reset_duration(
-                    config[CONF_WINDOW_DURATION].total_milliseconds
-                )
+                var.set_window_duration(config[CONF_WINDOW_DURATION].total_milliseconds)
             )
         if CONF_RESTORE in config:
             cg.add(var.set_restore(config[CONF_RESTORE]))
