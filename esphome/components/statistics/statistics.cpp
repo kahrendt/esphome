@@ -7,11 +7,11 @@ To-do:
   - spell/grammar check comments and documentation
     - Statistics
     - ContinuousSingular
-    - ContinuousQueue
     - documentation
     x AggregateQueue
     x Aggregate
     x DABALiteQueue
+    x ContinuousQueue
   - write a cookbook documentation example for humidity detection using a trend sensor
 
   x improve mean calculation for numerical stability
