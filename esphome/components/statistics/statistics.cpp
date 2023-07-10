@@ -5,6 +5,13 @@ To-do:
     - add table describing when each type of queue should be used
     x add reset action description
   - spell/grammar check comments and documentation
+    - Statistics
+    - ContinuousSingular
+    - ContinuousQueue
+    - DABALiteQueue
+    - Aggregate
+    - documentation
+    x AggregateQueue
   - write a cookbook documentation example for humidity detection using a trend sensor
 
   x test whether time weighted averages with no sensor updates in a chunk duration is handled properly
