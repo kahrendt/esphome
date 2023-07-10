@@ -1,22 +1,22 @@
 /*
 To-do:
-  - update documentation to reflect unified names
-  - updated required options in sensor.py to match documentation
-  - use at_least_one config for measurements_before_reset/chunks_before_reset and duration_before_reset
-
-  - rename send_at_ to send_at_chunks_ in code
   - test whether time weighted averages with no sensor updates in a chunk duration is handled properly
   - add/improve comments in aggregate_queue.h (just need a class description)
   - update documentation draft in esphome-docs repository
-    - add reset action description
+    - exlain chunk options
     - add table describing when each type of queue should be used
+    x add reset action description
   - spell/grammar check comments and documentation
   - write a cookbook documentation example for humidity detection using a trend sensor
 
+  x rename send_at_ to send_at_chunks_ in code
   x rename config options to be more uniform across types
   x move statistics config dump to own function
   x move enable aggregate config to own function
   x rename measurements_before_reset and chunks_before_reset to unify them
+  x update documentation to reflect unified names
+  x updated required options in sensor.py to match documentation
+  x use at_least_one config for measurements_before_reset/chunks_before_reset and duration_before_reset
 */
 
 #include "statistics.h"
@@ -168,17 +168,17 @@ void StatisticsComponent::setup() {
   this->source_sensor_->add_on_state_callback([this](float value) -> void { this->handle_new_value_(value); });
 
   // Ensure we send our first reading when configured
-  this->set_first_at(this->send_every_ - this->send_at_);
+  this->set_first_at(this->send_every_ - this->send_at_chunks_counter_);
 }
 
 void StatisticsComponent::reset() {
   this->queue_->clear();
-  this->continuous_queue_duration_ = 0;  // reset the duration of measurements in queue
+  this->running_window_duration_ = 0;  // reset the duration of measurements in queue
 
   this->running_chunk_aggregate_ = Aggregate();  // reset the running aggregate to the identity/null measurement
   this->running_chunk_count_ = 0;                // reset the running chunk count
 
-  this->send_at_ = 0;  // reset the inserted chunk counter
+  this->send_at_chunks_counter_ = 0;  // reset the inserted chunk counter
 }
 
 void StatisticsComponent::handle_new_value_(float value) {
@@ -210,10 +210,10 @@ void StatisticsComponent::handle_new_value_(float value) {
     }
   }
 
-  // If the continuous_queue_reset_duration_ == 0, then we are not a continuous queue or we are not resetting by
+  // If the window_reset_duration_ == 0, then we are not a continuous queue or we are not resetting by
   // duration
-  if (this->continuous_queue_reset_duration_ > 0) {
-    if (this->continuous_queue_duration_ >= this->continuous_queue_reset_duration_) {
+  if (this->window_reset_duration_ > 0) {
+    if (this->running_window_duration_ >= this->window_reset_duration_) {
       this->reset();
     }
   }
@@ -228,7 +228,7 @@ void StatisticsComponent::handle_new_value_(float value) {
   ++this->running_chunk_count_;
   this->running_chunk_duration_ += duration_since_last_measurement;
 
-  this->continuous_queue_duration_ += duration_since_last_measurement;
+  this->running_window_duration_ += duration_since_last_measurement;
 
   ////////////////////////////
   // Add new chunk to queue //
@@ -242,19 +242,19 @@ void StatisticsComponent::handle_new_value_(float value) {
     this->running_chunk_count_ = 0;
     this->running_chunk_duration_ = 0;
 
-    ++this->send_at_;
+    ++this->send_at_chunks_counter_;
   }
 
   ////////////////////////////////////
   // Publish and save sensor values //
   ////////////////////////////////////
 
-  if (this->send_at_ >= this->send_every_) {
+  if (this->send_at_chunks_counter_ >= this->send_every_) {
     // Ensures we only push updates at the rate configured
-    //  - send_at_ counts the number of chunks inserted into the appropriate queue
+    //  - send_at_chunks_counter_ counts the number of chunks inserted into the appropriate queue
     //  - after send_every_ chunks, each sensor is updated
 
-    this->send_at_ = 0;  // reset send_at_
+    this->send_at_chunks_counter_ = 0;  // reset send_at_chunks_counter_
 
     this->publish_and_save_(this->queue_->compute_current_aggregate());
   }

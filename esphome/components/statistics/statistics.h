@@ -123,15 +123,14 @@ class StatisticsComponent : public Component {
   void set_trend_sensor(sensor::Sensor *trend_sensor) { this->trend_sensor_ = trend_sensor; }
   void set_variance_sensor(sensor::Sensor *variance_sensor) { this->variance_sensor_ = variance_sensor; }
 
-  // mimic ESPHome's current filter behavior
   void set_window_size(size_t window_size) { this->window_size_ = window_size; }
+  void set_window_duration(size_t duration) { this->window_reset_duration_ = duration; }
+
   void set_send_every(size_t send_every) { this->send_every_ = send_every; }
-  void set_first_at(size_t send_first_at) { this->send_at_ = send_first_at; }
+  void set_first_at(size_t send_first_at) { this->send_at_chunks_counter_ = send_first_at; }
 
   void set_chunk_size(size_t size) { this->chunk_size_ = size; }
   void set_chunk_duration(uint32_t time_delta) { this->chunk_duration_ = time_delta; }
-
-  void set_continuous_reset_duration(size_t duration) { this->continuous_queue_reset_duration_ = duration; }
 
   void set_average_type(AverageType type) { this->average_type_ = type; }
   void set_group_type(GroupType type) { this->group_type_ = type; }
@@ -161,23 +160,21 @@ class StatisticsComponent : public Component {
 
   Aggregate running_chunk_aggregate_{};
 
-  // mimic ESPHome's current filters behavior
-  size_t window_size_{};
+  size_t window_size_{0};
   size_t send_every_{};
-  size_t send_at_{};
+  size_t send_at_chunks_counter_{};
 
-  size_t chunk_size_{1};       // amount of measurements stored in a chunk before being inserted into the queue
-  uint32_t chunk_duration_{};  // duration of measurements stored in a chunk before being inserted into the queue
+  size_t window_reset_duration_{0};  // max duration of measurements in window
+  size_t chunk_size_{1};             // amount of measurements stored in a chunk before being inserted into the queue
+  uint32_t chunk_duration_{};        // duration of measurements stored in a chunk before being inserted into the queue
 
+  size_t running_window_duration_{0};   // duration of measurements currently stored in the running window
   size_t running_chunk_count_{0};       // amount of measurements currently stored in the running aggregate chunk
   uint32_t running_chunk_duration_{0};  // duration of measurements currently stored in the running aggregate chunk
 
-  size_t continuous_queue_duration_{0};
-  size_t continuous_queue_reset_duration_{0};
-
-  AverageType average_type_{};  // either simple or time-weighted
-  GroupType group_type_{};      // measurements come from either a population or sample
-  StatisticsType statistics_type_{};
+  AverageType average_type_{};                     // either simple or time-weighted
+  GroupType group_type_{};                         // measurements come from either a population or sample
+  StatisticsType statistics_type_{};               // what type of queue we store measurements/chunks in
   TimeConversionFactor time_conversion_factor_{};  // covariance and trend have a unit involving a time unit
 
   // if the aggregates are time-weighted, these store info about the previous observation
