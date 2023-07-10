@@ -88,7 +88,7 @@ class AggregateQueue {
    */
   size_t size() const { return this->size_; };
 
-  /// Enable averages to be weighted by the measurement's duration.
+  /// @brief Enable averages to be weighted by the measurement's duration.
   void enable_time_weighted() { this->time_weighted_ = true; }
 
  protected:
@@ -103,17 +103,20 @@ class AggregateQueue {
   size_t *duration_queue_{nullptr};
   size_t *duration_squared_queue_{nullptr};
 
-  uint32_t *timestamp_reference_queue_{nullptr};
-
-  float *max_queue_{nullptr};
-  float *mean_queue_{nullptr};
-  float *min_queue_{nullptr};
-
-  // By experimentation, using doubles for these improves accuracy in a measurable way
+  // By experimentation, using doubles for these improves accuracy in a measurable way since more computations are
+  // needed before returning a usueful statistic
   double *c2_queue_{nullptr};
   double *m2_queue_{nullptr};
   double *timestamp_m2_queue_{nullptr};
   double *timestamp_mean_queue_{nullptr};
+
+  // Timestamps from millis() are always type uint32_t
+  uint32_t *timestamp_reference_queue_{nullptr};
+
+  // FLoating point precision is only needed here, as that is what sensor->publish has as input
+  float *max_queue_{nullptr};
+  float *mean_queue_{nullptr};
+  float *min_queue_{nullptr};
 };
 
 }  // namespace statistics
