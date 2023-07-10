@@ -1,4 +1,12 @@
 /*
+ * AggregateQueue class facilitates storing aggregate statistics in queues. It has three main purposes:
+ *  - Allocate memory only for arrays that are necessary based on configured sensors (allocate_memory method)
+ *  - Add a new Aggregate to the queue by inserting actual values into allocated arrays (emplace method)
+ *  - Retreive an aggregate from the queue by reading actual values in the allocated arrays (lower method)
+ *
+ * Additionally, it defines several virtual methods that child classes implement. This allows for uniform method calls
+ * regardless of the specific queue structure used.
+ *
  * Implemented by Kevin Ahrendt for the ESPHome project, June and July 2023
  */
 
