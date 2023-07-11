@@ -73,12 +73,12 @@ CONF_CHUNKED_SLIDING_WINDOW = "chunked_sliding_window"
 CONF_CONTINUOUS = "continuous_window"
 CONF_CHUNKED_CONTINUOUS = "chunked_continuous_window"
 
-StatisticsType = statistics_ns.enum("StatisticsType")
-STATISTICS_TYPES = {
-    CONF_SLIDING_WINDOW: StatisticsType.STATISTICS_TYPE_SLIDING_WINDOW,
-    CONF_CHUNKED_SLIDING_WINDOW: StatisticsType.STATISTICS_TYPE_CHUNKED_SLIDING_WINDOW,
-    CONF_CONTINUOUS: StatisticsType.STATISTICS_TYPE_CONTINUOUS,
-    CONF_CHUNKED_CONTINUOUS: StatisticsType.STATISTICS_TYPE_CHUNKED_CONTINUOUS,
+WindowType = statistics_ns.enum("WindowType")
+WINDOW_TYPES = {
+    CONF_SLIDING_WINDOW: WindowType.WINDOW_TYPE_SLIDING_WINDOW,
+    CONF_CHUNKED_SLIDING_WINDOW: WindowType.WINDOW_TYPE_CHUNKED_SLIDING_WINDOW,
+    CONF_CONTINUOUS: WindowType.WINDOW_TYPE_CONTINUOUS,
+    CONF_CHUNKED_CONTINUOUS: WindowType.WINDOW_TYPE_CHUNKED_CONTINUOUS,
 }
 
 #################
@@ -343,8 +343,8 @@ async def to_code(config):
     cg.add(var.set_time_conversion_factor(config[CONF_TIME_UNIT]))
     cg.add(var.set_group_type(config[CONF_GROUP_TYPE]))
 
-    constant = STATISTICS_TYPES[config[CONF_TYPE]]
-    cg.add(var.set_statistics_type(constant))
+    constant = WINDOW_TYPES[config[CONF_TYPE]]
+    cg.add(var.set_window_type(constant))
 
     if config[CONF_TYPE] == CONF_SLIDING_WINDOW:
         cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
