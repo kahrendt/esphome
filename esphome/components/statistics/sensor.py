@@ -237,7 +237,7 @@ inherit_accuracy_decimals_with_transformation = [
 SLIDING_WINDOW_SCHEMA = cv.Schema(
     {
         cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
-        cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
+        cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_not_null_int,
         cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
     },
     validate_send_first_at,
@@ -247,10 +247,10 @@ CHUNKED_SLIDING_WINDOW_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
-            cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
-            cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
             cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
             cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
+            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_not_null_int,
+            cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
         },
         validate_send_first_at,
     ),
@@ -262,7 +262,7 @@ CONTINUOUS_WINDOW_SCHEMA = cv.All(
         {
             cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
             cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
-            cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
+            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_not_null_int,
             cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
         },
         validate_send_first_at,
@@ -275,10 +275,10 @@ CHUNKED_CONTINUOUS_WINDOW_SCHEMA = cv.All(
         {
             cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
             cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
-            cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
-            cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
             cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
             cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
+            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_not_null_int,
+            cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
             cv.Optional(CONF_RESTORE): cv.boolean,
         },
         validate_send_first_at,
