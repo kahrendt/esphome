@@ -1,18 +1,5 @@
 /*
 To-do:
-  - update documentation draft in esphome-docs repository
-    - add table describing when each type of queue should be used
-    x add reset action description
-    x exlain chunk options
-  - spell/grammar check comments and documentation
-    - documentation
-
-    x AggregateQueue
-    x Aggregate
-    x DABALiteQueue
-    x ContinuousQueue
-    x ContinuousSingular
-    x Statistics
   - write a cookbook documentation example for humidity detection using a trend sensor
 
   x improve mean calculation for numerical stability
@@ -27,6 +14,18 @@ To-do:
   x update documentation to reflect unified names
   x updated required options in sensor.py to match documentation
   x use at_least_one config for measurements_before_reset/chunks_before_reset and duration_before_reset
+  x update documentation draft in esphome-docs repository
+    x add table describing when each type of queue should be used
+    x add reset action description
+    x exlain chunk options
+  x spell/grammar check comments and documentation
+    x documentation
+    x AggregateQueue
+    x Aggregate
+    x DABALiteQueue
+    x ContinuousQueue
+    x ContinuousSingular
+    x Statistics
 */
 
 #include "statistics.h"
