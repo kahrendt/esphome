@@ -58,8 +58,8 @@ GROUP_TYPES = {
 # Different types of statistics possible
 CONF_SLIDING_WINDOW = "sliding_window"
 CONF_CHUNKED_SLIDING_WINDOW = "chunked_sliding_window"
-CONF_CONTINUOUS = "continuous"
-CONF_CHUNKED_CONTINUOUS = "chunked_continuous"
+CONF_CONTINUOUS = "continuous_window"
+CONF_CHUNKED_CONTINUOUS = "chunked_continuous_window"
 
 StatisticsType = statistics_ns.enum("StatisticsType")
 STATISTICS_TYPES = {
