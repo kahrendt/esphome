@@ -28,6 +28,13 @@ CODEOWNERS = ["@kahrendt"]
 statistics_ns = cg.esphome_ns.namespace("statistics")
 StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
 
+######################
+# Automation Actions #
+######################
+
+# Reset action that clears all queued aggragates
+ResetAction = statistics_ns.class_("ResetAction", automation.Action)
+
 #####################
 # Definable sensors #
 #####################
@@ -110,8 +117,39 @@ TIME_CONVERSION_FACTORS = {
     "d": TimeConversionFactor.FACTOR_DAY,
 }
 
-# Reset action that clears all queued aggragates
-ResetAction = statistics_ns.class_("ResetAction", automation.Action)
+############################################
+# List of Sensors for Property Inheritance #
+############################################
+
+SENSOR_LIST_WITH_ORIGINAL_UNITS = [
+    CONF_MEAN,
+    CONF_MIN,
+    CONF_MAX,
+    CONF_STD_DEV,
+]
+
+SENSOR_LIST_WITH_MODIFIED_UNITS = [
+    CONF_VARIANCE,
+    CONF_COVARIANCE,
+    CONF_TREND,
+]
+
+SENSOR_LIST_WITH_SAME_ACCURACY_DECIMALS = [
+    CONF_MAX,
+    CONF_MEAN,
+    CONF_MIN,
+]
+
+SENSOR_LIST_WITH_INCREASED_ACCURACY_DECIMALS = [
+    CONF_COVARIANCE,
+    CONF_STD_DEV,
+    CONF_TREND,
+    CONF_VARIANCE,
+]
+
+#####################################################
+# Transformation Functions for Inherited Properties #
+#####################################################
 
 
 # covarance's unit is original unit of measurement multiplied by time unit of measurement
@@ -140,7 +178,7 @@ def transform_accuracy_decimals(decimals, config):
     return decimals + 2
 
 
-# borrowed from sensor/__init__.py
+# borrowed from sensor/__init__.py (accessed July 2023)
 def validate_send_first_at(config):
     send_first_at = config.get(CONF_SEND_FIRST_AT)
     send_every = config[CONF_SEND_EVERY]
@@ -151,6 +189,52 @@ def validate_send_first_at(config):
     return config
 
 
+###################
+# Inherit Schemas #
+###################
+
+PROPERTIES_TO_INHERIT_WITH_ORIGINAL_UNIT_SENSORS = [
+    CONF_DEVICE_CLASS,
+    CONF_ENTITY_CATEGORY,
+    CONF_ICON,
+    CONF_UNIT_OF_MEASUREMENT,
+]
+
+PROPERTIES_TO_INHERIT_WITH_MODIFIED_UNIT_SENSORS = [
+    CONF_ENTITY_CATEGORY,
+    CONF_ICON,
+]
+
+inherit_schema_for_same_unit_sensors = [
+    inherit_property_from([sensor_config, property], CONF_SOURCE_ID)
+    for property in PROPERTIES_TO_INHERIT_WITH_ORIGINAL_UNIT_SENSORS
+    for sensor_config in SENSOR_LIST_WITH_ORIGINAL_UNITS
+]
+inherit_schema_for_new_unit_sensors = [
+    inherit_property_from([sensor_config, property], CONF_SOURCE_ID)
+    for property in PROPERTIES_TO_INHERIT_WITH_MODIFIED_UNIT_SENSORS
+    for sensor_config in SENSOR_LIST_WITH_MODIFIED_UNITS
+]
+
+inherit_accuracy_decimals_without_transformation = [
+    inherit_property_from([sensor_config, CONF_ACCURACY_DECIMALS], CONF_SOURCE_ID)
+    for sensor_config in SENSOR_LIST_WITH_SAME_ACCURACY_DECIMALS
+]
+
+inherit_accuracy_decimals_with_transformation = [
+    inherit_property_from(
+        [sensor_config, CONF_ACCURACY_DECIMALS],
+        CONF_SOURCE_ID,
+        transform=transform_accuracy_decimals,
+    )
+    for sensor_config in SENSOR_LIST_WITH_INCREASED_ACCURACY_DECIMALS
+]
+
+#########################
+# Configuration Schemas #
+#########################
+
+# Configuration options for all window types
 BASE_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(StatisticsComponent),
@@ -198,6 +282,7 @@ BASE_SCHEMA = cv.Schema(
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
+# Handle different window types
 CONFIG_SCHEMA = cv.All(
     cv.typed_schema(
         {
@@ -242,69 +327,6 @@ CONFIG_SCHEMA = cv.All(
     )
 )
 
-PROPERTIES_TO_INHERIT_WITH_ORIGINAL_UNIT_SENSORS = [
-    CONF_DEVICE_CLASS,
-    CONF_ENTITY_CATEGORY,
-    CONF_ICON,
-    CONF_UNIT_OF_MEASUREMENT,
-]
-
-PROPERTIES_TO_INHERIT_WITH_MODIFIED_UNIT_SENSORS = [
-    CONF_ENTITY_CATEGORY,
-    CONF_ICON,
-]
-
-SENSOR_LIST_WITH_ORIGINAL_UNITS = [
-    CONF_MEAN,
-    CONF_MIN,
-    CONF_MAX,
-    CONF_STD_DEV,
-]
-
-SENSOR_LIST_WITH_MODIFIED_UNITS = [
-    CONF_VARIANCE,
-    CONF_COVARIANCE,
-    CONF_TREND,
-]
-
-SENSOR_LIST_WITH_SAME_ACCURACY_DECIMALS = [
-    CONF_MAX,
-    CONF_MEAN,
-    CONF_MIN,
-]
-
-SENSOR_LIST_WITH_INCREASED_ACCURACY_DECIMALS = [
-    CONF_COVARIANCE,
-    CONF_STD_DEV,
-    CONF_TREND,
-    CONF_VARIANCE,
-]
-
-inherit_schema_for_same_unit_sensors = [
-    inherit_property_from([sensor_config, property], CONF_SOURCE_ID)
-    for property in PROPERTIES_TO_INHERIT_WITH_ORIGINAL_UNIT_SENSORS
-    for sensor_config in SENSOR_LIST_WITH_ORIGINAL_UNITS
-]
-inherit_schema_for_new_unit_sensors = [
-    inherit_property_from([sensor_config, property], CONF_SOURCE_ID)
-    for property in PROPERTIES_TO_INHERIT_WITH_MODIFIED_UNIT_SENSORS
-    for sensor_config in SENSOR_LIST_WITH_MODIFIED_UNITS
-]
-
-inherit_accuracy_decimals_without_transformation = [
-    inherit_property_from([sensor_config, CONF_ACCURACY_DECIMALS], CONF_SOURCE_ID)
-    for sensor_config in SENSOR_LIST_WITH_SAME_ACCURACY_DECIMALS
-]
-
-inherit_accuracy_decimals_with_transformation = [
-    inherit_property_from(
-        [sensor_config, CONF_ACCURACY_DECIMALS],
-        CONF_SOURCE_ID,
-        transform=transform_accuracy_decimals,
-    )
-    for sensor_config in SENSOR_LIST_WITH_INCREASED_ACCURACY_DECIMALS
-]
-
 FINAL_VALIDATE_SCHEMA = cv.All(
     *inherit_schema_for_new_unit_sensors,
     *inherit_schema_for_same_unit_sensors,
@@ -327,6 +349,10 @@ FINAL_VALIDATE_SCHEMA = cv.All(
     ),
     validate_send_first_at,
 )
+
+###################
+# Code Generation #
+###################
 
 
 async def to_code(config):
