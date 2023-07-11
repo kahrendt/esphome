@@ -35,6 +35,9 @@ StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
 # Reset action that clears all queued aggragates
 ResetAction = statistics_ns.class_("ResetAction", automation.Action)
 
+# Force all sensors to publish
+ForcePublishAction = statistics_ns.class_("ForcePublishAction", automation.Action)
+
 #####################
 # Definable sensors #
 #####################
@@ -482,9 +485,9 @@ async def to_code(config):
         cg.add(var.set_variance_sensor(sens))
 
 
-#####################
-# Automation Action #
-#####################
+######################
+# Automation Actions #
+######################
 
 
 @automation.register_action(
@@ -496,6 +499,22 @@ async def to_code(config):
         }
     ),
 )
+@automation.register_action(
+    "sensor.statistics.force_publish",
+    ForcePublishAction,
+    automation.maybe_simple_id(
+        {
+            cv.Required(CONF_ID): cv.use_id(StatisticsComponent),
+        }
+    ),
+)
 async def sensor_statistics_reset_to_code(config, action_id, template_arg, args):
+    paren = await cg.get_variable(config[CONF_ID])
+    return cg.new_Pvariable(action_id, template_arg, paren)
+
+
+async def sensor_statistics_force_publish_to_code(
+    config, action_id, template_arg, args
+):
     paren = await cg.get_variable(config[CONF_ID])
     return cg.new_Pvariable(action_id, template_arg, paren)
