@@ -98,10 +98,17 @@ class AggregateQueue {
   // Stores the number of aggregates inserted into the queue
   size_t size_{0};
 
-  // Queues for storing aggregate statistics
+  /////////////////////////////////////////////
+  // Queues for storing aggregate statistics //
+  /////////////////////////////////////////////
   size_t *count_queue_{nullptr};
-  size_t *duration_queue_{nullptr};
-  size_t *duration_squared_queue_{nullptr};
+
+  // Timestamps from millis() are always type uint32_t
+  uint32_t *timestamp_reference_queue_{nullptr};
+
+  // Long term durations could overflow uint32_t in milliseconds
+  uint64_t *duration_queue_{nullptr};
+  uint64_t *duration_squared_queue_{nullptr};
 
   // By experimentation, using doubles for these improves accuracy in a measurable way since more computations are
   // needed before returning a useful statistic
@@ -109,9 +116,6 @@ class AggregateQueue {
   double *m2_queue_{nullptr};
   double *timestamp_m2_queue_{nullptr};
   double *timestamp_mean_queue_{nullptr};
-
-  // Timestamps from millis() are always type uint32_t
-  uint32_t *timestamp_reference_queue_{nullptr};
 
   // Floating point precision is only needed here, as that is what sensor->publish_state has as input
   float *max_queue_{nullptr};
