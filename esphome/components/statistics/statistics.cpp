@@ -2,6 +2,8 @@
 To-do:
   - write a cookbook documentation example for humidity detection using a trend sensor
 
+  x move reset automation to automation.h
+  x use uint64_t for durations
   x improve mean calculation for numerical stability
   x ?move duration into AggregateQueue? => no, doesn't make sense to quickly compute this for DABALiteQueues
   x test whether time weighted averages with no sensor updates in a chunk duration is handled properly
