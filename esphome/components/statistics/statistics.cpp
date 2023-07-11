@@ -161,6 +161,13 @@ void StatisticsComponent::reset() {
   this->send_at_chunks_counter_ = 0;  // reset the inserted chunks counter
 }
 
+void StatisticsComponent::force_publish() {
+  Aggregate aggregate_to_publish = this->queue_->compute_current_aggregate();
+  aggregate_to_publish = aggregate_to_publish.combine_with(this->running_chunk_aggregate_);
+
+  this->publish_and_save_(aggregate_to_publish);
+}
+
 void StatisticsComponent::handle_new_value_(float value) {
   //////////////////////////////////////////////
   // Prepare incoming values to be aggregated //

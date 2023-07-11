@@ -107,6 +107,9 @@ class StatisticsComponent : public Component {
   /// @brief Reset the window by clearing it.
   void reset();
 
+  /// @brief Forces sensor updates using the current aggregate from the queue combined with the running chunk aggregate.
+  void force_publish();
+
   // source sensor of measurements
   void set_source_sensor(sensor::Sensor *source_sensor) { this->source_sensor_ = source_sensor; }
 
