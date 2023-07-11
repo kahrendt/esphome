@@ -44,6 +44,7 @@
  * Component code structure: (see specific header files for more detailed descriptions):
  *  - statistics.h - Statistics is a class that sets up the component by allocating memory for a configured queue and
  *    handles new measurements
+ *  - automation.h - Handles the ESPHome automation for resetting the window
  *  - aggregate.h - Aggregate is a class that stores a collection of summary statistics and can combine two aggregates
  *    into one
  *  - aggregate_queue.h - AggregateQueue is a class that allocates memory for a set of Aggregates for the enabled
@@ -210,17 +211,6 @@ class StatisticsComponent : public Component {
 
   /// @brief Return if the running aggregate chunk is ready to be inserted into the queue.
   inline bool is_running_chunk_ready_();
-};
-
-// Based on the integration component reset action
-template<typename... Ts> class ResetAction : public Action<Ts...> {
- public:
-  explicit ResetAction(StatisticsComponent *parent) : parent_(parent) {}
-
-  void play(Ts... x) override { this->parent_->reset(); }
-
- protected:
-  StatisticsComponent *parent_;
 };
 
 }  // namespace statistics
