@@ -102,9 +102,9 @@ AVERAGE_TYPES = {
     CONF_TIME_WEIGHTED_AVERAGE: AverageType.TIME_WEIGHTED_AVERAGE,
 }
 
-######################################
-# Time Unit for Covariance and Trend #
-######################################
+#######################################
+# Time Units for Covariance and Trend #
+#######################################
 
 CONF_TIME_UNIT = "time_unit"
 
@@ -117,9 +117,9 @@ TIME_CONVERSION_FACTORS = {
     "d": TimeConversionFactor.FACTOR_DAY,
 }
 
-############################################
-# List of Sensors for Property Inheritance #
-############################################
+#########################################
+# Sensor Lists for Property Inheritance #
+#########################################
 
 SENSOR_LIST_WITH_ORIGINAL_UNITS = [
     CONF_MEAN,

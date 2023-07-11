@@ -1,35 +1,3 @@
-/*
-To-do:
-  - write a cookbook documentation example for humidity detection using a trend sensor
-
-  x move reset automation to automation.h
-  x use uint64_t for durations
-  x improve mean calculation for numerical stability
-  x ?move duration into AggregateQueue? => no, doesn't make sense to quickly compute this for DABALiteQueues
-  x test whether time weighted averages with no sensor updates in a chunk duration is handled properly
-  x add/improve comments in aggregate_queue.h (just need a class description)
-  x rename send_at_ to send_at_chunks_ in code
-  x rename config options to be more uniform across types
-  x move statistics config dump to own function
-  x move enable aggregate config to own function
-  x rename measurements_before_reset and chunks_before_reset to unify them
-  x update documentation to reflect unified names
-  x updated required options in sensor.py to match documentation
-  x use at_least_one config for measurements_before_reset/chunks_before_reset and duration_before_reset
-  x update documentation draft in esphome-docs repository
-    x add table describing when each type of queue should be used
-    x add reset action description
-    x exlain chunk options
-  x spell/grammar check comments and documentation
-    x documentation
-    x AggregateQueue
-    x Aggregate
-    x DABALiteQueue
-    x ContinuousQueue
-    x ContinuousSingular
-    x Statistics
-*/
-
 #include "statistics.h"
 
 #include "aggregate.h"
