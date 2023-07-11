@@ -75,17 +75,17 @@ GROUP_TYPES = {
 # Window Types #
 ################
 
-CONF_SLIDING_WINDOW = "sliding_window"
-CONF_CHUNKED_SLIDING_WINDOW = "chunked_sliding_window"
-CONF_CONTINUOUS = "continuous_window"
-CONF_CHUNKED_CONTINUOUS = "chunked_continuous_window"
+CONF_SLIDING_WINDOW = "sliding"
+CONF_CHUNKED_SLIDING_WINDOW = "chunked_sliding"
+CONF_CONTINUOUS_WINDOW = "continuous"
+CONF_CHUNKED_CONTINUOUS_WINDOW = "chunked_continuous"
 
 WindowType = statistics_ns.enum("WindowType")
 WINDOW_TYPES = {
-    CONF_SLIDING_WINDOW: WindowType.WINDOW_TYPE_SLIDING_WINDOW,
-    CONF_CHUNKED_SLIDING_WINDOW: WindowType.WINDOW_TYPE_CHUNKED_SLIDING_WINDOW,
-    CONF_CONTINUOUS: WindowType.WINDOW_TYPE_CONTINUOUS,
-    CONF_CHUNKED_CONTINUOUS: WindowType.WINDOW_TYPE_CHUNKED_CONTINUOUS,
+    CONF_SLIDING_WINDOW: WindowType.WINDOW_TYPE_SLIDING,
+    CONF_CHUNKED_SLIDING_WINDOW: WindowType.WINDOW_TYPE_CHUNKED_SLIDING,
+    CONF_CONTINUOUS_WINDOW: WindowType.WINDOW_TYPE_CONTINUOUS,
+    CONF_CHUNKED_CONTINUOUS_WINDOW: WindowType.WINDOW_TYPE_CHUNKED_CONTINUOUS,
 }
 
 #################
@@ -152,8 +152,8 @@ SENSOR_LIST_WITH_INCREASED_ACCURACY_DECIMALS = [
 #####################################################
 
 
-# covarance's unit is original unit of measurement multiplied by time unit of measurement
-# borrowed from sensor/integration/sensor.py (accessed July 2023)
+# Covarance's unit is original unit of measurement multiplied by time unit of measurement
+# Borrowed from sensor/integration/sensor.py (accessed July 2023)
 def transform_covariance_unit_of_measurement(uom, config):
     suffix = config[CONF_TIME_UNIT]
     if uom.endswith("/" + suffix):
@@ -161,24 +161,24 @@ def transform_covariance_unit_of_measurement(uom, config):
     return uom + "⋅" + suffix
 
 
-# variance's unit is original unit of measurement squared
+# Variance's unit is original unit of measurement squared
 def transform_variance_unit_of_measurement(uom, config):
     return "(" + uom + ")²"
 
 
-# trend's unit is in original unit of measurement divides by time unit of measurement
+# Trend's unit is in original unit of measurement divides by time unit of measurement
 def transform_trend_unit_of_measurement(uom, config):
     denominator = config[CONF_TIME_UNIT]
     return uom + "/" + denominator
 
 
-# increases accuracy decimals by 2
-# borrowed from sensor/integration/sensor.py (accessed July 2023)
+# Increases accuracy decimals by 2
+# Borrowed from sensor/integration/sensor.py (accessed July 2023)
 def transform_accuracy_decimals(decimals, config):
     return decimals + 2
 
 
-# borrowed from sensor/__init__.py (accessed July 2023)
+# Borrowed from sensor/__init__.py (accessed July 2023)
 def validate_send_first_at(config):
     send_first_at = config.get(CONF_SEND_FIRST_AT)
     send_every = config[CONF_SEND_EVERY]
@@ -234,11 +234,71 @@ inherit_accuracy_decimals_with_transformation = [
 # Configuration Schemas #
 #########################
 
-# Configuration options for all window types
-BASE_SCHEMA = cv.Schema(
+SLIDING_WINDOW_SCHEMA = cv.Schema(
+    {
+        cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
+        cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
+        cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
+    },
+    validate_send_first_at,
+)
+
+CHUNKED_SLIDING_WINDOW_SCHEMA = cv.All(
+    cv.Schema(
+        {
+            cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
+            cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
+            cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
+            cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
+            cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
+        },
+        validate_send_first_at,
+    ),
+    cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
+)
+
+CONTINUOUS_WINDOW_SCHEMA = cv.All(
+    cv.Schema(
+        {
+            cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
+            cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
+            cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
+            cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
+        },
+        validate_send_first_at,
+    ),
+    cv.has_at_least_one_key(CONF_WINDOW_SIZE, CONF_WINDOW_DURATION),
+)
+
+CHUNKED_CONTINUOUS_WINDOW_SCHEMA = cv.All(
+    cv.Schema(
+        {
+            cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
+            cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
+            cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
+            cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
+            cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
+            cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
+            cv.Optional(CONF_RESTORE): cv.boolean,
+        },
+        validate_send_first_at,
+    ),
+    cv.has_at_least_one_key(CONF_WINDOW_SIZE, CONF_WINDOW_DURATION),
+    cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
+)
+
+CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(StatisticsComponent),
         cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
+        cv.Required("window"): cv.typed_schema(
+            {
+                CONF_SLIDING_WINDOW: SLIDING_WINDOW_SCHEMA,
+                CONF_CHUNKED_SLIDING_WINDOW: CHUNKED_SLIDING_WINDOW_SCHEMA,
+                CONF_CONTINUOUS_WINDOW: CONTINUOUS_WINDOW_SCHEMA,
+                CONF_CHUNKED_CONTINUOUS_WINDOW: CHUNKED_CONTINUOUS_WINDOW_SCHEMA,
+            }
+        ),
         cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE_AVERAGE): cv.enum(
             AVERAGE_TYPES, lower=True
         ),
@@ -248,8 +308,6 @@ BASE_SCHEMA = cv.Schema(
         cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
             TIME_CONVERSION_FACTORS, lower=True
         ),
-        cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
-        cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
         cv.Optional(CONF_COUNT): sensor.sensor_schema(
             state_class=STATE_CLASS_TOTAL,
         ),
@@ -282,51 +340,7 @@ BASE_SCHEMA = cv.Schema(
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
-# Handle different window types
-CONFIG_SCHEMA = cv.All(
-    cv.typed_schema(
-        {
-            CONF_SLIDING_WINDOW: BASE_SCHEMA.extend(
-                {
-                    cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
-                }
-            ),
-            CONF_CHUNKED_SLIDING_WINDOW: cv.All(
-                BASE_SCHEMA.extend(
-                    {
-                        cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
-                        cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
-                        cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
-                    },
-                ),
-                cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
-            ),
-            CONF_CONTINUOUS: cv.All(
-                BASE_SCHEMA.extend(
-                    {
-                        cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
-                        cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
-                    }
-                ),
-                cv.has_at_least_one_key(CONF_WINDOW_SIZE, CONF_WINDOW_DURATION),
-            ),
-            CONF_CHUNKED_CONTINUOUS: cv.All(
-                BASE_SCHEMA.extend(
-                    {
-                        cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
-                        cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
-                        cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
-                        cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
-                        cv.Optional(CONF_RESTORE): cv.boolean,
-                    },
-                ),
-                cv.has_at_least_one_key(CONF_WINDOW_SIZE, CONF_WINDOW_DURATION),
-                cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
-            ),
-        }
-    )
-)
-
+# Handles inheriting properties from the source sensor
 FINAL_VALIDATE_SCHEMA = cv.All(
     *inherit_schema_for_new_unit_sensors,
     *inherit_schema_for_same_unit_sensors,
@@ -347,7 +361,6 @@ FINAL_VALIDATE_SCHEMA = cv.All(
         CONF_SOURCE_ID,
         transform=transform_trend_unit_of_measurement,
     ),
-    validate_send_first_at,
 )
 
 ###################
@@ -366,49 +379,62 @@ async def to_code(config):
     cg.add(var.set_source_sensor(source))
 
     cg.add(var.set_average_type(config[CONF_AVERAGE_TYPE]))
-    cg.add(var.set_time_conversion_factor(config[CONF_TIME_UNIT]))
     cg.add(var.set_group_type(config[CONF_GROUP_TYPE]))
+    cg.add(var.set_time_conversion_factor(config[CONF_TIME_UNIT]))
 
-    constant = WINDOW_TYPES[config[CONF_TYPE]]
+    # Handle window configurations
+
+    window_config = config["window"]
+    constant = WINDOW_TYPES[window_config[CONF_TYPE]]
     cg.add(var.set_window_type(constant))
 
-    if config[CONF_TYPE] == CONF_SLIDING_WINDOW:
-        cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
-    elif config[CONF_TYPE] == CONF_CHUNKED_SLIDING_WINDOW:
-        if CONF_CHUNK_SIZE in config:
-            chunk_size = config[CONF_CHUNK_SIZE]
-        elif CONF_CHUNK_DURATION in config:
+    if window_config[CONF_TYPE] == CONF_SLIDING_WINDOW:
+        cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
+    elif window_config[CONF_TYPE] == CONF_CHUNKED_SLIDING_WINDOW:
+        if CONF_CHUNK_SIZE in window_config:
+            chunk_size = window_config[CONF_CHUNK_SIZE]
+        elif CONF_CHUNK_DURATION in window_config:
             chunk_size = 0
             cg.add(
-                var.set_chunk_duration(config[CONF_CHUNK_DURATION].total_milliseconds)
+                var.set_chunk_duration(
+                    window_config[CONF_CHUNK_DURATION].total_milliseconds
+                )
             )
         cg.add(var.set_chunk_size(chunk_size))
-        cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
-    elif config[CONF_TYPE] == CONF_CONTINUOUS:
-        cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
-        if CONF_WINDOW_DURATION in config:
+        cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
+    elif window_config[CONF_TYPE] == CONF_CONTINUOUS_WINDOW:
+        cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
+        if CONF_WINDOW_DURATION in window_config:
             cg.add(
-                var.set_window_duration(config[CONF_WINDOW_DURATION].total_milliseconds)
+                var.set_window_duration(
+                    window_config[CONF_WINDOW_DURATION].total_milliseconds
+                )
             )
-    elif config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS:
-        if CONF_CHUNK_SIZE in config:
-            chunk_size = config[CONF_CHUNK_SIZE]
-        elif CONF_CHUNK_DURATION in config:
+    elif window_config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS_WINDOW:
+        if CONF_CHUNK_SIZE in window_config:
+            chunk_size = window_config[CONF_CHUNK_SIZE]
+        elif CONF_CHUNK_DURATION in window_config:
             chunk_size = 0
             cg.add(
-                var.set_chunk_duration(config[CONF_CHUNK_DURATION].total_milliseconds)
+                var.set_chunk_duration(
+                    window_config[CONF_CHUNK_DURATION].total_milliseconds
+                )
             )
         cg.add(var.set_chunk_size(chunk_size))
-        cg.add(var.set_window_size(config[CONF_WINDOW_SIZE]))
-        if CONF_WINDOW_DURATION in config:
+        cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
+        if CONF_WINDOW_DURATION in window_config:
             cg.add(
-                var.set_window_duration(config[CONF_WINDOW_DURATION].total_milliseconds)
+                var.set_window_duration(
+                    window_config[CONF_WINDOW_DURATION].total_milliseconds
+                )
             )
-        if CONF_RESTORE in config:
-            cg.add(var.set_restore(config[CONF_RESTORE]))
+        if CONF_RESTORE in window_config:
+            cg.add(var.set_restore(window_config[CONF_RESTORE]))
 
-    cg.add(var.set_send_every(config[CONF_SEND_EVERY]))
-    cg.add(var.set_first_at(config[CONF_SEND_FIRST_AT]))
+    cg.add(var.set_send_every(window_config[CONF_SEND_EVERY]))
+    cg.add(var.set_first_at(window_config[CONF_SEND_FIRST_AT]))
+
+    # Handle sensor configurations
 
     if CONF_COUNT in config:
         conf = config[CONF_COUNT]
@@ -454,6 +480,11 @@ async def to_code(config):
         conf = config[CONF_VARIANCE]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_variance_sensor(sens))
+
+
+#####################
+# Automation Action #
+#####################
 
 
 @automation.register_action(
