@@ -6,7 +6,7 @@
 namespace esphome {
 namespace statistics {
 
-Aggregate::Aggregate(double value, size_t duration, uint32_t timestamp) {
+Aggregate::Aggregate(double value, uint64_t duration, uint32_t timestamp) {
   if (!std::isnan(value)) {
     this->c2_ = 0.0;
     this->count_ = 1;

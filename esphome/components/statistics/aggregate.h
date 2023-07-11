@@ -58,7 +58,7 @@ class Aggregate {
    * @param duration length of time (in milliseconds) for measurement
    * @param timestamp timestamp of measurement (in milliseconds)
    */
-  Aggregate(double value, size_t duration, uint32_t timestamp);
+  Aggregate(double value, uint64_t duration, uint32_t timestamp);
 
   /** Combine Aggregate with another.
    *
@@ -110,13 +110,13 @@ class Aggregate {
   void set_count(size_t count) { this->count_ = count; }
 
   // The duration of measurements in the Aggregate in milliseconds
-  size_t get_duration() const { return this->duration_; }
-  void set_duration(size_t duration) { this->duration_ = duration; }
+  uint64_t get_duration() const { return this->duration_; }
+  void set_duration(uint64_t duration) { this->duration_ = duration; }
 
   // The duration of measurements in the Aggregate squared in milliseconds squared; used for computing reliability
   // weights
-  size_t get_duration_squared() const { return this->duration_squared_; }
-  void set_duration_squared(size_t duration_squared) { this->duration_squared_ = duration_squared; }
+  uint64_t get_duration_squared() const { return this->duration_squared_; }
+  void set_duration_squared(uint64_t duration_squared) { this->duration_squared_ = duration_squared; }
 
   // M2 from Welford's algorithm; used to compute variance
   double get_m2() const { return this->m2_; }
@@ -160,11 +160,11 @@ class Aggregate {
   size_t count_{0};
 
   // Sum of the durations between successive measurements in the Aggregate's set of measurements; kept as milliseconds
-  size_t duration_{0};
+  uint64_t duration_{0};
 
   // Sum of the durations between successive measurements squared in the Aggregate's set of measurements; necessary for
   // reliability weights
-  size_t duration_squared_{0};
+  uint64_t duration_squared_{0};
 
   // Quantity used in an extension of Welford's algorithm for finding the covariance of the Aggregate's set of
   // measurements and timestamps
