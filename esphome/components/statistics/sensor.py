@@ -140,6 +140,8 @@ BASE_SCHEMA = cv.Schema(
         cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
             TIME_CONVERSION_FACTORS, lower=True
         ),
+        cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
+        cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
         cv.Optional(CONF_COUNT): sensor.sensor_schema(
             state_class=STATE_CLASS_TOTAL,
         ),
@@ -178,10 +180,6 @@ CONFIG_SCHEMA = cv.All(
             CONF_SLIDING_WINDOW: BASE_SCHEMA.extend(
                 {
                     cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
-                    cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
-                    cv.Optional(
-                        CONF_SEND_FIRST_AT, default=1
-                    ): cv.positive_not_null_int,
                 }
             ),
             CONF_CHUNKED_SLIDING_WINDOW: cv.All(
@@ -190,10 +188,6 @@ CONFIG_SCHEMA = cv.All(
                         cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
                         cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
                         cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
-                        cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
-                        cv.Optional(
-                            CONF_SEND_FIRST_AT, default=1
-                        ): cv.positive_not_null_int,
                     },
                 ),
                 cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
@@ -203,10 +197,6 @@ CONFIG_SCHEMA = cv.All(
                     {
                         cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
                         cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
-                        cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
-                        cv.Optional(
-                            CONF_SEND_FIRST_AT, default=1
-                        ): cv.positive_not_null_int,
                     }
                 ),
                 cv.has_at_least_one_key(CONF_WINDOW_SIZE, CONF_WINDOW_DURATION),
@@ -214,19 +204,15 @@ CONFIG_SCHEMA = cv.All(
             CONF_CHUNKED_CONTINUOUS: cv.All(
                 BASE_SCHEMA.extend(
                     {
+                        cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
+                        cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
                         cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
                         cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
-                        cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
-                        cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
-                        cv.Required(CONF_SEND_EVERY): cv.positive_not_null_int,
-                        cv.Optional(
-                            CONF_SEND_FIRST_AT, default=1
-                        ): cv.positive_not_null_int,
                         cv.Optional(CONF_RESTORE): cv.boolean,
                     },
                 ),
-                cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
                 cv.has_at_least_one_key(CONF_WINDOW_SIZE, CONF_WINDOW_DURATION),
+                cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
             ),
         }
     )
@@ -246,19 +232,23 @@ properties_to_inherit_new_unit = [
     CONF_ICON,
 ]
 
-same_unit_sensor_list = [
+original_unit_sensor_list = [
     CONF_MEAN,
     CONF_MIN,
     CONF_MAX,
     CONF_STD_DEV,
 ]
 
-new_unit_sensor_list = [CONF_VARIANCE, CONF_COVARIANCE, CONF_TREND]
+new_unit_sensor_list = [
+    CONF_VARIANCE,
+    CONF_COVARIANCE,
+    CONF_TREND,
+]
 
 inherit_schema_for_same_unit_sensors = [
     inherit_property_from([sensor_config, property], CONF_SOURCE_ID)
     for property in properties_to_inherit_original_unit
-    for sensor_config in same_unit_sensor_list
+    for sensor_config in original_unit_sensor_list
 ]
 inherit_schema_for_new_unit_sensors = [
     inherit_property_from([sensor_config, property], CONF_SOURCE_ID)
