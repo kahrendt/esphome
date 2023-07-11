@@ -28,7 +28,10 @@ CODEOWNERS = ["@kahrendt"]
 statistics_ns = cg.esphome_ns.namespace("statistics")
 StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
 
-# Definable sensors
+#####################
+# Definable sensors #
+#####################
+
 CONF_COVARIANCE = "covariance"
 CONF_DURATION = "duration"
 CONF_MAX = "max"
@@ -38,13 +41,19 @@ CONF_STD_DEV = "std_dev"
 CONF_TREND = "trend"
 CONF_VARIANCE = "variance"
 
-# Configuration options for aggregate chunks
+##############################################
+# Configuration Options for Aggregate Chunks #
+##############################################
+
 CONF_CHUNK_SIZE = "chunk_size"
 CONF_CHUNK_DURATION = "chunk_duration"
 
 CONF_WINDOW_DURATION = "window_duration"
 
-# Type of measurement group; i.e., are the observations for a population or sample
+##########################
+# Measurement Group Type #
+##########################
+
 CONF_GROUP_TYPE = "group_type"
 CONF_SAMPLE_GROUP = "sample"
 CONF_POPULATION_GROUP = "population"
@@ -55,7 +64,10 @@ GROUP_TYPES = {
     CONF_POPULATION_GROUP: GroupType.POPULATION_GROUP_TYPE,
 }
 
-# Different types of statistics possible
+################
+# Window Types #
+################
+
 CONF_SLIDING_WINDOW = "sliding_window"
 CONF_CHUNKED_SLIDING_WINDOW = "chunked_sliding_window"
 CONF_CONTINUOUS = "continuous_window"
@@ -69,7 +81,10 @@ STATISTICS_TYPES = {
     CONF_CHUNKED_CONTINUOUS: StatisticsType.STATISTICS_TYPE_CHUNKED_CONTINUOUS,
 }
 
-# Types of average; simple has every observation with the same weight, time_weighted weighs each observation by the duration of the observation
+#################
+# Average Types #
+#################
+
 CONF_AVERAGE_TYPE = "average_type"
 CONF_SIMPLE_AVERAGE = "simple"
 CONF_TIME_WEIGHTED_AVERAGE = "time_weighted"
@@ -80,7 +95,10 @@ AVERAGE_TYPES = {
     CONF_TIME_WEIGHTED_AVERAGE: AverageType.TIME_WEIGHTED_AVERAGE,
 }
 
-# Time unit used for covariance and trend
+######################################
+# Time Unit for Covariance and Trend #
+######################################
+
 CONF_TIME_UNIT = "time_unit"
 
 TimeConversionFactor = statistics_ns.enum("TimeConversionFactor")
@@ -97,7 +115,7 @@ ResetAction = statistics_ns.class_("ResetAction", automation.Action)
 
 
 # covarance's unit is original unit of measurement multiplied by time unit of measurement
-# borrowed from sensor/integration/sensor.py
+# borrowed from sensor/integration/sensor.py (accessed July 2023)
 def transform_covariance_unit_of_measurement(uom, config):
     suffix = config[CONF_TIME_UNIT]
     if uom.endswith("/" + suffix):
@@ -114,6 +132,12 @@ def transform_variance_unit_of_measurement(uom, config):
 def transform_trend_unit_of_measurement(uom, config):
     denominator = config[CONF_TIME_UNIT]
     return uom + "/" + denominator
+
+
+# increases accuracy decimals by 2
+# borrowed from sensor/integration/sensor.py (accessed July 2023)
+def transform_accuracy_decimals(decimals, config):
+    return decimals + 2
 
 
 # borrowed from sensor/__init__.py
@@ -218,48 +242,74 @@ CONFIG_SCHEMA = cv.All(
     )
 )
 
-properties_to_inherit_original_unit = [
-    CONF_ACCURACY_DECIMALS,
+PROPERTIES_TO_INHERIT_WITH_ORIGINAL_UNIT_SENSORS = [
     CONF_DEVICE_CLASS,
     CONF_ENTITY_CATEGORY,
     CONF_ICON,
     CONF_UNIT_OF_MEASUREMENT,
 ]
 
-properties_to_inherit_new_unit = [
-    CONF_ACCURACY_DECIMALS,
+PROPERTIES_TO_INHERIT_WITH_MODIFIED_UNIT_SENSORS = [
     CONF_ENTITY_CATEGORY,
     CONF_ICON,
 ]
 
-original_unit_sensor_list = [
+SENSOR_LIST_WITH_ORIGINAL_UNITS = [
     CONF_MEAN,
     CONF_MIN,
     CONF_MAX,
     CONF_STD_DEV,
 ]
 
-new_unit_sensor_list = [
+SENSOR_LIST_WITH_MODIFIED_UNITS = [
     CONF_VARIANCE,
     CONF_COVARIANCE,
     CONF_TREND,
 ]
 
+SENSOR_LIST_WITH_SAME_ACCURACY_DECIMALS = [
+    CONF_MAX,
+    CONF_MEAN,
+    CONF_MIN,
+]
+
+SENSOR_LIST_WITH_INCREASED_ACCURACY_DECIMALS = [
+    CONF_COVARIANCE,
+    CONF_STD_DEV,
+    CONF_TREND,
+    CONF_VARIANCE,
+]
+
 inherit_schema_for_same_unit_sensors = [
     inherit_property_from([sensor_config, property], CONF_SOURCE_ID)
-    for property in properties_to_inherit_original_unit
-    for sensor_config in original_unit_sensor_list
+    for property in PROPERTIES_TO_INHERIT_WITH_ORIGINAL_UNIT_SENSORS
+    for sensor_config in SENSOR_LIST_WITH_ORIGINAL_UNITS
 ]
 inherit_schema_for_new_unit_sensors = [
     inherit_property_from([sensor_config, property], CONF_SOURCE_ID)
-    for property in properties_to_inherit_new_unit
-    for sensor_config in new_unit_sensor_list
+    for property in PROPERTIES_TO_INHERIT_WITH_MODIFIED_UNIT_SENSORS
+    for sensor_config in SENSOR_LIST_WITH_MODIFIED_UNITS
 ]
 
+inherit_accuracy_decimals_without_transformation = [
+    inherit_property_from([sensor_config, CONF_ACCURACY_DECIMALS], CONF_SOURCE_ID)
+    for sensor_config in SENSOR_LIST_WITH_SAME_ACCURACY_DECIMALS
+]
+
+inherit_accuracy_decimals_with_transformation = [
+    inherit_property_from(
+        [sensor_config, CONF_ACCURACY_DECIMALS],
+        CONF_SOURCE_ID,
+        transform=transform_accuracy_decimals,
+    )
+    for sensor_config in SENSOR_LIST_WITH_INCREASED_ACCURACY_DECIMALS
+]
 
 FINAL_VALIDATE_SCHEMA = cv.All(
     *inherit_schema_for_new_unit_sensors,
     *inherit_schema_for_same_unit_sensors,
+    *inherit_accuracy_decimals_without_transformation,
+    *inherit_accuracy_decimals_with_transformation,
     inherit_property_from(
         [CONF_VARIANCE, CONF_UNIT_OF_MEASUREMENT],
         CONF_SOURCE_ID,
