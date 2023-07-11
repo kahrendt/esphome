@@ -106,10 +106,10 @@ void StatisticsComponent::dump_config() {
 
   LOG_SENSOR("  ", "Source Sensor:", this->source_sensor_);
 
-  if (this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) {
+  if (this->window_type_ == WINDOW_TYPE_SLIDING_WINDOW) {
     ESP_LOGCONFIG(TAG, "  Statistics Type: sliding_window");
     ESP_LOGCONFIG(TAG, "  Window Size: %u", this->window_size_);
-  } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_SLIDING_WINDOW) {
+  } else if (this->window_type_ == WINDOW_TYPE_CHUNKED_SLIDING_WINDOW) {
     ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_sliding_window");
     ESP_LOGCONFIG(TAG, "  Chunks in Window: %u", this->window_size_);
     if (this->chunk_size_) {
@@ -117,7 +117,7 @@ void StatisticsComponent::dump_config() {
     } else {
       ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_);
     }
-  } else if (this->statistics_type_ == STATISTICS_TYPE_CONTINUOUS) {
+  } else if (this->window_type_ == WINDOW_TYPE_CONTINUOUS) {
     ESP_LOGCONFIG(TAG, "  Statistics Type: continuous");
     ESP_LOGCONFIG(TAG, "  Chunks Before Reset: %u", this->window_size_);
     if (this->chunk_size_) {
@@ -125,7 +125,7 @@ void StatisticsComponent::dump_config() {
     } else {
       ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_);
     }
-  } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS) {
+  } else if (this->window_type_ == WINDOW_TYPE_CHUNKED_CONTINUOUS) {
     ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_continuous");
     ESP_LOGCONFIG(TAG, "  Measurements Before Reset: %u", this->window_size_);
   }
@@ -149,12 +149,12 @@ void StatisticsComponent::dump_config() {
 void StatisticsComponent::setup() {
   EnabledAggregatesConfiguration config = this->determine_enabled_statistics_config_();
 
-  if ((this->statistics_type_ == STATISTICS_TYPE_SLIDING_WINDOW) ||
-      (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_SLIDING_WINDOW)) {
+  if ((this->window_type_ == WINDOW_TYPE_SLIDING_WINDOW) ||
+      (this->window_type_ == WINDOW_TYPE_CHUNKED_SLIDING_WINDOW)) {
     this->queue_ = new DABALiteQueue();
-  } else if (this->statistics_type_ == STATISTICS_TYPE_CHUNKED_CONTINUOUS) {
+  } else if (this->window_type_ == WINDOW_TYPE_CHUNKED_CONTINUOUS) {
     this->queue_ = new ContinuousQueue();
-  } else if (this->statistics_type_ == STATISTICS_TYPE_CONTINUOUS) {
+  } else if (this->window_type_ == WINDOW_TYPE_CONTINUOUS) {
     this->queue_ = new ContinuousSingular();
   }
 

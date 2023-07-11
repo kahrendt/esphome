@@ -79,11 +79,11 @@ enum AverageType {
   TIME_WEIGHTED_AVERAGE,
 };
 
-enum StatisticsType {
-  STATISTICS_TYPE_SLIDING_WINDOW,
-  STATISTICS_TYPE_CHUNKED_SLIDING_WINDOW,
-  STATISTICS_TYPE_CONTINUOUS,
-  STATISTICS_TYPE_CHUNKED_CONTINUOUS,
+enum WindowType {
+  WINDOW_TYPE_SLIDING_WINDOW,
+  WINDOW_TYPE_CHUNKED_SLIDING_WINDOW,
+  WINDOW_TYPE_CONTINUOUS,
+  WINDOW_TYPE_CHUNKED_CONTINUOUS,
 };
 
 enum TimeConversionFactor {
@@ -132,7 +132,7 @@ class StatisticsComponent : public Component {
 
   void set_average_type(AverageType type) { this->average_type_ = type; }
   void set_group_type(GroupType type) { this->group_type_ = type; }
-  void set_statistics_type(StatisticsType type) { this->statistics_type_ = type; }
+  void set_window_type(WindowType type) { this->window_type_ = type; }
   void set_time_conversion_factor(TimeConversionFactor conversion_factor) {
     this->time_conversion_factor_ = conversion_factor;
   }
@@ -177,7 +177,7 @@ class StatisticsComponent : public Component {
 
   AverageType average_type_{};                     // either simple or time-weighted
   GroupType group_type_{};                         // measurements come from either a population or a sample
-  StatisticsType statistics_type_{};               // type of queue to store measurements/chunks in
+  WindowType window_type_{};                       // type of queue to store measurements/chunks in
   TimeConversionFactor time_conversion_factor_{};  // time unit conversion for covariance and trend
 
   // If the Aggregates are time-weighted, store info about the previous observation
