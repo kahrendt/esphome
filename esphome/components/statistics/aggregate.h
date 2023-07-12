@@ -13,14 +13,15 @@
  *      - Use get_* methods for retrieval
  *    - Some of the stored summary statistics in the monoid are not useful immediately but can be combined with other
  *      stored measurements to compute a useful statistic
- *      - Variance and standard deviation are computed using the stored count (or duration if time-weighted) and M2
- *        statistics
- *        - M2 requires the mean statistic and count (or duration if time-weighted) for the combine operation
  *      - Covariance uses the stored count (or duration if time-weighted) and C2 statistics
  *        - C2 uses the mean, count (or duration if time-weighted), and timestamp mean for the combine operation
+ *      - Pearson correlation coeffecient uses C2, M2, and timestamp M2 statistics
  *      - Trend is computed using C2 and timestamp M2 statistics
  *        - timestamp M2 statistic additionally requires the timestamp mean and count (or duration if time-weighted)
  *          for the combine operation
+ *      - Variance and standard deviation are computed using the stored count (or duration if time-weighted) and M2
+ *        statistics
+ *        - M2 requires the mean statistic and count (or duration if time-weighted) for the combine operation
  *      - Use compute_* methods for retrieval
  *
  * For any statistic that uses timestamp_mean, the Aggregate also stores timestamp_reference.
@@ -77,6 +78,13 @@ class Aggregate {
    */
   double compute_covariance(bool time_weighted, GroupType type) const;
 
+  /** Compute the Pearson correlation coeffecient of the set of measurements and timestamps.
+   *
+   *  Applies Bessel's correction or implements reliability weights if the group type is a sample.
+   * @return Pearson correlation coeffecient of the set of measurements and timestamps
+   */
+  double compute_pearson_correlation() const;
+
   /** Compute the standard deviation of the set of measurements.
    *
    * Applies Bessel's correction or implements reliability weights if the group type is a sample.
@@ -86,6 +94,12 @@ class Aggregate {
    */
   double compute_std_dev(bool time_weighted, GroupType type) const;
 
+  /** Compute the slope of the line of best fit
+   *
+   * @return trend of the set of measurements over time
+   */
+  double compute_trend() const;
+
   /** Compute the variance of the set of measurements.
    *
    * Applies Bessel's correction or implements reliability weights if the group type is a sample.
@@ -94,12 +108,6 @@ class Aggregate {
    * @return variance of the set of measurements
    */
   double compute_variance(bool time_weighted, GroupType type) const;
-
-  /** Compute the slope of the line of best fit
-   *
-   * @return trend of the set of measurements over time
-   */
-  double compute_trend() const;
 
   // C2 from Welford's algorithm; used to compute the covariance of the measurements and timestamps weighted
   double get_c2() const { return this->c2_; }
