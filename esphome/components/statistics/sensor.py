@@ -185,10 +185,11 @@ def transform_accuracy_decimals(decimals, config):
 def validate_send_first_at(config):
     send_first_at = config.get(CONF_SEND_FIRST_AT)
     send_every = config[CONF_SEND_EVERY]
-    if send_first_at is not None and send_first_at > send_every:
-        raise cv.Invalid(
-            f"send_first_at must be smaller than or equal to send_every! {send_first_at} <= {send_every}"
-        )
+    if send_every > 0:  # If send_every == 0, then automatic publication is disabled
+        if send_first_at is not None and send_first_at > send_every:
+            raise cv.Invalid(
+                f"send_first_at must be smaller than or equal to send_every! {send_first_at} <= {send_every}"
+            )
     return config
 
 
@@ -265,7 +266,7 @@ CONTINUOUS_WINDOW_SCHEMA = cv.All(
         {
             cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
             cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
-            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_not_null_int,
+            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_int,
             cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
         },
         validate_send_first_at,
@@ -280,7 +281,7 @@ CHUNKED_CONTINUOUS_WINDOW_SCHEMA = cv.All(
             cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
             cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
             cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
-            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_not_null_int,
+            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_int,
             cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
             cv.Optional(CONF_RESTORE): cv.boolean,
         },
