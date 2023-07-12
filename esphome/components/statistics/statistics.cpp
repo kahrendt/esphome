@@ -237,14 +237,17 @@ void StatisticsComponent::handle_new_value_(float value) {
   // Publish and save sensor values //
   ////////////////////////////////////
 
-  if (this->send_at_chunks_counter_ >= this->send_every_) {
-    // Ensure sensors update at the configured rate
-    //  - send_at_chunks_counter_ counts the number of chunks inserted into the appropriate queue
-    //  - after send_every_ chunks, each sensor updates
+  // If send_every_ == 0, then automatic publication is disabled for a continuous queue
+  if (this->send_every_ > 0) {
+    if (this->send_at_chunks_counter_ >= this->send_every_) {
+      // Ensure sensors update at the configured rate
+      //  - send_at_chunks_counter_ counts the number of chunks inserted into the appropriate queue
+      //  - after send_every_ chunks, each sensor updates
 
-    this->send_at_chunks_counter_ = 0;  // reset send_at_chunks_counter_
+      this->send_at_chunks_counter_ = 0;  // reset send_at_chunks_counter_
 
-    this->publish_and_save_(this->queue_->compute_current_aggregate());
+      this->publish_and_save_(this->queue_->compute_current_aggregate());
+    }
   }
 }
 
