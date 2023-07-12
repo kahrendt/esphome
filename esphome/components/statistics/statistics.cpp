@@ -56,6 +56,10 @@ void StatisticsComponent::dump_enabled_sensors_() {
     LOG_SENSOR("  ", "Min Sensor:", this->min_sensor_);
   }
 
+  if (this->pearson_correlation_sensor_) {
+    LOG_SENSOR("  ", "Pearson Corrleation:", this->pearson_correlation_sensor_);
+  }
+
   if (this->std_dev_sensor_) {
     LOG_SENSOR("  ", "Standard Deviation Sensor:", this->std_dev_sensor_);
   }
@@ -290,6 +294,9 @@ void StatisticsComponent::publish_and_save_(Aggregate value) {
     }
   }
 
+  if (this->pearson_correlation_sensor_)
+    this->pearson_correlation_sensor_->publish_state(value.compute_pearson_correlation());
+
   if (this->std_dev_sensor_)
     this->std_dev_sensor_->publish_state(value.compute_std_dev(this->is_time_weighted_(), this->group_type_));
 
@@ -334,6 +341,15 @@ EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics
 
   if (this->min_sensor_) {
     config.min = true;
+  }
+
+  if (this->pearson_correlation_sensor_) {
+    config.c2 = true;
+    config.m2 = true;
+    config.mean = true;
+    config.timestamp_m2 = true;
+    config.timestamp_mean = true;
+    config.timestamp_reference = true;
   }
 
   if ((this->std_dev_sensor_) || (this->variance_sensor_)) {

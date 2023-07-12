@@ -47,6 +47,7 @@ CONF_DURATION = "duration"
 CONF_MAX = "max"
 CONF_MEAN = "mean"
 CONF_MIN = "min"
+CONF_PEARSON_CORRELATION = "pearson_correlation"
 CONF_STD_DEV = "std_dev"
 CONF_TREND = "trend"
 CONF_VARIANCE = "variance"
@@ -332,6 +333,9 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_MIN): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
         ),
+        cv.Optional(CONF_PEARSON_CORRELATION): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
         cv.Optional(CONF_STD_DEV): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
         ),
@@ -469,6 +473,11 @@ async def to_code(config):
         conf = config[CONF_MIN]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_min_sensor(sens))
+
+    if CONF_PEARSON_CORRELATION in config:
+        conf = config[CONF_PEARSON_CORRELATION]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_pearson_correlation_sensor(sens))
 
     if CONF_STD_DEV in config:
         conf = config[CONF_STD_DEV]
