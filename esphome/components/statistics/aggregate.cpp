@@ -38,15 +38,6 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   combined.duration_ = this->get_duration() + b.get_duration();
   combined.duration_squared_ = this->get_duration_squared() + b.get_duration_squared();
 
-  double a_weight, b_weight, combined_weight;
-
-  double a_timestamp_mean = this->get_timestamp_mean();
-  double b_timestamp_mean = b.get_timestamp_mean();
-
-  combined.timestamp_reference_ =
-      this->normalize_timestamp_means_(a_timestamp_mean, this->get_timestamp_reference(), this->get_count(),
-                                       b_timestamp_mean, b.get_timestamp_reference(), b.get_count());
-
   // Combine max and argmax
   if (this->get_max() < b.get_max()) {
     combined.max_ = b.get_max();
@@ -80,6 +71,15 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
       combined.argmin_ = this->get_argmin();
     }
   }
+
+  double a_weight, b_weight, combined_weight;
+
+  double a_timestamp_mean = this->get_timestamp_mean();
+  double b_timestamp_mean = b.get_timestamp_mean();
+
+  combined.timestamp_reference_ =
+      this->normalize_timestamp_means_(a_timestamp_mean, this->get_timestamp_reference(), this->get_count(),
+                                       b_timestamp_mean, b.get_timestamp_reference(), b.get_count());
 
   // If the averages are time-weighted, then use measurement durations.
   // Otherwise, use the Aggregates' counts as the weights.
