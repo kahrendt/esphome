@@ -14,7 +14,7 @@ namespace statistics {
 
 static const char *const TAG = "statistics";
 
-static const LogString *time_conversion_factor_to_string(TimeConversionFactor factor) {
+static const LogString *time_conversion_factor_to_string_(TimeConversionFactor factor) {
   switch (factor) {
     case FACTOR_MS:
       return LOG_STR("milliseconds");
@@ -31,47 +31,9 @@ static const LogString *time_conversion_factor_to_string(TimeConversionFactor fa
   }
 }
 
-void StatisticsComponent::dump_enabled_sensors_() {
-  if (this->count_sensor_) {
-    LOG_SENSOR("  ", "Count Sensor:", this->count_sensor_);
-  }
-
-  if (this->covariance_sensor_) {
-    LOG_SENSOR("  ", "Covariance Sensor:", this->covariance_sensor_);
-  }
-
-  if (this->duration_sensor_) {
-    LOG_SENSOR("  ", "Duration Sensor:", this->duration_sensor_);
-  }
-
-  if (this->max_sensor_) {
-    LOG_SENSOR("  ", "Max Sensor:", this->max_sensor_);
-  }
-
-  if (this->mean_sensor_) {
-    LOG_SENSOR("  ", "Mean Sensor:", this->mean_sensor_);
-  }
-
-  if (this->min_sensor_) {
-    LOG_SENSOR("  ", "Min Sensor:", this->min_sensor_);
-  }
-
-  if (this->pearson_correlation_sensor_) {
-    LOG_SENSOR("  ", "Pearson Corrleation:", this->pearson_correlation_sensor_);
-  }
-
-  if (this->std_dev_sensor_) {
-    LOG_SENSOR("  ", "Standard Deviation Sensor:", this->std_dev_sensor_);
-  }
-
-  if (this->trend_sensor_) {
-    LOG_SENSOR("  ", "Trend Sensor:", this->trend_sensor_);
-  }
-
-  if (this->variance_sensor_) {
-    LOG_SENSOR("  ", "Variance Sensor:", this->variance_sensor_);
-  }
-}
+//////////////////////////
+// Public Class Methods //
+//////////////////////////
 
 void StatisticsComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "Statistics Component:");
@@ -110,7 +72,7 @@ void StatisticsComponent::dump_config() {
     ESP_LOGCONFIG(TAG, "  Average Type: time_weighted");
   }
 
-  ESP_LOGCONFIG(TAG, "  Time Unit: %s", LOG_STR_ARG(time_conversion_factor_to_string(this->time_conversion_factor_)));
+  ESP_LOGCONFIG(TAG, "  Time Unit: %s", LOG_STR_ARG(time_conversion_factor_to_string_(this->time_conversion_factor_)));
 
   if (this->restore_)
     ESP_LOGCONFIG(TAG, "  Restore Hash: %u", this->hash_);
@@ -155,6 +117,13 @@ void StatisticsComponent::setup() {
   this->set_first_at(this->send_every_ - this->send_at_chunks_counter_);
 }
 
+void StatisticsComponent::force_publish() {
+  Aggregate aggregate_to_publish = this->queue_->compute_current_aggregate();
+  aggregate_to_publish = aggregate_to_publish.combine_with(this->running_chunk_aggregate_);
+
+  this->publish_and_save_(aggregate_to_publish);
+}
+
 void StatisticsComponent::reset() {
   this->queue_->clear();
   this->running_window_duration_ = 0;  // reset the duration of measurements in queue
@@ -165,11 +134,107 @@ void StatisticsComponent::reset() {
   this->send_at_chunks_counter_ = 0;  // reset the inserted chunks counter
 }
 
-void StatisticsComponent::force_publish() {
-  Aggregate aggregate_to_publish = this->queue_->compute_current_aggregate();
-  aggregate_to_publish = aggregate_to_publish.combine_with(this->running_chunk_aggregate_);
+//////////////////////
+// Internal Methods //
+//////////////////////
 
-  this->publish_and_save_(aggregate_to_publish);
+EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics_config_() {
+  EnabledAggregatesConfiguration config;
+
+  if (this->covariance_sensor_) {
+    config.c2 = true;
+    config.mean = true;
+    config.timestamp_mean = true;
+    config.timestamp_reference = true;
+  }
+
+  if (this->duration_sensor_)
+    config.duration = true;
+
+  if (this->max_sensor_) {
+    config.max = true;
+  }
+
+  if (this->mean_sensor_) {
+    config.mean = true;
+  }
+
+  if (this->min_sensor_) {
+    config.min = true;
+  }
+
+  if (this->pearson_correlation_sensor_) {
+    config.c2 = true;
+    config.m2 = true;
+    config.mean = true;
+    config.timestamp_m2 = true;
+    config.timestamp_mean = true;
+    config.timestamp_reference = true;
+  }
+
+  if ((this->std_dev_sensor_) || (this->variance_sensor_)) {
+    config.m2 = true;
+    config.mean = true;
+  }
+
+  if (this->trend_sensor_) {
+    config.c2 = true;
+    config.m2 = true;
+    config.mean = true;
+    config.timestamp_m2 = true;
+    config.timestamp_mean = true;
+    config.timestamp_reference = true;
+  }
+
+  // if averages are time-weighted, then store duration information
+  if (this->is_time_weighted_()) {
+    config.duration = true;
+    config.duration_squared = true;
+  }
+
+  return config;
+}
+
+void StatisticsComponent::dump_enabled_sensors_() {
+  if (this->count_sensor_) {
+    LOG_SENSOR("  ", "Count Sensor:", this->count_sensor_);
+  }
+
+  if (this->covariance_sensor_) {
+    LOG_SENSOR("  ", "Covariance Sensor:", this->covariance_sensor_);
+  }
+
+  if (this->duration_sensor_) {
+    LOG_SENSOR("  ", "Duration Sensor:", this->duration_sensor_);
+  }
+
+  if (this->max_sensor_) {
+    LOG_SENSOR("  ", "Max Sensor:", this->max_sensor_);
+  }
+
+  if (this->mean_sensor_) {
+    LOG_SENSOR("  ", "Mean Sensor:", this->mean_sensor_);
+  }
+
+  if (this->min_sensor_) {
+    LOG_SENSOR("  ", "Min Sensor:", this->min_sensor_);
+  }
+
+  if (this->pearson_correlation_sensor_) {
+    LOG_SENSOR("  ", "Pearson Corrleation:", this->pearson_correlation_sensor_);
+  }
+
+  if (this->std_dev_sensor_) {
+    LOG_SENSOR("  ", "Standard Deviation Sensor:", this->std_dev_sensor_);
+  }
+
+  if (this->trend_sensor_) {
+    LOG_SENSOR("  ", "Trend Sensor:", this->trend_sensor_);
+  }
+
+  if (this->variance_sensor_) {
+    LOG_SENSOR("  ", "Variance Sensor:", this->variance_sensor_);
+  }
 }
 
 void StatisticsComponent::handle_new_value_(float value) {
@@ -318,62 +383,9 @@ void StatisticsComponent::publish_and_save_(Aggregate value) {
     this->pref_.save(&value);
 }
 
-EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics_config_() {
-  EnabledAggregatesConfiguration config;
-
-  if (this->covariance_sensor_) {
-    config.c2 = true;
-    config.mean = true;
-    config.timestamp_mean = true;
-    config.timestamp_reference = true;
-  }
-
-  if (this->duration_sensor_)
-    config.duration = true;
-
-  if (this->max_sensor_) {
-    config.max = true;
-  }
-
-  if (this->mean_sensor_) {
-    config.mean = true;
-  }
-
-  if (this->min_sensor_) {
-    config.min = true;
-  }
-
-  if (this->pearson_correlation_sensor_) {
-    config.c2 = true;
-    config.m2 = true;
-    config.mean = true;
-    config.timestamp_m2 = true;
-    config.timestamp_mean = true;
-    config.timestamp_reference = true;
-  }
-
-  if ((this->std_dev_sensor_) || (this->variance_sensor_)) {
-    config.m2 = true;
-    config.mean = true;
-  }
-
-  if (this->trend_sensor_) {
-    config.c2 = true;
-    config.m2 = true;
-    config.mean = true;
-    config.timestamp_m2 = true;
-    config.timestamp_mean = true;
-    config.timestamp_reference = true;
-  }
-
-  // if averages are time-weighted, then store duration information
-  if (this->is_time_weighted_()) {
-    config.duration = true;
-    config.duration_squared = true;
-  }
-
-  return config;
-}
+/////////////////////////////
+// Internal Inline Methods //
+/////////////////////////////
 
 inline bool StatisticsComponent::is_time_weighted_() { return (this->average_type_ == TIME_WEIGHTED_AVERAGE); }
 
