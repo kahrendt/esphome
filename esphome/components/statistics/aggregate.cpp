@@ -183,9 +183,8 @@ double Aggregate::denominator_(bool time_weighted, GroupType type) const {
   return denominator;
 }
 
-double Aggregate::normalize_timestamp_means_(double &a_mean, const uint32_t &a_timestamp_reference,
-                                             const size_t &a_count, double &b_mean,
-                                             const uint32_t &b_timestamp_reference, const size_t &b_count) {
+double Aggregate::normalize_timestamp_means_(double &a_mean, uint32_t a_timestamp_reference, size_t a_count,
+                                             double &b_mean, uint32_t b_timestamp_reference, size_t b_count) {
   if (a_count == 0) {
     // a is null, so b is always the more recent timestamp; no adjustments are necessary
     return b_timestamp_reference;
@@ -195,11 +194,7 @@ double Aggregate::normalize_timestamp_means_(double &a_mean, const uint32_t &a_t
     return a_timestamp_reference;
   }
 
-  // a and b both represent non-empty sets of measurements, so determine which timestamp is more recent
-  // We test the sign bit of the difference to see if the subtraction rolls over
-  //  - this assumes the references are not truly more than 2^31 ms apart, which is about 24.86 days
-  //    (https://arduino.stackexchange.com/a/12591, accessed June 2023)
-  if ((a_timestamp_reference - b_timestamp_reference) & 0x80000000) {
+  if (b_timestamp_reference == this->most_recent_timestamp_(a_timestamp_reference, b_timestamp_reference)) {
     // b is the more recent timestamp
     // normalize the a_mean using the b_timestamp
 
@@ -216,6 +211,16 @@ double Aggregate::normalize_timestamp_means_(double &a_mean, const uint32_t &a_t
 
     return a_timestamp_reference;
   }
+}
+
+inline uint32_t Aggregate::most_recent_timestamp_(const uint32_t a_timestamp, const uint32_t b_timestamp) {
+  // Test the sign bit of the difference to see if the subtraction rolls over
+  //  - this assumes the timestamps are not truly more than 2^31 ms apart, which is about 24.86 days
+  //    (https://arduino.stackexchange.com/a/12591, accessed June 2023)
+  if ((a_timestamp - b_timestamp) & 0x80000000)
+    return b_timestamp;
+
+  return a_timestamp;
 }
 
 }  // namespace statistics

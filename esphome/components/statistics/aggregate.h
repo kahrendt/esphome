@@ -218,9 +218,9 @@ class Aggregate {
    */
   double denominator_(bool time_weighted, GroupType type) const;
 
-  /** Normalize two timestamp means
+  /** Normalize two timestamp means.
    *
-   * Normalize the timestamp means so that they are both in reference to the larger timestamp.
+   * Normalize the timestamp means so that they both reference the more recent timestamp.
    * @param a_mean timestamp mean of Aggregate - may be adjusted after execution
    * @param a_timestamp_reference timestamp reference of the first Aggregate
    * @param a_count count of measurements in first Aggregate
@@ -229,8 +229,16 @@ class Aggregate {
    * @param b_count count of measurements in second Aggregate
    * @return timestamp that a_mean and b_mean are now both in reference to
    */
-  double normalize_timestamp_means_(double &a_mean, const uint32_t &a_timestamp_reference, const size_t &a_count,
-                                    double &b_mean, const uint32_t &b_timestamp_reference, const size_t &b_count);
+  double normalize_timestamp_means_(double &a_mean, uint32_t a_timestamp_reference, size_t a_count, double &b_mean,
+                                    uint32_t b_timestamp_reference, size_t b_count);
+
+  /** Returns the more recent timestamp
+   *
+   * Returns the more recent timestamp parameter; handles uint32_t overflow
+   * @param a_timestamp first timestamp to compare
+   * @param b_timestamp second timestamp to compare
+   */
+  inline uint32_t most_recent_timestamp_(const uint32_t a_timestamp, const uint32_t b_timestamp);
 };
 
 }  // namespace statistics
