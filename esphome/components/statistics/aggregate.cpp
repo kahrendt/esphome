@@ -57,11 +57,7 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   } else {  // the Aggregate's maximums are equal; use the more recent timestamp for argmax
     combined.max_ = this->get_max();
 
-    // We test the sign bit of the difference to see if the subtraction rolls over
-    //  - this assumes the timestamps are not truly more than 2^31 ms apart, which is about 24.86 days
-    //    (https://arduino.stackexchange.com/a/12591, accessed June 2023)
-    if ((this->get_argmax() - b.get_argmax()) & 0x80000000) {
-      // b's argmax is more recent
+    if (b.get_argmax() == this->most_recent_timestamp_(this->get_argmax(), b.get_argmax())) {
       combined.argmax_ = b.get_argmax();
     } else {
       combined.argmax_ = this->get_argmax();
@@ -78,11 +74,7 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   } else {  // the Aggregate's minimums are equal; use the more recent timestamp for argmin
     combined.min_ = this->get_min();
 
-    // We test the sign bit of the difference to see if the subtraction rolls over
-    //  - this assumes the timestamps are not truly more than 2^31 ms apart, which is about 24.86 days
-    //    (https://arduino.stackexchange.com/a/12591, accessed June 2023)
-    if ((this->get_argmin() - b.get_argmin()) & 0x80000000) {
-      // b's argmin is more recent
+    if (b.get_argmin() == this->most_recent_timestamp_(this->get_argmin(), b.get_argmin())) {
       combined.argmin_ = b.get_argmin();
     } else {
       combined.argmin_ = this->get_argmin();
@@ -195,16 +187,14 @@ double Aggregate::normalize_timestamp_means_(double &a_mean, uint32_t a_timestam
   }
 
   if (b_timestamp_reference == this->most_recent_timestamp_(a_timestamp_reference, b_timestamp_reference)) {
-    // b is the more recent timestamp
-    // normalize the a_mean using the b_timestamp
+    // b is the more recent timestamp, so normalize the a_mean using the b_timestamp
 
     uint32_t timestamp_delta = b_timestamp_reference - a_timestamp_reference;
     a_mean = a_mean - timestamp_delta;  // a_mean is now offset and normalized to b_timestamp_reference
 
     return b_timestamp_reference;  // both timestamps are in reference to b_timestamp_reference
   } else {
-    // a is the more recent timestamp
-    // normalize the b_mean using the a_timestamp
+    // a is the more recent timestamp, so normalize the b_mean using the a_timestamp
 
     uint32_t timestamp_delta = a_timestamp_reference - b_timestamp_reference;
     b_mean = b_mean - timestamp_delta;  // b_mean is now offset and normalized to a_timestamp_reference
