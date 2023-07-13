@@ -52,9 +52,9 @@ CONF_STD_DEV = "std_dev"
 CONF_TREND = "trend"
 CONF_VARIANCE = "variance"
 
-##############################################
-# Configuration Options for Aggregate Chunks #
-##############################################
+################################################
+# Configuration Options for Chunks and Windows #
+################################################
 
 CONF_CHUNK_SIZE = "chunk_size"
 CONF_CHUNK_DURATION = "chunk_duration"
@@ -335,6 +335,7 @@ CONFIG_SCHEMA = cv.Schema(
         ),
         cv.Optional(CONF_PEARSON_CORRELATION): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
+            accuracy_decimals=3,  # Pearson Correlation Coeffecient is always between -1 and 1
         ),
         cv.Optional(CONF_STD_DEV): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
