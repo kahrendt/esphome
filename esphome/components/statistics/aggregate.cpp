@@ -8,6 +8,8 @@ namespace statistics {
 
 Aggregate::Aggregate(double value, uint64_t duration, uint32_t timestamp) {
   if (!std::isnan(value)) {
+    this->argmax_ = timestamp;
+    this->argmin_ = timestamp;
     this->c2_ = 0.0;
     this->count_ = 1;
     this->m2_ = 0.0;
@@ -36,9 +38,6 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   combined.duration_ = this->get_duration() + b.get_duration();
   combined.duration_squared_ = this->get_duration_squared() + b.get_duration_squared();
 
-  combined.max_ = std::max(this->get_max(), b.get_max());
-  combined.min_ = std::min(this->get_min(), b.get_min());
-
   double a_weight, b_weight, combined_weight;
 
   double a_timestamp_mean = this->get_timestamp_mean();
@@ -47,6 +46,48 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   combined.timestamp_reference_ =
       this->normalize_timestamp_means_(a_timestamp_mean, this->get_timestamp_reference(), this->get_count(),
                                        b_timestamp_mean, b.get_timestamp_reference(), b.get_count());
+
+  // Combine max and argmax
+  if (this->get_max() < b.get_max()) {
+    combined.max_ = b.get_max();
+    combined.argmax_ = b.get_argmax();
+  } else if (this->get_max() > b.get_max()) {
+    combined.max_ = this->get_max();
+    combined.argmax_ = this->get_argmax();
+  } else {  // the Aggregate's maximums are equal; use the more recent timestamp for argmax
+    combined.max_ = this->get_max();
+
+    // We test the sign bit of the difference to see if the subtraction rolls over
+    //  - this assumes the timestamps are not truly more than 2^31 ms apart, which is about 24.86 days
+    //    (https://arduino.stackexchange.com/a/12591, accessed June 2023)
+    if ((this->get_argmax() - b.get_argmax()) & 0x80000000) {
+      // b's argmax is more recent
+      combined.argmax_ = b.get_argmax();
+    } else {
+      combined.argmax_ = this->get_argmax();
+    }
+  }
+
+  // Combine min and argmin
+  if (this->get_min() < b.get_min()) {
+    combined.min_ = this->get_min();
+    combined.argmin_ = this->get_argmin();
+  } else if (this->get_min() > b.get_min()) {
+    combined.min_ = b.get_min();
+    combined.argmin_ = b.get_argmin();
+  } else {  // the Aggregate's minimums are equal; use the more recent timestamp for argmin
+    combined.min_ = this->get_min();
+
+    // We test the sign bit of the difference to see if the subtraction rolls over
+    //  - this assumes the timestamps are not truly more than 2^31 ms apart, which is about 24.86 days
+    //    (https://arduino.stackexchange.com/a/12591, accessed June 2023)
+    if ((this->get_argmin() - b.get_argmin()) & 0x80000000) {
+      // b's argmin is more recent
+      combined.argmin_ = b.get_argmin();
+    } else {
+      combined.argmin_ = this->get_argmin();
+    }
+  }
 
   // If the averages are time-weighted, then use measurement durations.
   // Otherwise, use the Aggregates' counts as the weights.
