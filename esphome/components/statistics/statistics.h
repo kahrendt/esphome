@@ -5,8 +5,8 @@
  * have weights given by their duration.
  *
  * Available statistics as sensors
- *  - argmin: the time since the most recent minimum value of the measurements in the window
  *  - argmax: the time since the most recent maximum value of the measurements in the window
+ *  - argmin: the time since the most recent minimum value of the measurements in the window
  *  - count: number of valid measurements in the window (component ignores NaN values in the window)
  *  - covariance: sample or population covariance of the measurements compared to the timestamps of each reading
  *  - duration: the duration in milliseconds between the first and last measurement's timestamps
