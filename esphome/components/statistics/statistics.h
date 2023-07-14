@@ -13,7 +13,7 @@
  *  - min: minimum of the set of measurements
  *  - mean: average of the set of measurements
  *  - max: maximum of the set of measurements
- *  - pearson_correlation: the Pearson correlation coeffecient of the set of measurements and timestamps
+ *  - coeffecient_of_determination: the linear coeffecient of determination (r^2) of the measurements and timestamps
  *  - std_dev: sample or population standard deviation of the set of measurements
  *  - trend: the slope of the line of best fit for the measurement values versus timestamps
  *      - can be used as an approximation for the rate of change (derivative) of the measurements
@@ -125,8 +125,8 @@ class StatisticsComponent : public Component {
   void set_max_sensor(sensor::Sensor *max_sensor) { this->max_sensor_ = max_sensor; }
   void set_mean_sensor(sensor::Sensor *mean_sensor) { this->mean_sensor_ = mean_sensor; }
   void set_min_sensor(sensor::Sensor *min_sensor) { this->min_sensor_ = min_sensor; }
-  void set_pearson_correlation_sensor(sensor::Sensor *pearson_sensor) {
-    this->pearson_correlation_sensor_ = pearson_sensor;
+  void set_coeffecient_of_determination_sensor(sensor::Sensor *coeffecient_sensor) {
+    this->coeffecient_of_determination_sensor_ = coeffecient_sensor;
   }
   void set_std_dev_sensor(sensor::Sensor *std_dev_sensor) { this->std_dev_sensor_ = std_dev_sensor; }
   void set_trend_sensor(sensor::Sensor *trend_sensor) { this->trend_sensor_ = trend_sensor; }
@@ -164,7 +164,7 @@ class StatisticsComponent : public Component {
   sensor::Sensor *max_sensor_{nullptr};
   sensor::Sensor *mean_sensor_{nullptr};
   sensor::Sensor *min_sensor_{nullptr};
-  sensor::Sensor *pearson_correlation_sensor_{nullptr};
+  sensor::Sensor *coeffecient_of_determination_sensor_{nullptr};
   sensor::Sensor *std_dev_sensor_{nullptr};
   sensor::Sensor *trend_sensor_{nullptr};
   sensor::Sensor *variance_sensor_{nullptr};

@@ -15,7 +15,7 @@
  *      stored measurements to compute a useful statistic
  *      - Covariance uses the stored count (or duration if time-weighted) and C2 statistics
  *        - C2 uses the mean, count (or duration if time-weighted), and timestamp mean for the combine operation
- *      - Pearson correlation coeffecient uses C2, M2, and timestamp M2 statistics
+ *      - Linear correlation of deterimination uses C2, M2, and timestamp M2 statistics
  *      - Trend is computed using C2 and timestamp M2 statistics
  *        - timestamp M2 statistic additionally requires the timestamp mean and count (or duration if time-weighted)
  *          for the combine operation
@@ -78,12 +78,11 @@ class Aggregate {
    */
   double compute_covariance(bool time_weighted, GroupType type) const;
 
-  /** Compute the Pearson correlation coeffecient of the set of measurements and timestamps.
+  /** Compute the linear coeffecient of determination (r^2) of the set of measurements and timestamps.
    *
-   *  Applies Bessel's correction or implements reliability weights if the group type is a sample.
-   * @return Pearson correlation coeffecient of the set of measurements and timestamps
+   * @return linear coeffecient of determination of the set of measurements and timestamps
    */
-  double compute_pearson_correlation() const;
+  double compute_coeffecient_of_determination() const;
 
   /** Compute the standard deviation of the set of measurements.
    *
