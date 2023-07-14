@@ -173,7 +173,7 @@ EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics
     config.min = true;
   }
 
-  if (this->pearson_correlation_sensor_) {
+  if (this->coeffecient_of_determination_sensor_) {
     config.c2 = true;
     config.m2 = true;
     config.mean = true;
@@ -238,8 +238,8 @@ void StatisticsComponent::dump_enabled_sensors_() {
     LOG_SENSOR("  ", "Min Sensor:", this->min_sensor_);
   }
 
-  if (this->pearson_correlation_sensor_) {
-    LOG_SENSOR("  ", "Pearson Corrleation:", this->pearson_correlation_sensor_);
+  if (this->coeffecient_of_determination_sensor_) {
+    LOG_SENSOR("  ", "Coeffecient of Determination", this->coeffecient_of_determination_sensor_);
   }
 
   if (this->std_dev_sensor_) {
@@ -383,8 +383,8 @@ void StatisticsComponent::publish_and_save_(Aggregate value) {
     }
   }
 
-  if (this->pearson_correlation_sensor_)
-    this->pearson_correlation_sensor_->publish_state(value.compute_pearson_correlation());
+  if (this->coeffecient_of_determination_sensor_)
+    this->coeffecient_of_determination_sensor_->publish_state(value.compute_coeffecient_of_determination());
 
   if (this->std_dev_sensor_)
     this->std_dev_sensor_->publish_state(value.compute_std_dev(this->is_time_weighted_(), this->group_type_));

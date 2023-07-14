@@ -129,8 +129,8 @@ double Aggregate::compute_covariance(bool time_weighted, GroupType type) const {
   return NAN;
 }
 
-double Aggregate::compute_pearson_correlation() const {
-  return this->c2_ / (std::sqrt(this->m2_) * std::sqrt(this->timestamp_m2_));
+double Aggregate::compute_coeffecient_of_determination() const {
+  return (this->c2_) * this->c2_ / (this->m2_ * this->timestamp_m2_);
 }
 
 double Aggregate::compute_std_dev(bool time_weighted, GroupType type) const {
