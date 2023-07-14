@@ -115,6 +115,8 @@ class StatisticsComponent : public Component {
   void set_source_sensor(sensor::Sensor *source_sensor) { this->source_sensor_ = source_sensor; }
 
   // sensors for aggregate statistics
+  void set_argmax_sensor(sensor::Sensor *argmax_sensor) { this->argmax_sensor_ = argmax_sensor; }
+  void set_argmin_sensor(sensor::Sensor *argmin_sensor) { this->argmin_sensor_ = argmin_sensor; }
   void set_count_sensor(sensor::Sensor *count_sensor) { this->count_sensor_ = count_sensor; }
   void set_covariance_sensor(sensor::Sensor *covariance_senesor) { this->covariance_sensor_ = covariance_senesor; }
   void set_duration_sensor(sensor::Sensor *duration_sensor) { this->duration_sensor_ = duration_sensor; }
@@ -152,6 +154,8 @@ class StatisticsComponent : public Component {
   sensor::Sensor *source_sensor_{nullptr};
 
   // sensors for aggregate statistics from sliding window
+  sensor::Sensor *argmax_sensor_{nullptr};
+  sensor::Sensor *argmin_sensor_{nullptr};
   sensor::Sensor *count_sensor_{nullptr};
   sensor::Sensor *covariance_sensor_{nullptr};
   sensor::Sensor *duration_sensor_{nullptr};

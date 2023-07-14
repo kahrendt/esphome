@@ -141,6 +141,16 @@ void StatisticsComponent::reset() {
 EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics_config_() {
   EnabledAggregatesConfiguration config;
 
+  if (this->argmax_sensor_) {
+    config.max = true;
+    config.argmax = true;
+  }
+
+  if (this->argmin_sensor_) {
+    config.min = true;
+    config.argmin = true;
+  }
+
   if (this->covariance_sensor_) {
     config.c2 = true;
     config.mean = true;
@@ -196,6 +206,14 @@ EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics
 }
 
 void StatisticsComponent::dump_enabled_sensors_() {
+  if (this->argmax_sensor_) {
+    LOG_SENSOR("  ", "Argmax Sensor:", this->argmax_sensor_);
+  }
+
+  if (this->argmin_sensor_) {
+    LOG_SENSOR("  ", "Argmin Sensor:", this->argmin_sensor_);
+  }
+
   if (this->count_sensor_) {
     LOG_SENSOR("  ", "Count Sensor:", this->count_sensor_);
   }
@@ -324,6 +342,12 @@ void StatisticsComponent::publish_and_save_(Aggregate value) {
   ////////////////////////////////////////////////
   // Publish new states for all enabled sensors //
   ////////////////////////////////////////////////
+
+  if (this->argmax_sensor_)
+    this->argmax_sensor_->publish_state(value.get_timestamp_reference() - value.get_argmax());
+
+  if (this->argmin_sensor_)
+    this->argmin_sensor_->publish_state(value.get_timestamp_reference() - value.get_argmin());
 
   if (this->count_sensor_)
     this->count_sensor_->publish_state(value.get_count());

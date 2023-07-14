@@ -42,6 +42,8 @@ ForcePublishAction = statistics_ns.class_("ForcePublishAction", automation.Actio
 # Definable sensors #
 #####################
 
+CONF_ARGMAX = "argmax"
+CONF_ARGMIN = "argmin"
 CONF_COVARIANCE = "covariance"
 CONF_DURATION = "duration"
 CONF_MAX = "max"
@@ -313,6 +315,16 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
             TIME_CONVERSION_FACTORS, lower=True
         ),
+        cv.Optional(CONF_ARGMAX): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+            device_class=DEVICE_CLASS_DURATION,
+            unit_of_measurement=UNIT_MILLISECOND,
+        ),
+        cv.Optional(CONF_ARGMIN): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+            device_class=DEVICE_CLASS_DURATION,
+            unit_of_measurement=UNIT_MILLISECOND,
+        ),
         cv.Optional(CONF_COUNT): sensor.sensor_schema(
             state_class=STATE_CLASS_TOTAL,
         ),
@@ -444,6 +456,15 @@ async def to_code(config):
     cg.add(var.set_first_at(window_config[CONF_SEND_FIRST_AT]))
 
     # Handle sensor configurations
+    if CONF_ARGMAX in config:
+        conf = config[CONF_ARGMAX]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_argmax_sensor(sens))
+
+    if CONF_ARGMIN in config:
+        conf = config[CONF_ARGMIN]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_argmin_sensor(sens))
 
     if CONF_COUNT in config:
         conf = config[CONF_COUNT]

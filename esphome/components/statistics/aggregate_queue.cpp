@@ -11,6 +11,12 @@ void AggregateQueue::emplace(const Aggregate &value, size_t index) {
   // Count queue is always enabled
   this->count_queue_[index] = value.get_count();
 
+  if (this->argmax_queue_ != nullptr)
+    this->argmax_queue_[index] = value.get_argmax();
+
+  if (this->argmin_queue_ != nullptr)
+    this->argmin_queue_[index] = value.get_argmin();
+
   if (this->c2_queue_ != nullptr)
     this->c2_queue_[index] = value.get_c2();
 
@@ -44,6 +50,12 @@ Aggregate AggregateQueue::lower(size_t index) {
 
   // Count queue is always enabled
   aggregate.set_count(this->count_queue_[index]);
+
+  if (this->argmax_queue_ != nullptr)
+    aggregate.set_argmax(this->argmax_queue_[index]);
+
+  if (this->argmin_queue_ != nullptr)
+    aggregate.set_argmin(this->argmin_queue_[index]);
 
   if (this->c2_queue_ != nullptr)
     aggregate.set_c2(this->c2_queue_[index]);
@@ -85,6 +97,18 @@ bool AggregateQueue::allocate_memory(size_t capacity, EnabledAggregatesConfigura
 
   // Count is always enabled as it is necessary for the combine Aggregate method
   this->count_queue_ = size_t_allocator.allocate(capacity);
+
+  if (config.argmax) {
+    this->argmax_queue_ = uint32_t_allocator.allocate(capacity);
+    if (this->argmax_queue_ == nullptr)
+      return false;
+  }
+
+  if (config.argmin) {
+    this->argmin_queue_ = uint32_t_allocator.allocate(capacity);
+    if (this->argmin_queue_ == nullptr)
+      return false;
+  }
 
   if (this->count_queue_ == nullptr)
     return false;
