@@ -19,6 +19,8 @@ namespace statistics {
 
 /// @brief Configure statistics to store in the queue.
 struct EnabledAggregatesConfiguration {
+  bool argmax{false};
+  bool argmin{false};
   bool c2{false};
   bool duration{false};
   bool duration_squared{false};
@@ -102,6 +104,9 @@ class AggregateQueue {
   // Queues for storing aggregate statistics //
   /////////////////////////////////////////////
   size_t *count_queue_{nullptr};
+
+  uint32_t *argmax_queue_{nullptr};
+  uint32_t *argmin_queue_{nullptr};
 
   // Timestamps from millis() are always type uint32_t
   uint32_t *timestamp_reference_queue_{nullptr};
