@@ -151,6 +151,15 @@ EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics
     config.argmin = true;
   }
 
+  if (this->coeffecient_of_determination_sensor_) {
+    config.c2 = true;
+    config.m2 = true;
+    config.mean = true;
+    config.timestamp_m2 = true;
+    config.timestamp_mean = true;
+    config.timestamp_reference = true;
+  }
+
   if (this->covariance_sensor_) {
     config.c2 = true;
     config.mean = true;
@@ -171,15 +180,6 @@ EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics
 
   if (this->min_sensor_) {
     config.min = true;
-  }
-
-  if (this->coeffecient_of_determination_sensor_) {
-    config.c2 = true;
-    config.m2 = true;
-    config.mean = true;
-    config.timestamp_m2 = true;
-    config.timestamp_mean = true;
-    config.timestamp_reference = true;
   }
 
   if ((this->std_dev_sensor_) || (this->variance_sensor_)) {
@@ -214,6 +214,10 @@ void StatisticsComponent::dump_enabled_sensors_() {
     LOG_SENSOR("  ", "Argmin Sensor:", this->argmin_sensor_);
   }
 
+  if (this->coeffecient_of_determination_sensor_) {
+    LOG_SENSOR("  ", "Coeffecient of Determination", this->coeffecient_of_determination_sensor_);
+  }
+
   if (this->count_sensor_) {
     LOG_SENSOR("  ", "Count Sensor:", this->count_sensor_);
   }
@@ -236,10 +240,6 @@ void StatisticsComponent::dump_enabled_sensors_() {
 
   if (this->min_sensor_) {
     LOG_SENSOR("  ", "Min Sensor:", this->min_sensor_);
-  }
-
-  if (this->coeffecient_of_determination_sensor_) {
-    LOG_SENSOR("  ", "Coeffecient of Determination", this->coeffecient_of_determination_sensor_);
   }
 
   if (this->std_dev_sensor_) {
@@ -349,6 +349,9 @@ void StatisticsComponent::publish_and_save_(Aggregate value) {
   if (this->argmin_sensor_)
     this->argmin_sensor_->publish_state(value.get_timestamp_reference() - value.get_argmin());
 
+  if (this->coeffecient_of_determination_sensor_)
+    this->coeffecient_of_determination_sensor_->publish_state(value.compute_coeffecient_of_determination());
+
   if (this->count_sensor_)
     this->count_sensor_->publish_state(value.get_count());
 
@@ -382,9 +385,6 @@ void StatisticsComponent::publish_and_save_(Aggregate value) {
       this->min_sensor_->publish_state(min);
     }
   }
-
-  if (this->coeffecient_of_determination_sensor_)
-    this->coeffecient_of_determination_sensor_->publish_state(value.compute_coeffecient_of_determination());
 
   if (this->std_dev_sensor_)
     this->std_dev_sensor_->publish_state(value.compute_std_dev(this->is_time_weighted_(), this->group_type_));

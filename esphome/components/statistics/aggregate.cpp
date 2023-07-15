@@ -122,15 +122,15 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   return combined;
 }
 
+double Aggregate::compute_coeffecient_of_determination() const {
+  return (this->c2_) * this->c2_ / (this->m2_ * this->timestamp_m2_);
+}
+
 double Aggregate::compute_covariance(bool time_weighted, GroupType type) const {
   if (this->count_ > 1)
     return this->c2_ / this->denominator_(time_weighted, type);
 
   return NAN;
-}
-
-double Aggregate::compute_coeffecient_of_determination() const {
-  return (this->c2_) * this->c2_ / (this->m2_ * this->timestamp_m2_);
 }
 
 double Aggregate::compute_std_dev(bool time_weighted, GroupType type) const {

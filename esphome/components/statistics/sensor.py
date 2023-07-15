@@ -44,12 +44,12 @@ ForcePublishAction = statistics_ns.class_("ForcePublishAction", automation.Actio
 
 CONF_ARGMAX = "argmax"
 CONF_ARGMIN = "argmin"
+CONF_COEFFECIENT_OF_DETERMINATION = "coeffecient_of_determination"
 CONF_COVARIANCE = "covariance"
 CONF_DURATION = "duration"
 CONF_MAX = "max"
 CONF_MEAN = "mean"
 CONF_MIN = "min"
-CONF_COEFFECIENT_OF_DETERMINATION = "coeffecient_of_determination"
 CONF_STD_DEV = "std_dev"
 CONF_TREND = "trend"
 CONF_VARIANCE = "variance"
@@ -325,6 +325,10 @@ CONFIG_SCHEMA = cv.Schema(
             device_class=DEVICE_CLASS_DURATION,
             unit_of_measurement=UNIT_MILLISECOND,
         ),
+        cv.Optional(CONF_COEFFECIENT_OF_DETERMINATION): sensor.sensor_schema(
+            state_class=STATE_CLASS_MEASUREMENT,
+            accuracy_decimals=3,  # Coeffecient of Determination (r^2) is always between 0 and 1
+        ),
         cv.Optional(CONF_COUNT): sensor.sensor_schema(
             state_class=STATE_CLASS_TOTAL,
         ),
@@ -344,10 +348,6 @@ CONFIG_SCHEMA = cv.Schema(
         ),
         cv.Optional(CONF_MIN): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_COEFFECIENT_OF_DETERMINATION): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-            accuracy_decimals=3,  # Coeffecient of Determination (r^2) is always between 0 and 1
         ),
         cv.Optional(CONF_STD_DEV): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
@@ -471,6 +471,11 @@ async def to_code(config):
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_count_sensor(sens))
 
+    if CONF_COEFFECIENT_OF_DETERMINATION in config:
+        conf = config[CONF_COEFFECIENT_OF_DETERMINATION]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_coeffecient_of_determination_sensor(sens))
+
     if CONF_COVARIANCE in config:
         conf = config[CONF_COVARIANCE]
         sens = await sensor.new_sensor(conf)
@@ -495,11 +500,6 @@ async def to_code(config):
         conf = config[CONF_MIN]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_min_sensor(sens))
-
-    if CONF_COEFFECIENT_OF_DETERMINATION in config:
-        conf = config[CONF_COEFFECIENT_OF_DETERMINATION]
-        sens = await sensor.new_sensor(conf)
-        cg.add(var.set_coeffecient_of_determination_sensor(sens))
 
     if CONF_STD_DEV in config:
         conf = config[CONF_STD_DEV]
