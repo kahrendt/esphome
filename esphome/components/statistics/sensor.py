@@ -44,15 +44,12 @@ ForcePublishAction = statistics_ns.class_("ForcePublishAction", automation.Actio
 
 CONF_ARGMAX = "argmax"
 CONF_ARGMIN = "argmin"
-CONF_COEFFECIENT_OF_DETERMINATION = "coeffecient_of_determination"
-CONF_COVARIANCE = "covariance"
 CONF_DURATION = "duration"
 CONF_MAX = "max"
 CONF_MEAN = "mean"
 CONF_MIN = "min"
 CONF_STD_DEV = "std_dev"
 CONF_TREND = "trend"
-CONF_VARIANCE = "variance"
 
 ################################################
 # Configuration Options for Chunks and Windows #
@@ -108,9 +105,9 @@ AVERAGE_TYPES = {
     CONF_TIME_WEIGHTED_AVERAGE: AverageType.TIME_WEIGHTED_AVERAGE,
 }
 
-#######################################
-# Time Units for Covariance and Trend #
-#######################################
+########################
+# Time Units for Trend #
+########################
 
 CONF_TIME_UNIT = "time_unit"
 
@@ -137,12 +134,9 @@ SENSOR_LIST_WITH_ORIGINAL_UNITS = [
 SENSOR_LIST_WITH_MODIFIED_UNITS = [
     CONF_ARGMAX,
     CONF_ARGMIN,
-    CONF_COEFFECIENT_OF_DETERMINATION,
     CONF_COUNT,
-    CONF_COVARIANCE,
     CONF_DURATION,
     CONF_TREND,
-    CONF_VARIANCE,
 ]
 
 SENSOR_LIST_WITH_SAME_ACCURACY_DECIMALS = [
@@ -152,29 +146,13 @@ SENSOR_LIST_WITH_SAME_ACCURACY_DECIMALS = [
 ]
 
 SENSOR_LIST_WITH_INCREASED_ACCURACY_DECIMALS = [
-    CONF_COVARIANCE,
     CONF_STD_DEV,
     CONF_TREND,
-    CONF_VARIANCE,
 ]
 
 #####################################################
 # Transformation Functions for Inherited Properties #
 #####################################################
-
-
-# Covarance's unit is original unit of measurement multiplied by time unit of measurement
-# Borrowed from sensor/integration/sensor.py (accessed July 2023)
-def transform_covariance_unit_of_measurement(uom, config):
-    suffix = config[CONF_TIME_UNIT]
-    if uom.endswith("/" + suffix):
-        return uom[0 : -len("/" + suffix)]
-    return uom + "⋅" + suffix
-
-
-# Variance's unit is original unit of measurement squared
-def transform_variance_unit_of_measurement(uom, config):
-    return "(" + uom + ")²"
 
 
 # Trend's unit is in original unit of measurement divides by time unit of measurement
@@ -330,15 +308,8 @@ CONFIG_SCHEMA = cv.Schema(
             device_class=DEVICE_CLASS_DURATION,
             unit_of_measurement=UNIT_MILLISECOND,
         ),
-        cv.Optional(CONF_COEFFECIENT_OF_DETERMINATION): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-            accuracy_decimals=3,  # Coeffecient of Determination (r^2) is always between 0 and 1
-        ),
         cv.Optional(CONF_COUNT): sensor.sensor_schema(
             state_class=STATE_CLASS_TOTAL,
-        ),
-        cv.Optional(CONF_COVARIANCE): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_DURATION): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
@@ -360,9 +331,6 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_TREND): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
         ),
-        cv.Optional(CONF_VARIANCE): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -372,16 +340,6 @@ FINAL_VALIDATE_SCHEMA = cv.All(
     *inherit_schema_for_same_unit_sensors,
     *inherit_accuracy_decimals_without_transformation,
     *inherit_accuracy_decimals_with_transformation,
-    inherit_property_from(
-        [CONF_VARIANCE, CONF_UNIT_OF_MEASUREMENT],
-        CONF_SOURCE_ID,
-        transform=transform_variance_unit_of_measurement,
-    ),
-    inherit_property_from(
-        [CONF_COVARIANCE, CONF_UNIT_OF_MEASUREMENT],
-        CONF_SOURCE_ID,
-        transform=transform_covariance_unit_of_measurement,
-    ),
     inherit_property_from(
         [CONF_TREND, CONF_UNIT_OF_MEASUREMENT],
         CONF_SOURCE_ID,
@@ -476,16 +434,6 @@ async def to_code(config):
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_count_sensor(sens))
 
-    if CONF_COEFFECIENT_OF_DETERMINATION in config:
-        conf = config[CONF_COEFFECIENT_OF_DETERMINATION]
-        sens = await sensor.new_sensor(conf)
-        cg.add(var.set_coeffecient_of_determination_sensor(sens))
-
-    if CONF_COVARIANCE in config:
-        conf = config[CONF_COVARIANCE]
-        sens = await sensor.new_sensor(conf)
-        cg.add(var.set_covariance_sensor(sens))
-
     if CONF_DURATION in config:
         conf = config[CONF_DURATION]
         sens = await sensor.new_sensor(conf)
@@ -515,11 +463,6 @@ async def to_code(config):
         conf = config[CONF_TREND]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_trend_sensor(sens))
-
-    if CONF_VARIANCE in config:
-        conf = config[CONF_VARIANCE]
-        sens = await sensor.new_sensor(conf)
-        cg.add(var.set_variance_sensor(sens))
 
 
 ######################

@@ -151,22 +151,6 @@ EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics
     config.argmin = true;
   }
 
-  if (this->coeffecient_of_determination_sensor_) {
-    config.c2 = true;
-    config.m2 = true;
-    config.mean = true;
-    config.timestamp_m2 = true;
-    config.timestamp_mean = true;
-    config.timestamp_reference = true;
-  }
-
-  if (this->covariance_sensor_) {
-    config.c2 = true;
-    config.mean = true;
-    config.timestamp_mean = true;
-    config.timestamp_reference = true;
-  }
-
   if (this->duration_sensor_)
     config.duration = true;
 
@@ -182,7 +166,7 @@ EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics
     config.min = true;
   }
 
-  if ((this->std_dev_sensor_) || (this->variance_sensor_)) {
+  if (this->std_dev_sensor_) {
     config.m2 = true;
     config.mean = true;
   }
@@ -214,16 +198,8 @@ void StatisticsComponent::dump_enabled_sensors_() {
     LOG_SENSOR("  ", "Argmin Sensor:", this->argmin_sensor_);
   }
 
-  if (this->coeffecient_of_determination_sensor_) {
-    LOG_SENSOR("  ", "Coeffecient of Determination", this->coeffecient_of_determination_sensor_);
-  }
-
   if (this->count_sensor_) {
     LOG_SENSOR("  ", "Count Sensor:", this->count_sensor_);
-  }
-
-  if (this->covariance_sensor_) {
-    LOG_SENSOR("  ", "Covariance Sensor:", this->covariance_sensor_);
   }
 
   if (this->duration_sensor_) {
@@ -248,10 +224,6 @@ void StatisticsComponent::dump_enabled_sensors_() {
 
   if (this->trend_sensor_) {
     LOG_SENSOR("  ", "Trend Sensor:", this->trend_sensor_);
-  }
-
-  if (this->variance_sensor_) {
-    LOG_SENSOR("  ", "Variance Sensor:", this->variance_sensor_);
   }
 }
 
@@ -349,18 +321,8 @@ void StatisticsComponent::publish_and_save_(Aggregate value) {
   if (this->argmin_sensor_)
     this->argmin_sensor_->publish_state(value.get_timestamp_reference() - value.get_argmin());
 
-  if (this->coeffecient_of_determination_sensor_)
-    this->coeffecient_of_determination_sensor_->publish_state(value.compute_coeffecient_of_determination());
-
   if (this->count_sensor_)
     this->count_sensor_->publish_state(value.get_count());
-
-  if (this->covariance_sensor_) {
-    double covariance_ms = value.compute_covariance(this->is_time_weighted_(), this->group_type_);
-    double converted_covariance = covariance_ms / this->time_conversion_factor_;
-
-    this->covariance_sensor_->publish_state(converted_covariance);
-  }
 
   if (this->duration_sensor_)
     this->duration_sensor_->publish_state(value.get_duration());
@@ -395,9 +357,6 @@ void StatisticsComponent::publish_and_save_(Aggregate value) {
 
     this->trend_sensor_->publish_state(converted_trend);
   }
-
-  if (this->variance_sensor_)
-    this->variance_sensor_->publish_state(value.compute_variance(this->is_time_weighted_(), this->group_type_));
 
   //////////////////////////////
   // Save to flash if enabled //

@@ -9,7 +9,7 @@
  *      - See the article "Numerically Stable Parallel Computation of (Co-)Variance" by Schubert and Gertz for details
  *  - Compute summary statistics from the stored aggregates - get_* and compute_* methods
  *    - Some summary statistics are directly stored
- *      - count, duration, min, mean, and max
+ *      - argmax, argmin, count, duration, min, mean, and max
  *      - Use get_* methods for retrieval
  *    - Some of the stored summary statistics in the monoid are not useful immediately but can be combined with other
  *      stored measurements to compute a useful statistic

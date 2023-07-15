@@ -7,9 +7,7 @@
  * Available statistics as sensors
  *  - argmax: the time since the most recent maximum value of the measurements in the window
  *  - argmin: the time since the most recent minimum value of the measurements in the window
- *  - coeffecient_of_determination: the linear coeffecient of determination (r^2) of the measurements and timestamps
  *  - count: number of valid measurements in the window (component ignores NaN values in the window)
- *  - covariance: sample or population covariance of the measurements compared to the timestamps of each reading
  *  - duration: the duration in milliseconds between the first and last measurement's timestamps
  *  - min: minimum of the set of measurements
  *  - mean: average of the set of measurements
@@ -18,7 +16,6 @@
  *  - trend: the slope of the line of best fit for the measurement values versus timestamps
  *      - can be used as an approximation for the rate of change (derivative) of the measurements
  *      - computed using the covariance of timestamps versus measurements and the variance of timestamps
- *  - variance: sample or population variance of the set of measurements
  *
  * Terms and definitions used in this component:
  *  - measurement: a single reading from a sensor
@@ -119,18 +116,13 @@ class StatisticsComponent : public Component {
   // sensors for aggregate statistics
   void set_argmax_sensor(sensor::Sensor *argmax_sensor) { this->argmax_sensor_ = argmax_sensor; }
   void set_argmin_sensor(sensor::Sensor *argmin_sensor) { this->argmin_sensor_ = argmin_sensor; }
-  void set_coeffecient_of_determination_sensor(sensor::Sensor *coeffecient_sensor) {
-    this->coeffecient_of_determination_sensor_ = coeffecient_sensor;
-  }
   void set_count_sensor(sensor::Sensor *count_sensor) { this->count_sensor_ = count_sensor; }
-  void set_covariance_sensor(sensor::Sensor *covariance_senesor) { this->covariance_sensor_ = covariance_senesor; }
   void set_duration_sensor(sensor::Sensor *duration_sensor) { this->duration_sensor_ = duration_sensor; }
   void set_max_sensor(sensor::Sensor *max_sensor) { this->max_sensor_ = max_sensor; }
   void set_mean_sensor(sensor::Sensor *mean_sensor) { this->mean_sensor_ = mean_sensor; }
   void set_min_sensor(sensor::Sensor *min_sensor) { this->min_sensor_ = min_sensor; }
   void set_std_dev_sensor(sensor::Sensor *std_dev_sensor) { this->std_dev_sensor_ = std_dev_sensor; }
   void set_trend_sensor(sensor::Sensor *trend_sensor) { this->trend_sensor_ = trend_sensor; }
-  void set_variance_sensor(sensor::Sensor *variance_sensor) { this->variance_sensor_ = variance_sensor; }
 
   void set_window_size(size_t window_size) { this->window_size_ = window_size; }
   void set_window_duration(size_t duration) { this->window_reset_duration_ = duration; }
@@ -158,16 +150,13 @@ class StatisticsComponent : public Component {
   // sensors for aggregate statistics from sliding window
   sensor::Sensor *argmax_sensor_{nullptr};
   sensor::Sensor *argmin_sensor_{nullptr};
-  sensor::Sensor *coeffecient_of_determination_sensor_{nullptr};
   sensor::Sensor *count_sensor_{nullptr};
-  sensor::Sensor *covariance_sensor_{nullptr};
   sensor::Sensor *duration_sensor_{nullptr};
   sensor::Sensor *max_sensor_{nullptr};
   sensor::Sensor *mean_sensor_{nullptr};
   sensor::Sensor *min_sensor_{nullptr};
   sensor::Sensor *std_dev_sensor_{nullptr};
   sensor::Sensor *trend_sensor_{nullptr};
-  sensor::Sensor *variance_sensor_{nullptr};
 
   AggregateQueue *queue_{nullptr};
 
@@ -192,7 +181,7 @@ class StatisticsComponent : public Component {
   AverageType average_type_{};                     // either simple or time-weighted
   GroupType group_type_{};                         // measurements come from either a population or a sample
   WindowType window_type_{};                       // type of queue to store measurements/chunks in
-  TimeConversionFactor time_conversion_factor_{};  // time unit conversion for covariance and trend
+  TimeConversionFactor time_conversion_factor_{};  // time unit conversion trend
 
   // If the Aggregates are time-weighted, store info about the previous observation
   float previous_value_{NAN};
