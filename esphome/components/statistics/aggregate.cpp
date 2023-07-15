@@ -1,6 +1,7 @@
 #include "aggregate.h"
 
 #include <algorithm>  // necessary for std::min and std::max functions
+#include <cstdint>    // necessary for uint32_t
 #include <cmath>      // necessary for NaN
 
 namespace esphome {
@@ -48,7 +49,7 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   } else {  // the Aggregate's maximums are equal; use the more recent timestamp for argmax
     combined.max_ = this->get_max();
 
-    if (b.get_argmax() == this->most_recent_timestamp_(this->get_argmax(), b.get_argmax())) {
+    if (b.get_argmax() == this->more_recent_timestamp_(this->get_argmax(), b.get_argmax())) {
       combined.argmax_ = b.get_argmax();
     } else {
       combined.argmax_ = this->get_argmax();
@@ -65,7 +66,7 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   } else {  // the Aggregate's minimums are equal; use the more recent timestamp for argmin
     combined.min_ = this->get_min();
 
-    if (b.get_argmin() == this->most_recent_timestamp_(this->get_argmin(), b.get_argmin())) {
+    if (b.get_argmin() == this->more_recent_timestamp_(this->get_argmin(), b.get_argmin())) {
       combined.argmin_ = b.get_argmin();
     } else {
       combined.argmin_ = this->get_argmin();
@@ -186,7 +187,7 @@ double Aggregate::normalize_timestamp_means_(double &a_mean, uint32_t a_timestam
     return a_timestamp_reference;
   }
 
-  if (b_timestamp_reference == this->most_recent_timestamp_(a_timestamp_reference, b_timestamp_reference)) {
+  if (b_timestamp_reference == this->more_recent_timestamp_(a_timestamp_reference, b_timestamp_reference)) {
     // b is the more recent timestamp, so normalize the a_mean using the b_timestamp
 
     uint32_t timestamp_delta = b_timestamp_reference - a_timestamp_reference;
@@ -203,7 +204,7 @@ double Aggregate::normalize_timestamp_means_(double &a_mean, uint32_t a_timestam
   }
 }
 
-inline uint32_t Aggregate::most_recent_timestamp_(const uint32_t a_timestamp, const uint32_t b_timestamp) {
+inline uint32_t Aggregate::more_recent_timestamp_(const uint32_t a_timestamp, const uint32_t b_timestamp) {
   // Test the sign bit of the difference to see if the subtraction rolls over
   //  - this assumes the timestamps are not truly more than 2^31 ms apart, which is about 24.86 days
   //    (https://arduino.stackexchange.com/a/12591, accessed June 2023)

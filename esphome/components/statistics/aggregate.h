@@ -37,8 +37,9 @@
 
 #pragma once
 
-#include <cmath>   // necessary for NaN
-#include <limits>  // necessary for std::numeric_limits infinity
+#include <cmath>    // necessary for NaN
+#include <cstdint>  // necessary for uint32_t
+#include <limits>   // necessary for std::numeric_limits infinity
 
 namespace esphome {
 namespace statistics {
@@ -237,7 +238,7 @@ class Aggregate {
    * @param a_timestamp first timestamp to compare
    * @param b_timestamp second timestamp to compare
    */
-  inline uint32_t most_recent_timestamp_(const uint32_t a_timestamp, const uint32_t b_timestamp);
+  inline uint32_t more_recent_timestamp_(uint32_t a_timestamp, uint32_t b_timestamp);
 };
 
 }  // namespace statistics

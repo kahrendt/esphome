@@ -14,7 +14,7 @@ namespace statistics {
 
 static const char *const TAG = "statistics";
 
-static const LogString *time_conversion_factor_to_string_(TimeConversionFactor factor) {
+static const LogString *time_conversion_factor_to_string(TimeConversionFactor factor) {
   switch (factor) {
     case FACTOR_MS:
       return LOG_STR("milliseconds");
@@ -66,13 +66,13 @@ void StatisticsComponent::dump_config() {
 
   ESP_LOGCONFIG(TAG, "  Send Every: %u", this->send_every_);
 
-  if (this->average_type_ == SIMPLE_AVERAGE)
+  if (this->average_type_ == SIMPLE_AVERAGE) {
     ESP_LOGCONFIG(TAG, "  Average Type: simple");
-  else {
+  } else {
     ESP_LOGCONFIG(TAG, "  Average Type: time_weighted");
   }
 
-  ESP_LOGCONFIG(TAG, "  Time Unit: %s", LOG_STR_ARG(time_conversion_factor_to_string_(this->time_conversion_factor_)));
+  ESP_LOGCONFIG(TAG, "  Time Unit: %s", LOG_STR_ARG(time_conversion_factor_to_string(this->time_conversion_factor_)));
 
   if (this->restore_)
     ESP_LOGCONFIG(TAG, "  Restore Hash: %u", this->hash_);
