@@ -375,19 +375,29 @@ async def to_code(config):
     if window_config[CONF_TYPE] == CONF_SLIDING_WINDOW:
         cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
     elif window_config[CONF_TYPE] == CONF_CHUNKED_SLIDING_WINDOW:
+        cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
+
+        chunk_size = (
+            0  # default setting when CONF_CHUNK_DURATION is the configured option
+        )
         if CONF_CHUNK_SIZE in window_config:
             chunk_size = window_config[CONF_CHUNK_SIZE]
         elif CONF_CHUNK_DURATION in window_config:
-            chunk_size = 0
             cg.add(
                 var.set_chunk_duration(
                     window_config[CONF_CHUNK_DURATION].total_milliseconds
                 )
             )
         cg.add(var.set_chunk_size(chunk_size))
-        cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
+
     elif window_config[CONF_TYPE] == CONF_CONTINUOUS_WINDOW:
-        cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
+        window_size = (
+            0  # default setting if CONF_WINDOW_DURATION is the only configured option
+        )
+        if CONF_WINDOW_SIZE in window_config:
+            window_size = window_config[CONF_WINDOW_SIZE]
+        cg.add(var.set_window_size(window_size))
+
         if CONF_WINDOW_DURATION in window_config:
             cg.add(
                 var.set_window_duration(
@@ -395,23 +405,33 @@ async def to_code(config):
                 )
             )
     elif window_config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS_WINDOW:
-        if CONF_CHUNK_SIZE in window_config:
-            chunk_size = window_config[CONF_CHUNK_SIZE]
-        elif CONF_CHUNK_DURATION in window_config:
-            chunk_size = 0
-            cg.add(
-                var.set_chunk_duration(
-                    window_config[CONF_CHUNK_DURATION].total_milliseconds
-                )
-            )
-        cg.add(var.set_chunk_size(chunk_size))
-        cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
+        window_size = (
+            0  # default setting if CONF_WINDOW_DURATION is the only configured option
+        )
+        if CONF_WINDOW_SIZE in window_config:
+            window_size = window_config[CONF_WINDOW_SIZE]
+        cg.add(var.set_window_size(window_size))
+
         if CONF_WINDOW_DURATION in window_config:
             cg.add(
                 var.set_window_duration(
                     window_config[CONF_WINDOW_DURATION].total_milliseconds
                 )
             )
+
+        chunk_size = (
+            0  # default setting when CONF_CHUNK_DURATION is the configured option
+        )
+        if CONF_CHUNK_SIZE in window_config:
+            chunk_size = window_config[CONF_CHUNK_SIZE]
+        elif CONF_CHUNK_DURATION in window_config:
+            cg.add(
+                var.set_chunk_duration(
+                    window_config[CONF_CHUNK_DURATION].total_milliseconds
+                )
+            )
+        cg.add(var.set_chunk_size(chunk_size))
+
         if CONF_RESTORE in window_config:
             cg.add(var.set_restore(window_config[CONF_RESTORE]))
 
