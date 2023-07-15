@@ -128,9 +128,9 @@ TIME_CONVERSION_FACTORS = {
 #########################################
 
 SENSOR_LIST_WITH_ORIGINAL_UNITS = [
+    CONF_MAX,
     CONF_MEAN,
     CONF_MIN,
-    CONF_MAX,
     CONF_STD_DEV,
 ]
 
