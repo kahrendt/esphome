@@ -6,6 +6,7 @@ from esphome.const import (
     CONF_ACCURACY_DECIMALS,
     CONF_COUNT,
     CONF_DEVICE_CLASS,
+    CONF_DURATION,
     CONF_ENTITY_CATEGORY,
     CONF_ICON,
     CONF_ID,
@@ -44,7 +45,6 @@ ForcePublishAction = statistics_ns.class_("ForcePublishAction", automation.Actio
 
 CONF_ARGMAX = "argmax"
 CONF_ARGMIN = "argmin"
-CONF_DURATION = "duration"
 CONF_MAX = "max"
 CONF_MEAN = "mean"
 CONF_MIN = "min"
@@ -55,17 +55,17 @@ CONF_TREND = "trend"
 # Window Types #
 ################
 
-CONF_SLIDING_WINDOW = "sliding"
-CONF_CHUNKED_SLIDING_WINDOW = "chunked_sliding"
-CONF_CONTINUOUS_WINDOW = "continuous"
-CONF_CHUNKED_CONTINUOUS_WINDOW = "chunked_continuous"
+CONF_SLIDING = "sliding"
+CONF_CHUNKED_SLIDING = "chunked_sliding"
+CONF_CONTINUOUS = "continuous"
+CONF_CHUNKED_CONTINUOUS = "chunked_continuous"
 
 WindowType = statistics_ns.enum("WindowType")
 WINDOW_TYPES = {
-    CONF_SLIDING_WINDOW: WindowType.WINDOW_TYPE_SLIDING,
-    CONF_CHUNKED_SLIDING_WINDOW: WindowType.WINDOW_TYPE_CHUNKED_SLIDING,
-    CONF_CONTINUOUS_WINDOW: WindowType.WINDOW_TYPE_CONTINUOUS,
-    CONF_CHUNKED_CONTINUOUS_WINDOW: WindowType.WINDOW_TYPE_CHUNKED_CONTINUOUS,
+    CONF_SLIDING: WindowType.WINDOW_TYPE_SLIDING,
+    CONF_CHUNKED_SLIDING: WindowType.WINDOW_TYPE_CHUNKED_SLIDING,
+    CONF_CONTINUOUS: WindowType.WINDOW_TYPE_CONTINUOUS,
+    CONF_CHUNKED_CONTINUOUS: WindowType.WINDOW_TYPE_CHUNKED_CONTINUOUS,
 }
 
 ################################################
@@ -82,13 +82,13 @@ CONF_WINDOW_DURATION = "window_duration"
 ##########################
 
 CONF_GROUP_TYPE = "group_type"
-CONF_SAMPLE_GROUP = "sample"
-CONF_POPULATION_GROUP = "population"
+CONF_SAMPLE = "sample"
+CONF_POPULATION = "population"
 
 GroupType = statistics_ns.enum("GroupType")
 GROUP_TYPES = {
-    CONF_SAMPLE_GROUP: GroupType.SAMPLE_GROUP_TYPE,
-    CONF_POPULATION_GROUP: GroupType.POPULATION_GROUP_TYPE,
+    CONF_SAMPLE: GroupType.SAMPLE_GROUP_TYPE,
+    CONF_POPULATION: GroupType.POPULATION_GROUP_TYPE,
 }
 
 
@@ -97,13 +97,13 @@ GROUP_TYPES = {
 #################
 
 CONF_AVERAGE_TYPE = "average_type"
-CONF_SIMPLE_AVERAGE = "simple"
-CONF_TIME_WEIGHTED_AVERAGE = "time_weighted"
+CONF_SIMPLE = "simple"
+CONF_TIME_WEIGHTED = "time_weighted"
 
 AverageType = statistics_ns.enum("AverageType")
 AVERAGE_TYPES = {
-    CONF_SIMPLE_AVERAGE: AverageType.SIMPLE_AVERAGE,
-    CONF_TIME_WEIGHTED_AVERAGE: AverageType.TIME_WEIGHTED_AVERAGE,
+    CONF_SIMPLE: AverageType.SIMPLE_AVERAGE,
+    CONF_TIME_WEIGHTED: AverageType.TIME_WEIGHTED_AVERAGE,
 }
 
 ########################
@@ -284,16 +284,16 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
         cv.Required("window"): cv.typed_schema(
             {
-                CONF_SLIDING_WINDOW: SLIDING_WINDOW_SCHEMA,
-                CONF_CHUNKED_SLIDING_WINDOW: CHUNKED_SLIDING_WINDOW_SCHEMA,
-                CONF_CONTINUOUS_WINDOW: CONTINUOUS_WINDOW_SCHEMA,
-                CONF_CHUNKED_CONTINUOUS_WINDOW: CHUNKED_CONTINUOUS_WINDOW_SCHEMA,
+                CONF_SLIDING: SLIDING_WINDOW_SCHEMA,
+                CONF_CHUNKED_SLIDING: CHUNKED_SLIDING_WINDOW_SCHEMA,
+                CONF_CONTINUOUS: CONTINUOUS_WINDOW_SCHEMA,
+                CONF_CHUNKED_CONTINUOUS: CHUNKED_CONTINUOUS_WINDOW_SCHEMA,
             }
         ),
-        cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE_AVERAGE): cv.enum(
+        cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE): cv.enum(
             AVERAGE_TYPES, lower=True
         ),
-        cv.Optional(CONF_GROUP_TYPE, default=CONF_SAMPLE_GROUP): cv.enum(
+        cv.Optional(CONF_GROUP_TYPE, default=CONF_SAMPLE): cv.enum(
             GROUP_TYPES, lower=True
         ),
         cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
@@ -373,9 +373,9 @@ async def to_code(config):
     constant = WINDOW_TYPES[window_config[CONF_TYPE]]
     cg.add(var.set_window_type(constant))
 
-    if window_config[CONF_TYPE] == CONF_SLIDING_WINDOW:
+    if window_config[CONF_TYPE] == CONF_SLIDING:
         cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
-    elif window_config[CONF_TYPE] == CONF_CHUNKED_SLIDING_WINDOW:
+    elif window_config[CONF_TYPE] == CONF_CHUNKED_SLIDING:
         cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
 
         chunk_size = (
@@ -391,7 +391,7 @@ async def to_code(config):
             )
         cg.add(var.set_chunk_size(chunk_size))
 
-    elif window_config[CONF_TYPE] == CONF_CONTINUOUS_WINDOW:
+    elif window_config[CONF_TYPE] == CONF_CONTINUOUS:
         window_size = (
             0  # default setting if CONF_WINDOW_DURATION is the only configured option
         )
@@ -405,7 +405,7 @@ async def to_code(config):
                     window_config[CONF_WINDOW_DURATION].total_milliseconds
                 )
             )
-    elif window_config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS_WINDOW:
+    elif window_config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS:
         window_size = (
             0  # default setting if CONF_WINDOW_DURATION is the only configured option
         )
