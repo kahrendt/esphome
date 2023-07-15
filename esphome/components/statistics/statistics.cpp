@@ -74,8 +74,9 @@ void StatisticsComponent::dump_config() {
 
   ESP_LOGCONFIG(TAG, "  Time Unit: %s", LOG_STR_ARG(time_conversion_factor_to_string(this->time_conversion_factor_)));
 
-  if (this->restore_)
+  if (this->restore_) {
     ESP_LOGCONFIG(TAG, "  Restore Hash: %u", this->hash_);
+  }
 
   this->dump_enabled_sensors_();
 }
@@ -121,7 +122,7 @@ void StatisticsComponent::force_publish() {
   Aggregate aggregate_to_publish = this->queue_->compute_current_aggregate();
   aggregate_to_publish = aggregate_to_publish.combine_with(this->running_chunk_aggregate_);
 
-  this->publish_and_save_(aggregate_to_publish);
+  this->publish_and_save_(aggregate_to_publish, millis());
 }
 
 void StatisticsComponent::reset() {
@@ -305,21 +306,21 @@ void StatisticsComponent::handle_new_value_(float value) {
 
       this->send_at_chunks_counter_ = 0;  // reset send_at_chunks_counter_
 
-      this->publish_and_save_(this->queue_->compute_current_aggregate());
+      this->publish_and_save_(this->queue_->compute_current_aggregate(), now);
     }
   }
 }
 
-void StatisticsComponent::publish_and_save_(Aggregate value) {
+void StatisticsComponent::publish_and_save_(Aggregate value, uint32_t timestamp) {
   ////////////////////////////////////////////////
   // Publish new states for all enabled sensors //
   ////////////////////////////////////////////////
 
   if (this->argmax_sensor_)
-    this->argmax_sensor_->publish_state(value.get_timestamp_reference() - value.get_argmax());
+    this->argmax_sensor_->publish_state(timestamp - value.get_argmax());
 
   if (this->argmin_sensor_)
-    this->argmin_sensor_->publish_state(value.get_timestamp_reference() - value.get_argmin());
+    this->argmin_sensor_->publish_state(timestamp - value.get_argmin());
 
   if (this->count_sensor_)
     this->count_sensor_->publish_state(value.get_count());

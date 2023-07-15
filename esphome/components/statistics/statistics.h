@@ -206,8 +206,9 @@ class StatisticsComponent : public Component {
    *
    * Saves value to flash memory only if <restore_> is true.
    * @param value aggregate value to published and saved
+   * @param timestamp current system timestamp (in milliseconds)
    */
-  void publish_and_save_(Aggregate value);
+  void publish_and_save_(Aggregate value, uint32_t timestamp);
 
   /// @brief Return if averages are weighted by measurement duration.
   inline bool is_time_weighted_();
