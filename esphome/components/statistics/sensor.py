@@ -51,6 +51,23 @@ CONF_MIN = "min"
 CONF_STD_DEV = "std_dev"
 CONF_TREND = "trend"
 
+################
+# Window Types #
+################
+
+CONF_SLIDING_WINDOW = "sliding"
+CONF_CHUNKED_SLIDING_WINDOW = "chunked_sliding"
+CONF_CONTINUOUS_WINDOW = "continuous"
+CONF_CHUNKED_CONTINUOUS_WINDOW = "chunked_continuous"
+
+WindowType = statistics_ns.enum("WindowType")
+WINDOW_TYPES = {
+    CONF_SLIDING_WINDOW: WindowType.WINDOW_TYPE_SLIDING,
+    CONF_CHUNKED_SLIDING_WINDOW: WindowType.WINDOW_TYPE_CHUNKED_SLIDING,
+    CONF_CONTINUOUS_WINDOW: WindowType.WINDOW_TYPE_CONTINUOUS,
+    CONF_CHUNKED_CONTINUOUS_WINDOW: WindowType.WINDOW_TYPE_CHUNKED_CONTINUOUS,
+}
+
 ################################################
 # Configuration Options for Chunks and Windows #
 ################################################
@@ -74,22 +91,6 @@ GROUP_TYPES = {
     CONF_POPULATION_GROUP: GroupType.POPULATION_GROUP_TYPE,
 }
 
-################
-# Window Types #
-################
-
-CONF_SLIDING_WINDOW = "sliding"
-CONF_CHUNKED_SLIDING_WINDOW = "chunked_sliding"
-CONF_CONTINUOUS_WINDOW = "continuous"
-CONF_CHUNKED_CONTINUOUS_WINDOW = "chunked_continuous"
-
-WindowType = statistics_ns.enum("WindowType")
-WINDOW_TYPES = {
-    CONF_SLIDING_WINDOW: WindowType.WINDOW_TYPE_SLIDING,
-    CONF_CHUNKED_SLIDING_WINDOW: WindowType.WINDOW_TYPE_CHUNKED_SLIDING,
-    CONF_CONTINUOUS_WINDOW: WindowType.WINDOW_TYPE_CONTINUOUS,
-    CONF_CHUNKED_CONTINUOUS_WINDOW: WindowType.WINDOW_TYPE_CHUNKED_CONTINUOUS,
-}
 
 #################
 # Average Types #
