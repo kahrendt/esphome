@@ -99,7 +99,7 @@ enum TimeConversionFactor {
 
 class StatisticsComponent : public Component {
  public:
-  float get_setup_priority() const override { return setup_priority::DATA; }
+  float get_setup_priority() const override { return setup_priority::PROCESSOR; }
 
   void dump_config() override;
 
