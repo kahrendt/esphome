@@ -26,7 +26,7 @@ CONFIG_SCHEMA = (
     .extend(
         {
             cv.Optional(CONF_DEBOUNCE, default="750ms"): cv.All(
-                cv.positive_time_period_milliseconds,
+                cv.time_period,
                 cv.Range(max=core.TimePeriod(milliseconds=65535)),
             ),
             cv.Optional(CONF_RAW): binary_sensor.binary_sensor_schema(
