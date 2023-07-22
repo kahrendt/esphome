@@ -9,7 +9,7 @@ static const char *const TAG = "qwiic_pir";
 void QwiicPIRComponent::setup() {
   ESP_LOGCONFIG(TAG, "Setting up Qwiic PIR...");
 
-  // Verify communcation by reading and verifying the chip ID
+  // Verify I2C communcation by reading and verifying the chip ID
   uint8_t chip_id;
 
   if (!this->read_byte(QWIIC_PIR_CHIP_ID, &chip_id)) {
@@ -63,7 +63,7 @@ void QwiicPIRComponent::loop() {
     return;
   }
 
-  // If the raw state sensor is configured, publish the raw reading
+  // If the raw state binary sensor is configured, publish the raw reading
   if (this->raw_binary_sensor_)
     this->raw_binary_sensor_->publish_state(this->event_status_.bit.raw_reading);
 

@@ -1,3 +1,11 @@
+/*
+ * Adds support for Qwiic PIR motion sensors that communicate over an I2C bus.
+ * These sensors use Sharp PIR motion sensors to detect motion. A firmware running on an ATTiny84 translates the digital
+ * output to I2C communications.
+ * ATTiny84 firmware: https://github.com/sparkfun/Qwiic_PIR (acccessed July 2023)
+ * SparkFun's Arduino library: https://github.com/sparkfun/SparkFun_Qwiic_PIR_Arduino_Library (accessed July 2023)
+ */
+
 #pragma once
 
 #include "esphome/core/component.h"
@@ -7,12 +15,12 @@
 namespace esphome {
 namespace qwiic_pir {
 
-// Qwiic PIR Register Addresses
+// Qwiic PIR I2C Register Addresses
 enum {
   QWIIC_PIR_CHIP_ID = 0x00,
-  QWIIC_PIR_EVENT_STATUS = 0x03,
+  QWIIC_PIR_EVENT_STATUS = 0x03,  // raw sensor state, event state, debounced object removed, debounced object entered
   QWIIC_PIR_INTERRUPT_CONFIG = 0x04,
-  QWIIC_PIR_DEBOUNCE_TIME = 0x05,
+  QWIIC_PIR_DEBOUNCE_TIME = 0x05,  // uint16_t debounce time in milliseconds
 };
 
 static const uint8_t QWIIC_PIR_DEVICE_ID = 0x72;
@@ -46,10 +54,10 @@ class QwiicPIRComponent : public Component, public i2c::I2CDevice, public binary
 
   union {
     struct {
-      bool raw_reading : 1;
-      bool event_available : 1;
-      bool object_removed : 1;
-      bool object_detected : 1;
+      bool raw_reading : 1;      // raw state of PIR sensor
+      bool event_available : 1;  // a debounced object has been detected or removed
+      bool object_removed : 1;   // a debounced object is no longer detected
+      bool object_detected : 1;  // a debounced object has been detected
     } bit;
     uint8_t reg;
   } event_status_ = {.reg = 0};
