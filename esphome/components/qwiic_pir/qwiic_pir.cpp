@@ -40,17 +40,6 @@ void QwiicPIRComponent::setup() {
     return;
   }
 
-  if (this->enabled_interrupt_) {
-    if (!this->write_byte(QWIIC_PIR_INTERRUPT_CONFIG, 0x01)) {
-      ESP_LOGE(TAG, "Failed to enable interrupt.");
-
-      this->error_code_ = ERROR_COMMUNICATION_FAILED;
-      this->mark_failed();
-
-      return;
-    }
-  }
-
   // Publish initial state of sensor
   this->publish_initial_state(false);
 }

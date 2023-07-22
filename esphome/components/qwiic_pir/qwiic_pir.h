@@ -18,8 +18,7 @@ namespace qwiic_pir {
 // Qwiic PIR I2C Register Addresses
 enum {
   QWIIC_PIR_CHIP_ID = 0x00,
-  QWIIC_PIR_EVENT_STATUS = 0x03,  // raw sensor state, event state, debounced object removed, debounced object entered
-  QWIIC_PIR_INTERRUPT_CONFIG = 0x04,
+  QWIIC_PIR_EVENT_STATUS = 0x03,
   QWIIC_PIR_DEBOUNCE_TIME = 0x05,  // uint16_t debounce time in milliseconds
 };
 
@@ -34,7 +33,6 @@ class QwiicPIRComponent : public Component, public i2c::I2CDevice, public binary
   float get_setup_priority() const override { return setup_priority::DATA; }
 
   void set_debounce_time(uint16_t debounce_time) { this->debounce_time_ = debounce_time; }
-  void set_enable_interrupt(bool enabled) { this->enabled_interrupt_ = enabled; }
   void set_raw_binary_sensor(binary_sensor::BinarySensor *raw_binary_sensor) {
     this->raw_binary_sensor_ = raw_binary_sensor;
   }
@@ -43,8 +41,6 @@ class QwiicPIRComponent : public Component, public i2c::I2CDevice, public binary
   binary_sensor::BinarySensor *raw_binary_sensor_{nullptr};
 
   uint16_t debounce_time_;
-
-  bool enable_interrupt_;
 
   enum ErrorCode {
     NONE = 0,
