@@ -15,7 +15,7 @@ qwiic_pir_ns = cg.esphome_ns.namespace("qwiic_pir")
 
 
 QwiicPIRComponent = qwiic_pir_ns.class_(
-    "QwiicPIRComponent", cg.PollingComponent, i2c.I2CDevice, binary_sensor.BinarySensor
+    "QwiicPIRComponent", cg.Component, i2c.I2CDevice, binary_sensor.BinarySensor
 )
 
 CONFIG_SCHEMA = (
@@ -25,7 +25,7 @@ CONFIG_SCHEMA = (
     )
     .extend(
         {
-            cv.Optional(CONF_DEBOUNCE, default="750ms"): cv.All(
+            cv.Optional(CONF_DEBOUNCE, default="5ms"): cv.All(
                 cv.time_period,
                 cv.Range(max=core.TimePeriod(milliseconds=65535)),
             ),

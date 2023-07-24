@@ -1,5 +1,6 @@
 #include "qwiic_pir.h"
 #include "esphome/core/log.h"
+#include "esphome/core/hal.h"
 
 namespace esphome {
 namespace qwiic_pir {
@@ -54,21 +55,18 @@ void QwiicPIRComponent::loop() {
 
   // If the raw state binary sensor is configured, publish the raw reading
   if (this->raw_binary_sensor_)
-    this->raw_binary_sensor_->publish_state(this->event_status_.bit.raw_reading);
+    this->raw_binary_sensor_->publish_state(this->event_status_.raw_reading);
 
   // Handle debounced motion events
-  if (this->event_status_.bit.event_available) {
+  if (this->event_status_.event_available) {
     // If an object is detected, publish true
-    if (this->event_status_.bit.object_detected) {
+    if (this->event_status_.object_detected)
       this->publish_state(true);
-    }
 
     // If an object has been removed, publish false
-    if (this->event_status_.bit.object_removed && this->state) {
+    if (this->event_status_.object_removed)
       this->publish_state(false);
-    }
 
-    // Clear events register
     if (!this->write_byte(QWIIC_PIR_EVENT_STATUS, 0x00)) {
       ESP_LOGW(TAG, "Failed to clear events on sensor");
     }
@@ -77,6 +75,8 @@ void QwiicPIRComponent::loop() {
 
 void QwiicPIRComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "Qwiic PIR:");
+
+  ESP_LOGCONFIG(TAG, "  Debounce Time: %ums", this->debounce_time_);
 
   switch (this->error_code_) {
     case NONE:

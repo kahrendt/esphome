@@ -54,7 +54,8 @@ class QwiicPIRComponent : public Component, public i2c::I2CDevice, public binary
       bool event_available : 1;  // a debounced object has been detected or removed
       bool object_removed : 1;   // a debounced object is no longer detected
       bool object_detected : 1;  // a debounced object has been detected
-    } bit;
+      bool : 4;
+    };
     uint8_t reg;
   } event_status_ = {.reg = 0};
 };
