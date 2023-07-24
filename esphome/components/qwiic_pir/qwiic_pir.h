@@ -22,6 +22,12 @@ enum {
   QWIIC_PIR_DEBOUNCE_TIME = 0x05,  // uint16_t debounce time in milliseconds
 };
 
+enum OperationMode {
+  RAW_MODE,
+  DEBOUNCED_MODE,
+  HYBRID_MODE,
+};
+
 static const uint8_t QWIIC_PIR_DEVICE_ID = 0x72;
 
 class QwiicPIRComponent : public Component, public i2c::I2CDevice, public binary_sensor::BinarySensor {
@@ -33,14 +39,13 @@ class QwiicPIRComponent : public Component, public i2c::I2CDevice, public binary
   float get_setup_priority() const override { return setup_priority::DATA; }
 
   void set_debounce_time(uint16_t debounce_time) { this->debounce_time_ = debounce_time; }
-  void set_raw_binary_sensor(binary_sensor::BinarySensor *raw_binary_sensor) {
-    this->raw_binary_sensor_ = raw_binary_sensor;
-  }
 
  protected:
-  binary_sensor::BinarySensor *raw_binary_sensor_{nullptr};
-
   uint16_t debounce_time_;
+
+  OperationMode mode_{HYBRID_MODE};
+
+  uint32_t last_on_time_{0};
 
   enum ErrorCode {
     NONE = 0,

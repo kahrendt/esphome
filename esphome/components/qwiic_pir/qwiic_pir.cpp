@@ -32,7 +32,12 @@ void QwiicPIRComponent::setup() {
   }
 
   // Configure debounce time
-  if (!this->write_byte_16(QWIIC_PIR_DEBOUNCE_TIME, this->debounce_time_)) {
+  uint16_t debounce_time = this->debounce_time_;
+
+  if (this->mode_ == HYBRID_MODE)
+    debounce_time = 1;
+
+  if (!this->write_byte_16(QWIIC_PIR_DEBOUNCE_TIME, debounce_time)) {
     ESP_LOGE(TAG, "Failed to configure debounce time.");
 
     this->error_code_ = ERROR_COMMUNICATION_FAILED;
@@ -53,23 +58,54 @@ void QwiicPIRComponent::loop() {
     return;
   }
 
-  // If the raw state binary sensor is configured, publish the raw reading
-  if (this->raw_binary_sensor_)
-    this->raw_binary_sensor_->publish_state(this->event_status_.raw_reading);
+  switch (this->mode_) {
+    case RAW_MODE:
+      this->publish_state(this->event_status_.raw_reading);
+      return;
+    case DEBOUNCED_MODE:
+      // Handle debounced motion events
+      if (this->event_status_.event_available) {
+        // If an object is detected, publish true
+        if (this->event_status_.object_detected)
+          this->publish_state(true);
 
-  // Handle debounced motion events
-  if (this->event_status_.event_available) {
-    // If an object is detected, publish true
-    if (this->event_status_.object_detected)
-      this->publish_state(true);
+        // If an object has been removed, publish false
+        if (this->event_status_.object_removed)
+          this->publish_state(false);
 
-    // If an object has been removed, publish false
-    if (this->event_status_.object_removed)
-      this->publish_state(false);
+        if (!this->write_byte(QWIIC_PIR_EVENT_STATUS, 0x00)) {
+          ESP_LOGW(TAG, "Failed to clear events on sensor");
+        }
+      }
+      return;
+    case HYBRID_MODE:
+      if (this->state) {
+        // Sensor state is detecting motion
+        if (!this->event_status_.raw_reading) {
+          // Raw PIR Sensor is off
+          if (millis() - last_on_time_ > this->debounce_time_) {
+            // Verify the raw PIR sensor has been off sufficiently long
+            this->publish_state(false);
+          }
+        } else {
+          // Raw PIR sensor is on, update last_on_time_
+          this->last_on_time_ = millis();
+        }
+      }
 
-    if (!this->write_byte(QWIIC_PIR_EVENT_STATUS, 0x00)) {
-      ESP_LOGW(TAG, "Failed to clear events on sensor");
-    }
+      // Sensor reports an event
+      if (this->event_status_.event_available) {
+        // Clear event register on sensor
+        if (!this->write_byte(QWIIC_PIR_EVENT_STATUS, 0x00)) {
+          ESP_LOGW(TAG, "Failed to clear events on sensor");
+        }
+
+        if (!this->state) {
+          this->publish_state(true);
+          this->last_on_time_ = millis();
+        }
+      }
+      return;
   }
 }
 

@@ -4,7 +4,6 @@ import esphome.config_validation as cv
 from esphome.components import i2c, binary_sensor
 from esphome.const import (
     CONF_DEBOUNCE,
-    CONF_RAW,
     DEVICE_CLASS_MOTION,
 )
 
@@ -29,9 +28,6 @@ CONFIG_SCHEMA = (
                 cv.time_period,
                 cv.Range(max=core.TimePeriod(milliseconds=65535)),
             ),
-            cv.Optional(CONF_RAW): binary_sensor.binary_sensor_schema(
-                device_class=DEVICE_CLASS_MOTION,
-            ),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -45,8 +41,3 @@ async def to_code(config):
     await i2c.register_i2c_device(var, config)
 
     cg.add(var.set_debounce_time(config[CONF_DEBOUNCE].total_milliseconds))
-
-    if CONF_RAW in config:
-        conf = config[CONF_RAW]
-        binary_sens = await binary_sensor.new_binary_sensor(conf)
-        cg.add(var.set_raw_binary_sensor(binary_sens))
