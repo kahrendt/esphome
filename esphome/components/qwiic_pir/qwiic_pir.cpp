@@ -21,14 +21,14 @@ void QwiicPIRComponent::setup() {
     return;
   }
 
-  if (chip_id != QWIIC_PIR_CHIP_ID) {
-    ESP_LOGE(TAG, "Unknown chip ID, is this a Qwiic PIR?");
+  // if (chip_id != QWIIC_PIR_CHIP_ID) {
+  //   ESP_LOGE(TAG, "Unknown chip ID, is this a Qwiic PIR?");
 
-    this->error_code_ = ERROR_WRONG_CHIP_ID;
-    this->mark_failed();
+  //   this->error_code_ = ERROR_WRONG_CHIP_ID;
+  //   this->mark_failed();
 
-    return;
-  }
+  //   return;
+  // }
 
   // Configure debounce time
   if (!this->write_byte_16(QWIIC_PIR_DEBOUNCE_TIME, this->debounce_time_)) {
