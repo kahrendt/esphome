@@ -12,6 +12,15 @@ CODEOWNERS = ["@kahrendt"]
 
 qwiic_pir_ns = cg.esphome_ns.namespace("qwiic_pir")
 
+OperationMode = qwiic_pir_ns.enum("OperationMode")
+OPERATION_MODE_OPTIONS = {
+    "RAW": OperationMode.RAW_MODE,
+    "DEBOUNCED": OperationMode.DEBOUNCED_MODE,
+    "HYBRID": OperationMode.HYBRID_MODE,
+}
+
+CONF_MODE = "mode"
+
 
 QwiicPIRComponent = qwiic_pir_ns.class_(
     "QwiicPIRComponent", cg.Component, i2c.I2CDevice, binary_sensor.BinarySensor
@@ -28,6 +37,9 @@ CONFIG_SCHEMA = (
                 cv.time_period,
                 cv.Range(max=core.TimePeriod(milliseconds=65535)),
             ),
+            cv.Optional(CONF_MODE, default="HYBRID"): cv.enum(
+                OPERATION_MODE_OPTIONS, upper=True
+            ),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -41,3 +53,4 @@ async def to_code(config):
     await i2c.register_i2c_device(var, config)
 
     cg.add(var.set_debounce_time(config[CONF_DEBOUNCE].total_milliseconds))
+    cg.add(var.set_operation_mode(config[CONF_MODE]))

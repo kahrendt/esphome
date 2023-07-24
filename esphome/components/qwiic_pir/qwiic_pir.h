@@ -39,6 +39,7 @@ class QwiicPIRComponent : public Component, public i2c::I2CDevice, public binary
   float get_setup_priority() const override { return setup_priority::DATA; }
 
   void set_debounce_time(uint16_t debounce_time) { this->debounce_time_ = debounce_time; }
+  void set_operation_mode(OperationMode mode) { this->mode_ = mode; }
 
  protected:
   uint16_t debounce_time_;
