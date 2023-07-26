@@ -5,13 +5,13 @@
  * have weights given by their duration.
  *
  * Available statistics as sensors
- *  - argmax: the UTC timestamp of the most recent maximum value
- *  - argmin: the UTC timestamp of the most recent minimum value
  *  - count: number of valid measurements in the window (component ignores NaN values in the window)
  *  - duration: the duration in milliseconds between the first and last measurement's timestamps
  *  - min: minimum of the set of measurements
  *  - mean: average of the set of measurements
  *  - max: maximum of the set of measurements
+ *  - since_argmax: the time in seconds since the most recent maximum value
+ *  - since_argmin: the time in seconds since the most recent minimum value
  *  - std_dev: sample or population standard deviation of the set of measurements
  *  - trend: the slope of the line of best fit for the measurement values versus timestamps
  *      - can be used as an approximation for the rate of change (derivative) of the measurements
@@ -115,13 +115,13 @@ class StatisticsComponent : public Component {
   void set_source_sensor(sensor::Sensor *source_sensor) { this->source_sensor_ = source_sensor; }
 
   // sensors for aggregate statistics
-  void set_argmax_sensor(sensor::Sensor *argmax_sensor) { this->argmax_sensor_ = argmax_sensor; }
-  void set_argmin_sensor(sensor::Sensor *argmin_sensor) { this->argmin_sensor_ = argmin_sensor; }
   void set_count_sensor(sensor::Sensor *count_sensor) { this->count_sensor_ = count_sensor; }
   void set_duration_sensor(sensor::Sensor *duration_sensor) { this->duration_sensor_ = duration_sensor; }
   void set_max_sensor(sensor::Sensor *max_sensor) { this->max_sensor_ = max_sensor; }
   void set_mean_sensor(sensor::Sensor *mean_sensor) { this->mean_sensor_ = mean_sensor; }
   void set_min_sensor(sensor::Sensor *min_sensor) { this->min_sensor_ = min_sensor; }
+  void set_since_argmax_sensor(sensor::Sensor *argmax_sensor) { this->since_argmax_sensor_ = argmax_sensor; }
+  void set_since_argmin_sensor(sensor::Sensor *argmin_sensor) { this->since_argmin_sensor_ = argmin_sensor; }
   void set_std_dev_sensor(sensor::Sensor *std_dev_sensor) { this->std_dev_sensor_ = std_dev_sensor; }
   void set_trend_sensor(sensor::Sensor *trend_sensor) { this->trend_sensor_ = trend_sensor; }
 
@@ -149,13 +149,13 @@ class StatisticsComponent : public Component {
   sensor::Sensor *source_sensor_{nullptr};
 
   // sensors for aggregate statistics from sliding window
-  sensor::Sensor *argmax_sensor_{nullptr};
-  sensor::Sensor *argmin_sensor_{nullptr};
   sensor::Sensor *count_sensor_{nullptr};
   sensor::Sensor *duration_sensor_{nullptr};
   sensor::Sensor *max_sensor_{nullptr};
   sensor::Sensor *mean_sensor_{nullptr};
   sensor::Sensor *min_sensor_{nullptr};
+  sensor::Sensor *since_argmax_sensor_{nullptr};
+  sensor::Sensor *since_argmin_sensor_{nullptr};
   sensor::Sensor *std_dev_sensor_{nullptr};
   sensor::Sensor *trend_sensor_{nullptr};
 

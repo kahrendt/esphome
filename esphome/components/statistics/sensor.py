@@ -45,11 +45,11 @@ ForcePublishAction = statistics_ns.class_("ForcePublishAction", automation.Actio
 # Definable sensors #
 #####################
 
-CONF_ARGMAX = "argmax"
-CONF_ARGMIN = "argmin"
 CONF_MAX = "max"
 CONF_MEAN = "mean"
 CONF_MIN = "min"
+CONF_SINCE_ARGMAX = "since_argmax"
+CONF_SINCE_ARGMIN = "since_argmin"
 CONF_STD_DEV = "std_dev"
 CONF_TREND = "trend"
 
@@ -135,10 +135,10 @@ SENSOR_LIST_WITH_ORIGINAL_UNITS = [
 ]
 
 SENSOR_LIST_WITH_MODIFIED_UNITS = [
-    CONF_ARGMAX,
-    CONF_ARGMIN,
     CONF_COUNT,
     CONF_DURATION,
+    CONF_SINCE_ARGMAX,
+    CONF_SINCE_ARGMIN,
     CONF_TREND,
 ]
 
@@ -302,12 +302,12 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
             TIME_CONVERSION_FACTORS, lower=True
         ),
-        cv.Optional(CONF_ARGMAX): sensor.sensor_schema(
+        cv.Optional(CONF_SINCE_ARGMAX): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
             device_class=DEVICE_CLASS_DURATION,
             unit_of_measurement=UNIT_SECOND,
         ),
-        cv.Optional(CONF_ARGMIN): sensor.sensor_schema(
+        cv.Optional(CONF_SINCE_ARGMIN): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
             device_class=DEVICE_CLASS_DURATION,
             unit_of_measurement=UNIT_SECOND,
@@ -446,16 +446,6 @@ async def to_code(config):
     cg.add(var.set_first_at(window_config[CONF_SEND_FIRST_AT]))
 
     # Handle sensor configurations
-    if CONF_ARGMAX in config:
-        conf = config[CONF_ARGMAX]
-        sens = await sensor.new_sensor(conf)
-        cg.add(var.set_argmax_sensor(sens))
-
-    if CONF_ARGMIN in config:
-        conf = config[CONF_ARGMIN]
-        sens = await sensor.new_sensor(conf)
-        cg.add(var.set_argmin_sensor(sens))
-
     if CONF_COUNT in config:
         conf = config[CONF_COUNT]
         sens = await sensor.new_sensor(conf)
@@ -480,6 +470,16 @@ async def to_code(config):
         conf = config[CONF_MIN]
         sens = await sensor.new_sensor(conf)
         cg.add(var.set_min_sensor(sens))
+
+    if CONF_SINCE_ARGMAX in config:
+        conf = config[CONF_SINCE_ARGMAX]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_since_argmax_sensor(sens))
+
+    if CONF_SINCE_ARGMIN in config:
+        conf = config[CONF_SINCE_ARGMIN]
+        sens = await sensor.new_sensor(conf)
+        cg.add(var.set_since_argmin_sensor(sens))
 
     if CONF_STD_DEV in config:
         conf = config[CONF_STD_DEV]

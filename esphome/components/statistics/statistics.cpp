@@ -145,16 +145,6 @@ void StatisticsComponent::reset() {
 EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics_config_() {
   EnabledAggregatesConfiguration config;
 
-  if (this->argmax_sensor_) {
-    config.max = true;
-    config.argmax = true;
-  }
-
-  if (this->argmin_sensor_) {
-    config.min = true;
-    config.argmin = true;
-  }
-
   if (this->duration_sensor_)
     config.duration = true;
 
@@ -168,6 +158,16 @@ EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics
 
   if (this->min_sensor_) {
     config.min = true;
+  }
+
+  if (this->since_argmax_sensor_) {
+    config.max = true;
+    config.argmax = true;
+  }
+
+  if (this->since_argmin_sensor_) {
+    config.min = true;
+    config.argmin = true;
   }
 
   if (this->std_dev_sensor_) {
@@ -194,14 +194,6 @@ EnabledAggregatesConfiguration StatisticsComponent::determine_enabled_statistics
 }
 
 void StatisticsComponent::dump_enabled_sensors_() {
-  if (this->argmax_sensor_) {
-    LOG_SENSOR("  ", "Argmax Sensor:", this->argmax_sensor_);
-  }
-
-  if (this->argmin_sensor_) {
-    LOG_SENSOR("  ", "Argmin Sensor:", this->argmin_sensor_);
-  }
-
   if (this->count_sensor_) {
     LOG_SENSOR("  ", "Count Sensor:", this->count_sensor_);
   }
@@ -220,6 +212,14 @@ void StatisticsComponent::dump_enabled_sensors_() {
 
   if (this->min_sensor_) {
     LOG_SENSOR("  ", "Min Sensor:", this->min_sensor_);
+  }
+
+  if (this->since_argmax_sensor_) {
+    LOG_SENSOR("  ", "Since Argmax Sensor:", this->since_argmax_sensor_);
+  }
+
+  if (this->since_argmin_sensor_) {
+    LOG_SENSOR("  ", "Since Argmin Sensor:", this->since_argmin_sensor_);
   }
 
   if (this->std_dev_sensor_) {
@@ -321,12 +321,6 @@ void StatisticsComponent::publish_and_save_(Aggregate value, time_t time) {
   // Publish new states for all enabled sensors //
   ////////////////////////////////////////////////
 
-  if (this->argmax_sensor_)
-    this->argmax_sensor_->publish_state(time - value.get_argmax());
-
-  if (this->argmin_sensor_)
-    this->argmin_sensor_->publish_state(time - value.get_argmin());
-
   if (this->count_sensor_)
     this->count_sensor_->publish_state(value.get_count());
 
@@ -353,6 +347,12 @@ void StatisticsComponent::publish_and_save_(Aggregate value, time_t time) {
       this->min_sensor_->publish_state(min);
     }
   }
+
+  if (this->since_argmax_sensor_)
+    this->since_argmax_sensor_->publish_state(time - value.get_argmax());
+
+  if (this->since_argmin_sensor_)
+    this->since_argmin_sensor_->publish_state(time - value.get_argmin());
 
   if (this->std_dev_sensor_)
     this->std_dev_sensor_->publish_state(value.compute_std_dev(this->is_time_weighted_(), this->group_type_));
