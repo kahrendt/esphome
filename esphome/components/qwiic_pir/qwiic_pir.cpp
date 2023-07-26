@@ -79,33 +79,46 @@ void QwiicPIRComponent::loop() {
       }
       return;
     case HYBRID_MODE:
-      if (this->state) {
-        // Sensor state is detecting motion
-        if (!this->event_status_.raw_reading) {
-          // Raw PIR Sensor is off
-          if (millis() - last_on_time_ > this->debounce_time_) {
-            // Verify the raw PIR sensor has been off sufficiently long
-            this->publish_state(false);
+      if ((this->event_status_.raw_reading) || (this->event_status_.event_available)) {
+        this->publish_state(true);
+
+        // Clear event status register
+        if (this->event_status_.event_available) {
+          if (!this->write_byte(QWIIC_PIR_EVENT_STATUS, 0x00)) {
+            ESP_LOGW(TAG, "Failed to clear events on sensor");
           }
-        } else {
-          // Raw PIR sensor is on, update last_on_time_
-          this->last_on_time_ = millis();
         }
-      }
-
-      // Sensor reports an event
-      if (this->event_status_.event_available) {
-        // Clear event register on sensor
-        if (!this->write_byte(QWIIC_PIR_EVENT_STATUS, 0x00)) {
-          ESP_LOGW(TAG, "Failed to clear events on sensor");
-        }
-
-        if (!this->state) {
-          this->publish_state(true);
-          this->last_on_time_ = millis();
-        }
+      } else {
+        this->publish_state(false);
       }
       return;
+      // if (this->state) {
+      //   // Sensor state is detecting motion
+      //   if (!this->event_status_.raw_reading) {
+      //     // Raw PIR Sensor is off
+      //     if (millis() - last_on_time_ > this->debounce_time_) {
+      //       // Verify the raw PIR sensor has been off sufficiently long
+      //       this->publish_state(false);
+      //     }
+      //   } else {
+      //     // Raw PIR sensor is on, update last_on_time_
+      //     this->last_on_time_ = millis();
+      //   }
+      // }
+
+      // // Sensor reports an event
+      // if (this->event_status_.event_available) {
+      //   // Clear event register on sensor
+      //   if (!this->write_byte(QWIIC_PIR_EVENT_STATUS, 0x00)) {
+      //     ESP_LOGW(TAG, "Failed to clear events on sensor");
+      //   }
+
+      //   if (!this->state) {
+      //     this->publish_state(true);
+      //     this->last_on_time_ = millis();
+      //   }
+      // }
+      // return;
   }
 }
 
