@@ -255,6 +255,7 @@ CONTINUOUS_WINDOW_SCHEMA = cv.All(
             cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
             cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_int,
             cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
+            cv.Optional(CONF_RESTORE): cv.boolean,
         },
         validate_send_first_at,
     ),
@@ -405,6 +406,9 @@ async def to_code(config):
                     window_config[CONF_WINDOW_DURATION].total_milliseconds
                 )
             )
+
+        if CONF_RESTORE in window_config:
+            cg.add(var.set_restore(window_config[CONF_RESTORE]))
     elif window_config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS:
         window_size = (
             0  # default setting if CONF_WINDOW_DURATION is the only configured option
