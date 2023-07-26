@@ -167,7 +167,7 @@ class StatisticsComponent : public Component {
 
   uint32_t hash_{};
 
-  size_t window_size_{0};
+  size_t window_size_{};
   size_t send_every_{};
   size_t send_at_chunks_counter_{};
 

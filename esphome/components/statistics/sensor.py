@@ -370,17 +370,36 @@ async def to_code(config):
     cg.add(var.set_group_type(config[CONF_GROUP_TYPE]))
     cg.add(var.set_time_conversion_factor(config[CONF_TIME_UNIT]))
 
-    # Handle window configurations
-
+    ####################
+    # Configure Window #
+    ####################
     window_config = config["window"]
     constant = WINDOW_TYPES[window_config[CONF_TYPE]]
     cg.add(var.set_window_type(constant))
 
-    if window_config[CONF_TYPE] == CONF_SLIDING:
-        cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
-    elif window_config[CONF_TYPE] == CONF_CHUNKED_SLIDING:
-        cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
+    # Setup window size
+    window_size = (
+        0  # default setting if CONF_WINDOW_DURATION is the only configured option
+    )
+    if CONF_WINDOW_SIZE in window_config:
+        window_size = window_config[CONF_WINDOW_SIZE]
+    cg.add(var.set_window_size(window_size))
 
+    if CONF_WINDOW_DURATION in window_config:
+        cg.add(
+            var.set_window_duration(
+                window_config[CONF_WINDOW_DURATION].total_milliseconds
+            )
+        )
+
+    # Setup restore setting
+    if CONF_RESTORE in window_config:
+        cg.add(var.set_restore(window_config[CONF_RESTORE]))
+
+    # Setup chunk size
+    if (window_config[CONF_TYPE] == CONF_CHUNKED_SLIDING) or (
+        window_config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS
+    ):
         chunk_size = (
             0  # default setting when CONF_CHUNK_DURATION is the configured option
         )
@@ -394,58 +413,13 @@ async def to_code(config):
             )
         cg.add(var.set_chunk_size(chunk_size))
 
-    elif window_config[CONF_TYPE] == CONF_CONTINUOUS:
-        window_size = (
-            0  # default setting if CONF_WINDOW_DURATION is the only configured option
-        )
-        if CONF_WINDOW_SIZE in window_config:
-            window_size = window_config[CONF_WINDOW_SIZE]
-        cg.add(var.set_window_size(window_size))
-
-        if CONF_WINDOW_DURATION in window_config:
-            cg.add(
-                var.set_window_duration(
-                    window_config[CONF_WINDOW_DURATION].total_milliseconds
-                )
-            )
-
-        if CONF_RESTORE in window_config:
-            cg.add(var.set_restore(window_config[CONF_RESTORE]))
-    elif window_config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS:
-        window_size = (
-            0  # default setting if CONF_WINDOW_DURATION is the only configured option
-        )
-        if CONF_WINDOW_SIZE in window_config:
-            window_size = window_config[CONF_WINDOW_SIZE]
-        cg.add(var.set_window_size(window_size))
-
-        if CONF_WINDOW_DURATION in window_config:
-            cg.add(
-                var.set_window_duration(
-                    window_config[CONF_WINDOW_DURATION].total_milliseconds
-                )
-            )
-
-        chunk_size = (
-            0  # default setting when CONF_CHUNK_DURATION is the configured option
-        )
-        if CONF_CHUNK_SIZE in window_config:
-            chunk_size = window_config[CONF_CHUNK_SIZE]
-        elif CONF_CHUNK_DURATION in window_config:
-            cg.add(
-                var.set_chunk_duration(
-                    window_config[CONF_CHUNK_DURATION].total_milliseconds
-                )
-            )
-        cg.add(var.set_chunk_size(chunk_size))
-
-        if CONF_RESTORE in window_config:
-            cg.add(var.set_restore(window_config[CONF_RESTORE]))
-
+    # Setup send parameters
     cg.add(var.set_send_every(window_config[CONF_SEND_EVERY]))
     cg.add(var.set_first_at(window_config[CONF_SEND_FIRST_AT]))
 
-    # Handle sensor configurations
+    ############################
+    # Setup Configured Sensors #
+    ############################
     if CONF_COUNT in config:
         conf = config[CONF_COUNT]
         sens = await sensor.new_sensor(conf)
