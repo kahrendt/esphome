@@ -52,7 +52,7 @@ void QwiicPIRComponent::setup() {
 
 void QwiicPIRComponent::loop() {
   // Read Event Register
-  if (!this->read_byte(QWIIC_PIR_EVENT_STATUS, &this->event_status_.reg)) {
+  if (!this->read_byte(QWIIC_PIR_EVENT_STATUS, &this->event_register_.reg)) {
     ESP_LOGW(TAG, "Failed to communicate with sensor");
 
     return;
@@ -60,35 +60,28 @@ void QwiicPIRComponent::loop() {
 
   switch (this->mode_) {
     case RAW_MODE:
-      this->publish_state(this->event_status_.raw_reading);
-      return;
+      this->publish_state(this->event_register_.raw_reading);
+      break;
     case DEBOUNCED_MODE:
-      // Handle debounced motion events
-      if (this->event_status_.event_available) {
+      if (this->event_register_.event_available) {
         // If an object is detected, publish true
-        if (this->event_status_.object_detected)
+        if (this->event_register_.object_detected)
           this->publish_state(true);
 
         // If an object has been removed, publish false
-        if (this->event_status_.object_removed)
+        if (this->event_register_.object_removed)
           this->publish_state(false);
 
-        if (!this->write_byte(QWIIC_PIR_EVENT_STATUS, 0x00)) {
-          ESP_LOGW(TAG, "Failed to clear events on sensor");
-        }
+        this->clear_events_();
       }
-      return;
+      break;
     case HYBRID_MODE:
-      this->publish_state(this->event_status_.raw_reading || this->event_status_.event_available);
+      this->publish_state(this->event_register_.raw_reading || this->event_register_.event_available);
 
-      // Clear event status register
-      if (this->event_status_.event_available) {
-        if (!this->write_byte(QWIIC_PIR_EVENT_STATUS, 0x00)) {
-          ESP_LOGW(TAG, "Failed to clear events on sensor");
-        }
+      if (this->event_register_.event_available) {
+        this->clear_events_();
       }
-
-      return;
+      break;
   }
 }
 
@@ -113,6 +106,12 @@ void QwiicPIRComponent::dump_config() {
 
   LOG_I2C_DEVICE(this);
   LOG_BINARY_SENSOR("  ", "Qwiic PIR Binary Sensor", this);
+}
+
+void QwiicPIRComponent::clear_events_() {
+  // Clear event status register
+  if (!this->write_byte(QWIIC_PIR_EVENT_STATUS, 0x00))
+    ESP_LOGW(TAG, "Failed to clear events on sensor");
 }
 
 }  // namespace qwiic_pir

@@ -46,8 +46,6 @@ class QwiicPIRComponent : public Component, public i2c::I2CDevice, public binary
 
   OperationMode mode_{HYBRID_MODE};
 
-  uint32_t last_on_time_{0};
-
   enum ErrorCode {
     NONE = 0,
     ERROR_COMMUNICATION_FAILED,
@@ -63,7 +61,9 @@ class QwiicPIRComponent : public Component, public i2c::I2CDevice, public binary
       bool : 4;
     };
     uint8_t reg;
-  } event_status_ = {.reg = 0};
+  } event_register_ = {.reg = 0};
+
+  void clear_events_();
 };
 
 }  // namespace qwiic_pir
