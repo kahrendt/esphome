@@ -39,6 +39,7 @@
 
 #include <cmath>    // necessary for NaN
 #include <cstdint>  // necessary for uint32_t
+#include <ctime>    // necessary for time_t
 #include <limits>   // necessary for std::numeric_limits infinity
 
 namespace esphome {
@@ -58,9 +59,10 @@ class Aggregate {
    *
    * @param value sensor measurement
    * @param duration length of time (in milliseconds) for measurement
-   * @param timestamp timestamp of measurement (in milliseconds)
+   * @param timestamp timestamp (in milliseconds) since boot; i.e., millis()
+   * @param time UTC Unix time for measurement (in seconds)
    */
-  Aggregate(double value, uint64_t duration, uint32_t timestamp);
+  Aggregate(double value, uint64_t duration, uint32_t timestamp, time_t time);
 
   /** Combine Aggregate with another.
    *
@@ -109,13 +111,13 @@ class Aggregate {
    */
   double compute_variance(bool time_weighted, GroupType type) const;
 
-  // The timestamp of the most recent maximum value in the set of measurements
-  uint32_t get_argmax() const { return this->argmax_; }
-  void set_argmax(uint32_t timestamp) { this->argmax_ = timestamp; }
+  // The UTC Unix time of the most recent maximum value in the set of measurements
+  time_t get_argmax() const { return this->argmax_; }
+  void set_argmax(time_t timestamp) { this->argmax_ = timestamp; }
 
-  // The timestamp of the most recent minimum  value in the set of measurements
-  uint32_t get_argmin() const { return this->argmin_; }
-  void set_argmin(uint32_t timestamp) { this->argmin_ = timestamp; }
+  // The UTC Unix time of the most recent minimum  value in the set of measurements
+  time_t get_argmin() const { return this->argmin_; }
+  void set_argmin(time_t timestamp) { this->argmin_ = timestamp; }
 
   // C2 from Welford's algorithm; used to compute the covariance of the measurements and timestamps weighted
   double get_c2() const { return this->c2_; }
@@ -172,9 +174,9 @@ class Aggregate {
   // e.g., if we have one raw timestamp at 5 ms and the reference is 5 ms, we store 0 ms in timestamp_mean
   uint32_t timestamp_reference_{0};
 
-  // The timestamps for the most recent extreme values in the set of measurements
-  uint32_t argmin_{0};
-  uint32_t argmax_{0};
+  // The UTC Unix times for the most recent extreme values in the set of measurements
+  time_t argmin_{std::numeric_limits<time_t>::infinity() * (-1)};
+  time_t argmax_{0};
 
   // Count of non-NaN measurements in the set of measurements
   size_t count_{0};

@@ -5,8 +5,8 @@
  * have weights given by their duration.
  *
  * Available statistics as sensors
- *  - argmax: the time since the most recent maximum value of the measurements in the window
- *  - argmin: the time since the most recent minimum value of the measurements in the window
+ *  - argmax: the UTC timestamp of the most recent maximum value
+ *  - argmin: the UTC timestamp of the most recent minimum value
  *  - count: number of valid measurements in the window (component ignores NaN values in the window)
  *  - duration: the duration in milliseconds between the first and last measurement's timestamps
  *  - min: minimum of the set of measurements
@@ -70,6 +70,7 @@
 #include "esphome/core/component.h"
 #include "esphome/core/preferences.h"
 #include "esphome/components/sensor/sensor.h"
+#include "esphome/components/time/real_time_clock.h"
 
 namespace esphome {
 namespace statistics {
@@ -158,6 +159,8 @@ class StatisticsComponent : public Component {
   sensor::Sensor *std_dev_sensor_{nullptr};
   sensor::Sensor *trend_sensor_{nullptr};
 
+  time::RealTimeClock *time_;
+
   AggregateQueue *queue_{nullptr};
 
   Aggregate running_chunk_aggregate_{};
@@ -206,9 +209,9 @@ class StatisticsComponent : public Component {
    *
    * Saves value to flash memory only if <restore_> is true.
    * @param value aggregate value to published and saved
-   * @param timestamp current system timestamp (in milliseconds)
+   * @param timestamp current UTC Unix time (in seconds)
    */
-  void publish_and_save_(Aggregate value, uint32_t timestamp);
+  void publish_and_save_(Aggregate value, time_t timestamp);
 
   /// @brief Return if averages are weighted by measurement duration.
   inline bool is_time_weighted_();

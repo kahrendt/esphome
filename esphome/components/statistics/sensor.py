@@ -21,10 +21,12 @@ from esphome.const import (
     STATE_CLASS_MEASUREMENT,
     STATE_CLASS_TOTAL,
     UNIT_MILLISECOND,
+    UNIT_SECOND,
 )
 from esphome.core.entity_helpers import inherit_property_from
 
 CODEOWNERS = ["@kahrendt"]
+DEPENDENCIES = ["time"]
 
 statistics_ns = cg.esphome_ns.namespace("statistics")
 StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
@@ -303,12 +305,12 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_ARGMAX): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
             device_class=DEVICE_CLASS_DURATION,
-            unit_of_measurement=UNIT_MILLISECOND,
+            unit_of_measurement=UNIT_SECOND,
         ),
         cv.Optional(CONF_ARGMIN): sensor.sensor_schema(
             state_class=STATE_CLASS_MEASUREMENT,
             device_class=DEVICE_CLASS_DURATION,
-            unit_of_measurement=UNIT_MILLISECOND,
+            unit_of_measurement=UNIT_SECOND,
         ),
         cv.Optional(CONF_COUNT): sensor.sensor_schema(
             state_class=STATE_CLASS_TOTAL,

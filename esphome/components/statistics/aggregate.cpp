@@ -7,10 +7,10 @@
 namespace esphome {
 namespace statistics {
 
-Aggregate::Aggregate(double value, uint64_t duration, uint32_t timestamp) {
+Aggregate::Aggregate(double value, uint64_t duration, uint32_t timestamp, time_t time) {
   if (!std::isnan(value)) {
-    this->argmax_ = timestamp;
-    this->argmin_ = timestamp;
+    this->argmax_ = time;
+    this->argmin_ = time;
     this->c2_ = 0.0;
     this->count_ = 1;
     this->m2_ = 0.0;
@@ -49,11 +49,7 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
   } else {  // the Aggregate's maximums are equal; use the more recent timestamp for argmax
     combined.max_ = this->get_max();
 
-    if (b.get_argmax() == this->more_recent_timestamp_(this->get_argmax(), b.get_argmax())) {
-      combined.argmax_ = b.get_argmax();
-    } else {
-      combined.argmax_ = this->get_argmax();
-    }
+    combined.argmax_ = std::max(this->get_argmax(), b.get_argmax());
   }
 
   // Combine min and argmin
@@ -65,12 +61,8 @@ Aggregate Aggregate::combine_with(const Aggregate &b, bool time_weighted) {
     combined.argmin_ = b.get_argmin();
   } else {  // the Aggregate's minimums are equal; use the more recent timestamp for argmin
     combined.min_ = this->get_min();
-
-    if (b.get_argmin() == this->more_recent_timestamp_(this->get_argmin(), b.get_argmin())) {
-      combined.argmin_ = b.get_argmin();
-    } else {
-      combined.argmin_ = this->get_argmin();
-    }
+    combined.argmin_ =
+        std::max(this->get_argmin(), b.get_argmin());  // use the more recent UTC Unix time; i.e., std::max
   }
 
   double a_weight, b_weight, combined_weight;

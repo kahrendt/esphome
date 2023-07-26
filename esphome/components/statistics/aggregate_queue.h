@@ -105,8 +105,8 @@ class AggregateQueue {
   /////////////////////////////////////////////
   size_t *count_queue_{nullptr};
 
-  uint32_t *argmax_queue_{nullptr};
-  uint32_t *argmin_queue_{nullptr};
+  time_t *argmax_queue_{nullptr};
+  time_t *argmin_queue_{nullptr};
 
   // Timestamps from millis() are always type uint32_t
   uint32_t *timestamp_reference_queue_{nullptr};

@@ -122,7 +122,7 @@ void StatisticsComponent::force_publish() {
   Aggregate aggregate_to_publish = this->queue_->compute_current_aggregate();
   aggregate_to_publish = aggregate_to_publish.combine_with(this->running_chunk_aggregate_);
 
-  this->publish_and_save_(aggregate_to_publish, millis());
+  this->publish_and_save_(aggregate_to_publish, this->time_->timestamp_now());
 }
 
 void StatisticsComponent::reset() {
@@ -233,8 +233,10 @@ void StatisticsComponent::handle_new_value_(float value) {
   // Prepare incoming values to be aggregated //
   //////////////////////////////////////////////
 
-  uint32_t now = millis();
-  uint32_t duration_since_last_measurement = now - this->previous_timestamp_;
+  uint32_t now_timestamp = millis();               // milliseconds since boot
+  time_t now_time = this->time_->timestamp_now();  // UTC Unix time
+
+  uint32_t duration_since_last_measurement = now_timestamp - this->previous_timestamp_;
 
   float insert_value = value;
 
@@ -244,7 +246,7 @@ void StatisticsComponent::handle_new_value_(float value) {
     insert_value = this->previous_value_;
   }
 
-  this->previous_timestamp_ = now;
+  this->previous_timestamp_ = now_timestamp;
   this->previous_value_ = value;
 
   ////////////////////////////////////////////////
@@ -271,7 +273,7 @@ void StatisticsComponent::handle_new_value_(float value) {
   ////////////////////////////////////////////
 
   this->running_chunk_aggregate_ = this->running_chunk_aggregate_.combine_with(
-      Aggregate(insert_value, duration_since_last_measurement, now), this->is_time_weighted_());
+      Aggregate(insert_value, duration_since_last_measurement, now_timestamp, now_time), this->is_time_weighted_());
 
   ++this->running_chunk_count_;
   this->running_chunk_duration_ += duration_since_last_measurement;
@@ -306,21 +308,21 @@ void StatisticsComponent::handle_new_value_(float value) {
 
       this->send_at_chunks_counter_ = 0;  // reset send_at_chunks_counter_
 
-      this->publish_and_save_(this->queue_->compute_current_aggregate(), now);
+      this->publish_and_save_(this->queue_->compute_current_aggregate(), now_time);
     }
   }
 }
 
-void StatisticsComponent::publish_and_save_(Aggregate value, uint32_t timestamp) {
+void StatisticsComponent::publish_and_save_(Aggregate value, time_t time) {
   ////////////////////////////////////////////////
   // Publish new states for all enabled sensors //
   ////////////////////////////////////////////////
 
   if (this->argmax_sensor_)
-    this->argmax_sensor_->publish_state(timestamp - value.get_argmax());
+    this->argmax_sensor_->publish_state(time - value.get_argmax());
 
   if (this->argmin_sensor_)
-    this->argmin_sensor_->publish_state(timestamp - value.get_argmin());
+    this->argmin_sensor_->publish_state(time - value.get_argmin());
 
   if (this->count_sensor_)
     this->count_sensor_->publish_state(value.get_count());

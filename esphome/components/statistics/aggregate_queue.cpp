@@ -92,6 +92,7 @@ bool AggregateQueue::allocate_memory(size_t capacity, EnabledAggregatesConfigura
   ExternalRAMAllocator<double> double_allocator(ExternalRAMAllocator<double>::ALLOW_FAILURE);
   ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
   ExternalRAMAllocator<size_t> size_t_allocator(ExternalRAMAllocator<size_t>::ALLOW_FAILURE);
+  ExternalRAMAllocator<time_t> time_t_allocator(ExternalRAMAllocator<time_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<uint32_t> uint32_t_allocator(ExternalRAMAllocator<uint32_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<uint64_t> uint64_t_allocator(ExternalRAMAllocator<uint64_t>::ALLOW_FAILURE);
 
@@ -99,13 +100,13 @@ bool AggregateQueue::allocate_memory(size_t capacity, EnabledAggregatesConfigura
   this->count_queue_ = size_t_allocator.allocate(capacity);
 
   if (config.argmax) {
-    this->argmax_queue_ = uint32_t_allocator.allocate(capacity);
+    this->argmax_queue_ = time_t_allocator.allocate(capacity);
     if (this->argmax_queue_ == nullptr)
       return false;
   }
 
   if (config.argmin) {
-    this->argmin_queue_ = uint32_t_allocator.allocate(capacity);
+    this->argmin_queue_ = time_t_allocator.allocate(capacity);
     if (this->argmin_queue_ == nullptr)
       return false;
   }
