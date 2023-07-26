@@ -175,7 +175,7 @@ class Aggregate {
   uint32_t timestamp_reference_{0};
 
   // The UTC Unix times for the most recent extreme values in the set of measurements
-  time_t argmin_{std::numeric_limits<time_t>::infinity() * (-1)};
+  time_t argmin_{0};
   time_t argmax_{0};
 
   // Count of non-NaN measurements in the set of measurements
