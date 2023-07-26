@@ -109,6 +109,9 @@ void StatisticsComponent::setup() {
     // If a value is successfully loaded, then insert it into the queue
     if (this->pref_.load(&restored_value))
       this->queue_->insert(restored_value);
+
+    // Force publish restored values
+    this->force_publish();
   }
 
   // On every source sensor update, call handle_new_value_()
