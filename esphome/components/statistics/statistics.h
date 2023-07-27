@@ -32,7 +32,7 @@
  *  - chunk: an Aggregate that specifically aggregates incoming measurements and is inserted into a queue
  *  - chunk size: the number of measurements to Aggregate in a chunk before it inserted into a queue
  *  - chunk duration: the timespan between the first and last measurement in a chunk before being inserted into a queue
- *  - sliding window queue: a queue that can insert new Aggregates and evict the oldest aggregate
+ *  - sliding window queue: a queue that can insert new chunks and evict the oldest chunks
  *  - sliding window aggregate: an Aggregate that stores the summary statistics for all Aggregates in a sliding
  *    window queue
  *  - continuous queue: a queue that can only insert new Aggregates and reset
@@ -82,7 +82,6 @@ enum AverageType {
 
 enum WindowType {
   WINDOW_TYPE_SLIDING,
-  WINDOW_TYPE_CHUNKED_SLIDING,
   WINDOW_TYPE_CONTINUOUS,
   WINDOW_TYPE_CHUNKED_CONTINUOUS,
 };
@@ -148,7 +147,7 @@ class StatisticsComponent : public Component {
   // source sensor of measurement data
   sensor::Sensor *source_sensor_{nullptr};
 
-  // sensors for aggregate statistics from sliding window
+  // sensors for aggregate statistics from measurements in window
   sensor::Sensor *count_sensor_{nullptr};
   sensor::Sensor *duration_sensor_{nullptr};
   sensor::Sensor *max_sensor_{nullptr};

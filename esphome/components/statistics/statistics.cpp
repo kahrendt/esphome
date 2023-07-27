@@ -43,9 +43,6 @@ void StatisticsComponent::dump_config() {
   if (this->window_type_ == WINDOW_TYPE_SLIDING) {
     ESP_LOGCONFIG(TAG, "  Statistics Type: sliding");
     ESP_LOGCONFIG(TAG, "  Window Size: %u", this->window_size_);
-  } else if (this->window_type_ == WINDOW_TYPE_CHUNKED_SLIDING) {
-    ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_sliding");
-    ESP_LOGCONFIG(TAG, "  Chunks in Window: %u", this->window_size_);
     if (this->chunk_size_) {
       ESP_LOGCONFIG(TAG, "  Measurements per Chunk: %u", this->chunk_size_);
     } else {
@@ -54,14 +51,14 @@ void StatisticsComponent::dump_config() {
   } else if (this->window_type_ == WINDOW_TYPE_CONTINUOUS) {
     ESP_LOGCONFIG(TAG, "  Statistics Type: continuous");
     ESP_LOGCONFIG(TAG, "  Chunks Before Reset: %u", this->window_size_);
+  } else if (this->window_type_ == WINDOW_TYPE_CHUNKED_CONTINUOUS) {
+    ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_continuous");
+    ESP_LOGCONFIG(TAG, "  Measurements Before Reset: %u", this->window_size_);
     if (this->chunk_size_) {
       ESP_LOGCONFIG(TAG, "  Measurements per Chunk: %u", this->chunk_size_);
     } else {
       ESP_LOGCONFIG(TAG, "  Duration of Chunk: %u ms", this->chunk_duration_);
     }
-  } else if (this->window_type_ == WINDOW_TYPE_CHUNKED_CONTINUOUS) {
-    ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_continuous");
-    ESP_LOGCONFIG(TAG, "  Measurements Before Reset: %u", this->window_size_);
   }
 
   ESP_LOGCONFIG(TAG, "  Send Every: %u", this->send_every_);
@@ -84,7 +81,7 @@ void StatisticsComponent::dump_config() {
 void StatisticsComponent::setup() {
   EnabledAggregatesConfiguration config = this->determine_enabled_statistics_config_();
 
-  if ((this->window_type_ == WINDOW_TYPE_SLIDING) || (this->window_type_ == WINDOW_TYPE_CHUNKED_SLIDING)) {
+  if ((this->window_type_ == WINDOW_TYPE_SLIDING)) {
     this->queue_ = new DABALiteQueue();
   } else if (this->window_type_ == WINDOW_TYPE_CHUNKED_CONTINUOUS) {
     this->queue_ = new ContinuousQueue();

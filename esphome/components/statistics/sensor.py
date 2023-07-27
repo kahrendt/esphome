@@ -58,14 +58,12 @@ CONF_TREND = "trend"
 ################
 
 CONF_SLIDING = "sliding"
-CONF_CHUNKED_SLIDING = "chunked_sliding"
 CONF_CONTINUOUS = "continuous"
 CONF_CHUNKED_CONTINUOUS = "chunked_continuous"
 
 WindowType = statistics_ns.enum("WindowType")
 WINDOW_TYPES = {
     CONF_SLIDING: WindowType.WINDOW_TYPE_SLIDING,
-    CONF_CHUNKED_SLIDING: WindowType.WINDOW_TYPE_CHUNKED_SLIDING,
     CONF_CONTINUOUS: WindowType.WINDOW_TYPE_CONTINUOUS,
     CONF_CHUNKED_CONTINUOUS: WindowType.WINDOW_TYPE_CHUNKED_CONTINUOUS,
 }
@@ -227,16 +225,7 @@ inherit_accuracy_decimals_with_transformation = [
 # Configuration Schemas #
 #########################
 
-SLIDING_WINDOW_SCHEMA = cv.Schema(
-    {
-        cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
-        cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_not_null_int,
-        cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
-    },
-    validate_send_first_at,
-)
-
-CHUNKED_SLIDING_WINDOW_SCHEMA = cv.All(
+SLIDING_WINDOW_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
@@ -288,7 +277,6 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Required("window"): cv.typed_schema(
             {
                 CONF_SLIDING: SLIDING_WINDOW_SCHEMA,
-                CONF_CHUNKED_SLIDING: CHUNKED_SLIDING_WINDOW_SCHEMA,
                 CONF_CONTINUOUS: CONTINUOUS_WINDOW_SCHEMA,
                 CONF_CHUNKED_CONTINUOUS: CHUNKED_CONTINUOUS_WINDOW_SCHEMA,
             }
@@ -397,7 +385,7 @@ async def to_code(config):
         cg.add(var.set_restore(window_config[CONF_RESTORE]))
 
     # Setup chunk size
-    if (window_config[CONF_TYPE] == CONF_CHUNKED_SLIDING) or (
+    if (window_config[CONF_TYPE] == CONF_SLIDING) or (
         window_config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS
     ):
         chunk_size = (
