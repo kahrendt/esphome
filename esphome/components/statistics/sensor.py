@@ -59,13 +59,13 @@ CONF_TREND = "trend"
 
 CONF_SLIDING = "sliding"
 CONF_CONTINUOUS = "continuous"
-CONF_CHUNKED_CONTINUOUS = "chunked_continuous"
+CONF_CONTINUOUS_LONG_TERM = "continuous_long_term"
 
 WindowType = statistics_ns.enum("WindowType")
 WINDOW_TYPES = {
     CONF_SLIDING: WindowType.WINDOW_TYPE_SLIDING,
     CONF_CONTINUOUS: WindowType.WINDOW_TYPE_CONTINUOUS,
-    CONF_CHUNKED_CONTINUOUS: WindowType.WINDOW_TYPE_CHUNKED_CONTINUOUS,
+    CONF_CONTINUOUS_LONG_TERM: WindowType.WINDOW_TYPE_CONTINUOUS_LONG_TERM,
 }
 
 ################################################
@@ -237,29 +237,16 @@ SLIDING_WINDOW_SCHEMA = cv.Schema(
     validate_send_first_at,
 )
 
-
 CONTINUOUS_WINDOW_SCHEMA = cv.All(
     cv.Schema(
         {
-            cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
-            cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
-            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_int,
-            cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
-            cv.Optional(CONF_RESTORE): cv.boolean,
-        },
-        validate_send_first_at,
-    ),
-    cv.has_at_least_one_key(CONF_WINDOW_SIZE, CONF_WINDOW_DURATION),
-)
-
-CHUNKED_CONTINUOUS_WINDOW_SCHEMA = cv.All(
-    cv.Schema(
-        {
-            cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
+            cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,  # 0 disables window reset
             cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
             cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
             cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
-            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_int,
+            cv.Optional(
+                CONF_SEND_EVERY, default=1
+            ): cv.positive_int,  # 0 disables automatic updates
             cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
             cv.Optional(CONF_RESTORE): cv.boolean,
         },
@@ -276,7 +263,7 @@ CONFIG_SCHEMA = cv.Schema(
             {
                 CONF_SLIDING: SLIDING_WINDOW_SCHEMA,
                 CONF_CONTINUOUS: CONTINUOUS_WINDOW_SCHEMA,
-                CONF_CHUNKED_CONTINUOUS: CHUNKED_CONTINUOUS_WINDOW_SCHEMA,
+                CONF_CONTINUOUS_LONG_TERM: CONTINUOUS_WINDOW_SCHEMA,
             }
         ),
         cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE): cv.enum(

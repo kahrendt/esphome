@@ -51,8 +51,8 @@ void StatisticsComponent::dump_config() {
   } else if (this->window_type_ == WINDOW_TYPE_CONTINUOUS) {
     ESP_LOGCONFIG(TAG, "  Statistics Type: continuous");
     ESP_LOGCONFIG(TAG, "  Chunks Before Reset: %u", this->window_size_);
-  } else if (this->window_type_ == WINDOW_TYPE_CHUNKED_CONTINUOUS) {
-    ESP_LOGCONFIG(TAG, "  Statistics Type: chunked_continuous");
+  } else if (this->window_type_ == WINDOW_TYPE_CONTINUOUS_LONG_TERM) {
+    ESP_LOGCONFIG(TAG, "  Statistics Type: continuous_long_term");
     ESP_LOGCONFIG(TAG, "  Measurements Before Reset: %u", this->window_size_);
     if (this->chunk_size_) {
       ESP_LOGCONFIG(TAG, "  Measurements per Chunk: %u", this->chunk_size_);
@@ -83,7 +83,7 @@ void StatisticsComponent::setup() {
 
   if ((this->window_type_ == WINDOW_TYPE_SLIDING)) {
     this->queue_ = new DABALiteQueue();
-  } else if (this->window_type_ == WINDOW_TYPE_CHUNKED_CONTINUOUS) {
+  } else if (this->window_type_ == WINDOW_TYPE_CONTINUOUS_LONG_TERM) {
     this->queue_ = new ContinuousQueue();
   } else if (this->window_type_ == WINDOW_TYPE_CONTINUOUS) {
     this->queue_ = new ContinuousSingular();

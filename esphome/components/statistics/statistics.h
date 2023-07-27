@@ -85,7 +85,7 @@ enum AverageType {
 enum WindowType {
   WINDOW_TYPE_SLIDING,
   WINDOW_TYPE_CONTINUOUS,
-  WINDOW_TYPE_CHUNKED_CONTINUOUS,
+  WINDOW_TYPE_CONTINUOUS_LONG_TERM,
 };
 
 enum TimeConversionFactor {
@@ -179,7 +179,7 @@ class StatisticsComponent : public Component {
   size_t send_every_{};
   size_t send_at_chunks_counter_{};
 
-  size_t running_window_duration_{0};  // duration of measurements currently stored in the running window
+  uint64_t running_window_duration_{0};  // duration of measurements currently stored in the running window
 
   size_t running_chunk_count_{0};       // number of measurements currently stored in the running aggregate chunk
   uint32_t running_chunk_duration_{0};  // duration of measurements currently stored in the running aggregate chunk
