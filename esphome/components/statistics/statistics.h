@@ -72,6 +72,8 @@
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/time/real_time_clock.h"
 
+#include <limits>  // necessary for std::numeric_limits infinity
+
 namespace esphome {
 namespace statistics {
 
@@ -166,14 +168,16 @@ class StatisticsComponent : public Component {
 
   uint32_t hash_{};
 
-  size_t window_size_{};
+  size_t window_size_{std::numeric_limits<size_t>::infinity()};
+  uint64_t window_reset_duration_{std::numeric_limits<uint64_t>::infinity()};  // max duration of measurements in window
+
+  size_t chunk_size_{std::numeric_limits<size_t>::infinity()};  // number of measurements aggregated in a chunk before
+                                                                // being inserted into the queue
+  uint64_t chunk_duration_{std::numeric_limits<uint64_t>::infinity()};  // duration of measurements agggregated in a
+                                                                        // chunk before being inserted into the queue
+
   size_t send_every_{};
   size_t send_at_chunks_counter_{};
-
-  size_t window_reset_duration_{0};  // max duration of measurements in window
-
-  size_t chunk_size_{1};       // number of measurements aggregated in a chunk before being inserted into the queue
-  uint32_t chunk_duration_{};  // duration of measurements agggregated in a chunk before being inserted into the queue
 
   size_t running_window_duration_{0};  // duration of measurements currently stored in the running window
 
@@ -214,9 +218,6 @@ class StatisticsComponent : public Component {
 
   /// @brief Return if averages are weighted by measurement duration.
   inline bool is_time_weighted_();
-
-  /// @brief Return if the running aggregate chunk is ready to be inserted into the queue.
-  inline bool is_running_chunk_ready_();
 };
 
 }  // namespace statistics

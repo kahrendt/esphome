@@ -225,19 +225,18 @@ inherit_accuracy_decimals_with_transformation = [
 # Configuration Schemas #
 #########################
 
-SLIDING_WINDOW_SCHEMA = cv.All(
-    cv.Schema(
-        {
-            cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
-            cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
-            cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
-            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_not_null_int,
-            cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
-        },
-        validate_send_first_at,
-    ),
-    cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
+
+SLIDING_WINDOW_SCHEMA = cv.Schema(
+    {
+        cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
+        cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
+        cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
+        cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_not_null_int,
+        cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
+    },
+    validate_send_first_at,
 )
+
 
 CONTINUOUS_WINDOW_SCHEMA = cv.All(
     cv.Schema(
@@ -267,7 +266,6 @@ CHUNKED_CONTINUOUS_WINDOW_SCHEMA = cv.All(
         validate_send_first_at,
     ),
     cv.has_at_least_one_key(CONF_WINDOW_SIZE, CONF_WINDOW_DURATION),
-    cv.has_exactly_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
 )
 
 CONFIG_SCHEMA = cv.Schema(
@@ -366,12 +364,9 @@ async def to_code(config):
     cg.add(var.set_window_type(constant))
 
     # Setup window size
-    window_size = (
-        0  # default setting if CONF_WINDOW_DURATION is the only configured option
-    )
     if CONF_WINDOW_SIZE in window_config:
-        window_size = window_config[CONF_WINDOW_SIZE]
-    cg.add(var.set_window_size(window_size))
+        if window_config[CONF_WINDOW_SIZE] > 0:
+            cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
 
     if CONF_WINDOW_DURATION in window_config:
         cg.add(
@@ -380,30 +375,28 @@ async def to_code(config):
             )
         )
 
-    # Setup restore setting
-    if CONF_RESTORE in window_config:
-        cg.add(var.set_restore(window_config[CONF_RESTORE]))
-
     # Setup chunk size
-    if (window_config[CONF_TYPE] == CONF_SLIDING) or (
-        window_config[CONF_TYPE] == CONF_CHUNKED_CONTINUOUS
+    if (CONF_CHUNK_SIZE not in window_config) and (
+        CONF_CHUNK_DURATION not in window_config
     ):
-        chunk_size = (
-            0  # default setting when CONF_CHUNK_DURATION is the configured option
-        )
-        if CONF_CHUNK_SIZE in window_config:
-            chunk_size = window_config[CONF_CHUNK_SIZE]
-        elif CONF_CHUNK_DURATION in window_config:
-            cg.add(
-                var.set_chunk_duration(
-                    window_config[CONF_CHUNK_DURATION].total_milliseconds
-                )
+        cg.add(var.set_chunk_size(1))
+    if CONF_CHUNK_SIZE in window_config:
+        if window_config[CONF_CHUNK_SIZE] > 0:
+            cg.add(var.set_chunk_size(window_config[CONF_CHUNK_SIZE]))
+    if CONF_CHUNK_DURATION in window_config:
+        cg.add(
+            var.set_chunk_duration(
+                window_config[CONF_CHUNK_DURATION].total_milliseconds
             )
-        cg.add(var.set_chunk_size(chunk_size))
+        )
 
     # Setup send parameters
     cg.add(var.set_send_every(window_config[CONF_SEND_EVERY]))
     cg.add(var.set_first_at(window_config[CONF_SEND_FIRST_AT]))
+
+    # Setup restore setting
+    if CONF_RESTORE in window_config:
+        cg.add(var.set_restore(window_config[CONF_RESTORE]))
 
     ############################
     # Setup Configured Sensors #

@@ -253,19 +253,12 @@ void StatisticsComponent::handle_new_value_(float value) {
   // Evict elements or reset queue if too large //
   ////////////////////////////////////////////////
 
-  //  If window_size_ == 0, then there is a continuous queue with no automatic reset, so never evict/clear
-  if (this->window_size_ > 0) {
-    while (this->queue_->size() >= this->window_size_) {
-      this->queue_->evict();  // evict is equivalent to clearing the queue for ContinuousQueue and ContinuousSingular
-    }
+  while (this->queue_->size() >= this->window_size_) {
+    this->queue_->evict();  // evict is equivalent to clearing the queue for ContinuousQueue and ContinuousSingular
   }
 
-  // If the window_reset_duration_ == 0, then this is a sliding window queue or a continuous queue that does not reset
-  // by duration
-  if (this->window_reset_duration_ > 0) {
-    if (this->running_window_duration_ >= this->window_reset_duration_) {
-      this->reset();
-    }
+  if (this->running_window_duration_ >= this->window_reset_duration_) {
+    this->reset();
   }
 
   ////////////////////////////////////////////
@@ -283,8 +276,7 @@ void StatisticsComponent::handle_new_value_(float value) {
   ////////////////////////////
   // Add new chunk to queue //
   ////////////////////////////
-
-  if (this->is_running_chunk_ready_()) {
+  if ((this->running_chunk_count_ >= this->chunk_size_) || (this->running_chunk_duration_ >= this->chunk_duration_)) {
     this->queue_->insert(this->running_chunk_aggregate_);
 
     // Reset counters and chunk to a null measurement
@@ -374,22 +366,6 @@ void StatisticsComponent::publish_and_save_(Aggregate value, time_t time) {
 /////////////////////////////
 
 inline bool StatisticsComponent::is_time_weighted_() { return (this->average_type_ == TIME_WEIGHTED_AVERAGE); }
-
-inline bool StatisticsComponent::is_running_chunk_ready_() {
-  // If the chunk_size_ == 0, then the running chunk resets based on a duration
-  if (this->chunk_size_ > 0) {
-    if (this->running_chunk_count_ >= this->chunk_size_) {
-      return true;
-    }
-  } else {
-    if (this->running_chunk_duration_ >= this->chunk_duration_) {
-      if (this->running_chunk_count_ > 0)  // ensure at least one measurement is aggregated in this timespan
-        return true;
-    }
-  }
-
-  return false;
-}
 
 }  // namespace statistics
 }  // namespace esphome
