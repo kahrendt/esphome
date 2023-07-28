@@ -243,14 +243,31 @@ std::string MQTTComponent::friendly_name() const { return this->get_entity()->ge
 std::string MQTTComponent::get_icon() const { return this->get_entity()->get_icon(); }
 bool MQTTComponent::is_disabled_by_default() const { return this->get_entity()->is_disabled_by_default(); }
 bool MQTTComponent::is_internal() {
-  switch (this->internal_mqtt_) {
-    case MQTT_INTERNAL:
+  if (this->internal_mqtt_ != MQTT_COPY) {
+    if (this->internal_mqtt_ == MQTT_INTERNAL)
       return true;
-    case MQTT_EXTERNAL:
+    else
       return false;
-    case default:
-      return this->get_entity()->is_internal();
+  } else {
+    // internal_mqtt_ hasn't been set
+    switch (global_mqtt_client->get_internal_mqtt_default()) {
+      case MQTT_INTERNAL:
+        return true;
+      case MQTT_EXTERNAL:
+        return false;
+      default:
+        return this->get_entity()->is_internal();
+    }
   }
+
+  // switch (this->internal_mqtt_) {
+  //   case MQTT_INTERNAL:
+  //     return true;
+  //   case MQTT_EXTERNAL:
+  //     return false;
+  //   default:
+  //     return this->get_entity()->is_internal();
+  // }
 }
 
 }  // namespace mqtt

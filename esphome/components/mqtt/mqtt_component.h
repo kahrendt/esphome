@@ -19,12 +19,6 @@ struct SendDiscoveryConfig {
   bool command_topic{true};  ///< If the command topic should be included. Default to true.
 };
 
-enum InternalMQTTOptions {
-  MQTT_INTERNAL,
-  MQTT_EXTERNAL,
-  MQTT_COPY,
-};
-
 #define LOG_MQTT_COMPONENT(state_topic, command_topic) \
   if (state_topic) { \
     ESP_LOGCONFIG(TAG, "  State Topic: '%s'", this->get_state_topic_().c_str()); \

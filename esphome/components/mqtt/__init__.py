@@ -55,6 +55,7 @@ CONF_IDF_SEND_ASYNC = "idf_send_async"
 CONF_SKIP_CERT_CN_CHECK = "skip_cert_cn_check"
 
 CONF_INTERNAL_MQTT = "internal_mqtt"
+CONF_INTERNAL_MQTT_DEFAULT = "internal_mqtt_default"
 
 
 def validate_message_just_topic(value):
@@ -177,7 +178,6 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_USERNAME, default=""): cv.string,
             cv.Optional(CONF_PASSWORD, default=""): cv.string,
             cv.Optional(CONF_CLIENT_ID): cv.string,
-            cv.Optional(CONF_INTERNAL_MQTT): cv.boolean,
             cv.SplitDefault(CONF_IDF_SEND_ASYNC, esp32_idf=False): cv.All(
                 cv.boolean, cv.only_with_esp_idf
             ),
@@ -204,6 +204,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_BIRTH_MESSAGE): MQTT_MESSAGE_SCHEMA,
             cv.Optional(CONF_WILL_MESSAGE): MQTT_MESSAGE_SCHEMA,
             cv.Optional(CONF_SHUTDOWN_MESSAGE): MQTT_MESSAGE_SCHEMA,
+            cv.Optional(CONF_INTERNAL_MQTT_DEFAULT): cv.boolean,
             cv.Optional(CONF_TOPIC_PREFIX, default=lambda: CORE.name): cv.publish_topic,
             cv.Optional(CONF_LOG_TOPIC): cv.Any(
                 None,
@@ -337,6 +338,9 @@ async def to_code(config):
         cg.add(var.disable_shutdown_message())
     else:
         cg.add(var.set_shutdown_message(exp_mqtt_message(shutdown_message)))
+
+    if CONF_INTERNAL_MQTT_DEFAULT in config:
+        cg.add(var.set_internal_mqtt_default(config[CONF_INTERNAL_MQTT_DEFAULT]))
 
     log_topic = config[CONF_LOG_TOPIC]
     if not log_topic:
