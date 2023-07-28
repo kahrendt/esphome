@@ -127,7 +127,7 @@ class StatisticsComponent : public Component {
   void set_trend_sensor(sensor::Sensor *trend_sensor) { this->trend_sensor_ = trend_sensor; }
 
   void set_window_size(size_t window_size) { this->window_size_ = window_size; }
-  void set_window_duration(size_t duration) { this->window_reset_duration_ = duration; }
+  void set_window_duration(size_t duration) { this->window_duration_ = duration; }
 
   void set_send_every(size_t send_every) { this->send_every_ = send_every; }
   void set_first_at(size_t send_first_at) { this->send_at_chunks_counter_ = send_first_at; }
@@ -169,7 +169,7 @@ class StatisticsComponent : public Component {
   uint32_t hash_{};
 
   size_t window_size_{std::numeric_limits<size_t>::max()};
-  uint64_t window_reset_duration_{std::numeric_limits<uint64_t>::max()};  // max duration of measurements in window
+  uint64_t window_duration_{std::numeric_limits<uint64_t>::max()};  // max duration of measurements in window
 
   size_t chunk_size_{std::numeric_limits<size_t>::max()};  // number of measurements aggregated in a chunk before
                                                            // being inserted into the queue
