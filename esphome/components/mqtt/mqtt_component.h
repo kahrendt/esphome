@@ -19,6 +19,12 @@ struct SendDiscoveryConfig {
   bool command_topic{true};  ///< If the command topic should be included. Default to true.
 };
 
+enum InternalMQTTOptions {
+  MQTT_INTERNAL,
+  MQTT_EXTERNAL,
+  MQTT_COPY,
+};
+
 #define LOG_MQTT_COMPONENT(state_topic, command_topic) \
   if (state_topic) { \
     ESP_LOGCONFIG(TAG, "  State Topic: '%s'", this->get_state_topic_().c_str()); \
@@ -87,8 +93,8 @@ class MQTTComponent : public Component {
   /// Override this method to return the component type (e.g. "light", "sensor", ...)
   virtual std::string component_type() const = 0;
 
-  /// Set send override flag to still send despite being marked internal
-  void set_send_override(bool send_override) { this->send_override_ = send_override; }
+  /// Set MQTT entity to be internal
+  void set_internal_mqtt(bool option);
 
   /// Set a custom state topic. Set to "" for default behavior.
   void set_custom_state_topic(const std::string &custom_state_topic);
@@ -186,9 +192,6 @@ class MQTTComponent : public Component {
   /// Internal method to start sending discovery info, this will call send_discovery().
   bool send_discovery_();
 
-  /// Override and still send this specific internal component
-  bool send_override_{false};
-
   // ========== INTERNAL METHODS ==========
   // (In most use cases you won't need these)
   /// Generate the Home Assistant MQTT discovery object id by automatically transforming the friendly name.
@@ -196,11 +199,15 @@ class MQTTComponent : public Component {
 
   std::string custom_state_topic_{};
   std::string custom_command_topic_{};
+
   bool command_retain_{false};
   bool retain_{true};
   bool discovery_enabled_{true};
   std::unique_ptr<Availability> availability_;
   bool resend_state_{false};
+
+  /// Override and still send this specific internal component
+  InternalMQTTOptions internal_mqtt_{MQTT_COPY};
 };
 
 }  // namespace mqtt

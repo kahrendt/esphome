@@ -162,6 +162,13 @@ void MQTTComponent::subscribe_json(const std::string &topic, const mqtt_json_cal
 
 MQTTComponent::MQTTComponent() = default;
 
+void MQTTComponent::set_internal_mqtt(bool option) {
+  if (option)
+    this->internal_mqtt_ = MQTT_INTERNAL;
+  else
+    this->internal_mqtt_ = MQTT_EXTERNAL;
+}
+
 float MQTTComponent::get_setup_priority() const { return setup_priority::AFTER_CONNECTION; }
 void MQTTComponent::disable_discovery() { this->discovery_enabled_ = false; }
 void MQTTComponent::set_custom_state_topic(const std::string &custom_state_topic) {
@@ -236,16 +243,14 @@ std::string MQTTComponent::friendly_name() const { return this->get_entity()->ge
 std::string MQTTComponent::get_icon() const { return this->get_entity()->get_icon(); }
 bool MQTTComponent::is_disabled_by_default() const { return this->get_entity()->is_disabled_by_default(); }
 bool MQTTComponent::is_internal() {
-  // we are never internal if we opt in to send
-  if (this->send_override_)
-    return false;
-
-  // if we we do set opt in by default, then the sensor is internal
-  if (global_mqtt_client->get_opt_in_send())
-    return true;
-
-  // otherwise return entitie's internal setting
-  return this->get_entity()->is_internal();
+  switch (this->internal_mqtt_) {
+    case MQTT_INTERNAL:
+      return true;
+    case MQTT_EXTERNAL:
+      return false;
+    case default:
+      return this->get_entity()->is_internal();
+  }
 }
 
 }  // namespace mqtt

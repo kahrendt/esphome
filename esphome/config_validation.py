@@ -78,7 +78,7 @@ from esphome.util import parse_esphome_version
 from esphome.voluptuous_schema import _Schema
 from esphome.yaml_util import make_data_base
 
-CONF_SEND_OVERRIDE = "send_override"
+CONF_INTERNAL_MQTT = "internal_mqtt"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1665,7 +1665,6 @@ MQTT_COMPONENT_SCHEMA = Schema(
         Optional(CONF_RETAIN): All(requires_component("mqtt"), boolean),
         Optional(CONF_DISCOVERY): All(requires_component("mqtt"), boolean),
         Optional(CONF_STATE_TOPIC): All(requires_component("mqtt"), publish_topic),
-        Optional(CONF_SEND_OVERRIDE): All(requires_component("mqtt"), boolean),
         Optional(CONF_AVAILABILITY): All(
             requires_component("mqtt"), Any(None, MQTT_COMPONENT_AVAILABILITY_SCHEMA)
         ),
