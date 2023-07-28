@@ -168,13 +168,13 @@ class StatisticsComponent : public Component {
 
   uint32_t hash_{};
 
-  size_t window_size_{std::numeric_limits<size_t>::infinity()};
-  uint64_t window_reset_duration_{std::numeric_limits<uint64_t>::infinity()};  // max duration of measurements in window
+  size_t window_size_{std::numeric_limits<size_t>::max()};
+  uint64_t window_reset_duration_{std::numeric_limits<uint64_t>::max()};  // max duration of measurements in window
 
-  size_t chunk_size_{std::numeric_limits<size_t>::infinity()};  // number of measurements aggregated in a chunk before
-                                                                // being inserted into the queue
-  uint64_t chunk_duration_{std::numeric_limits<uint64_t>::infinity()};  // duration of measurements agggregated in a
-                                                                        // chunk before being inserted into the queue
+  size_t chunk_size_{std::numeric_limits<size_t>::max()};  // number of measurements aggregated in a chunk before
+                                                           // being inserted into the queue
+  uint64_t chunk_duration_{std::numeric_limits<uint64_t>::max()};  // duration of measurements agggregated in a
+                                                                   // chunk before being inserted into the queue
 
   size_t send_every_{};
   size_t send_at_chunks_counter_{};
