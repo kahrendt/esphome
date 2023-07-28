@@ -60,6 +60,7 @@ CONF_TREND = "trend"
 CONF_SLIDING = "sliding"
 CONF_CONTINUOUS = "continuous"
 CONF_CONTINUOUS_LONG_TERM = "continuous_long_term"
+CONF_WINDOW = "window"
 
 WindowType = statistics_ns.enum("WindowType")
 WINDOW_TYPES = {
@@ -168,6 +169,11 @@ def transform_accuracy_decimals(decimals, config):
     return decimals + 2
 
 
+#####################################
+# Confiuration Validation Functions #
+#####################################
+
+
 # Borrowed from sensor/__init__.py (accessed July 2023)
 def validate_send_first_at(config):
     send_first_at = config.get(CONF_SEND_FIRST_AT)
@@ -177,6 +183,15 @@ def validate_send_first_at(config):
             raise cv.Invalid(
                 f"send_first_at must be smaller than or equal to send_every! {send_first_at} <= {send_every}"
             )
+    return config
+
+
+# Ensures that the trend sensor is not enabled if restore from flash is enabled
+def validate_no_trend_and_restore(config):
+    window_config = config.get(CONF_WINDOW)
+
+    if (CONF_RESTORE in window_config) and (CONF_TREND in config):
+        raise cv.Invalid("The trend sensor cannot be configured if restore is enabled")
     return config
 
 
@@ -226,14 +241,16 @@ inherit_accuracy_decimals_with_transformation = [
 #########################
 
 
-SLIDING_WINDOW_SCHEMA = cv.Schema(
-    {
-        cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
-        cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
-        cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
-        cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_not_null_int,
-        cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
-    },
+SLIDING_WINDOW_SCHEMA = cv.All(
+    cv.Schema(
+        {
+            cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
+            cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
+            cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
+            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_not_null_int,
+            cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
+        },
+    ),
     validate_send_first_at,
 )
 
@@ -250,66 +267,70 @@ CONTINUOUS_WINDOW_SCHEMA = cv.All(
             cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
             cv.Optional(CONF_RESTORE): cv.boolean,
         },
-        validate_send_first_at,
     ),
+    validate_send_first_at,
     cv.has_at_least_one_key(CONF_WINDOW_SIZE, CONF_WINDOW_DURATION),
 )
 
-CONFIG_SCHEMA = cv.Schema(
-    {
-        cv.GenerateID(): cv.declare_id(StatisticsComponent),
-        cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
-        cv.Required("window"): cv.typed_schema(
-            {
-                CONF_SLIDING: SLIDING_WINDOW_SCHEMA,
-                CONF_CONTINUOUS: CONTINUOUS_WINDOW_SCHEMA,
-                CONF_CONTINUOUS_LONG_TERM: CONTINUOUS_WINDOW_SCHEMA,
-            }
-        ),
-        cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE): cv.enum(
-            AVERAGE_TYPES, lower=True
-        ),
-        cv.Optional(CONF_GROUP_TYPE, default=CONF_SAMPLE): cv.enum(
-            GROUP_TYPES, lower=True
-        ),
-        cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
-            TIME_CONVERSION_FACTORS, lower=True
-        ),
-        cv.Optional(CONF_SINCE_ARGMAX): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-            device_class=DEVICE_CLASS_DURATION,
-            unit_of_measurement=UNIT_SECOND,
-        ),
-        cv.Optional(CONF_SINCE_ARGMIN): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-            device_class=DEVICE_CLASS_DURATION,
-            unit_of_measurement=UNIT_SECOND,
-        ),
-        cv.Optional(CONF_COUNT): sensor.sensor_schema(
-            state_class=STATE_CLASS_TOTAL,
-        ),
-        cv.Optional(CONF_DURATION): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-            device_class=DEVICE_CLASS_DURATION,
-            unit_of_measurement=UNIT_MILLISECOND,
-        ),
-        cv.Optional(CONF_MAX): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_MEAN): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_MIN): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_STD_DEV): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_TREND): sensor.sensor_schema(
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-    }
-).extend(cv.COMPONENT_SCHEMA)
+CONFIG_SCHEMA = cv.All(
+    cv.Schema(
+        {
+            cv.GenerateID(): cv.declare_id(StatisticsComponent),
+            cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
+            cv.Required(CONF_WINDOW): cv.typed_schema(
+                {
+                    CONF_SLIDING: SLIDING_WINDOW_SCHEMA,
+                    CONF_CONTINUOUS: CONTINUOUS_WINDOW_SCHEMA,
+                    CONF_CONTINUOUS_LONG_TERM: CONTINUOUS_WINDOW_SCHEMA,
+                }
+            ),
+            cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE): cv.enum(
+                AVERAGE_TYPES, lower=True
+            ),
+            cv.Optional(CONF_GROUP_TYPE, default=CONF_SAMPLE): cv.enum(
+                GROUP_TYPES, lower=True
+            ),
+            cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
+                TIME_CONVERSION_FACTORS, lower=True
+            ),
+            cv.Optional(CONF_SINCE_ARGMAX): sensor.sensor_schema(
+                state_class=STATE_CLASS_MEASUREMENT,
+                device_class=DEVICE_CLASS_DURATION,
+                unit_of_measurement=UNIT_SECOND,
+            ),
+            cv.Optional(CONF_SINCE_ARGMIN): sensor.sensor_schema(
+                state_class=STATE_CLASS_MEASUREMENT,
+                device_class=DEVICE_CLASS_DURATION,
+                unit_of_measurement=UNIT_SECOND,
+            ),
+            cv.Optional(CONF_COUNT): sensor.sensor_schema(
+                state_class=STATE_CLASS_TOTAL,
+            ),
+            cv.Optional(CONF_DURATION): sensor.sensor_schema(
+                state_class=STATE_CLASS_MEASUREMENT,
+                device_class=DEVICE_CLASS_DURATION,
+                unit_of_measurement=UNIT_MILLISECOND,
+            ),
+            cv.Optional(CONF_MAX): sensor.sensor_schema(
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_MEAN): sensor.sensor_schema(
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_MIN): sensor.sensor_schema(
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_STD_DEV): sensor.sensor_schema(
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_TREND): sensor.sensor_schema(
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+        },
+    ).extend(cv.COMPONENT_SCHEMA),
+    validate_no_trend_and_restore,
+)
+
 
 # Handles inheriting properties from the source sensor
 FINAL_VALIDATE_SCHEMA = cv.All(
