@@ -658,13 +658,6 @@ void MQTTClientComponent::add_ssl_fingerprint(const std::array<uint8_t, SHA1_SIZ
 }
 #endif
 
-void MQTTClientComponent::set_internal_mqtt_default(bool internal) {
-  if (internal)
-    this->internal_mqtt_default_ = MQTT_INTERNAL;
-  else
-    this->internal_mqtt_default_ = MQTT_EXTERNAL;
-}
-
 MQTTClientComponent *global_mqtt_client = nullptr;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 // MQTTMessageTrigger

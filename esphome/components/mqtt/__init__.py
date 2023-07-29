@@ -127,6 +127,13 @@ MQTT_DISCOVERY_OBJECT_ID_GENERATOR_OPTIONS = {
     "device_name": MQTTDiscoveryObjectIdGenerator.MQTT_DEVICE_NAME_OBJECT_ID_GENERATOR,
 }
 
+InternalMQTTOptions = mqtt_ns.enum("InternalMQTTOptions")
+INTERNAL_MQTT_OPTIONS = {
+    "internal": InternalMQTTOptions.MQTT_INTERNAL,
+    "external": InternalMQTTOptions.MQTT_EXTERNAL,
+    "copy": InternalMQTTOptions.MQTT_COPY,
+}
+
 
 def validate_config(value):
     # Populate default fields
@@ -204,7 +211,9 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_BIRTH_MESSAGE): MQTT_MESSAGE_SCHEMA,
             cv.Optional(CONF_WILL_MESSAGE): MQTT_MESSAGE_SCHEMA,
             cv.Optional(CONF_SHUTDOWN_MESSAGE): MQTT_MESSAGE_SCHEMA,
-            cv.Optional(CONF_INTERNAL_MQTT_DEFAULT): cv.boolean,
+            cv.Optional(CONF_INTERNAL_MQTT_DEFAULT, default="copy"): cv.enum(
+                INTERNAL_MQTT_OPTIONS, lower=True
+            ),
             cv.Optional(CONF_TOPIC_PREFIX, default=lambda: CORE.name): cv.publish_topic,
             cv.Optional(CONF_LOG_TOPIC): cv.Any(
                 None,
