@@ -201,7 +201,7 @@ class MQTTComponent : public Component {
   bool resend_state_{false};
 
   /// Override and still send this specific internal component
-  InternalMQTTOptions internal_mqtt_{MQTT_COPY};
+  MQTTInternalOptions internal_mqtt_{MQTT_COPY};
 };
 
 }  // namespace mqtt

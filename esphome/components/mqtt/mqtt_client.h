@@ -71,7 +71,7 @@ enum MQTTDiscoveryObjectIdGenerator {
 };
 
 /// Available options for setting MQTT component internal
-enum InternalMQTTOptions {
+enum MQTTInternalOptions {
   MQTT_INTERNAL,
   MQTT_EXTERNAL,
   MQTT_COPY,
@@ -257,8 +257,8 @@ class MQTTClientComponent : public Component {
   void set_on_connect(mqtt_on_connect_callback_t &&callback);
   void set_on_disconnect(mqtt_on_disconnect_callback_t &&callback);
 
-  InternalMQTTOptions get_internal_mqtt_default() { return this->internal_mqtt_default_; }
-  void set_internal_mqtt_default(InternalMQTTOptions option) { this->internal_mqtt_default_ = option; }
+  MQTTInternalOptions get_internal_mqtt_default() { return this->internal_mqtt_default_; }
+  void set_internal_mqtt_default(MQTTInternalOptions option) { this->internal_mqtt_default_ = option; }
 
  protected:
   void send_device_info_();
@@ -320,7 +320,7 @@ class MQTTClientComponent : public Component {
   uint32_t reboot_timeout_{300000};
   uint32_t connect_begin_;
   uint32_t last_connected_{0};
-  InternalMQTTOptions internal_mqtt_default_{};
+  MQTTInternalOptions internal_mqtt_default_{};
   optional<MQTTClientDisconnectReason> disconnect_reason_{};
 };  // namespace mqtt
 
