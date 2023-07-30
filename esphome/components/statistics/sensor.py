@@ -83,13 +83,11 @@ CONF_WINDOW_DURATION = "window_duration"
 ##########################
 
 CONF_GROUP_TYPE = "group_type"
-CONF_SAMPLE = "sample"
-CONF_POPULATION = "population"
 
 GroupType = statistics_ns.enum("GroupType")
 GROUP_TYPES = {
-    CONF_SAMPLE: GroupType.SAMPLE_GROUP_TYPE,
-    CONF_POPULATION: GroupType.POPULATION_GROUP_TYPE,
+    "sample": GroupType.SAMPLE_GROUP_TYPE,
+    "population": GroupType.POPULATION_GROUP_TYPE,
 }
 
 
@@ -98,13 +96,11 @@ GROUP_TYPES = {
 #################
 
 CONF_AVERAGE_TYPE = "average_type"
-CONF_SIMPLE = "simple"
-CONF_TIME_WEIGHTED = "time_weighted"
 
 AverageType = statistics_ns.enum("AverageType")
 AVERAGE_TYPES = {
-    CONF_SIMPLE: AverageType.SIMPLE_AVERAGE,
-    CONF_TIME_WEIGHTED: AverageType.TIME_WEIGHTED_AVERAGE,
+    "simple": AverageType.SIMPLE_AVERAGE,
+    "time_weighted": AverageType.TIME_WEIGHTED_AVERAGE,
 }
 
 ########################
@@ -284,10 +280,10 @@ CONFIG_SCHEMA = cv.All(
                     CONF_CONTINUOUS_LONG_TERM: CONTINUOUS_WINDOW_SCHEMA,
                 }
             ),
-            cv.Optional(CONF_AVERAGE_TYPE, default=CONF_SIMPLE): cv.enum(
+            cv.Optional(CONF_AVERAGE_TYPE, default="simple"): cv.enum(
                 AVERAGE_TYPES, lower=True
             ),
-            cv.Optional(CONF_GROUP_TYPE, default=CONF_SAMPLE): cv.enum(
+            cv.Optional(CONF_GROUP_TYPE, default="sample"): cv.enum(
                 GROUP_TYPES, lower=True
             ),
             cv.Optional(CONF_TIME_UNIT, default="s"): cv.enum(
