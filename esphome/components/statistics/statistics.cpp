@@ -307,7 +307,7 @@ void StatisticsComponent::handle_new_value_(float value) {
   if ((this->running_chunk_count_ >= this->chunk_size_) || (this->running_chunk_duration_ >= this->chunk_duration_)) {
     this->queue_->insert(this->running_chunk_aggregate_);
 
-    // Reset counters and chunk to a null measurement
+    // Reset counters and running_chunk_aggregate to a null measurement
     this->running_chunk_aggregate_ = Aggregate();
     this->running_chunk_count_ = 0;
     this->running_chunk_duration_ = 0;
