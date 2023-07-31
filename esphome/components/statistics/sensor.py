@@ -29,7 +29,11 @@ CODEOWNERS = ["@kahrendt"]
 DEPENDENCIES = ["time"]
 
 statistics_ns = cg.esphome_ns.namespace("statistics")
-StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
+StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.PollingComponent)
+
+
+# testing stuff
+CONF_RESET_AFTER_UPDATES = "reset_after_updates"
 
 ######################
 # Automation Actions #
@@ -243,7 +247,7 @@ SLIDING_WINDOW_SCHEMA = cv.All(
             cv.Required(CONF_WINDOW_SIZE): cv.positive_not_null_int,
             cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
             cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
-            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_not_null_int,
+            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_int,
             cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
         },
     ),
@@ -262,6 +266,7 @@ CONTINUOUS_WINDOW_SCHEMA = cv.All(
             ): cv.positive_int,  # 0 disables automatic updates
             cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
             cv.Optional(CONF_RESTORE): cv.boolean,
+            cv.Optional(CONF_RESET_AFTER_UPDATES): cv.positive_int,  # 0 disables
         },
     ),
     validate_send_first_at,
@@ -323,7 +328,7 @@ CONFIG_SCHEMA = cv.All(
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
         },
-    ).extend(cv.COMPONENT_SCHEMA),
+    ).extend(cv.polling_component_schema("never")),
     validate_no_trend_and_restore,
 )
 
@@ -401,6 +406,14 @@ async def to_code(config):
     # Setup restore setting
     if CONF_RESTORE in window_config:
         cg.add(var.set_restore(window_config[CONF_RESTORE]))
+
+    ###
+    # testing things...
+    ##
+
+    if CONF_RESET_AFTER_UPDATES in window_config:
+        if window_config[CONF_RESET_AFTER_UPDATES] > 0:
+            cg.add(var.set_reset_after_updates(window_config[CONF_RESET_AFTER_UPDATES]))
 
     ############################
     # Setup Configured Sensors #

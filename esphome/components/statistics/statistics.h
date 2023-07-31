@@ -96,7 +96,7 @@ enum TimeConversionFactor {
   FACTOR_DAY = 86400000,  // 86400000 ms per day
 };
 
-class StatisticsComponent : public Component {
+class StatisticsComponent : public PollingComponent {
  public:
   float get_setup_priority() const override { return setup_priority::PROCESSOR; }
 
@@ -105,6 +105,9 @@ class StatisticsComponent : public Component {
   /// @brief Determine which statistics need to be stored, set up the appropriate queue, and configure various
   /// options.
   void setup() override;
+
+  /// @brief Publish current statistics at a pre-defined interval
+  void update() override;
 
   /// @brief Reset the window by clearing it.
   void reset();
@@ -145,6 +148,8 @@ class StatisticsComponent : public Component {
   void set_hash(const std::string &config_id) { this->hash_ = fnv1_hash("statistics_component_" + config_id); }
   void set_restore(bool restore) { this->restore_ = restore; }
 
+  void set_reset_after_updates(size_t reset_after) { this->reset_after_updates_ = reset_after; }
+
  protected:
   // source sensor of measurement data
   sensor::Sensor *source_sensor_{nullptr};
@@ -183,6 +188,10 @@ class StatisticsComponent : public Component {
 
   size_t running_chunk_count_{0};       // number of measurements currently stored in the running aggregate chunk
   uint32_t running_chunk_duration_{0};  // duration of measurements currently stored in the running aggregate chunk
+
+  size_t update_count_{0};
+
+  size_t reset_after_updates_{std::numeric_limits<size_t>::max()};
 
   AverageType average_type_{};                     // either simple or time-weighted
   GroupType group_type_{};                         // measurements come from either a population or a sample

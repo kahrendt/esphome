@@ -146,9 +146,21 @@ void StatisticsComponent::setup() {
   this->set_first_at(this->send_every_ - this->send_at_chunks_counter_);
 }
 
+void StatisticsComponent::update() {
+  this->force_publish();
+
+  ++this->update_count_;
+  if (this->update_count_ >= this->reset_after_updates_) {
+    this->reset();
+    this->update_count_ = 0;
+  }
+}
+
 void StatisticsComponent::force_publish() {
   Aggregate aggregate_to_publish = this->queue_->compute_current_aggregate();
-  aggregate_to_publish = aggregate_to_publish.combine_with(this->running_chunk_aggregate_);
+
+  if ((this->window_type_ == WINDOW_TYPE_CONTINUOUS) || (this->window_type_ == WINDOW_TYPE_CONTINUOUS_LONG_TERM))
+    aggregate_to_publish = aggregate_to_publish.combine_with(this->running_chunk_aggregate_);
 
   this->publish_and_save_(aggregate_to_publish, this->time_->timestamp_now());
 }
@@ -277,18 +289,6 @@ void StatisticsComponent::handle_new_value_(float value) {
   this->previous_timestamp_ = now_timestamp;
   this->previous_value_ = value;
 
-  ////////////////////////////////////////////////
-  // Evict elements or reset queue if too large //
-  ////////////////////////////////////////////////
-
-  while (this->queue_->size() >= this->window_size_) {
-    this->queue_->evict();  // evict is equivalent to clearing the queue for ContinuousQueue and ContinuousSingular
-  }
-
-  if (this->running_window_duration_ >= this->window_duration_) {
-    this->reset();
-  }
-
   ////////////////////////////////////////////
   // Aggregate new value into running chunk //
   ////////////////////////////////////////////
@@ -305,6 +305,18 @@ void StatisticsComponent::handle_new_value_(float value) {
   // Add new chunk to queue //
   ////////////////////////////
   if ((this->running_chunk_count_ >= this->chunk_size_) || (this->running_chunk_duration_ >= this->chunk_duration_)) {
+    ////////////////////////////////////////////////
+    // Evict elements or reset queue if too large //
+    ////////////////////////////////////////////////
+
+    while (this->queue_->size() >= this->window_size_) {
+      this->queue_->evict();  // evict is equivalent to clearing the queue for ContinuousQueue and ContinuousSingular
+    }
+
+    if (this->running_window_duration_ >= this->window_duration_) {
+      this->reset();
+    }
+
     this->queue_->insert(this->running_chunk_aggregate_);
 
     // Reset counters and running_chunk_aggregate to a null measurement
