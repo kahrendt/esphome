@@ -166,12 +166,12 @@ class StatisticsComponent : public Component {
   Aggregate running_chunk_aggregate_{};
 
   uint32_t hash_{};
-  size_t window_size_{std::numeric_limits<size_t>::max()};
+  size_t window_size_{};
 
-  size_t chunk_size_{std::numeric_limits<size_t>::max()};  // number of measurements aggregated in a chunk before
-                                                           // being inserted into the queue
-  uint32_t chunk_duration_{std::numeric_limits<uint32_t>::max()};  // duration of measurements agggregated in a
-                                                                   // chunk before being inserted into the queue
+  size_t chunk_size_{};        // number of measurements aggregated in a chunk before
+                               // being inserted into the queue
+  uint32_t chunk_duration_{};  // duration of measurements agggregated in a
+                               // chunk before being inserted into the queue
 
   size_t send_every_{};
   size_t send_at_chunks_counter_{};

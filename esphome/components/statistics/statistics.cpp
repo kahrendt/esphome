@@ -13,6 +13,7 @@ namespace esphome {
 namespace statistics {
 
 static const char *const TAG = "statistics";
+static const uint32_t NEVER_BOUND = 4294967295UL;  // uint32_t maximum
 
 static const LogString *time_conversion_factor_to_string(TimeConversionFactor factor) {
   switch (factor) {
@@ -87,15 +88,25 @@ void StatisticsComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "  Window Configuration:");
   ESP_LOGCONFIG(TAG, "    Type: %s", LOG_STR_ARG(window_type_to_string(this->window_type_)));
 
-  if (this->window_size_ < std::numeric_limits<size_t>::max()) {
+  if (this->window_size_ < NEVER_BOUND) {
     ESP_LOGCONFIG(TAG, "    Window Size: %u", this->window_size_);
+  } else {
+    ESP_LOGCONFIG(TAG, "    Window Size: infinite");
   }
 
-  if (this->chunk_size_ < std::numeric_limits<size_t>::max()) {
+  if (this->chunk_size_ < NEVER_BOUND) {
     ESP_LOGCONFIG(TAG, "    Chunk Size: %u", this->chunk_size_);
   }
 
-  ESP_LOGCONFIG(TAG, "    Send Every: %u", this->send_every_);
+  if (this->chunk_duration_ < NEVER_BOUND) {
+    ESP_LOGCONFIG(TAG, "    Chunk Duration: %u ms", this->chunk_duration_);
+  }
+
+  if (this->send_every_ < NEVER_BOUND) {
+    ESP_LOGCONFIG(TAG, "    Send Every: %u", this->send_every_);
+  } else {
+    ESP_LOGCONFIG(TAG, "    Send Every: never");
+  }
 
   this->dump_enabled_sensors_();
 }
@@ -137,7 +148,7 @@ void StatisticsComponent::setup() {
   this->source_sensor_->add_on_state_callback([this](float value) -> void { this->handle_new_value_(value); });
 
   // If chunk_duration is configured, use an interval timer to handle running chunk insertion
-  if (this->chunk_duration_ < std::numeric_limits<uint32_t>::max()) {
+  if (this->chunk_duration_ < NEVER_BOUND) {
     this->set_interval(this->chunk_duration_, [this] { this->insert_running_chunk_(); });
   }
 
@@ -292,7 +303,6 @@ void StatisticsComponent::handle_new_value_(float value) {
 
   // 4) Add running chunk to queue if full
   if (this->running_chunk_count_ >= this->chunk_size_) {
-    this->running_chunk_count_ = 0;
     this->insert_running_chunk_();
   }
 }
@@ -312,24 +322,21 @@ void StatisticsComponent::insert_running_chunk_() {
 
   // 2) Insert into queue
   this->queue_->insert(this->running_chunk_aggregate_);
-
-  // 3) Reset running_chunk_aggregate to a null measurement
-  this->running_chunk_aggregate_ = Aggregate();
-
   ++this->send_at_chunks_counter_;
 
+  // 3) Reset running_chunk_aggregate to a null measurement and reset the coutner
+  this->running_chunk_aggregate_ = Aggregate();
+  this->running_chunk_count_ = 0;
+
   // 4) Publish if exceeding send_every
-  // If send_every_ == 0, then automatic publication is disabled for a continuous queue
-  if (this->send_every_ > 0) {
-    if (this->send_at_chunks_counter_ >= this->send_every_) {
-      // Ensure sensors update at the configured rate
-      //  - send_at_chunks_counter_ counts the number of chunks inserted into the appropriate queue
-      //  - after send_every_ chunks, each sensor updates
+  if (this->send_at_chunks_counter_ >= this->send_every_) {
+    // Ensure sensors update at the configured rate
+    //  - send_at_chunks_counter_ counts the number of chunks inserted into the appropriate queue
+    //  - after send_every_ chunks, each sensor updates
 
-      this->send_at_chunks_counter_ = 0;  // reset send_at_chunks_counter_
+    this->send_at_chunks_counter_ = 0;  // reset send_at_chunks_counter_
 
-      this->publish_and_save_(this->queue_->compute_current_aggregate());
-    }
+    this->publish_and_save_(this->queue_->compute_current_aggregate());
   }
 }
 

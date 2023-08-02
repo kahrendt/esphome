@@ -153,7 +153,7 @@ SENSOR_LIST_WITH_INCREASED_ACCURACY_DECIMALS = [
 
 # Trend's unit is in original unit of measurement divides by time unit of measurement
 def transform_trend_unit_of_measurement(uom, config):
-    denominator = config[CONF_TIME_UNIT]
+    denominator = config.get(CONF_TIME_UNIT)
     return uom + "/" + denominator
 
 
@@ -171,9 +171,9 @@ def transform_accuracy_decimals(decimals, config):
 # Borrowed from sensor/__init__.py (accessed July 2023)
 def validate_send_first_at(config):
     send_first_at = config.get(CONF_SEND_FIRST_AT)
-    send_every = config[CONF_SEND_EVERY]
+    send_every = config.get(CONF_SEND_EVERY)
     if send_every > 0:  # If send_every == 0, then automatic publication is disabled
-        if send_first_at is not None and send_first_at > send_every:
+        if send_first_at > send_every:
             raise cv.Invalid(
                 f"send_first_at must be smaller than or equal to send_every! {send_first_at} <= {send_every}"
             )
@@ -253,7 +253,7 @@ CONTINUOUS_WINDOW_SCHEMA = cv.All(
     cv.Schema(
         {
             # A config value of 0 disables: window_size resets, send_every publications
-            cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
+            cv.Required(CONF_WINDOW_SIZE): cv.positive_int,
             cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
             cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
             cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_int,
@@ -353,93 +353,85 @@ async def to_code(config):
 
     cg.add(var.set_source_sensor(source))
 
-    cg.add(var.set_average_type(config[CONF_AVERAGE_TYPE]))
-    cg.add(var.set_group_type(config[CONF_GROUP_TYPE]))
-    cg.add(var.set_time_conversion_factor(config[CONF_TIME_UNIT]))
+    cg.add(var.set_average_type(config.get(CONF_AVERAGE_TYPE)))
+    cg.add(var.set_group_type(config.get(CONF_GROUP_TYPE)))
+    cg.add(var.set_time_conversion_factor(config.get(CONF_TIME_UNIT)))
 
     ####################
     # Configure Window #
     ####################
-    window_config = config["window"]
-    constant = WINDOW_TYPES[window_config[CONF_TYPE]]
-    cg.add(var.set_window_type(constant))
+    window_config = config.get(CONF_WINDOW)
+    window_type = WINDOW_TYPES[window_config.get(CONF_TYPE)]
+    cg.add(var.set_window_type(window_type))
 
     # Setup window size
-    if CONF_WINDOW_SIZE in window_config:
-        # If CONF_WINDOW_SIZE is 0, then resets by window size are disabled
-        # If so, window_size_ is the default max size_t value defined in statistics.h
-        if window_config[CONF_WINDOW_SIZE] > 0:
-            cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
+    window_size_setting = window_config.get(CONF_WINDOW_SIZE)
+    if window_size_setting > 0:
+        cg.add(var.set_window_size(window_size_setting))
+    else:
+        cg.add(var.set_window_size(4294967295))  # uint32_t max
 
-    # Setup chunk size
-    if (CONF_CHUNK_SIZE not in window_config) and (
-        CONF_CHUNK_DURATION not in window_config
-    ):
+    if chunk_size_setting := window_config.get(CONF_CHUNK_SIZE):
+        cg.add(var.set_chunk_size(chunk_size_setting))
+        cg.add(var.set_chunk_duration(4294967295))  # uint32_t max
+    elif chunk_duration_setting := window_config.get(CONF_CHUNK_DURATION):
+        cg.add(var.set_chunk_size(4294967295))  # uint32_t max
+        cg.add(var.set_chunk_duration(chunk_duration_setting.total_milliseconds))
+    else:
         # If neither CONF_CHUNK_SIZE or CONF_CHUNK_DURATION are configured, the default chunk size is 1
         cg.add(var.set_chunk_size(1))
-    if CONF_CHUNK_SIZE in window_config:
-        cg.add(var.set_chunk_size(window_config[CONF_CHUNK_SIZE]))
-    if CONF_CHUNK_DURATION in window_config:
-        cg.add(
-            var.set_chunk_duration(
-                window_config[CONF_CHUNK_DURATION].total_milliseconds
-            )
-        )
+        cg.add(var.set_chunk_duration(4294967295))  # uint32_t max
 
     # Setup send parameters
-    cg.add(var.set_send_every(window_config[CONF_SEND_EVERY]))
-    cg.add(var.set_first_at(window_config[CONF_SEND_FIRST_AT]))
+    cg.add(var.set_first_at(window_config.get(CONF_SEND_FIRST_AT)))
+
+    send_every_setting = window_config.get(CONF_SEND_EVERY)
+    if send_every_setting > 0:
+        cg.add(var.set_send_every(send_every_setting))
+    else:
+        cg.add(var.set_send_every(4294967295))  # uint32_t max
 
     # Setup restore setting
-    if CONF_RESTORE in window_config:
-        cg.add(var.set_restore(window_config[CONF_RESTORE]))
+    if restore_setting := window_config.get(CONF_RESTORE):
+        cg.add(var.set_restore(restore_setting))
 
     ############################
     # Setup Configured Sensors #
     ############################
-    if CONF_COUNT in config:
-        conf = config[CONF_COUNT]
-        sens = await sensor.new_sensor(conf)
+    if count_sensor := config.get(CONF_COUNT):
+        sens = await sensor.new_sensor(count_sensor)
         cg.add(var.set_count_sensor(sens))
 
-    if CONF_DURATION in config:
-        conf = config[CONF_DURATION]
-        sens = await sensor.new_sensor(conf)
+    if duration_sensor := config.get(CONF_DURATION):
+        sens = await sensor.new_sensor(duration_sensor)
         cg.add(var.set_duration_sensor(sens))
 
-    if CONF_MAX in config:
-        conf = config[CONF_MAX]
-        sens = await sensor.new_sensor(conf)
+    if max_sensor := config.get(CONF_MAX):
+        sens = await sensor.new_sensor(max_sensor)
         cg.add(var.set_max_sensor(sens))
 
-    if CONF_MEAN in config:
-        conf = config[CONF_MEAN]
-        sens = await sensor.new_sensor(conf)
+    if mean_sensor := config.get(CONF_MEAN):
+        sens = await sensor.new_sensor(mean_sensor)
         cg.add(var.set_mean_sensor(sens))
 
-    if CONF_MIN in config:
-        conf = config[CONF_MIN]
-        sens = await sensor.new_sensor(conf)
+    if min_sensor := config.get(CONF_MIN):
+        sens = await sensor.new_sensor(min_sensor)
         cg.add(var.set_min_sensor(sens))
 
-    if CONF_SINCE_ARGMAX in config:
-        conf = config[CONF_SINCE_ARGMAX]
-        sens = await sensor.new_sensor(conf)
+    if since_argmax_sensor := config.get(CONF_SINCE_ARGMAX):
+        sens = await sensor.new_sensor(since_argmax_sensor)
         cg.add(var.set_since_argmax_sensor(sens))
 
-    if CONF_SINCE_ARGMIN in config:
-        conf = config[CONF_SINCE_ARGMIN]
-        sens = await sensor.new_sensor(conf)
+    if since_argmin_sensor := config.get(CONF_SINCE_ARGMIN):
+        sens = await sensor.new_sensor(since_argmin_sensor)
         cg.add(var.set_since_argmin_sensor(sens))
 
-    if CONF_STD_DEV in config:
-        conf = config[CONF_STD_DEV]
-        sens = await sensor.new_sensor(conf)
+    if std_dev_sensor := config.get(CONF_STD_DEV):
+        sens = await sensor.new_sensor(std_dev_sensor)
         cg.add(var.set_std_dev_sensor(sens))
 
-    if CONF_TREND in config:
-        conf = config[CONF_TREND]
-        sens = await sensor.new_sensor(conf)
+    if trend_sensor := config.get(CONF_TREND):
+        sens = await sensor.new_sensor(trend_sensor)
         cg.add(var.set_trend_sensor(sens))
 
 
