@@ -96,7 +96,7 @@ enum TimeConversionFactor {
   FACTOR_DAY = 86400000,  // 86400000 ms per day
 };
 
-class StatisticsComponent : public PollingComponent {
+class StatisticsComponent : public Component {
  public:
   float get_setup_priority() const override { return setup_priority::PROCESSOR; }
 
@@ -105,9 +105,6 @@ class StatisticsComponent : public PollingComponent {
   /// @brief Determine which statistics need to be stored, set up the appropriate queue, and configure various
   /// options.
   void setup() override;
-
-  /// @brief Publish current statistics at a pre-defined interval
-  void update() override;
 
   /// @brief Reset the window by clearing it.
   void reset();
@@ -130,13 +127,12 @@ class StatisticsComponent : public PollingComponent {
   void set_trend_sensor(sensor::Sensor *trend_sensor) { this->trend_sensor_ = trend_sensor; }
 
   void set_window_size(size_t window_size) { this->window_size_ = window_size; }
-  void set_window_duration(size_t duration) { this->window_duration_ = duration; }
-
-  void set_send_every(size_t send_every) { this->send_every_ = send_every; }
-  void set_first_at(size_t send_first_at) { this->send_at_chunks_counter_ = send_first_at; }
 
   void set_chunk_size(size_t size) { this->chunk_size_ = size; }
   void set_chunk_duration(uint32_t time_delta) { this->chunk_duration_ = time_delta; }
+
+  void set_send_every(size_t send_every) { this->send_every_ = send_every; }
+  void set_first_at(size_t send_first_at) { this->send_at_chunks_counter_ = send_first_at; }
 
   void set_average_type(AverageType type) { this->average_type_ = type; }
   void set_group_type(GroupType type) { this->group_type_ = type; }
@@ -147,8 +143,6 @@ class StatisticsComponent : public PollingComponent {
 
   void set_hash(const std::string &config_id) { this->hash_ = fnv1_hash("statistics_component_" + config_id); }
   void set_restore(bool restore) { this->restore_ = restore; }
-
-  void set_reset_after_updates(size_t reset_after) { this->reset_after_updates_ = reset_after; }
 
  protected:
   // source sensor of measurement data
@@ -172,26 +166,17 @@ class StatisticsComponent : public PollingComponent {
   Aggregate running_chunk_aggregate_{};
 
   uint32_t hash_{};
-
   size_t window_size_{std::numeric_limits<size_t>::max()};
-  uint64_t window_duration_{std::numeric_limits<uint64_t>::max()};  // max duration of measurements in window
 
   size_t chunk_size_{std::numeric_limits<size_t>::max()};  // number of measurements aggregated in a chunk before
                                                            // being inserted into the queue
-  uint64_t chunk_duration_{std::numeric_limits<uint64_t>::max()};  // duration of measurements agggregated in a
+  uint32_t chunk_duration_{std::numeric_limits<uint32_t>::max()};  // duration of measurements agggregated in a
                                                                    // chunk before being inserted into the queue
 
   size_t send_every_{};
   size_t send_at_chunks_counter_{};
 
-  uint64_t running_window_duration_{0};  // duration of measurements currently stored in the running window
-
-  size_t running_chunk_count_{0};       // number of measurements currently stored in the running aggregate chunk
-  uint32_t running_chunk_duration_{0};  // duration of measurements currently stored in the running aggregate chunk
-
-  size_t update_count_{0};
-
-  size_t reset_after_updates_{std::numeric_limits<size_t>::max()};
+  size_t running_chunk_count_{0};  // number of measurements currently stored in the running aggregate chunk
 
   AverageType average_type_{};                     // either simple or time-weighted
   GroupType group_type_{};                         // measurements come from either a population or a sample
@@ -217,13 +202,15 @@ class StatisticsComponent : public PollingComponent {
   /// @brief Insert new sensor measurements and update sensors.
   void handle_new_value_(float value);
 
+  void insert_running_chunk_();
+
   /** Publish sensor values and save to flash memory (if configured).
    *
    * Saves value to flash memory only if <restore_> is true.
    * @param value aggregate value to published and saved
    * @param timestamp current UTC Unix time (in seconds)
    */
-  void publish_and_save_(Aggregate value, time_t timestamp);
+  void publish_and_save_(Aggregate value);
 
   /// @brief Return if averages are weighted by measurement duration.
   inline bool is_time_weighted_();

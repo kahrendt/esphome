@@ -29,11 +29,7 @@ CODEOWNERS = ["@kahrendt"]
 DEPENDENCIES = ["time"]
 
 statistics_ns = cg.esphome_ns.namespace("statistics")
-StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.PollingComponent)
-
-
-# testing stuff
-CONF_RESET_AFTER_UPDATES = "reset_after_updates"
+StatisticsComponent = statistics_ns.class_("StatisticsComponent", cg.Component)
 
 ######################
 # Automation Actions #
@@ -79,8 +75,6 @@ WINDOW_TYPES = {
 
 CONF_CHUNK_SIZE = "chunk_size"
 CONF_CHUNK_DURATION = "chunk_duration"
-
-CONF_WINDOW_DURATION = "window_duration"
 
 ##########################
 # Measurement Group Type #
@@ -252,25 +246,23 @@ SLIDING_WINDOW_SCHEMA = cv.All(
         },
     ),
     validate_send_first_at,
+    cv.has_at_most_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
 )
 
 CONTINUOUS_WINDOW_SCHEMA = cv.All(
     cv.Schema(
         {
-            cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,  # 0 disables window reset
-            cv.Optional(CONF_WINDOW_DURATION): cv.time_period,
+            # A config value of 0 disables: window_size resets, send_every publications
+            cv.Optional(CONF_WINDOW_SIZE): cv.positive_int,
             cv.Optional(CONF_CHUNK_SIZE): cv.positive_not_null_int,
             cv.Optional(CONF_CHUNK_DURATION): cv.time_period,
-            cv.Optional(
-                CONF_SEND_EVERY, default=1
-            ): cv.positive_int,  # 0 disables automatic updates
+            cv.Optional(CONF_SEND_EVERY, default=1): cv.positive_int,
             cv.Optional(CONF_SEND_FIRST_AT, default=1): cv.positive_not_null_int,
             cv.Optional(CONF_RESTORE): cv.boolean,
-            cv.Optional(CONF_RESET_AFTER_UPDATES): cv.positive_int,  # 0 disables
         },
     ),
     validate_send_first_at,
-    cv.has_at_least_one_key(CONF_WINDOW_SIZE, CONF_WINDOW_DURATION),
+    cv.has_at_most_one_key(CONF_CHUNK_SIZE, CONF_CHUNK_DURATION),
 )
 
 CONFIG_SCHEMA = cv.All(
@@ -328,7 +320,7 @@ CONFIG_SCHEMA = cv.All(
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
         },
-    ).extend(cv.polling_component_schema("never")),
+    ).extend(cv.COMPONENT_SCHEMA),
     validate_no_trend_and_restore,
 )
 
@@ -374,24 +366,19 @@ async def to_code(config):
 
     # Setup window size
     if CONF_WINDOW_SIZE in window_config:
+        # If CONF_WINDOW_SIZE is 0, then resets by window size are disabled
+        # If so, window_size_ is the default max size_t value defined in statistics.h
         if window_config[CONF_WINDOW_SIZE] > 0:
             cg.add(var.set_window_size(window_config[CONF_WINDOW_SIZE]))
-
-    if CONF_WINDOW_DURATION in window_config:
-        cg.add(
-            var.set_window_duration(
-                window_config[CONF_WINDOW_DURATION].total_milliseconds
-            )
-        )
 
     # Setup chunk size
     if (CONF_CHUNK_SIZE not in window_config) and (
         CONF_CHUNK_DURATION not in window_config
     ):
+        # If neither CONF_CHUNK_SIZE or CONF_CHUNK_DURATION are configured, the default chunk size is 1
         cg.add(var.set_chunk_size(1))
     if CONF_CHUNK_SIZE in window_config:
-        if window_config[CONF_CHUNK_SIZE] > 0:
-            cg.add(var.set_chunk_size(window_config[CONF_CHUNK_SIZE]))
+        cg.add(var.set_chunk_size(window_config[CONF_CHUNK_SIZE]))
     if CONF_CHUNK_DURATION in window_config:
         cg.add(
             var.set_chunk_duration(
@@ -406,14 +393,6 @@ async def to_code(config):
     # Setup restore setting
     if CONF_RESTORE in window_config:
         cg.add(var.set_restore(window_config[CONF_RESTORE]))
-
-    ###
-    # testing things...
-    ##
-
-    if CONF_RESET_AFTER_UPDATES in window_config:
-        if window_config[CONF_RESET_AFTER_UPDATES] > 0:
-            cg.add(var.set_reset_after_updates(window_config[CONF_RESET_AFTER_UPDATES]))
 
     ############################
     # Setup Configured Sensors #

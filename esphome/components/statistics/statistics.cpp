@@ -90,15 +90,9 @@ void StatisticsComponent::dump_config() {
   if (this->window_size_ < std::numeric_limits<size_t>::max()) {
     ESP_LOGCONFIG(TAG, "    Window Size: %u", this->window_size_);
   }
-  if (this->window_duration_ < std::numeric_limits<uint64_t>::max()) {
-    ESP_LOGCONFIG(TAG, "    Window Duration: %llu ms", this->window_duration_);
-  }
 
   if (this->chunk_size_ < std::numeric_limits<size_t>::max()) {
     ESP_LOGCONFIG(TAG, "    Chunk Size: %u", this->chunk_size_);
-  }
-  if (this->window_duration_ < std::numeric_limits<uint64_t>::max()) {
-    ESP_LOGCONFIG(TAG, "    Chunk Duration: %llu ms", this->chunk_duration_);
   }
 
   ESP_LOGCONFIG(TAG, "    Send Every: %u", this->send_every_);
@@ -142,18 +136,13 @@ void StatisticsComponent::setup() {
   // On every source sensor update, call handle_new_value_()
   this->source_sensor_->add_on_state_callback([this](float value) -> void { this->handle_new_value_(value); });
 
+  // If chunk_duration is configured, use an interval timer to handle running chunk insertion
+  if (this->chunk_duration_ < std::numeric_limits<uint32_t>::max()) {
+    this->set_interval(this->chunk_duration_, [this] { this->insert_running_chunk_(); });
+  }
+
   // Ensure the first sensor update is when configured
   this->set_first_at(this->send_every_ - this->send_at_chunks_counter_);
-}
-
-void StatisticsComponent::update() {
-  this->force_publish();
-
-  ++this->update_count_;
-  if (this->update_count_ >= this->reset_after_updates_) {
-    this->reset();
-    this->update_count_ = 0;
-  }
 }
 
 void StatisticsComponent::force_publish() {
@@ -162,13 +151,12 @@ void StatisticsComponent::force_publish() {
   if ((this->window_type_ == WINDOW_TYPE_CONTINUOUS) || (this->window_type_ == WINDOW_TYPE_CONTINUOUS_LONG_TERM))
     aggregate_to_publish = aggregate_to_publish.combine_with(this->running_chunk_aggregate_);
 
-  this->publish_and_save_(aggregate_to_publish, this->time_->timestamp_now());
+  // this->publish_and_save_(aggregate_to_publish, this->time_->timestamp_now());
+  this->publish_and_save_(aggregate_to_publish);
 }
 
 void StatisticsComponent::reset() {
   this->queue_->clear();
-  this->running_window_duration_ = 0;  // reset the duration of measurements in queue
-
   this->running_chunk_aggregate_ = Aggregate();  // reset the running aggregate to the identity/null measurement
   this->running_chunk_count_ = 0;                // reset the running chunk count
 
@@ -269,10 +257,17 @@ void StatisticsComponent::dump_enabled_sensors_() {
 }
 
 void StatisticsComponent::handle_new_value_(float value) {
-  //////////////////////////////////////////////
-  // Prepare incoming values to be aggregated //
-  //////////////////////////////////////////////
+  // 1) Verify not NaN, return if so
+  // 2) prepare incoming values ot be aggregated
+  // 3) insert value into running chunk
+  //   b) combine running chunk with new value
+  //   c) increase measurements inserted into chunk counter
+  // 4) if measurements inserted == chunk size, then insert into queue by calling a function
 
+  if (std::isnan(value))
+    return;
+
+  // 2) Prepare incoming values to be aggregated
   uint32_t now_timestamp = millis();               // milliseconds since boot
   time_t now_time = this->time_->timestamp_now();  // UTC Unix time
 
@@ -289,48 +284,41 @@ void StatisticsComponent::handle_new_value_(float value) {
   this->previous_timestamp_ = now_timestamp;
   this->previous_value_ = value;
 
-  ////////////////////////////////////////////
-  // Aggregate new value into running chunk //
-  ////////////////////////////////////////////
-
+  // 3) Aggregate new value into running chunk
   this->running_chunk_aggregate_ = this->running_chunk_aggregate_.combine_with(
       Aggregate(insert_value, duration_since_last_measurement, now_timestamp, now_time), this->is_time_weighted_());
 
   ++this->running_chunk_count_;
-  this->running_chunk_duration_ += duration_since_last_measurement;
 
-  this->running_window_duration_ += duration_since_last_measurement;
-
-  ////////////////////////////
-  // Add new chunk to queue //
-  ////////////////////////////
-  if ((this->running_chunk_count_ >= this->chunk_size_) || (this->running_chunk_duration_ >= this->chunk_duration_)) {
-    ////////////////////////////////////////////////
-    // Evict elements or reset queue if too large //
-    ////////////////////////////////////////////////
-
-    while (this->queue_->size() >= this->window_size_) {
-      this->queue_->evict();  // evict is equivalent to clearing the queue for ContinuousQueue and ContinuousSingular
-    }
-
-    if (this->running_window_duration_ >= this->window_duration_) {
-      this->reset();
-    }
-
-    this->queue_->insert(this->running_chunk_aggregate_);
-
-    // Reset counters and running_chunk_aggregate to a null measurement
-    this->running_chunk_aggregate_ = Aggregate();
+  // 4) Add running chunk to queue if full
+  if (this->running_chunk_count_ >= this->chunk_size_) {
     this->running_chunk_count_ = 0;
-    this->running_chunk_duration_ = 0;
+    this->insert_running_chunk_();
+  }
+}
 
-    ++this->send_at_chunks_counter_;
+void StatisticsComponent::insert_running_chunk_() {
+  // - note that this can be called either by a preset interval or by handle_new_value_()
+  // 1) if queue is at window_size, reset/evict
+  // 2) insert running chunk into queue
+  // 3) increase running chunk insertion count
+  // 4) publish if exceeding send_every
+  //   - reset counters
+
+  // 1) Evict elements or reset queue if too large
+  while (this->queue_->size() >= this->window_size_) {
+    this->queue_->evict();  // evict is equivalent to clearing the queue for ContinuousQueue and ContinuousSingular
   }
 
-  ////////////////////////////////////
-  // Publish and save sensor values //
-  ////////////////////////////////////
+  // 2) Insert into queue
+  this->queue_->insert(this->running_chunk_aggregate_);
 
+  // 3) Reset running_chunk_aggregate to a null measurement
+  this->running_chunk_aggregate_ = Aggregate();
+
+  ++this->send_at_chunks_counter_;
+
+  // 4) Publish if exceeding send_every
   // If send_every_ == 0, then automatic publication is disabled for a continuous queue
   if (this->send_every_ > 0) {
     if (this->send_at_chunks_counter_ >= this->send_every_) {
@@ -340,12 +328,12 @@ void StatisticsComponent::handle_new_value_(float value) {
 
       this->send_at_chunks_counter_ = 0;  // reset send_at_chunks_counter_
 
-      this->publish_and_save_(this->queue_->compute_current_aggregate(), now_time);
+      this->publish_and_save_(this->queue_->compute_current_aggregate());
     }
   }
 }
 
-void StatisticsComponent::publish_and_save_(Aggregate value, time_t time) {
+void StatisticsComponent::publish_and_save_(Aggregate value) {
   ////////////////////////////////////////////////
   // Publish new states for all enabled sensors //
   ////////////////////////////////////////////////
@@ -377,11 +365,23 @@ void StatisticsComponent::publish_and_save_(Aggregate value, time_t time) {
     }
   }
 
-  if (this->since_argmax_sensor_)
-    this->since_argmax_sensor_->publish_state(time - value.get_argmax());
+  if (this->since_argmax_sensor_) {
+    time_t argmax = value.get_argmax();
+    if (argmax == 0) {  // default argmax is a Unix time of 0, so switch to NaN for HA
+      this->since_argmax_sensor_->publish_state(NAN);
+    } else {
+      this->since_argmax_sensor_->publish_state(this->time_->timestamp_now() - argmax);
+    }
+  }
 
-  if (this->since_argmin_sensor_)
-    this->since_argmin_sensor_->publish_state(time - value.get_argmin());
+  if (this->since_argmin_sensor_) {
+    time_t argmin = value.get_argmin();
+    if (argmin == 0) {  // default argmin value is a Unix time of 0, so switch to NaN for HA
+      this->since_argmin_sensor_->publish_state(NAN);
+    } else {
+      this->since_argmin_sensor_->publish_state(this->time_->timestamp_now() - argmin);
+    }
+  }
 
   if (this->std_dev_sensor_)
     this->std_dev_sensor_->publish_state(value.compute_std_dev(this->is_time_weighted_(), this->group_type_));
