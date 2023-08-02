@@ -176,7 +176,8 @@ class StatisticsComponent : public Component {
   size_t send_every_{};
   size_t send_at_chunks_counter_{};
 
-  size_t running_chunk_count_{0};  // number of measurements currently stored in the running aggregate chunk
+  size_t measurements_in_running_chunk_count_{
+      0};  // number of measurements currently stored in the running aggregate chunk
 
   AverageType average_type_{};                     // either simple or time-weighted
   GroupType group_type_{};                         // measurements come from either a population or a sample
