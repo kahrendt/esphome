@@ -144,11 +144,15 @@ class StatisticsComponent : public Component {
   void set_hash(const std::string &config_id) { this->hash_ = fnv1_hash("statistics_component_" + config_id); }
   void set_restore(bool restore) { this->restore_ = restore; }
 
+  void set_enabled_aggregates(const EnabledAggregatesConfiguration &enabled_aggregates) {
+    this->enabled_aggregates_ = enabled_aggregates;
+  }
+
  protected:
-  // source sensor of measurement data
+  // Source sensor of measurement data
   sensor::Sensor *source_sensor_{nullptr};
 
-  // sensors for aggregate statistics from measurements in window
+  // Sensors for aggregate statistics from measurements in window
   sensor::Sensor *count_sensor_{nullptr};
   sensor::Sensor *duration_sensor_{nullptr};
   sensor::Sensor *max_sensor_{nullptr};
@@ -159,13 +163,24 @@ class StatisticsComponent : public Component {
   sensor::Sensor *std_dev_sensor_{nullptr};
   sensor::Sensor *trend_sensor_{nullptr};
 
-  time::RealTimeClock *time_;
+  // Time component for since_argmax and since_argmin
+  time::RealTimeClock *time_{nullptr};
 
+  // Stores the Aggregates
   AggregateQueue *queue_{nullptr};
 
-  Aggregate running_chunk_aggregate_{};
-
+  // Restore continuous aggregate statistics from flash
+  ESPPreferenceObject pref_{};
+  bool restore_{false};
   uint32_t hash_{};
+
+  // Configuration options for how statistics are calculated
+  AverageType average_type_{};                     // either simple or time-weighted
+  GroupType group_type_{};                         // measurements come from either a population or a sample
+  WindowType window_type_{};                       // type of queue to store measurements/chunks in
+  TimeConversionFactor time_conversion_factor_{};  // time unit conversion trend
+
+  // Window configuration options
   size_t window_size_{};
 
   size_t chunk_size_{};        // number of measurements aggregated in a chunk before
@@ -176,20 +191,18 @@ class StatisticsComponent : public Component {
   size_t send_every_{};
   size_t send_at_chunks_counter_{};
 
-  size_t measurements_in_running_chunk_count_{
-      0};  // number of measurements currently stored in the running aggregate chunk
-
-  AverageType average_type_{};                     // either simple or time-weighted
-  GroupType group_type_{};                         // measurements come from either a population or a sample
-  WindowType window_type_{};                       // type of queue to store measurements/chunks in
-  TimeConversionFactor time_conversion_factor_{};  // time unit conversion trend
+  // Running aAgregate chunk
+  Aggregate running_chunk_aggregate_{};
+  size_t measurements_in_running_chunk_count_{0};  // number of measurements currently
+                                                   // stored in the running Aggregate chunk
 
   // If the Aggregates are time-weighted, store info about the previous observation
   float previous_value_{NAN};
   uint32_t previous_timestamp_{0};
 
-  bool restore_{false};
-  ESPPreferenceObject pref_;
+  //////////////////////
+  // Internal Methods //
+  //////////////////////
 
   /// @brief  Use log_sensor to dump information about all enabled statistics sensors.
   void dump_enabled_sensors_();
@@ -203,13 +216,13 @@ class StatisticsComponent : public Component {
   /// @brief Insert new sensor measurements and update sensors.
   void handle_new_value_(float value);
 
+  /// @brief Insert running chunk into the AggregateQueue.
   void insert_running_chunk_();
 
   /** Publish sensor values and save to flash memory (if configured).
    *
    * Saves value to flash memory only if <restore_> is true.
    * @param value aggregate value to published and saved
-   * @param timestamp current UTC Unix time (in seconds)
    */
   void publish_and_save_(Aggregate value);
 

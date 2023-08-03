@@ -162,12 +162,12 @@ void StatisticsComponent::force_publish() {
   if ((this->window_type_ == WINDOW_TYPE_CONTINUOUS) || (this->window_type_ == WINDOW_TYPE_CONTINUOUS_LONG_TERM))
     aggregate_to_publish = aggregate_to_publish.combine_with(this->running_chunk_aggregate_);
 
-  // this->publish_and_save_(aggregate_to_publish, this->time_->timestamp_now());
   this->publish_and_save_(aggregate_to_publish);
 }
 
 void StatisticsComponent::reset() {
   this->queue_->clear();
+
   this->running_chunk_aggregate_ = Aggregate();    // reset the running aggregate to the identity/null measurement
   this->measurements_in_running_chunk_count_ = 0;  // reset the running chunk count
 
@@ -268,17 +268,10 @@ void StatisticsComponent::dump_enabled_sensors_() {
 }
 
 void StatisticsComponent::handle_new_value_(float value) {
-  // 1) Verify not NaN, return if so
-  // 2) prepare incoming values ot be aggregated
-  // 3) insert value into running chunk
-  //   b) combine running chunk with new value
-  //   c) increase measurements inserted into chunk counter
-  // 4) if measurements inserted == chunk size, then insert into queue by calling a function
+  //////////////////////////////////////////////
+  // Prepare incoming values to be aggregated //
+  //////////////////////////////////////////////
 
-  if (std::isnan(value))
-    return;
-
-  // 2) Prepare incoming values to be aggregated
   uint32_t now_timestamp = millis();               // milliseconds since boot
   time_t now_time = this->time_->timestamp_now();  // UTC Unix time
 
@@ -295,46 +288,62 @@ void StatisticsComponent::handle_new_value_(float value) {
   this->previous_timestamp_ = now_timestamp;
   this->previous_value_ = value;
 
-  // 3) Aggregate new value into running chunk
+  ////////////////////////////////////////////
+  // Aggregate new value into running chunk //
+  ////////////////////////////////////////////
+
+  if (std::isnan(insert_value))
+    return;
+
   this->running_chunk_aggregate_ = this->running_chunk_aggregate_.combine_with(
       Aggregate(insert_value, duration_since_last_measurement, now_timestamp, now_time), this->is_time_weighted_());
 
   ++this->measurements_in_running_chunk_count_;
 
-  // 4) Add running chunk to queue if full
-  //   - uses count_ + 1 to rollover and not insert if chunk_size_ is size_t max
+  ////////////////////////////////////////
+  // Add running chunk to queue if full //
+  ////////////////////////////////////////
+
   if ((this->measurements_in_running_chunk_count_ + 1) > this->chunk_size_) {
+    // Uses count_ + 1 to rollover and not insert if chunk_size_ is size_t max
     this->insert_running_chunk_();
   }
 }
 
 void StatisticsComponent::insert_running_chunk_() {
-  // - note that this can be called either by a preset interval or by handle_new_value_()
-  // 1) if queue is at window_size, reset/evict
-  // 2) insert running chunk into queue
-  // 3) increase running chunk insertion count
-  // 4) publish if exceeding send_every
-  //   - reset counters
+  // This function is called either by a preset interval of chunk_duration_ length or by handle_new_value_()
 
-  // 1) Evict elements or reset queue if too large
-  //   - uses size() + 1 to rollover and not evict if window_size_ is size_t max
+  //////////////////////////////////////////////////
+  // Evict elements or reset queue if at capacity //
+  //////////////////////////////////////////////////
+
   while ((this->queue_->size() + 1) > this->window_size_) {
+    // Uses size() + 1 to rollover and never evict if window_size_ is size_t max
     this->queue_->evict();  // evict is equivalent to clearing the queue for ContinuousQueue and ContinuousSingular
   }
 
-  // 2) Insert into queue
+  ///////////////////////
+  // Insert into queue //
+  ///////////////////////
+
   this->queue_->insert(this->running_chunk_aggregate_);
   ++this->send_at_chunks_counter_;
 
-  // 3) Reset running_chunk_aggregate to a null measurement and reset the coutner
+  ///////////////////////////////////////////////////////////////////////////////
+  // Reset running_chunk_aggregate to a null measurement and reset the coutner //
+  ///////////////////////////////////////////////////////////////////////////////
+
   this->running_chunk_aggregate_ = Aggregate();
   this->measurements_in_running_chunk_count_ = 0;
 
-  // 4) Publish if exceeding send_every
-  //   - uses size() + 1 to rollover and not send if send_every_ is size_t max
+  /////////////
+  // Publish //
+  /////////////
+
   if ((this->send_at_chunks_counter_ + 1) > this->send_every_) {
+    // Uses size() + 1 to rollover and never send if send_every_ is size_t max
     // Ensure sensors update at the configured rate
-    //  - send_at_chunks_counter_ counts the number of chunks inserted into the appropriate queue
+    //  - send_at_chunks_counter_ counts the number of chunks inserted into the queue
     //  - after send_every_ chunks, each sensor updates
 
     this->send_at_chunks_counter_ = 0;  // reset send_at_chunks_counter_
