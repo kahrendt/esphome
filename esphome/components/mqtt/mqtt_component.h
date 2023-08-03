@@ -200,7 +200,7 @@ class MQTTComponent : public Component {
   std::unique_ptr<Availability> availability_;
   bool resend_state_{false};
 
-  /// Whether to publish the MQTT or not; defaults to copy the component's internal state
+  /// Whether to publish the MQTT or not; defaults to copy the entity's internal state
   MQTTInternalOptions internal_mqtt_{MQTT_COPY};
 };
 

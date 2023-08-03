@@ -70,11 +70,11 @@ enum MQTTDiscoveryObjectIdGenerator {
   MQTT_DEVICE_NAME_OBJECT_ID_GENERATOR,
 };
 
-/// Available options for setting a component internal with respect to MQTT publishing
+/// Available options for setting an entity internal with respect to MQTT publishing
 enum MQTTInternalOptions {
   MQTT_INTERNAL,
   MQTT_EXTERNAL,
-  MQTT_COPY,  // copy the componenet's internal setting
+  MQTT_COPY,  // copy the entity's internal setting
 };
 
 /** Internal struct for MQTT Home Assistant discovery

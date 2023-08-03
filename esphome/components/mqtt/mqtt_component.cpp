@@ -164,9 +164,9 @@ MQTTComponent::MQTTComponent() = default;
 
 void MQTTComponent::set_internal_mqtt(bool option) {
   if (option)
-    this->internal_mqtt_ = MQTT_INTERNAL;  // force component to be internal wrt MQTT
+    this->internal_mqtt_ = MQTT_INTERNAL;  // force entity to be internal wrt MQTT; i.e., never publish the entity
   else
-    this->internal_mqtt_ = MQTT_EXTERNAL;  // force component to be external wrt MQTT
+    this->internal_mqtt_ = MQTT_EXTERNAL;  // force entity to be external wrt MQTT; i.e., always publish the entity
 }
 
 float MQTTComponent::get_setup_priority() const { return setup_priority::AFTER_CONNECTION; }
@@ -244,13 +244,13 @@ std::string MQTTComponent::get_icon() const { return this->get_entity()->get_ico
 bool MQTTComponent::is_disabled_by_default() const { return this->get_entity()->is_disabled_by_default(); }
 bool MQTTComponent::is_internal() {
   if (this->internal_mqtt_ != MQTT_COPY) {
-    // internal_mqtt_ has been configured, always follow it
+    // internal_mqtt_ has been configured, always use it's setting
     if (this->internal_mqtt_ == MQTT_INTERNAL)
       return true;
     else
       return false;
   } else {
-    // internal_mqtt_ hasn't been configured, so follow the global default
+    // internal_mqtt_ hasn't been configured, so follow the global MQTT default
     switch (global_mqtt_client->get_internal_mqtt_default()) {
       case MQTT_INTERNAL:
         return true;
@@ -260,15 +260,6 @@ bool MQTTComponent::is_internal() {
         return this->get_entity()->is_internal();
     }
   }
-
-  // switch (this->internal_mqtt_) {
-  //   case MQTT_INTERNAL:
-  //     return true;
-  //   case MQTT_EXTERNAL:
-  //     return false;
-  //   default:
-  //     return this->get_entity()->is_internal();
-  // }
 }
 
 }  // namespace mqtt
