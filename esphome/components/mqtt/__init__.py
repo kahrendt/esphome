@@ -19,6 +19,8 @@ from esphome.const import (
     CONF_DISCOVERY_UNIQUE_ID_GENERATOR,
     CONF_DISCOVERY_OBJECT_ID_GENERATOR,
     CONF_ID,
+    CONF_INTERNAL_MQTT,
+    CONF_INTERNAL_MQTT_DEFAULT,
     CONF_KEEPALIVE,
     CONF_LEVEL,
     CONF_LOG_TOPIC,
@@ -53,9 +55,6 @@ AUTO_LOAD = ["json"]
 
 CONF_IDF_SEND_ASYNC = "idf_send_async"
 CONF_SKIP_CERT_CN_CHECK = "skip_cert_cn_check"
-
-CONF_INTERNAL_MQTT = "internal_mqtt"
-CONF_INTERNAL_MQTT_DEFAULT = "internal_mqtt_default"
 
 
 def validate_message_just_topic(value):

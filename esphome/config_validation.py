@@ -25,6 +25,7 @@ from esphome.const import (
     CONF_ICON,
     CONF_ID,
     CONF_INTERNAL,
+    CONF_INTERNAL_MQTT,
     CONF_NAME,
     CONF_PAYLOAD_AVAILABLE,
     CONF_PAYLOAD_NOT_AVAILABLE,
@@ -77,8 +78,6 @@ from esphome.schema_extractors import (
 from esphome.util import parse_esphome_version
 from esphome.voluptuous_schema import _Schema
 from esphome.yaml_util import make_data_base
-
-CONF_INTERNAL_MQTT = "internal_mqtt"
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -87,7 +87,7 @@ class MQTTComponent : public Component {
   /// Override this method to return the component type (e.g. "light", "sensor", ...)
   virtual std::string component_type() const = 0;
 
-  /// Set MQTT entity to be internal
+  /// Set MQTT entity to be internal; i.e., do not publish sensor via MQTT
   void set_internal_mqtt(bool option);
 
   /// Set a custom state topic. Set to "" for default behavior.
@@ -200,7 +200,7 @@ class MQTTComponent : public Component {
   std::unique_ptr<Availability> availability_;
   bool resend_state_{false};
 
-  /// Override and still send this specific internal component
+  /// Whether to publish the MQTT or not; defaults to copy the component's internal state
   MQTTInternalOptions internal_mqtt_{MQTT_COPY};
 };
 
