@@ -22,10 +22,10 @@ enum {
   QWIIC_PIR_DEBOUNCE_TIME = 0x05,  // uint16_t debounce time in milliseconds
 };
 
-enum OperationMode {
-  RAW_MODE,
-  DEBOUNCED_MODE,
-  HYBRID_MODE,
+enum DebounceMode {
+  RAW_DEBOUNCE_MODE,
+  NATIVE_DEBOUNCE_MODE,
+  HYBRID_DEBOUNCE_MODE,
 };
 
 static const uint8_t QWIIC_PIR_DEVICE_ID = 0x72;
@@ -39,12 +39,12 @@ class QwiicPIRComponent : public Component, public i2c::I2CDevice, public binary
   float get_setup_priority() const override { return setup_priority::DATA; }
 
   void set_debounce_time(uint16_t debounce_time) { this->debounce_time_ = debounce_time; }
-  void set_operation_mode(OperationMode mode) { this->mode_ = mode; }
+  void set_debounce_mode(DebounceMode mode) { this->debounce_mode_ = mode; }
 
  protected:
-  uint16_t debounce_time_;
+  uint16_t debounce_time_{1};  // use a default of 1 ms if not configured in YAML
 
-  OperationMode mode_{HYBRID_MODE};
+  DebounceMode debounce_mode_{};
 
   enum ErrorCode {
     NONE = 0,

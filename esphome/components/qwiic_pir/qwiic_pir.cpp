@@ -1,6 +1,5 @@
 #include "qwiic_pir.h"
 #include "esphome/core/log.h"
-#include "esphome/core/hal.h"
 
 namespace esphome {
 namespace qwiic_pir {
@@ -31,13 +30,7 @@ void QwiicPIRComponent::setup() {
     return;
   }
 
-  // Configure debounce time
-  uint16_t debounce_time = this->debounce_time_;
-
-  if (this->mode_ == HYBRID_MODE)
-    debounce_time = 1;
-
-  if (!this->write_byte_16(QWIIC_PIR_DEBOUNCE_TIME, debounce_time)) {
+  if (!this->write_byte_16(QWIIC_PIR_DEBOUNCE_TIME, this->debounce_time_)) {
     ESP_LOGE(TAG, "Failed to configure debounce time.");
 
     this->error_code_ = ERROR_COMMUNICATION_FAILED;
@@ -46,7 +39,8 @@ void QwiicPIRComponent::setup() {
     return;
   }
 
-  // Publish initial state of sensor
+  // Publish initial state of sensor; if in NATIVE debounce mode, then state would otherwise be unknown until the
+  // first motion event
   this->publish_initial_state(false);
 }
 
@@ -58,37 +52,57 @@ void QwiicPIRComponent::loop() {
     return;
   }
 
-  switch (this->mode_) {
-    case RAW_MODE:
-      this->publish_state(this->event_register_.raw_reading);
-      break;
-    case DEBOUNCED_MODE:
-      if (this->event_register_.event_available) {
-        // If an object is detected, publish true
-        if (this->event_register_.object_detected)
-          this->publish_state(true);
+  if (this->debounce_mode_ == HYBRID_DEBOUNCE_MODE) {
+    // Use a combination of the raw sensor reading and the device's event detection to determine state
+    //  - The device is hardcoded to use a debounce time of 1 ms in this mode
+    //  - Any event, even if it is object_removed, implies motion was active since the last loop, so publish true
+    //  - Use ESPHome's built-in filters for debouncing
+    this->publish_state(this->event_register_.raw_reading || this->event_register_.event_available);
 
-        // If an object has been removed, publish false
-        if (this->event_register_.object_removed)
-          this->publish_state(false);
+    if (this->event_register_.event_available) {
+      this->clear_events_();
+    }
+  } else if (this->debounce_mode_ == NATIVE_DEBOUNCE_MODE) {
+    // Uses the device's firmware to debounce the signal
+    //  - Follows the logic of SparkFun's example implementation:
+    //    https://github.com/sparkfun/SparkFun_Qwiic_PIR_Arduino_Library/blob/master/examples/Example2_PrintPIRStatus/Example2_PrintPIRStatus.ino
+    //    (accessed July 2023)
+    //  - Is unreliable at detecting an object being removed, especially at debounce rates even slightly large
+    if (this->event_register_.event_available) {
+      // If an object is detected, publish true
+      if (this->event_register_.object_detected)
+        this->publish_state(true);
 
-        this->clear_events_();
-      }
-      break;
-    case HYBRID_MODE:
-      this->publish_state(this->event_register_.raw_reading || this->event_register_.event_available);
+      // If an object has been removed, publish false
+      if (this->event_register_.object_removed)
+        this->publish_state(false);
 
-      if (this->event_register_.event_available) {
-        this->clear_events_();
-      }
-      break;
+      this->clear_events_();
+    }
+  } else if (this->debounce_mode_ == RAW_DEBOUNCE_MODE) {
+    // Publishes the raw PIR sensor reading with no further logic
+    //  - May miss a very short motion detection if the ESP's loop time is slow
+    this->publish_state(this->event_register_.raw_reading);
   }
 }
 
 void QwiicPIRComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "Qwiic PIR:");
 
-  ESP_LOGCONFIG(TAG, "  Debounce Time: %ums", this->debounce_time_);
+  switch (this->debounce_mode_) {
+    case RAW_DEBOUNCE_MODE:
+      ESP_LOGCONFIG(TAG, "  Debounce Mode: RAW");
+      break;
+    case NATIVE_DEBOUNCE_MODE:
+      ESP_LOGCONFIG(TAG, "  Debounce Mode: NATIVE");
+      ESP_LOGCONFIG(TAG, "  Debounce Time: %ums", this->debounce_time_);
+      break;
+    case HYBRID_DEBOUNCE_MODE:
+      ESP_LOGCONFIG(TAG, "  Debounce Mode: HYBRID");
+      break;
+    default:
+      break;
+  }
 
   switch (this->error_code_) {
     case NONE:
