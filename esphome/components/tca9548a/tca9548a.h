@@ -28,7 +28,7 @@ class TCA9548AComponent : public Component, public i2c::I2CDevice {
   void update();
 
   void set_multiple_tca9548a(bool multiple) { this->multiple_tca9548a_ = multiple; }
-  bool get_multiple_tca9548a() { return this->multiple_tca9548a_; }
+  bool get_multiple_tca9548a() const { return this->multiple_tca9548a_; }
 
   i2c::ErrorCode switch_to_channel(uint8_t channel);
   void disable_all_channels();
