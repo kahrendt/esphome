@@ -11,7 +11,7 @@ i2c::ErrorCode TCA9548AChannel::readv(uint8_t address, i2c::ReadBuffer *buffers,
   if (err != i2c::ERROR_OK)
     return err;
   err = this->parent_->bus_->readv(address, buffers, cnt);
-  if (this->parent_->get_multiple_tca9548a())
+  if (this->parent_->get_multiple_tca9548a())  // if there are other tca9548a's, then disable all channels
     this->parent_->disable_all_channels();
   return err;
 }
@@ -20,7 +20,7 @@ i2c::ErrorCode TCA9548AChannel::writev(uint8_t address, i2c::WriteBuffer *buffer
   if (err != i2c::ERROR_OK)
     return err;
   err = this->parent_->bus_->writev(address, buffers, cnt, stop);
-  if (this->parent_->get_multiple_tca9548a())
+  if (this->parent_->get_multiple_tca9548a())  // if there are other tca9548a's, then disable all channels
     this->parent_->disable_all_channels();
   return err;
 }
@@ -62,9 +62,9 @@ void TCA9548AComponent::disable_all_channels() {
   auto err = this->write(&null_channel, 1);
 
   if (err == i2c::ERROR_OK) {
-    this->current_channel_ = 255;
+    this->current_channel_ = 255;  // no channels are enabled, so set current_channel_ to default
   } else {
-    this->mark_failed();
+    this->mark_failed();  // failed to disable channels, mark entire component failed to avoid address conflicts
     ESP_LOGE(TAG, "Failed to disable all channels.");
   }
 }

@@ -35,7 +35,7 @@ class TCA9548AComponent : public Component, public i2c::I2CDevice {
 
  protected:
   friend class TCA9548AChannel;
-  bool multiple_tca9548a_{true};
+  bool multiple_tca9548a_{};
   uint8_t current_channel_{255};
 };
 }  // namespace tca9548a
