@@ -39,7 +39,8 @@ async def to_code(config):
         await cg.register_component(var, component)
         await i2c.register_i2c_device(var, component)
 
-        cg.add(var.set_multiple_tca9548a(len(config) > 1))
+        # If more than one tca9548a is configured, disable all channels after all IO to avoid address conflicts
+        cg.add(var.set_disable_channels_after_io(len(config) > 1))
         for conf in component[CONF_CHANNELS]:
             chan = cg.new_Pvariable(conf[CONF_BUS_ID])
             cg.add(chan.set_parent(var))

@@ -11,8 +11,7 @@ i2c::ErrorCode TCA9548AChannel::readv(uint8_t address, i2c::ReadBuffer *buffers,
   if (err != i2c::ERROR_OK)
     return err;
   err = this->parent_->bus_->readv(address, buffers, cnt);
-  if (this->parent_->get_multiple_tca9548a())  // if there are other tca9548a's, then disable all channels
-    this->parent_->disable_all_channels();
+  this->parent_->disable_all_channels();
   return err;
 }
 i2c::ErrorCode TCA9548AChannel::writev(uint8_t address, i2c::WriteBuffer *buffers, size_t cnt, bool stop) {
@@ -20,8 +19,7 @@ i2c::ErrorCode TCA9548AChannel::writev(uint8_t address, i2c::WriteBuffer *buffer
   if (err != i2c::ERROR_OK)
     return err;
   err = this->parent_->bus_->writev(address, buffers, cnt, stop);
-  if (this->parent_->get_multiple_tca9548a())  // if there are other tca9548a's, then disable all channels
-    this->parent_->disable_all_channels();
+  this->parent_->disable_all_channels();
   return err;
 }
 
@@ -46,7 +44,7 @@ i2c::ErrorCode TCA9548AComponent::switch_to_channel(uint8_t channel) {
   if (current_channel_ == channel)
     return i2c::ERROR_OK;
 
-  uint8_t channel_val = 1 << channel;
+  uint8_t channel_val = 1 << channel;  // if channel > 7, then channel_val = 0, which disables all channels
   auto err = this->write(&channel_val, 1);
   if (err == i2c::ERROR_OK) {
     this->current_channel_ = channel;
@@ -55,17 +53,11 @@ i2c::ErrorCode TCA9548AComponent::switch_to_channel(uint8_t channel) {
 }
 
 void TCA9548AComponent::disable_all_channels() {
-  if (this->is_failed())
-    return;
-
-  const uint8_t null_channel = 0;
-  auto err = this->write(&null_channel, 1);
-
-  if (err == i2c::ERROR_OK) {
-    this->current_channel_ = 255;  // no channels are enabled, so set current_channel_ to default
-  } else {
-    this->mark_failed();  // failed to disable channels, mark entire component failed to avoid address conflicts
-    ESP_LOGE(TAG, "Failed to disable all channels.");
+  if (this->disable_channels_after_io_) {
+    if (this->switch_to_channel(255) != i2c::ERROR_OK) {
+      this->mark_failed();  // couldn't disable channels, mark entire component failed to avoid future address conflicts
+      ESP_LOGE(TAG, "Failed to disable all channels.");
+    }
   }
 }
 

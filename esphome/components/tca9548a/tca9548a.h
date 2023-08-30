@@ -27,16 +27,15 @@ class TCA9548AComponent : public Component, public i2c::I2CDevice {
   float get_setup_priority() const override { return setup_priority::IO; }
   void update();
 
-  void set_multiple_tca9548a(bool multiple) { this->multiple_tca9548a_ = multiple; }
-  bool get_multiple_tca9548a() const { return this->multiple_tca9548a_; }
+  void set_disable_channels_after_io(bool disable_state) { this->disable_channels_after_io_ = disable_state; }
 
   i2c::ErrorCode switch_to_channel(uint8_t channel);
   void disable_all_channels();
 
  protected:
   friend class TCA9548AChannel;
-  bool multiple_tca9548a_{};
   uint8_t current_channel_{255};
+  bool disable_channels_after_io_{};  // Disable channels after any IO; use when multiple tca9548a are used
 };
 }  // namespace tca9548a
 }  // namespace esphome
