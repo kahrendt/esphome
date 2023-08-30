@@ -64,7 +64,7 @@ class K3Scale : public ScaleFunction {
 
 class MergingDigest {
  public:
-  MergingDigest(size_t compression, ScaleFunctions scale_function, uint16_t buffer_size);
+  MergingDigest(size_t compression, ScaleFunctions scale_function);
 
   void add(double x, size_t w);
 
@@ -93,7 +93,6 @@ class MergingDigest {
   size_t unmerged_weight_{0};
 
   uint16_t compression_{};
-  uint16_t buffer_size_{};
 
   void merge_(uint16_t compression, std::vector<Centroid, ExternalRAMAllocator<Centroid>> *tdigest_vector);
   void merge_new_values_();

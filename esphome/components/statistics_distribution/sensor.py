@@ -22,8 +22,7 @@ StatisticsDistributionComponent = statistics_distribution_ns.class_(
     "StatisticsDistributionComponent", cg.PollingComponent
 )
 
-CONF_BUFFER_SIZE = "buffer_size"
-CONF_COMPRESSION = "compression"
+CONF_DIGEST_SIZE = "digest_size"
 CONF_SCALE_FUNCTION = "scale_function"
 
 CONF_QUANTILE_SENSORS = "quantile_sensors"
@@ -77,8 +76,7 @@ CONFIG_SCHEMA = cv.All(
         {
             cv.GenerateID(): cv.declare_id(StatisticsDistributionComponent),
             cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
-            cv.Optional(CONF_BUFFER_SIZE, default=10): cv.int_range(min=1, max=5000),
-            cv.Optional(CONF_COMPRESSION, default=10): cv.int_range(min=10, max=5000),
+            cv.Optional(CONF_DIGEST_SIZE, default=100): cv.int_range(min=20, max=255),
             cv.Optional(CONF_SCALE_FUNCTION, default="K3"): cv.enum(
                 SCALE_FUNCTION_OPTIONS, upper=True
             ),
@@ -107,25 +105,32 @@ FINAL_VALIDATE_SCHEMA = cv.All(
 
 
 async def to_code(config):
-    var = cg.new_Pvariable(config[CONF_ID])
+    template_args = cg.TemplateArguments(config[CONF_DIGEST_SIZE])
+
+    var = cg.new_Pvariable(config[CONF_ID], template_args)
     await cg.register_component(var, config)
 
     source = await cg.get_variable(config[CONF_SOURCE_ID])
 
     cg.add(var.set_source_sensor(source))
-    cg.add(var.set_buffer_size(config.get(CONF_BUFFER_SIZE)))
     cg.add(var.set_scale_function(config.get(CONF_SCALE_FUNCTION)))
 
     if weight_sensor := config.get("total_weight"):
-        sens = await sensor.new_sensor(weight_sensor)
+        weight_ = await cg.templatable(weight_sensor, template_args, cg.uint8)
+        sens = await sensor.new_sensor(weight_)
+        # sens = await sensor.new_sensor(weight_sensor)
         cg.add(var.set_total_weight_sensor(sens))
 
     if quantile_sensor_list := config.get(CONF_QUANTILE_SENSORS):
         for quantile_sensor in quantile_sensor_list:
-            sens = await sensor.new_sensor(quantile_sensor)
+            quantile_ = await cg.templatable(quantile_sensor, template_args, cg.uint8)
+            sens = await sensor.new_sensor(quantile_)
+            # sens = await sensor.new_sensor(quantile_sensor)
             cg.add(var.add_quantile_sensor(sens, quantile_sensor.get("quantile")))
 
     if cdf_sensor_list := config.get("cdf_sensors"):
         for cdf_sensor in cdf_sensor_list:
-            sens = await sensor.new_sensor(cdf_sensor)
+            cdf_ = await cg.templatable(cdf_sensor, template_args, cg.uint8)
+            sens = await sensor.new_sensor(cdf_)
+            # sens = await sensor.new_sensor(cdf_sensor)
             cg.add(var.add_cdf_sensor(sens, cdf_sensor.get("value")))

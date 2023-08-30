@@ -50,7 +50,7 @@ double K3Scale::normalizer(size_t compression, size_t weight) {
   return compression / z;
 }
 
-MergingDigest::MergingDigest(size_t compression, ScaleFunctions scale_function, uint16_t buffer_size) {
+MergingDigest::MergingDigest(size_t compression, ScaleFunctions scale_function) {
   if (scale_function == K1_SCALE)
     this->scale_function_ = new K1Scale();
   else if (scale_function == K2_SCALE)
@@ -59,7 +59,6 @@ MergingDigest::MergingDigest(size_t compression, ScaleFunctions scale_function, 
     this->scale_function_ = new K3Scale();
 
   this->compression_ = compression;
-  this->buffer_size_ = buffer_size;
 
   this->clear();
 }
@@ -67,10 +66,6 @@ MergingDigest::MergingDigest(size_t compression, ScaleFunctions scale_function, 
 void MergingDigest::add(double x, size_t w) {
   if (std::isnan(x))
     return;
-
-  if (this->temporary_buffer_.size() >= this->buffer_size_) {
-    this->merge_new_values_();
-  }
 
   this->temporary_buffer_.push_back(Centroid(x, w));
 
@@ -89,17 +84,13 @@ void MergingDigest::clear() {
   this->temporary_buffer_.clear();
 }
 
-void MergingDigest::compress_for_saving(uint8_t max_centroids, Centroid tdigest_array[100]) {
+void MergingDigest::compress_for_saving(uint8_t max_centroids, Centroid tdigest_array[]) {
   this->merge_new_values_();
 
-  std::vector<Centroid, ExternalRAMAllocator<Centroid>>
-      tdigest_vector;  // vector to store the tdigest with compression=max_centroids/2
-
-  this->merge_(max_centroids / 2, &tdigest_vector);
-
   for (uint8_t i = 0; i < max_centroids; ++i) {
-    if ((i < tdigest_vector.size()) && (tdigest_vector.size() > 0) && (tdigest_vector[i].get_weight() > 0)) {
-      tdigest_array[i] = tdigest_vector[i];
+    if ((i < this->centroids_vector_.size()) && (this->centroids_vector_.size() > 0) &&
+        (this->centroids_vector_[i].get_weight() > 0)) {
+      tdigest_array[i] = this->centroids_vector_[i];
     } else {
       tdigest_array[i] = Centroid(NAN, 0);  // Pad unused elements with a null Centroid
     }
@@ -177,8 +168,7 @@ void MergingDigest::merge_(uint16_t compression,
 }
 
 double MergingDigest::cdf(double x) {
-  if (this->unmerged_weight_ > 0)
-    this->merge_new_values_();
+  this->merge_new_values_();
 
   if (this->centroids_vector_.size() == 0) {
     return NAN;
@@ -261,8 +251,7 @@ double MergingDigest::cdf(double x) {
 }
 
 double MergingDigest::quantile(double q) {
-  if (this->unmerged_weight_ > 0)
-    this->merge_new_values_();
+  this->merge_new_values_();
 
   if (this->centroids_vector_.size() == 0) {
     return NAN;
