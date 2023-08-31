@@ -177,42 +177,40 @@ double MergingDigest::cdf(double x) {
     return 0.0;
   } else if (x > this->max_) {
     return 1.0;
-  } else if (this->centroids_vector_.size() == 1) {
-    return 0.5;
   }
 
-  if (x < this->centroids_vector_.front().get_mean()) {
-    if (this->centroids_vector_.front().get_mean() - this->min_) {
-      if (x == this->min_) {
-        return 0.5 / this->total_weight_;
-      } else {
-        return (1.0 + (x - this->min_) / (this->centroids_vector_.front().get_mean() - this->min_) *
-                          (this->centroids_vector_.front().get_weight() / 2.0 - 1.0)) /
-               this->total_weight_;
-      }
-    } else {
-      return 0.0;
-    }
-  }
+  // if (x < this->centroids_vector_.front().get_mean()) {
+  //   if (this->centroids_vector_.front().get_mean() - this->min_) {
+  //     if (x == this->min_) {
+  //       return 0.5 / this->total_weight_;
+  //     } else {
+  //       return (1.0 + (x - this->min_) / (this->centroids_vector_.front().get_mean() - this->min_) *
+  //                         (this->centroids_vector_.front().get_weight() / 2.0 - 1.0)) /
+  //              this->total_weight_;
+  //     }
+  //   } else {
+  //     return 0.0;
+  //   }
+  // }
 
-  if (x > this->centroids_vector_.back().get_mean()) {
-    if (this->max_ - this->centroids_vector_.back().get_mean() > 0) {
-      if (x == this->max_) {
-        return 1.0 - 0.5 / this->total_weight_;
-      } else {
-        double dq = (1.0 + (this->max_ - x) / (this->max_ - this->centroids_vector_.back().get_mean()) *
-                               (this->centroids_vector_.back().get_weight() / 2.0 - 1.0)) /
-                    this->total_weight_;
-        return 1.0 - dq;
-      }
-    } else {
-      return 1;
-    }
-  }
+  // if (x > this->centroids_vector_.back().get_mean()) {
+  //   if (this->max_ - this->centroids_vector_.back().get_mean() > 0) {
+  //     if (x == this->max_) {
+  //       return 1.0 - 0.5 / this->total_weight_;
+  //     } else {
+  //       double dq = (1.0 + (this->max_ - x) / (this->max_ - this->centroids_vector_.back().get_mean()) *
+  //                              (this->centroids_vector_.back().get_weight() / 2.0 - 1.0)) /
+  //                   this->total_weight_;
+  //       return 1.0 - dq;
+  //     }
+  //   } else {
+  //     return 1;
+  //   }
+  // }
 
   double weight_so_far = 0.0;
 
-  for (auto it = this->temporary_buffer_.begin(); it != this->temporary_buffer_.end(); ++it) {
+  for (auto it = this->centroids_vector_.begin(); it != this->centroids_vector_.end(); ++it) {
     // NOTE not checking for "floating point madness"...
 
     if ((it->get_mean() <= x) && (x < (it + 1)->get_mean())) {
