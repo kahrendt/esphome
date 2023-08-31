@@ -64,7 +64,7 @@ class K3Scale : public ScaleFunction {
 
 class MergingDigest {
  public:
-  MergingDigest(size_t compression, ScaleFunctions scale_function);
+  MergingDigest(uint8_t compression, ScaleFunctions scale_function);
 
   void add(double x, size_t w);
 
@@ -74,12 +74,8 @@ class MergingDigest {
 
   void clear();
 
-  uint16_t get_centroids_count() { return this->centroids_vector_.size(); }
-  // uint16_t get_unmerged_count() { return this->temporary_buffer_.size(); }
+  uint8_t get_centroids_count() { return this->centroids_vector_.size(); }
   size_t get_total_weight() { return this->total_weight_; }
-
-  float get_max() { return this->max_; }
-  float get_min() { return this->min_; }
 
   void compress_for_saving(uint8_t max_centroids, Centroid *tdigest_array);
 
@@ -92,9 +88,9 @@ class MergingDigest {
   size_t total_weight_{0};
   size_t unmerged_weight_{0};
 
-  uint16_t compression_{};
+  uint8_t compression_{};
 
-  void merge_(uint16_t compression, std::vector<Centroid, ExternalRAMAllocator<Centroid>> *tdigest_vector);
+  void merge_(uint8_t compression, std::vector<Centroid, ExternalRAMAllocator<Centroid>> *tdigest_vector);
   void merge_new_values_();
 
   std::vector<Centroid, ExternalRAMAllocator<Centroid>> centroids_vector_{};

@@ -76,7 +76,7 @@ CONFIG_SCHEMA = cv.All(
         {
             cv.GenerateID(): cv.declare_id(StatisticsDistributionComponent),
             cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
-            cv.Optional(CONF_DIGEST_SIZE, default=100): cv.int_range(min=20, max=255),
+            cv.Optional(CONF_DIGEST_SIZE, default=100): cv.int_range(min=20, max=511),
             cv.Optional(CONF_SCALE_FUNCTION, default="K3"): cv.enum(
                 SCALE_FUNCTION_OPTIONS, upper=True
             ),

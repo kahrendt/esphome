@@ -50,7 +50,7 @@ double K3Scale::normalizer(size_t compression, size_t weight) {
   return compression / z;
 }
 
-MergingDigest::MergingDigest(size_t compression, ScaleFunctions scale_function) {
+MergingDigest::MergingDigest(uint8_t compression, ScaleFunctions scale_function) {
   if (scale_function == K1_SCALE)
     this->scale_function_ = new K1Scale();
   else if (scale_function == K2_SCALE)
@@ -103,8 +103,7 @@ void MergingDigest::merge_new_values_() {
   }
 }
 
-void MergingDigest::merge_(uint16_t compression,
-                           std::vector<Centroid, ExternalRAMAllocator<Centroid>> *tdigest_vector) {
+void MergingDigest::merge_(uint8_t compression, std::vector<Centroid, ExternalRAMAllocator<Centroid>> *tdigest_vector) {
   if ((this->total_weight_ == 0) && (this->unmerged_weight_ == 0))
     return;
 
