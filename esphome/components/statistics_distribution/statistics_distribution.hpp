@@ -27,7 +27,7 @@ struct CDFSensor {
   float value;
 };
 
-template<uint8_t SZ> class StatisticsDistributionComponent : public PollingComponent {
+template<uint8_t SZ> class StatisticsDistributionComponent : public PollingComponent, public sensor::Sensor {
  public:
   float get_setup_priority() const override { return setup_priority::PROCESSOR; }
 
@@ -40,18 +40,20 @@ template<uint8_t SZ> class StatisticsDistributionComponent : public PollingCompo
   void setup() override {
     this->tdigest_ = new MergingDigest(SZ / 2, this->scale_function_);
 
-    this->pref_centroids_ = global_preferences->make_preference<Centroid[SZ]>(317);
+    if (this->restore_) {
+      this->pref_centroids_ = global_preferences->make_preference<Centroid[SZ]>(this->get_object_id_hash());
 
-    Centroid saved_tdigest[SZ];
+      Centroid saved_tdigest[SZ];
 
-    if (this->pref_centroids_.load(&saved_tdigest)) {
-      uint8_t i = 0;
-      while ((i < SZ) && (saved_tdigest[i].get_weight() > 0)) {
-        this->tdigest_->add(saved_tdigest[i].get_mean(), saved_tdigest[i].get_weight());
-        ++i;
+      if (this->pref_centroids_.load(&saved_tdigest)) {
+        uint8_t i = 0;
+        while ((i < SZ) && (saved_tdigest[i].get_weight() > 0)) {
+          this->tdigest_->add(saved_tdigest[i].get_mean(), saved_tdigest[i].get_weight());
+          ++i;
+        }
+
+        this->update();
       }
-
-      this->update();
     }
 
     // On every source sensor update, call handle_new_value_()
@@ -59,6 +61,7 @@ template<uint8_t SZ> class StatisticsDistributionComponent : public PollingCompo
   }
 
   void update() override {
+    this->tdigest_->merge_new_values();
     for (auto quantile_sensor : this->quantile_sensors_) {
       float quant = this->tdigest_->quantile(quantile_sensor.quantile);
       quantile_sensor.sensor->publish_state(quant);
@@ -129,8 +132,31 @@ template<uint8_t SZ> class StatisticsDistributionComponent : public PollingCompo
   //////////////////////
 
   /// @brief Insert new sensor measurements and update sensors.
-  void handle_new_value_(float value) { this->tdigest_->add(value, 1); }
+  void handle_new_value_(float value) {
+    this->tdigest_->add(value, 1);
+    this->publish_state(this->tdigest_->cdf(value));
+  }
 };
+
+// template<typename... Ts> class StatisticsDistributionCondition : public Condition<Ts...> {
+//  public:
+//   void set_low_threshold(float low_threshold) { this->low_threshold_ = low_threshold; }
+//   void set_high_threshold(float high_threshold) { this->high_threshold_ = high_threshold; }
+
+//   bool check(Ts... x) override {
+//     double elevation = this->elevation_.value(x...);
+//     double current = this->parent_->elevation();
+//     if (this->above_) {
+//       return current > elevation;
+//     } else {
+//       return current < elevation;
+//     }
+//   }
+
+//  protected:
+//   float low_threshold_;
+//   float high_threshold_;
+// };
 
 }  // namespace statistics_distribution
 }  // namespace esphome

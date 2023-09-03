@@ -78,6 +78,7 @@ class MergingDigest {
   size_t get_total_weight() { return this->total_weight_; }
 
   void compress_for_saving(uint8_t max_centroids, Centroid *tdigest_array);
+  void merge_new_values();
 
  protected:
   ScaleFunction *scale_function_{nullptr};
@@ -91,7 +92,6 @@ class MergingDigest {
   uint8_t compression_{};
 
   void merge_(uint8_t compression, std::vector<Centroid, ExternalRAMAllocator<Centroid>> *tdigest_vector);
-  void merge_new_values_();
 
   std::vector<Centroid, ExternalRAMAllocator<Centroid>> centroids_vector_{};
   std::vector<Centroid, ExternalRAMAllocator<Centroid>> temporary_buffer_{};

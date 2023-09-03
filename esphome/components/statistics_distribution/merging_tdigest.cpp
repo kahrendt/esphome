@@ -85,7 +85,7 @@ void MergingDigest::clear() {
 }
 
 void MergingDigest::compress_for_saving(uint8_t max_centroids, Centroid tdigest_array[]) {
-  this->merge_new_values_();
+  this->merge_new_values();
 
   for (uint8_t i = 0; i < max_centroids; ++i) {
     if ((i < this->centroids_vector_.size()) && (this->centroids_vector_.size() > 0) &&
@@ -97,7 +97,7 @@ void MergingDigest::compress_for_saving(uint8_t max_centroids, Centroid tdigest_
   }
 }
 
-void MergingDigest::merge_new_values_() {
+void MergingDigest::merge_new_values() {
   if (this->unmerged_weight_ > 0) {
     this->merge_(this->compression_, &this->centroids_vector_);
   }
@@ -167,7 +167,7 @@ void MergingDigest::merge_(uint8_t compression, std::vector<Centroid, ExternalRA
 }
 
 double MergingDigest::cdf(double x) {
-  this->merge_new_values_();
+  // this->merge_new_values_();
 
   if (this->centroids_vector_.size() == 0) {
     return NAN;
@@ -248,7 +248,7 @@ double MergingDigest::cdf(double x) {
 }
 
 double MergingDigest::quantile(double q) {
-  this->merge_new_values_();
+  // this->merge_new_values_();
 
   if (this->centroids_vector_.size() == 0) {
     return NAN;

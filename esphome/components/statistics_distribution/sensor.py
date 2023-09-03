@@ -6,11 +6,11 @@ from esphome.const import (
     CONF_DEVICE_CLASS,
     CONF_ENTITY_CATEGORY,
     CONF_ICON,
-    CONF_ID,
+    CONF_RESTORE,
     CONF_SOURCE_ID,
     CONF_UNIT_OF_MEASUREMENT,
     CONF_STATE_CLASS,
-    # STATE_CLASS_MEASUREMENT,
+    STATE_CLASS_MEASUREMENT,
 )
 from esphome.core.entity_helpers import inherit_property_from
 
@@ -61,7 +61,9 @@ inherit_schema_for_quantile_sensors = [
 # Configuration Schemas #
 #########################
 
-QUANTILE_SENSOR_SCHEMA = sensor.sensor_schema().extend(
+QUANTILE_SENSOR_SCHEMA = sensor.sensor_schema(
+    state_class=STATE_CLASS_MEASUREMENT
+).extend(
     {
         cv.Required("quantile"): cv.float_range(min=0, max=1),
     }
@@ -71,11 +73,15 @@ CDF_SENSOR_SCHEMA = sensor.sensor_schema().extend(
         cv.Required("value"): cv.float_,
     }
 )
-CONFIG_SCHEMA = cv.All(
-    cv.Schema(
+CONFIG_SCHEMA = (
+    sensor.sensor_schema(
+        StatisticsDistributionComponent,
+        state_class=STATE_CLASS_MEASUREMENT,
+    )
+    .extend(
         {
-            cv.GenerateID(): cv.declare_id(StatisticsDistributionComponent),
             cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
+            cv.Optional(CONF_RESTORE, default=False): cv.boolean,
             cv.Optional(CONF_DIGEST_SIZE, default=100): cv.int_range(min=20, max=511),
             cv.Optional(CONF_SCALE_FUNCTION, default="K3"): cv.enum(
                 SCALE_FUNCTION_OPTIONS, upper=True
@@ -90,8 +96,31 @@ CONFIG_SCHEMA = cv.All(
                 cv.Length(min=1),
             ),
         },
-    ).extend(cv.polling_component_schema("60s"))
+    )
+    .extend(cv.polling_component_schema("60s"))
 )
+
+# cv.All(
+#     cv.Schema(
+#         {
+#             cv.GenerateID(): cv.declare_id(StatisticsDistributionComponent),
+#             cv.Required(CONF_SOURCE_ID): cv.use_id(sensor.Sensor),
+#             cv.Optional(CONF_DIGEST_SIZE, default=100): cv.int_range(min=20, max=511),
+#             cv.Optional(CONF_SCALE_FUNCTION, default="K3"): cv.enum(
+#                 SCALE_FUNCTION_OPTIONS, upper=True
+#             ),
+#             cv.Optional("total_weight"): sensor.sensor_schema(),
+#             cv.Optional(CONF_QUANTILE_SENSORS): cv.All(
+#                 cv.ensure_list(QUANTILE_SENSOR_SCHEMA),
+#                 cv.Length(min=1),
+#             ),
+#             cv.Optional("cdf_sensors"): cv.All(
+#                 cv.ensure_list(CDF_SENSOR_SCHEMA),
+#                 cv.Length(min=1),
+#             ),
+#         },
+#     ).extend(cv.polling_component_schema("60s"))
+# )
 
 
 # Handles inheriting properties from the source sensor
@@ -107,13 +136,15 @@ FINAL_VALIDATE_SCHEMA = cv.All(
 async def to_code(config):
     template_args = cg.TemplateArguments(config[CONF_DIGEST_SIZE])
 
-    var = cg.new_Pvariable(config[CONF_ID], template_args)
+    # var = cg.new_Pvariable(config[CONF_ID], template_args)
+    var = await sensor.new_sensor(config, template_args)
     await cg.register_component(var, config)
 
     source = await cg.get_variable(config[CONF_SOURCE_ID])
 
     cg.add(var.set_source_sensor(source))
     cg.add(var.set_scale_function(config.get(CONF_SCALE_FUNCTION)))
+    cg.add(var.set_restore(config.get(CONF_RESTORE)))
 
     if weight_sensor := config.get("total_weight"):
         weight_ = await cg.templatable(weight_sensor, template_args, cg.uint8)
