@@ -9,8 +9,8 @@ static const char *const TAG = "absolute_humidity.sensor";
 void AbsoluteHumidityComponent::setup() {
   ESP_LOGCONFIG(TAG, "Setting up absolute humidity '%s'...", this->get_name().c_str());
 
-  // Defer updating the sensors until the next loop to ensure both the temperature and humidity sensors have both
-  // published new values
+  // Defer updating the component until the next loop to avoid duplication in case the temperature and humidity sensors
+  // have both updated in the same loop
   this->temperature_sensor_->add_on_state_callback(
       [this](float state) -> void { this->defer("update", [this]() { this->update_sensors_(); }); });
   ESP_LOGD(TAG, "  Added callback for temperature '%s'", this->temperature_sensor_->get_name().c_str());
@@ -19,15 +19,13 @@ void AbsoluteHumidityComponent::setup() {
       [this](float state) -> void { this->defer("update", [this]() { this->update_sensors_(); }); });
   ESP_LOGD(TAG, "  Added callback for relative humidity '%s'", this->humidity_sensor_->get_name().c_str());
 
-  // Source sensors have measurements, so update sensors
+  // Source sensors already have measurements, so update component
   if (this->temperature_sensor_->has_state() && this->humidity_sensor_->has_state()) {
     this->update_sensors_();
   }
 }
 
 void AbsoluteHumidityComponent::dump_config() {
-  LOG_SENSOR("", "Absolute Humidity", this);
-
   switch (this->equation_) {
     case BUCK:
       ESP_LOGCONFIG(TAG, "Saturation Vapor Pressure Equation: Buck");
@@ -43,9 +41,18 @@ void AbsoluteHumidityComponent::dump_config() {
       break;
   }
 
-  ESP_LOGCONFIG(TAG, "Sources");
+  ESP_LOGCONFIG(TAG, "Sources:");
   ESP_LOGCONFIG(TAG, "  Temperature: '%s'", this->temperature_sensor_->get_name().c_str());
   ESP_LOGCONFIG(TAG, "  Relative Humidity: '%s'", this->humidity_sensor_->get_name().c_str());
+
+  if (this->absolute_humidity_sensor_)
+    LOG_SENSOR("", "Absolute Humidity Sensor:", this->absolute_humidity_sensor_);
+
+  if (this->dewpoint_sensor_)
+    LOG_SENSOR("", "Dewpoint Sensor:", this->dewpoint_sensor_);
+
+  if (this->frostpoint_sensor_)
+    LOG_SENSOR("", "Frostpoint Sensor:", this->frostpoint_sensor_);
 }
 
 float AbsoluteHumidityComponent::get_setup_priority() const { return setup_priority::DATA; }
@@ -94,20 +101,20 @@ void AbsoluteHumidityComponent::update_sensors_() {
   }
   ESP_LOGD(TAG, "Saturation vapor pressure %f kPa", es);
 
-  // Calculate absolute humidity and dewpoint
-  const float absolute_humidity = this->vapor_density(es, hr, temperature_k);
-  const float dewpoint_temperature = this->dewpoint(es, hr);
+  // Calculate dewpoint
+  const float dewpoint_temperature = dewpoint(es, hr);
 
-  // Publish absolute humidity
-  ESP_LOGD(TAG, "Publishing absolute humidity %f g/m³", absolute_humidity);
   this->status_clear_warning();
-  this->publish_state(absolute_humidity);
 
+  // Publish enabled sensors
+  if (this->absolute_humidity_sensor_) {
+    this->publish_state(vapor_density(es, hr, temperature_k));
+  }
   if (this->dewpoint_sensor_) {
     this->dewpoint_sensor_->publish_state(dewpoint_temperature);
   }
   if (this->frostpoint_sensor_) {
-    this->frostpoint_sensor_->publish_state(this->frostpoint(dewpoint_temperature, temperature_c));
+    this->frostpoint_sensor_->publish_state(frostpoint(dewpoint_temperature, temperature_c));
   }
 }
 
@@ -144,7 +151,7 @@ float AbsoluteHumidityComponent::es_tetens(float temperature_c) {
 
 // Wobus equation
 // https://wahiduddin.net/calc/density_altitude.htm
-// https://wahiduddin.net/calc/density_algorithms.htm
+// https://wahiduddin.net/calc/density_algorithms.htm (FUNCTION ESW)
 // Calculate the saturation vapor pressure (kPa)
 float AbsoluteHumidityComponent::es_wobus(float t) {
   // THIS FUNCTION RETURNS THE SATURATION VAPOR PRESSURE ESW (MILLIBARS)

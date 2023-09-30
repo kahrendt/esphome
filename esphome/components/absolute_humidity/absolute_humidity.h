@@ -22,6 +22,9 @@ class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
   void set_humidity_sensor(sensor::Sensor *humidity_sensor) { this->humidity_sensor_ = humidity_sensor; }
   void set_equation(SaturationVaporPressureEquation equation) { this->equation_ = equation; }
 
+  void set_absolute_humidity_sensor(sensor::Sensor *absolute_humidity_sensor) {
+    this->absolute_humidity_sensor_ = absolute_humidity_sensor;
+  }
   void set_dewpoint_sensor(sensor::Sensor *dewpoint_sensor) { this->dewpoint_sensor_ = dewpoint_sensor; }
   void set_frostpoint_sensor(sensor::Sensor *frostpoint_sensor) { this->frostpoint_sensor_ = frostpoint_sensor; }
 
@@ -61,7 +64,7 @@ class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
    *
    * @param es Saturation vapor pressure in kPA.
    * @param hr Relative humidity 0 to 1.
-   * @return dewpoint tempreature in °C.
+   * @return dewpoint temperature in °C.
    */
   static float dewpoint(float es, float hr);
 
@@ -69,7 +72,7 @@ class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
    *
    * @param dewpoint Dewpoint in °C.
    * @param hr Relative humidity 0 to 1.
-   * @return dewpoint tempreature in °C.
+   * @return frostpoint temperature in °C.
    */
   static float frostpoint(float dewpoint, float temperature);
 
@@ -78,6 +81,7 @@ class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
 
   SaturationVaporPressureEquation equation_;
 
+  sensor::Sensor *absolute_humidity_sensor_{nullptr};
   sensor::Sensor *dewpoint_sensor_{nullptr};
   sensor::Sensor *frostpoint_sensor_{nullptr};
 };
