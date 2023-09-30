@@ -101,6 +101,10 @@ void AbsoluteHumidityComponent::loop() {
   ESP_LOGD(TAG, "Publishing absolute humidity %f g/m³", absolute_humidity);
   this->status_clear_warning();
   this->publish_state(absolute_humidity);
+
+  if (this->dewpoint_sensor_) {
+    this->dewpoint_sensor_->publish_state(dewpoint(es, hr));
+  }
 }
 
 // Buck equation (https://en.wikipedia.org/wiki/Arden_Buck_equation)
@@ -176,6 +180,26 @@ float AbsoluteHumidityComponent::vapor_density(float es, float hr, float ta) {
   const float mw = 18.01528;         // molar mass of water (g⋅mol⁻¹)
   const float r = 8.31446261815324;  // molar gas constant (J⋅K⁻¹)
   return (ea * mw) / (r * ta);
+}
+
+// https://wahiduddin.net/calc/density_algorithms.htm (FUNCTION DEWPT)
+// Calculate the dewpoint (degrees Celsius)
+float AbsoluteHumidityComponent::dewpoint(float es, float hr) {
+  // THIS FUNCTION YIELDS THE DEW POINT DEWPT (CELSIUS), GIVEN THE
+  // WATER VAPOR PRESSURE EW (MILLIBARS).
+  // THE EMPIRICAL FORMULA APPEARS IN BOLTON, DAVID, 1980:
+  // "THE COMPUTATION OF EQUIVALENT POTENTIAL TEMPERATURE,"
+  // MONTHLY WEATHER REVIEW, VOL. 108, NO. 7 (JULY), P. 1047, EQ.(11).
+  // THE QUOTED ACCURACY IS 0.03C OR LESS FOR -35 < DEWPT < 35C.
+  //
+  //     Baker, Schlatter  17-MAY-1982     Original version.
+
+  // es = satured vapor pressure (kPa)
+  // hr = relative humidity between 0 and 1
+
+  const float ew_millibar = 10 * es * hr;  // 10 millibars per kPa
+  const float enl = log(ew_millibar);
+  return (243.5 * enl - 440.8) / (19.48 - enl);
 }
 
 }  // namespace absolute_humidity

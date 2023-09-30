@@ -22,6 +22,8 @@ class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
   void set_humidity_sensor(sensor::Sensor *humidity_sensor) { this->humidity_sensor_ = humidity_sensor; }
   void set_equation(SaturationVaporPressureEquation equation) { this->equation_ = equation; }
 
+  void set_dewpoint_sensor(sensor::Sensor *dewpoint_sensor) { this->dewpoint_sensor_ = dewpoint_sensor; }
+
   void setup() override;
   void dump_config() override;
   float get_setup_priority() const override;
@@ -58,9 +60,16 @@ class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
    * @param es Saturation vapor pressure in kPa.
    * @param hr Relative humidity 0 to 1.
    * @param ta Absolute temperature in K.
-   * @param heater_duration The duration in ms that the heater should turn on for when measuring.
    */
   static float vapor_density(float es, float hr, float ta);
+
+  /** Calculate dewpoint in degrees celsius.
+   *
+   * @param es Saturation vapor pressure in kPA.
+   * @param hr Relative humidity 0 to 1.
+   * @return dewpoint tempreature in degrees celsius.
+   */
+  static float dewpoint(float es, float hr);
 
   sensor::Sensor *temperature_sensor_{nullptr};
   sensor::Sensor *humidity_sensor_{nullptr};
@@ -70,6 +79,8 @@ class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
   float temperature_{NAN};
   float humidity_{NAN};
   SaturationVaporPressureEquation equation_;
+
+  sensor::Sensor *dewpoint_sensor_{nullptr};
 };
 
 }  // namespace absolute_humidity

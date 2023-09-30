@@ -4,11 +4,15 @@ from esphome.components import sensor
 from esphome.const import (
     CONF_HUMIDITY,
     CONF_TEMPERATURE,
+    DEVICE_CLASS_TEMPERATURE,
     STATE_CLASS_MEASUREMENT,
     CONF_EQUATION,
     ICON_WATER,
+    UNIT_CELSIUS,
     UNIT_GRAMS_PER_CUBIC_METER,
 )
+
+CONF_DEWPOINT = "dewpoint"
 
 absolute_humidity_ns = cg.esphome_ns.namespace("absolute_humidity")
 AbsoluteHumidityComponent = absolute_humidity_ns.class_(
@@ -37,6 +41,12 @@ CONFIG_SCHEMA = (
             cv.Required(CONF_TEMPERATURE): cv.use_id(sensor.Sensor),
             cv.Required(CONF_HUMIDITY): cv.use_id(sensor.Sensor),
             cv.Optional(CONF_EQUATION, default="WOBUS"): cv.enum(EQUATION, upper=True),
+            cv.Optional(CONF_DEWPOINT): sensor.sensor_schema(
+                unit_of_measurement=UNIT_CELSIUS,
+                device_class=DEVICE_CLASS_TEMPERATURE,
+                accuracy_decimals=1,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -54,3 +64,7 @@ async def to_code(config):
     cg.add(var.set_humidity_sensor(humidity_sensor))
 
     cg.add(var.set_equation(config[CONF_EQUATION]))
+
+    if dewpoint_config := config.get(CONF_DEWPOINT):
+        sens = await sensor.new_sensor(dewpoint_config)
+        cg.add(var.set_dewpoint_sensor(sens))
