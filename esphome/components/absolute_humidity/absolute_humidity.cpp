@@ -9,16 +9,19 @@ static const char *const TAG = "absolute_humidity.sensor";
 void AbsoluteHumidityComponent::setup() {
   ESP_LOGCONFIG(TAG, "Setting up absolute humidity '%s'...", this->get_name().c_str());
 
+  // Defer updating the sensors until the next loop to ensure both the temperature and humidity sensors have both
+  // published new values
+  this->temperature_sensor_->add_on_state_callback(
+      [this](float state) -> void { this->defer("update", [this]() { this->update_sensors_(); }); });
   ESP_LOGD(TAG, "  Added callback for temperature '%s'", this->temperature_sensor_->get_name().c_str());
-  this->temperature_sensor_->add_on_state_callback([this](float state) { this->temperature_callback_(state); });
-  if (this->temperature_sensor_->has_state()) {
-    this->temperature_callback_(this->temperature_sensor_->get_state());
-  }
 
+  this->humidity_sensor_->add_on_state_callback(
+      [this](float state) -> void { this->defer("update", [this]() { this->update_sensors_(); }); });
   ESP_LOGD(TAG, "  Added callback for relative humidity '%s'", this->humidity_sensor_->get_name().c_str());
-  this->humidity_sensor_->add_on_state_callback([this](float state) { this->humidity_callback_(state); });
-  if (this->humidity_sensor_->has_state()) {
-    this->humidity_callback_(this->humidity_sensor_->get_state());
+
+  // Source sensors have measurements, so update sensors
+  if (this->temperature_sensor_->has_state() && this->humidity_sensor_->has_state()) {
+    this->update_sensors_();
   }
 }
 
@@ -47,32 +50,29 @@ void AbsoluteHumidityComponent::dump_config() {
 
 float AbsoluteHumidityComponent::get_setup_priority() const { return setup_priority::DATA; }
 
-void AbsoluteHumidityComponent::loop() {
-  if (!this->next_update_) {
-    return;
-  }
-  this->next_update_ = false;
+void AbsoluteHumidityComponent::publish_invalid_() {
+  this->publish_state(NAN);
+  this->status_set_warning();
+  ESP_LOGW(TAG, "Unable to calculate absolute humidity.");
+}
 
-  // Ensure we have source data
-  const bool no_temperature = std::isnan(this->temperature_);
-  const bool no_humidity = std::isnan(this->humidity_);
-  if (no_temperature || no_humidity) {
-    if (no_temperature) {
-      ESP_LOGW(TAG, "No valid state from temperature sensor!");
-    }
-    if (no_humidity) {
-      ESP_LOGW(TAG, "No valid state from temperature sensor!");
-    }
-    ESP_LOGW(TAG, "Unable to calculate absolute humidity.");
-    this->publish_state(NAN);
-    this->status_set_warning();
-    return;
-  }
-
-  // Convert to desired units
-  const float temperature_c = this->temperature_;
+void AbsoluteHumidityComponent::update_sensors_() {
+  // Get source sensor values and convert to desired units
+  const float temperature_c = this->temperature_sensor_->get_state();
   const float temperature_k = temperature_c + 273.15;
-  const float hr = this->humidity_ / 100;
+  const float hr = this->humidity_sensor_->get_state() / 100;
+
+  if (std::isnan(temperature_c)) {
+    ESP_LOGW(TAG, "No valid state from temperature sensor!");
+    this->publish_invalid_();
+    return;
+  }
+
+  if (std::isnan(temperature_k)) {
+    ESP_LOGW(TAG, "No valid state from humidity sensor!");
+    this->publish_invalid_();
+    return;
+  }
 
   // Calculate saturation vapor pressure
   float es;
