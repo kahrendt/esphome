@@ -23,6 +23,7 @@ class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
   void set_equation(SaturationVaporPressureEquation equation) { this->equation_ = equation; }
 
   void set_dewpoint_sensor(sensor::Sensor *dewpoint_sensor) { this->dewpoint_sensor_ = dewpoint_sensor; }
+  void set_frostpoint_sensor(sensor::Sensor *frostpoint_sensor) { this->frostpoint_sensor_ = frostpoint_sensor; }
 
   void setup() override;
   void dump_config() override;
@@ -63,13 +64,21 @@ class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
    */
   static float vapor_density(float es, float hr, float ta);
 
-  /** Calculate dewpoint in degrees celsius.
+  /** Calculate dewpoint in °C.
    *
    * @param es Saturation vapor pressure in kPA.
    * @param hr Relative humidity 0 to 1.
-   * @return dewpoint tempreature in degrees celsius.
+   * @return dewpoint tempreature in °C.
    */
   static float dewpoint(float es, float hr);
+
+  /** Calculate frostpoint in °C.
+   *
+   * @param dewpoint Dewpoint in °C.
+   * @param hr Relative humidity 0 to 1.
+   * @return dewpoint tempreature in °C.
+   */
+  static float frostpoint(float dewpoint, float temperature);
 
   sensor::Sensor *temperature_sensor_{nullptr};
   sensor::Sensor *humidity_sensor_{nullptr};
@@ -81,6 +90,7 @@ class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
   SaturationVaporPressureEquation equation_;
 
   sensor::Sensor *dewpoint_sensor_{nullptr};
+  sensor::Sensor *frostpoint_sensor_{nullptr};
 };
 
 }  // namespace absolute_humidity

@@ -94,8 +94,9 @@ void AbsoluteHumidityComponent::loop() {
   }
   ESP_LOGD(TAG, "Saturation vapor pressure %f kPa", es);
 
-  // Calculate absolute humidity
-  const float absolute_humidity = vapor_density(es, hr, temperature_k);
+  // Calculate absolute humidity and dewpoint
+  const float absolute_humidity = this->vapor_density(es, hr, temperature_k);
+  const float dewpoint_temperature = this->dewpoint(es, hr);
 
   // Publish absolute humidity
   ESP_LOGD(TAG, "Publishing absolute humidity %f g/m³", absolute_humidity);
@@ -103,7 +104,10 @@ void AbsoluteHumidityComponent::loop() {
   this->publish_state(absolute_humidity);
 
   if (this->dewpoint_sensor_) {
-    this->dewpoint_sensor_->publish_state(dewpoint(es, hr));
+    this->dewpoint_sensor_->publish_state(dewpoint_temperature);
+  }
+  if (this->frostpoint_sensor_) {
+    this->frostpoint_sensor_->publish_state(this->frostpoint(dewpoint_temperature, temperature_c));
   }
 }
 
@@ -200,6 +204,17 @@ float AbsoluteHumidityComponent::dewpoint(float es, float hr) {
   const float ew_millibar = 10 * es * hr;  // 10 millibars per kPa
   const float enl = log(ew_millibar);
   return (243.5 * enl - 440.8) / (19.48 - enl);
+}
+
+// From https://pon.fr/dzvents-alerte-givre-et-calcul-humidite-absolue/
+float AbsoluteHumidityComponent::frostpoint(float dewpoint, float temperature) {
+  const float absolute_temperature = temperature + 273.15;
+  const float absolute_dewpoint = dewpoint + 273.15;
+
+  return (absolute_dewpoint +
+          (2671.02 / ((2954.61 / absolute_temperature) + 2.193665 * log(absolute_temperature) - 13.448)) -
+          absolute_temperature) -
+         273.15;
 }
 
 }  // namespace absolute_humidity

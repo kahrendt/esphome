@@ -13,6 +13,7 @@ from esphome.const import (
 )
 
 CONF_DEWPOINT = "dewpoint"
+CONF_FROSTPOINT = "frostpoint"
 
 absolute_humidity_ns = cg.esphome_ns.namespace("absolute_humidity")
 AbsoluteHumidityComponent = absolute_humidity_ns.class_(
@@ -47,6 +48,18 @@ CONFIG_SCHEMA = (
                 accuracy_decimals=1,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
+            cv.Optional(CONF_DEWPOINT): sensor.sensor_schema(
+                unit_of_measurement=UNIT_CELSIUS,
+                device_class=DEVICE_CLASS_TEMPERATURE,
+                accuracy_decimals=1,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_FROSTPOINT): sensor.sensor_schema(
+                unit_of_measurement=UNIT_CELSIUS,
+                device_class=DEVICE_CLASS_TEMPERATURE,
+                accuracy_decimals=1,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -68,3 +81,7 @@ async def to_code(config):
     if dewpoint_config := config.get(CONF_DEWPOINT):
         sens = await sensor.new_sensor(dewpoint_config)
         cg.add(var.set_dewpoint_sensor(sens))
+
+    if frostpoint_config := config.get(CONF_FROSTPOINT):
+        sens = await sensor.new_sensor(frostpoint_config)
+        cg.add(var.set_frostpoint_sensor(sens))
