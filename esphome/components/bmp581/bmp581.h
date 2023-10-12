@@ -99,6 +99,9 @@ class BMP581Component : public PollingComponent, public i2c::I2CDevice {
   // Computed in Python during codegen
   uint8_t conversion_time_;
 
+  // Writes the configured settings to the sensor. Returns true if successful
+  bool configure_settings_();
+
   // Checks if the BMP581 has measurement data ready by checking the sensor's interrupts
   bool check_data_readiness_();
 

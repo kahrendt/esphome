@@ -110,176 +110,43 @@ void BMP581Component::dump_config() {
 }
 
 void BMP581Component::setup() {
-  /*
-   * Setup goes through several stages, which follows the post-power-up procedure (page 18 of datasheet) and then sets
-   * configured options
-   *  1) Soft reboot
-   *  2) Verify ASIC chip ID matches BMP581
-   *  3) Verify sensor status (check if NVM is okay)
-   *  4) Enable data ready interrupt
-   *  5) Write oversampling settings and set internal configuration values
-   *  6) Configure and prime IIR Filter(s), if enabled
-   */
-
   this->error_code_ = NONE;
   ESP_LOGCONFIG(TAG, "Setting up BMP581...");
 
-  ////////////////////
-  // 1) Soft reboot //
-  ////////////////////
-
-  // Power-On-Reboot bit is asserted if sensor successfully reset
-  if (!this->reset_()) {
-    ESP_LOGE(TAG, "BMP581 failed to reset");
-
-    this->error_code_ = ERROR_SENSOR_RESET;
+  if (!this->configure_settings_()) {
     this->mark_failed();
 
     return;
-  }
-
-  ///////////////////////////////////////////
-  // 2) Verify ASIC chip ID matches BMP581 //
-  ///////////////////////////////////////////
-
-  uint8_t chip_id;
-
-  // read chip id from sensor
-  if (!this->read_byte(BMP581_CHIP_ID, &chip_id)) {
-    ESP_LOGE(TAG, "Failed to read chip id");
-
-    this->error_code_ = ERROR_COMMUNICATION_FAILED;
-    this->mark_failed();
-
-    return;
-  }
-
-  // verify id
-  if (chip_id != BMP581_ASIC_ID) {
-    ESP_LOGE(TAG, "Unknown chip ID, is this a BMP581?");
-
-    this->error_code_ = ERROR_WRONG_CHIP_ID;
-    this->mark_failed();
-
-    return;
-  }
-
-  ////////////////////////////////////////////////////
-  // 3) Verify sensor status (check if NVM is okay) //
-  ////////////////////////////////////////////////////
-
-  if (!this->read_byte(BMP581_STATUS, &this->status_.reg)) {
-    ESP_LOGE(TAG, "Failed to read status register");
-
-    this->error_code_ = ERROR_COMMUNICATION_FAILED;
-    this->mark_failed();
-
-    return;
-  }
-
-  // verify status_nvm_rdy bit (it is asserted if boot was successful)
-  if (!(this->status_.bit.status_nvm_rdy)) {
-    ESP_LOGE(TAG, "NVM not ready after boot");
-
-    this->error_code_ = ERROR_SENSOR_STATUS;
-    this->mark_failed();
-
-    return;
-  }
-
-  // verify status_nvm_err bit (it is asserted if an error is detected)
-  if (this->status_.bit.status_nvm_err) {
-    ESP_LOGE(TAG, "NVM error detected on boot");
-
-    this->error_code_ = ERROR_SENSOR_STATUS;
-    this->mark_failed();
-
-    return;
-  }
-
-  ////////////////////////////////////
-  // 4) Enable data ready interrupt //
-  ////////////////////////////////////
-
-  // enable the data ready interrupt source
-  if (!this->write_interrupt_source_settings_(true)) {
-    ESP_LOGE(TAG, "Failed to write interrupt source register");
-
-    this->error_code_ = ERROR_COMMUNICATION_FAILED;
-    this->mark_failed();
-
-    return;
-  }
-
-  //////////////////////////////////////////////////////////////////////////
-  // 5) Write oversampling settings and set internal configuration values //
-  //////////////////////////////////////////////////////////////////////////
-
-  // configure pressure readings, if sensor is defined
-  // otherwise, disable pressure oversampling
-  if (this->pressure_sensor_) {
-    this->osr_config_.bit.press_en = true;
-  } else {
-    this->pressure_oversampling_ = OVERSAMPLING_NONE;
-  }
-
-  // write oversampling settings
-  if (!this->write_oversampling_settings_(this->temperature_oversampling_, this->pressure_oversampling_)) {
-    ESP_LOGE(TAG, "Failed to write oversampling register");
-
-    this->error_code_ = ERROR_COMMUNICATION_FAILED;
-    this->mark_failed();
-
-    return;
-  }
-
-  // set output data rate to 4 Hz=0x19 (page 65 of datasheet)
-  //  - ?shouldn't? matter as this component only uses FORCED_MODE - datasheet is ambiguous
-  //  - If in NORMAL_MODE or NONSTOP_MODE, then this would still allow deep standby to save power
-  //  - will be written to BMP581 at next requested measurement
-  this->odr_config_.bit.odr = 0x19;
-
-  ///////////////////////////////////////////////////////
-  /// 6) Configure and prime IIR Filter(s), if enabled //
-  ///////////////////////////////////////////////////////
-
-  if ((this->iir_temperature_level_ != IIR_FILTER_OFF) || (this->iir_pressure_level_ != IIR_FILTER_OFF)) {
-    if (!this->write_iir_settings_(this->iir_temperature_level_, this->iir_pressure_level_)) {
-      ESP_LOGE(TAG, "Failed to write IIR configuration registers");
-
-      this->error_code_ = ERROR_COMMUNICATION_FAILED;
-      this->mark_failed();
-
-      return;
-    }
-
-    if (!this->prime_iir_filter_()) {
-      ESP_LOGE(TAG, "Failed to prime the IIR filter with an intiial measurement");
-
-      this->error_code_ = ERROR_PRIME_IIR_FAILED;
-      this->mark_failed();
-
-      return;
-    }
   }
 }
 
 void BMP581Component::update() {
   /*
    * Each update goes through several stages
-   *  0) Verify either a temperature or pressure sensor is defined before proceeding
+   *  0) Verify sensors are defined or no error exists before proceeding
    *  1) Request a measurement
    *  2) Wait for measurement to finish (based on oversampling rates)
    *  3) Read data registers for temperature and pressure, if applicable
    *  4) Publish measurements to sensor(s), if applicable
    */
 
-  ////////////////////////////////////////////////////////////////////////////////////
-  // 0) Verify either a temperature or pressure sensor is defined before proceeding //
-  ////////////////////////////////////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////////////////////////
+  // 0) Verify sensors are defined and no error exists before proceeding //
+  /////////////////////////////////////////////////////////////////////////
 
   if ((!this->temperature_sensor_) && (!this->pressure_sensor_)) {
     return;
+  }
+
+  if (this->status_has_error() || this->status_has_warning()) {
+    ESP_LOGD(TAG, "Attempting to reset and reconfigure sensor after error");
+    if (this->configure_settings_()) {
+      ESP_LOGD(TAG, "Succesfully reconfigured sensor");
+      this->status_clear_error();
+      this->error_code_ = NONE;
+    } else {
+      return;
+    }
   }
 
   //////////////////////////////
@@ -290,7 +157,7 @@ void BMP581Component::update() {
 
   if (!this->start_measurement_()) {
     ESP_LOGW(TAG, "Failed to request forced measurement of sensor");
-    this->status_set_warning();
+    this->status_set_error();
 
     return;
   }
@@ -302,42 +169,45 @@ void BMP581Component::update() {
   ESP_LOGVV(TAG, "Measurement is expected to take %d ms to complete", this->conversion_time_);
 
   this->set_timeout("measurement", this->conversion_time_, [this]() {
-    float temperature = 0.0;
-    float pressure = 0.0;
+    this->set_retry("measurement", this->conversion_time_, 2, [this](uint8_t attempts_left) -> RetryResult {
+      float temperature = 0.0;
+      float pressure = 0.0;
 
-    ////////////////////////////////////////////////////////////////////////
-    // 3) Read data registers for temperature and pressure, if applicable //
-    ////////////////////////////////////////////////////////////////////////
+      ////////////////////////////////////////////////////////////////////////
+      // 3) Read data registers for temperature and pressure, if applicable //
+      ////////////////////////////////////////////////////////////////////////
 
-    if (this->pressure_sensor_) {
-      if (!this->read_temperature_and_pressure_(temperature, pressure)) {
-        ESP_LOGW(TAG, "Failed to read temperature and pressure measurements, skipping update");
-        this->status_set_warning();
+      if (this->pressure_sensor_) {
+        if (!this->read_temperature_and_pressure_(temperature, pressure)) {
+          ESP_LOGW(TAG, "Failed to read temperature and pressure measurements, attempts left: %u", attempts_left);
+          this->status_set_warning();
 
-        return;
+          return RetryResult::RETRY;
+        }
+      } else {
+        if (!this->read_temperature_(temperature)) {
+          ESP_LOGW(TAG, "Failed to read temperature measurement, attempts left: %u", attempts_left);
+          this->status_set_warning();
+
+          return RetryResult::RETRY;
+        }
       }
-    } else {
-      if (!this->read_temperature_(temperature)) {
-        ESP_LOGW(TAG, "Failed to read temperature measurement, skipping update");
-        this->status_set_warning();
 
-        return;
+      /////////////////////////////////////////////////////////
+      // 4) Publish measurements to sensor(s), if applicable //
+      /////////////////////////////////////////////////////////
+
+      if (this->temperature_sensor_) {
+        this->temperature_sensor_->publish_state(temperature);
       }
-    }
 
-    /////////////////////////////////////////////////////////
-    // 4) Publish measurements to sensor(s), if applicable //
-    /////////////////////////////////////////////////////////
+      if (this->pressure_sensor_) {
+        this->pressure_sensor_->publish_state(pressure);
+      }
 
-    if (this->temperature_sensor_) {
-      this->temperature_sensor_->publish_state(temperature);
-    }
-
-    if (this->pressure_sensor_) {
-      this->pressure_sensor_->publish_state(pressure);
-    }
-
-    this->status_clear_warning();
+      this->status_clear_warning();
+      return RetryResult::DONE;
+    });
   });
 }
 
@@ -357,6 +227,7 @@ bool BMP581Component::check_data_readiness_() {
 
   if (!this->read_byte(BMP581_INT_STATUS, &status)) {
     ESP_LOGE(TAG, "Failed to read interrupt status register");
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
     return false;
   }
 
@@ -373,6 +244,131 @@ bool BMP581Component::check_data_readiness_() {
   }
 
   return false;
+}
+
+bool BMP581Component::configure_settings_() {
+  /* Setup goes through several stages, which follows the post-power-up procedure (page 18 of datasheet) and then sets
+   * configured options
+   *  1) Soft reboot
+   *  2) Verify ASIC chip ID matches BMP581
+   *  3) Verify sensor status (check if NVM is okay)
+   *  4) Enable data ready interrupt
+   *  5) Write oversampling settings and set internal configuration values
+   *  6) Configure and prime IIR Filter(s), if enabled
+   *
+   * Returns true if succesful
+   */
+
+  ////////////////////
+  // 1) Soft reboot //
+  ////////////////////
+
+  // Power-On-Reboot bit is asserted if sensor successfully reset
+  if (!this->reset_()) {
+    ESP_LOGE(TAG, "BMP581 failed to reset");
+    this->error_code_ = ERROR_SENSOR_RESET;
+    return false;
+  }
+
+  ///////////////////////////////////////////
+  // 2) Verify ASIC chip ID matches BMP581 //
+  ///////////////////////////////////////////
+
+  uint8_t chip_id;
+
+  // read chip id from sensor
+  if (!this->read_byte(BMP581_CHIP_ID, &chip_id)) {
+    ESP_LOGE(TAG, "Failed to read chip id");
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
+    return false;
+  }
+
+  // verify id
+  if (chip_id != BMP581_ASIC_ID) {
+    ESP_LOGE(TAG, "Unknown chip ID, is this a BMP581?");
+    this->error_code_ = ERROR_WRONG_CHIP_ID;
+    return false;
+  }
+
+  ////////////////////////////////////////////////////
+  // 3) Verify sensor status (check if NVM is okay) //
+  ////////////////////////////////////////////////////
+
+  if (!this->read_byte(BMP581_STATUS, &this->status_.reg)) {
+    ESP_LOGE(TAG, "Failed to read status register");
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
+    return false;
+  }
+
+  // verify status_nvm_rdy bit (it is asserted if boot was successful)
+  if (!(this->status_.bit.status_nvm_rdy)) {
+    ESP_LOGE(TAG, "NVM not ready after boot");
+    this->error_code_ = ERROR_SENSOR_STATUS;
+    return false;
+  }
+
+  // verify status_nvm_err bit (it is asserted if an error is detected)
+  if (this->status_.bit.status_nvm_err) {
+    ESP_LOGE(TAG, "NVM error detected on boot");
+    this->error_code_ = ERROR_SENSOR_STATUS;
+    return false;
+  }
+
+  ////////////////////////////////////
+  // 4) Enable data ready interrupt //
+  ////////////////////////////////////
+
+  // enable the data ready interrupt source
+  if (!this->write_interrupt_source_settings_(true)) {
+    ESP_LOGE(TAG, "Failed to write interrupt source register");
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
+    return false;
+  }
+
+  //////////////////////////////////////////////////////////////////////////
+  // 5) Write oversampling settings and set internal configuration values //
+  //////////////////////////////////////////////////////////////////////////
+
+  // configure pressure readings, if sensor is defined
+  // otherwise, disable pressure oversampling
+  if (this->pressure_sensor_) {
+    this->osr_config_.bit.press_en = true;
+  } else {
+    this->pressure_oversampling_ = OVERSAMPLING_NONE;
+  }
+
+  // write oversampling settings
+  if (!this->write_oversampling_settings_(this->temperature_oversampling_, this->pressure_oversampling_)) {
+    ESP_LOGE(TAG, "Failed to write oversampling register");
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
+    return false;
+  }
+
+  // set output data rate to 4 Hz=0x19 (page 65 of datasheet)
+  //  - ?shouldn't? matter as this component only uses FORCED_MODE - datasheet is ambiguous
+  //  - If in NORMAL_MODE or NONSTOP_MODE, then this would still allow deep standby to save power
+  //  - will be written to BMP581 at next requested measurement
+  this->odr_config_.bit.odr = 0x19;
+
+  ///////////////////////////////////////////////////////
+  /// 6) Configure and prime IIR Filter(s), if enabled //
+  ///////////////////////////////////////////////////////
+
+  if ((this->iir_temperature_level_ != IIR_FILTER_OFF) || (this->iir_pressure_level_ != IIR_FILTER_OFF)) {
+    if (!this->write_iir_settings_(this->iir_temperature_level_, this->iir_pressure_level_)) {
+      ESP_LOGE(TAG, "Failed to write IIR configuration registers");
+      this->error_code_ = ERROR_COMMUNICATION_FAILED;
+      return false;
+    }
+
+    if (!this->prime_iir_filter_()) {
+      ESP_LOGE(TAG, "Failed to prime the IIR filter with an intiial measurement");
+      this->error_code_ = ERROR_PRIME_IIR_FAILED;
+      return false;
+    }
+  }
+
+  return true;
 }
 
 bool BMP581Component::prime_iir_filter_() {
@@ -419,7 +415,7 @@ bool BMP581Component::prime_iir_filter_() {
   delay(3);
 
   if (!this->check_data_readiness_()) {
-    ESP_LOGE(TAG, "IIR priming measurement was not ready");
+    ESP_LOGW(TAG, "IIR priming measurement was not ready");
 
     return false;
   }
@@ -428,6 +424,7 @@ bool BMP581Component::prime_iir_filter_() {
   this->dsp_config_.bit.iir_flush_forced_en = false;
   if (!this->write_byte(BMP581_DSP, this->dsp_config_.reg)) {
     ESP_LOGE(TAG, "Failed to write IIR source register");
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
 
     return false;
   }
@@ -452,7 +449,8 @@ bool BMP581Component::read_temperature_(float &temperature) {
   uint8_t data[3];
   if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], 3)) {
     ESP_LOGW(TAG, "Failed to read sensor's measurement data");
-    this->status_set_warning();
+    this->status_set_error();
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
 
     return false;
   }
@@ -481,7 +479,8 @@ bool BMP581Component::read_temperature_and_pressure_(float &temperature, float &
   uint8_t data[6];
   if (!this->read_bytes(BMP581_MEASUREMENT_DATA, &data[0], 6)) {
     ESP_LOGW(TAG, "Failed to read sensor's measurement data");
-    this->status_set_warning();
+    this->status_set_error();
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
 
     return false;
   }
@@ -505,6 +504,7 @@ bool BMP581Component::reset_() {
   // writes reset command to BMP's command register
   if (!this->write_byte(BMP581_COMMAND, RESET_COMMAND)) {
     ESP_LOGE(TAG, "Failed to write reset command");
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
 
     return false;
   }
@@ -516,6 +516,7 @@ bool BMP581Component::reset_() {
   // read interrupt status register
   if (!this->read_byte(BMP581_INT_STATUS, &this->int_status_.reg)) {
     ESP_LOGE(TAG, "Failed to read interrupt status register");
+    this->error_code_ = ERROR_COMMUNICATION_FAILED;
 
     return false;
   }
