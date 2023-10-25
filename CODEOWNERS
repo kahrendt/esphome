@@ -12,7 +12,6 @@ esphome/core/* @esphome/core
 
 # Integrations
 esphome/components/a01nyub/* @MrSuicideParrot
-esphome/components/absolute_humidity/* @DAVe3283
 esphome/components/ac_dimmer/* @glmnet
 esphome/components/adc/* @esphome/core
 esphome/components/adc128s102/* @DeerMaximum
@@ -304,6 +303,7 @@ esphome/components/tee501/* @Stock-M
 esphome/components/teleinfo/* @0hax
 esphome/components/template/alarm_control_panel/* @grahambrown11
 esphome/components/text/* @mauritskorse
+esphome/components/thermal_comfort/* @DAVe3283 @kahrendt
 esphome/components/thermostat/* @kbx81
 esphome/components/time/* @OttoWinter
 esphome/components/tlc5947/* @rnauber
