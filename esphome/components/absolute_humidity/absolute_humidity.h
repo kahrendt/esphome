@@ -14,7 +14,7 @@ enum SaturationVaporPressureEquation {
 };
 
 /// This class implements calculation of absolute humidity from temperature and relative humidity.
-class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
+class AbsoluteHumidityComponent : public Component {
  public:
   AbsoluteHumidityComponent() = default;
 
@@ -27,6 +27,8 @@ class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
   }
   void set_dewpoint_sensor(sensor::Sensor *dewpoint_sensor) { this->dewpoint_sensor_ = dewpoint_sensor; }
   void set_frostpoint_sensor(sensor::Sensor *frostpoint_sensor) { this->frostpoint_sensor_ = frostpoint_sensor; }
+  void set_heat_index_sensor(sensor::Sensor *heat_index_sensor) { this->heat_index_sensor_ = heat_index_sensor; }
+  void set_humidex_sensor(sensor::Sensor *humidex_sensor) { this->humidex_sensor_ = humidex_sensor; }
 
   void setup() override;
   void dump_config() override;
@@ -64,17 +66,35 @@ class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
    *
    * @param es Saturation vapor pressure in kPA.
    * @param hr Relative humidity 0 to 1.
-   * @return dewpoint temperature in °C.
    */
   static float dewpoint(float es, float hr);
 
   /** Calculate frostpoint in °C.
    *
-   * @param dewpoint Dewpoint in °C.
-   * @param hr Relative humidity 0 to 1.
-   * @return frostpoint temperature in °C.
+   * @param dewpoint_c Dewpoint in °C.
+   * @param temperature Temperature in °C.
    */
-  static float frostpoint(float dewpoint, float temperature);
+  static float frostpoint(float dewpoint_c, float temperature_c);
+
+  /** Calculate heat index in °F.
+   *
+   * @param hr Relative humidity 0 to 1.
+   * @param temperature_c Temperature in °C.
+   */
+  static float heat_index(float hr, float temperature_c);
+
+  /** Calculate humidex in °C.
+   *
+   * @param dewpoint_c Relative humidity 0 to 1.
+   * @param temperature_c Temperature in °C.
+   */
+  static float humidex(float dewpoint_c, float temperature_c);
+
+  /** Calculate absolute temperature in K
+   *
+   * @param temperature_c Temperature in °C.
+   */
+  static float celsius_to_kelvin(float temperature_c);
 
   sensor::Sensor *temperature_sensor_{nullptr};
   sensor::Sensor *humidity_sensor_{nullptr};
@@ -84,6 +104,8 @@ class AbsoluteHumidityComponent : public sensor::Sensor, public Component {
   sensor::Sensor *absolute_humidity_sensor_{nullptr};
   sensor::Sensor *dewpoint_sensor_{nullptr};
   sensor::Sensor *frostpoint_sensor_{nullptr};
+  sensor::Sensor *heat_index_sensor_{nullptr};
+  sensor::Sensor *humidex_sensor_{nullptr};
 };
 
 }  // namespace absolute_humidity

@@ -16,6 +16,10 @@ from esphome.const import (
 CONF_ABSOLUTE_HUMIDITY = "absolute_humidity"
 CONF_DEWPOINT = "dewpoint"
 CONF_FROSTPOINT = "frostpoint"
+CONF_HEAT_INDEX = "heat_index"
+CONF_HUMIDEX = "humidex"
+
+UNIT_FAHRENHEIT = "°F"
 
 CODEOWNERS = ["@DAVe3283", "@kahrendt"]
 
@@ -57,6 +61,18 @@ CONFIG_SCHEMA = cv.Schema(
             accuracy_decimals=1,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
+        cv.Optional(CONF_HEAT_INDEX): sensor.sensor_schema(
+            unit_of_measurement=UNIT_FAHRENHEIT,
+            device_class=DEVICE_CLASS_TEMPERATURE,
+            accuracy_decimals=1,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_HUMIDEX): sensor.sensor_schema(
+            unit_of_measurement=UNIT_CELSIUS,
+            device_class=DEVICE_CLASS_TEMPERATURE,
+            accuracy_decimals=1,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -84,3 +100,11 @@ async def to_code(config):
     if frostpoint_config := config.get(CONF_FROSTPOINT):
         sens = await sensor.new_sensor(frostpoint_config)
         cg.add(var.set_frostpoint_sensor(sens))
+
+    if heat_index_config := config.get(CONF_HEAT_INDEX):
+        sens = await sensor.new_sensor(heat_index_config)
+        cg.add(var.set_heat_index_sensor(sens))
+
+    if humidex_config := config.get(CONF_HUMIDEX):
+        sens = await sensor.new_sensor(humidex_config)
+        cg.add(var.set_humidex_sensor(sens))

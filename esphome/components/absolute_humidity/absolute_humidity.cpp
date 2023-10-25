@@ -7,7 +7,7 @@ namespace absolute_humidity {
 static const char *const TAG = "absolute_humidity.sensor";
 
 void AbsoluteHumidityComponent::setup() {
-  ESP_LOGCONFIG(TAG, "Setting up absolute humidity '%s'...", this->get_name().c_str());
+  ESP_LOGCONFIG(TAG, "Setting up thermal comfort");
 
   // Defer updating the component until the next loop to avoid duplication in case the temperature and humidity sensors
   // have both updated in the same loop
@@ -58,16 +58,28 @@ void AbsoluteHumidityComponent::dump_config() {
 float AbsoluteHumidityComponent::get_setup_priority() const { return setup_priority::DATA; }
 
 void AbsoluteHumidityComponent::publish_invalid_() {
-  this->publish_state(NAN);
-  this->status_set_warning();
-  ESP_LOGW(TAG, "Unable to calculate absolute humidity.");
+  if (this->absolute_humidity_sensor_) {
+    this->absolute_humidity_sensor_->publish_state(NAN);
+  }
+  if (this->dewpoint_sensor_) {
+    this->dewpoint_sensor_->publish_state(NAN);
+  }
+  if (this->frostpoint_sensor_) {
+    this->frostpoint_sensor_->publish_state(NAN);
+  }
+  if (this->heat_index_sensor_) {
+    this->heat_index_sensor_->publish_state(NAN);
+  }
+  if (this->humidex_sensor_) {
+    this->humidex_sensor_->publish_state(NAN);
+  }
 }
 
 void AbsoluteHumidityComponent::update_sensors_() {
   // Get source sensor values and convert to desired units
   const float temperature_c = this->temperature_sensor_->get_state();
-  const float temperature_k = temperature_c + 273.15;
-  const float hr = this->humidity_sensor_->get_state() / 100;
+  const float temperature_k = celsius_to_kelvin(temperature_c);  // Convert to Kelvin
+  const float hr = this->humidity_sensor_->get_state() / 100;    // Convert humidity percentage to be between 0 and 1
 
   if (std::isnan(temperature_c)) {
     ESP_LOGW(TAG, "No valid state from temperature sensor!");
@@ -75,7 +87,7 @@ void AbsoluteHumidityComponent::update_sensors_() {
     return;
   }
 
-  if (std::isnan(temperature_k)) {
+  if (std::isnan(hr)) {
     ESP_LOGW(TAG, "No valid state from humidity sensor!");
     this->publish_invalid_();
     return;
@@ -95,26 +107,32 @@ void AbsoluteHumidityComponent::update_sensors_() {
       break;
     default:
       ESP_LOGE(TAG, "Invalid saturation vapor pressure equation selection!");
-      this->publish_state(NAN);
+      this->publish_invalid_();
       this->status_set_error();
       return;
   }
   ESP_LOGD(TAG, "Saturation vapor pressure %f kPa", es);
 
   // Calculate dewpoint
-  const float dewpoint_temperature = dewpoint(es, hr);
+  const float dewpoint_c = dewpoint(es, hr);
 
   this->status_clear_warning();
 
   // Publish enabled sensors
   if (this->absolute_humidity_sensor_) {
-    this->publish_state(vapor_density(es, hr, temperature_k));
+    this->absolute_humidity_sensor_->publish_state(vapor_density(es, hr, temperature_k));
   }
   if (this->dewpoint_sensor_) {
-    this->dewpoint_sensor_->publish_state(dewpoint_temperature);
+    this->dewpoint_sensor_->publish_state(dewpoint_c);
   }
   if (this->frostpoint_sensor_) {
-    this->frostpoint_sensor_->publish_state(frostpoint(dewpoint_temperature, temperature_c));
+    this->frostpoint_sensor_->publish_state(frostpoint(dewpoint_c, temperature_c));
+  }
+  if (this->heat_index_sensor_) {
+    this->heat_index_sensor_->publish_state(heat_index(hr, temperature_c));
+  }
+  if (this->humidex_sensor_) {
+    this->humidex_sensor_->publish_state(humidex(dewpoint_c, temperature_c));
   }
 }
 
@@ -214,15 +232,53 @@ float AbsoluteHumidityComponent::dewpoint(float es, float hr) {
 }
 
 // From https://pon.fr/dzvents-alerte-givre-et-calcul-humidite-absolue/
-float AbsoluteHumidityComponent::frostpoint(float dewpoint, float temperature) {
-  const float absolute_temperature = temperature + 273.15;
-  const float absolute_dewpoint = dewpoint + 273.15;
+float AbsoluteHumidityComponent::frostpoint(float dewpoint_c, float temperature_c) {
+  const float temperature_k = celsius_to_kelvin(temperature_c);
+  const float dewpoint_k = celsius_to_kelvin(dewpoint_c);
 
-  return (absolute_dewpoint +
-          (2671.02 / ((2954.61 / absolute_temperature) + 2.193665 * log(absolute_temperature) - 13.448)) -
-          absolute_temperature) -
+  return (dewpoint_k + (2671.02 / ((2954.61 / temperature_k) + 2.193665 * log(temperature_k) - 13.448)) -
+          temperature_k) -
          273.15;
 }
+
+// From https://www.wpc.ncep.noaa.gov/html/heatindex_equation.shtml
+float AbsoluteHumidityComponent::heat_index(float hr, float temperature_c) {
+  const float temperature_f = 32.0 + 9.0 / 5.0 * temperature_c;  // Temperature in °F
+  const float humidity_percent = hr * 100;
+
+  const float hi_simple = 0.5 * (temperature_f + 61.0 + (temperature_f - 68.0) * 1.2 + humidity_percent * 0.094);
+
+  const float hi_simple_temperature_average = (temperature_f + hi_simple) / 2.0;
+
+  if (hi_simple_temperature_average < 80)
+    return hi_simple;
+
+  const float hi = -42.379 + 2.04901523 * temperature_f + 10.14333127 * humidity_percent -
+                   0.22475541 * temperature_f * humidity_percent - 0.00683783 * temperature_f * temperature_f -
+                   0.05481717 * humidity_percent * humidity_percent +
+                   0.00122874 * temperature_f * temperature_f * humidity_percent +
+                   0.00085282 * temperature_f * humidity_percent * humidity_percent -
+                   0.00000199 * temperature_f * temperature_f * humidity_percent * humidity_percent;
+
+  float adjustment = 0.0;
+
+  if (humidity_percent < 13 && temperature_f >= 80 && temperature_f <= 112)
+    adjustment = -((13.0 - humidity_percent) / 4.0) * sqrt((17.0 - abs(temperature_f - 95.0)) / 17.0);
+
+  if (humidity_percent > 85 && temperature_f >= 80 && temperature_f <= 87)
+    adjustment = ((humidity_percent - 85.0) / 10.0) * ((87.0 - temperature_f) / 5.0);
+
+  return hi + adjustment;
+}
+
+// From https://en.wikipedia.org/wiki/Humidex#Humidex_formula
+float AbsoluteHumidityComponent::humidex(float dewpoint_c, float temperature_c) {
+  const float dewpoint_k = celsius_to_kelvin(dewpoint_c);
+
+  return temperature_c + 0.5555 * (6.11 * exp(5417.7530 * (1 / 273.16 - 1 / dewpoint_k)) - 10.0);
+}
+
+float AbsoluteHumidityComponent::celsius_to_kelvin(float temperature_c) { return temperature_c + 273.15; }
 
 }  // namespace absolute_humidity
 }  // namespace esphome
