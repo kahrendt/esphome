@@ -23,6 +23,9 @@ std::string MQTTComponent::get_discovery_topic_(const MQTTDiscoveryInfo &discove
 }
 
 std::string MQTTComponent::get_default_topic_for_(const std::string &suffix) const {
+  // If topic_prefix is empty, the default is to not publish unless a custom topic is set
+  if (global_mqtt_client->get_topic_prefix().empty())
+    return "";
   return global_mqtt_client->get_topic_prefix() + "/" + this->component_type() + "/" + this->get_default_object_id_() +
          "/" + suffix;
 }
@@ -40,14 +43,10 @@ std::string MQTTComponent::get_command_topic_() const {
 }
 
 bool MQTTComponent::publish(const std::string &topic, const std::string &payload) {
-  if (topic.empty())
-    return false;
   return global_mqtt_client->publish(topic, payload, 0, this->retain_);
 }
 
 bool MQTTComponent::publish_json(const std::string &topic, const json::json_build_t &f) {
-  if (topic.empty())
-    return false;
   return global_mqtt_client->publish_json(topic, f, 0, this->retain_);
 }
 
@@ -237,7 +236,20 @@ bool MQTTComponent::is_connected_() const { return global_mqtt_client->is_connec
 std::string MQTTComponent::friendly_name() const { return this->get_entity()->get_name(); }
 std::string MQTTComponent::get_icon() const { return this->get_entity()->get_icon(); }
 bool MQTTComponent::is_disabled_by_default() const { return this->get_entity()->is_disabled_by_default(); }
-bool MQTTComponent::is_internal() { return this->get_entity()->is_internal(); }
+bool MQTTComponent::is_internal() {
+  if ((this->get_state_topic_().empty()) && (this->get_command_topic_().empty())) {
+    // If both state_topic and command_topic are empty, then the entity is internal to mqtt
+    return true;
+  }
+
+  if (this->has_custom_state_topic_ || this->has_custom_command_topic_) {
+    // If a custom state_topic or command_topic is set, then the entity is not internal to mqtt
+    return false;
+  }
+
+  // Use ESPHome's entity internal state
+  return this->get_entity()->is_internal();
+}
 
 }  // namespace mqtt
 }  // namespace esphome

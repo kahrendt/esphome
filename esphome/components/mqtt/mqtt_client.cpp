@@ -471,6 +471,10 @@ bool MQTTClientComponent::publish(const MQTTMessage &message) {
     // critical components will re-transmit their messages
     return false;
   }
+
+  if (message.topic.empty())
+    return true;
+
   bool logging_topic = this->log_message_.topic == message.topic;
   bool ret = this->mqtt_backend_.publish(message);
   delay(0);

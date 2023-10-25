@@ -130,32 +130,44 @@ def validate_config(value):
     out = value.copy()
     topic_prefix = value[CONF_TOPIC_PREFIX]
     if CONF_BIRTH_MESSAGE not in value:
-        out[CONF_BIRTH_MESSAGE] = {
-            CONF_TOPIC: f"{topic_prefix}/status",
-            CONF_PAYLOAD: "online",
-            CONF_QOS: 0,
-            CONF_RETAIN: True,
-        }
+        if topic_prefix != "":
+            out[CONF_BIRTH_MESSAGE] = {
+                CONF_TOPIC: f"{topic_prefix}/status",
+                CONF_PAYLOAD: "online",
+                CONF_QOS: 0,
+                CONF_RETAIN: True,
+            }
+        else:
+            out[CONF_BIRTH_MESSAGE] = {}
     if CONF_WILL_MESSAGE not in value:
-        out[CONF_WILL_MESSAGE] = {
-            CONF_TOPIC: f"{topic_prefix}/status",
-            CONF_PAYLOAD: "offline",
-            CONF_QOS: 0,
-            CONF_RETAIN: True,
-        }
+        if topic_prefix != "":
+            out[CONF_WILL_MESSAGE] = {
+                CONF_TOPIC: f"{topic_prefix}/status",
+                CONF_PAYLOAD: "offline",
+                CONF_QOS: 0,
+                CONF_RETAIN: True,
+            }
+        else:
+            out[CONF_WILL_MESSAGE] = {}
     if CONF_SHUTDOWN_MESSAGE not in value:
-        out[CONF_SHUTDOWN_MESSAGE] = {
-            CONF_TOPIC: f"{topic_prefix}/status",
-            CONF_PAYLOAD: "offline",
-            CONF_QOS: 0,
-            CONF_RETAIN: True,
-        }
+        if topic_prefix != "":
+            out[CONF_SHUTDOWN_MESSAGE] = {
+                CONF_TOPIC: f"{topic_prefix}/status",
+                CONF_PAYLOAD: "offline",
+                CONF_QOS: 0,
+                CONF_RETAIN: True,
+            }
+        else:
+            out[CONF_SHUTDOWN_MESSAGE] = {}
     if CONF_LOG_TOPIC not in value:
-        out[CONF_LOG_TOPIC] = {
-            CONF_TOPIC: f"{topic_prefix}/debug",
-            CONF_QOS: 0,
-            CONF_RETAIN: True,
-        }
+        if topic_prefix != "":
+            out[CONF_LOG_TOPIC] = {
+                CONF_TOPIC: f"{topic_prefix}/debug",
+                CONF_QOS: 0,
+                CONF_RETAIN: True,
+            }
+        else:
+            out[CONF_LOG_TOPIC] = {}
     return out
 
 
