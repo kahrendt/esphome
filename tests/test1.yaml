@@ -1431,7 +1431,7 @@ sensor:
     model: 1005
     update_interval: 60s
     i2c_id: i2c_bus
-  - platform: absolute_humidity
+  - platform: thermal_comfort
     temperature: dht_temperature
     humidity: dht_humidity
     absolute_humidity:
@@ -1440,6 +1440,10 @@ sensor:
       name: DHT Dewpoint
     frostpoint:
       name: DHT Frostpoint
+    heat_index:
+      name: DHT Heat Index
+    humidex:
+      name: DHT Humidex
   - platform: hyt271
     i2c_id: i2c_bus
     temperature:
