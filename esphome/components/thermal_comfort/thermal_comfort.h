@@ -4,7 +4,7 @@
 #include "esphome/components/sensor/sensor.h"
 
 namespace esphome {
-namespace absolute_humidity {
+namespace thermal_comfort {
 
 /// Enum listing all implemented saturation vapor pressure equations.
 enum SaturationVaporPressureEquation {
@@ -13,10 +13,10 @@ enum SaturationVaporPressureEquation {
   WOBUS,
 };
 
-/// This class implements calculation of absolute humidity from temperature and relative humidity.
-class AbsoluteHumidityComponent : public Component {
+/// This class implements calculation of various measures of thermal comfort based on temperature and relative humidity.
+class ThermalComfortComponent : public Component {
  public:
-  AbsoluteHumidityComponent() = default;
+  ThermalComfortComponent() = default;
 
   void set_temperature_sensor(sensor::Sensor *temperature_sensor) { this->temperature_sensor_ = temperature_sensor; }
   void set_humidity_sensor(sensor::Sensor *humidity_sensor) { this->humidity_sensor_ = humidity_sensor; }
@@ -108,5 +108,5 @@ class AbsoluteHumidityComponent : public Component {
   sensor::Sensor *humidex_sensor_{nullptr};
 };
 
-}  // namespace absolute_humidity
+}  // namespace thermal_comfort
 }  // namespace esphome

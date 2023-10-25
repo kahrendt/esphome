@@ -1,12 +1,12 @@
 #include "esphome/core/log.h"
-#include "absolute_humidity.h"
+#include "thermal_comfort.h"
 
 namespace esphome {
-namespace absolute_humidity {
+namespace thermal_comfort {
 
-static const char *const TAG = "absolute_humidity.sensor";
+static const char *const TAG = "thermal_comfort.sensor";
 
-void AbsoluteHumidityComponent::setup() {
+void ThermalComfortComponent::setup() {
   ESP_LOGCONFIG(TAG, "Setting up thermal comfort");
 
   // Defer updating the component until the next loop to avoid duplication in case the temperature and humidity sensors
@@ -25,7 +25,7 @@ void AbsoluteHumidityComponent::setup() {
   }
 }
 
-void AbsoluteHumidityComponent::dump_config() {
+void ThermalComfortComponent::dump_config() {
   switch (this->equation_) {
     case BUCK:
       ESP_LOGCONFIG(TAG, "Saturation Vapor Pressure Equation: Buck");
@@ -55,9 +55,9 @@ void AbsoluteHumidityComponent::dump_config() {
     LOG_SENSOR("", "Frostpoint Sensor:", this->frostpoint_sensor_);
 }
 
-float AbsoluteHumidityComponent::get_setup_priority() const { return setup_priority::DATA; }
+float ThermalComfortComponent::get_setup_priority() const { return setup_priority::DATA; }
 
-void AbsoluteHumidityComponent::publish_invalid_() {
+void ThermalComfortComponent::publish_invalid_() {
   if (this->absolute_humidity_sensor_) {
     this->absolute_humidity_sensor_->publish_state(NAN);
   }
@@ -75,7 +75,7 @@ void AbsoluteHumidityComponent::publish_invalid_() {
   }
 }
 
-void AbsoluteHumidityComponent::update_sensors_() {
+void ThermalComfortComponent::update_sensors_() {
   // Get source sensor values and convert to desired units
   const float temperature_c = this->temperature_sensor_->get_state();
   const float temperature_k = celsius_to_kelvin(temperature_c);  // Convert to Kelvin
@@ -138,7 +138,7 @@ void AbsoluteHumidityComponent::update_sensors_() {
 
 // Buck equation (https://en.wikipedia.org/wiki/Arden_Buck_equation)
 // More accurate than Tetens in normal meteorologic conditions
-float AbsoluteHumidityComponent::es_buck(float temperature_c) {
+float ThermalComfortComponent::es_buck(float temperature_c) {
   float a, b, c, d;
   if (temperature_c >= 0) {
     a = 0.61121;
@@ -155,7 +155,7 @@ float AbsoluteHumidityComponent::es_buck(float temperature_c) {
 }
 
 // Tetens equation (https://en.wikipedia.org/wiki/Tetens_equation)
-float AbsoluteHumidityComponent::es_tetens(float temperature_c) {
+float ThermalComfortComponent::es_tetens(float temperature_c) {
   float a, b;
   if (temperature_c >= 0) {
     a = 17.27;
@@ -171,7 +171,7 @@ float AbsoluteHumidityComponent::es_tetens(float temperature_c) {
 // https://wahiduddin.net/calc/density_altitude.htm
 // https://wahiduddin.net/calc/density_algorithms.htm (FUNCTION ESW)
 // Calculate the saturation vapor pressure (kPa)
-float AbsoluteHumidityComponent::es_wobus(float t) {
+float ThermalComfortComponent::es_wobus(float t) {
   // THIS FUNCTION RETURNS THE SATURATION VAPOR PRESSURE ESW (MILLIBARS)
   // OVER LIQUID WATER GIVEN THE TEMPERATURE T (CELSIUS). THE POLYNOMIAL
   // APPROXIMATION BELOW IS DUE TO HERMAN WOBUS, A MATHEMATICIAN WHO
@@ -200,7 +200,7 @@ float AbsoluteHumidityComponent::es_wobus(float t) {
 // From https://www.environmentalbiophysics.org/chalk-talk-how-to-calculate-absolute-humidity/
 // H/T to https://esphome.io/cookbook/bme280_environment.html
 // H/T to https://carnotcycle.wordpress.com/2012/08/04/how-to-convert-relative-humidity-to-absolute-humidity/
-float AbsoluteHumidityComponent::vapor_density(float es, float hr, float ta) {
+float ThermalComfortComponent::vapor_density(float es, float hr, float ta) {
   // es = saturated vapor pressure (kPa)
   // hr = relative humidity [0-1]
   // ta = absolute temperature (K)
@@ -213,7 +213,7 @@ float AbsoluteHumidityComponent::vapor_density(float es, float hr, float ta) {
 
 // https://wahiduddin.net/calc/density_algorithms.htm (FUNCTION DEWPT)
 // Calculate the dewpoint (degrees Celsius)
-float AbsoluteHumidityComponent::dewpoint(float es, float hr) {
+float ThermalComfortComponent::dewpoint(float es, float hr) {
   // THIS FUNCTION YIELDS THE DEW POINT DEWPT (CELSIUS), GIVEN THE
   // WATER VAPOR PRESSURE EW (MILLIBARS).
   // THE EMPIRICAL FORMULA APPEARS IN BOLTON, DAVID, 1980:
@@ -232,7 +232,7 @@ float AbsoluteHumidityComponent::dewpoint(float es, float hr) {
 }
 
 // From https://pon.fr/dzvents-alerte-givre-et-calcul-humidite-absolue/
-float AbsoluteHumidityComponent::frostpoint(float dewpoint_c, float temperature_c) {
+float ThermalComfortComponent::frostpoint(float dewpoint_c, float temperature_c) {
   const float temperature_k = celsius_to_kelvin(temperature_c);
   const float dewpoint_k = celsius_to_kelvin(dewpoint_c);
 
@@ -242,7 +242,7 @@ float AbsoluteHumidityComponent::frostpoint(float dewpoint_c, float temperature_
 }
 
 // From https://www.wpc.ncep.noaa.gov/html/heatindex_equation.shtml
-float AbsoluteHumidityComponent::heat_index(float hr, float temperature_c) {
+float ThermalComfortComponent::heat_index(float hr, float temperature_c) {
   const float temperature_f = 32.0 + 9.0 / 5.0 * temperature_c;  // Temperature in °F
   const float humidity_percent = hr * 100;
 
@@ -272,13 +272,13 @@ float AbsoluteHumidityComponent::heat_index(float hr, float temperature_c) {
 }
 
 // From https://en.wikipedia.org/wiki/Humidex#Humidex_formula
-float AbsoluteHumidityComponent::humidex(float dewpoint_c, float temperature_c) {
+float ThermalComfortComponent::humidex(float dewpoint_c, float temperature_c) {
   const float dewpoint_k = celsius_to_kelvin(dewpoint_c);
 
   return temperature_c + 0.5555 * (6.11 * exp(5417.7530 * (1 / 273.16 - 1 / dewpoint_k)) - 10.0);
 }
 
-float AbsoluteHumidityComponent::celsius_to_kelvin(float temperature_c) { return temperature_c + 273.15; }
+float ThermalComfortComponent::celsius_to_kelvin(float temperature_c) { return temperature_c + 273.15; }
 
-}  // namespace absolute_humidity
+}  // namespace thermal_comfort
 }  // namespace esphome

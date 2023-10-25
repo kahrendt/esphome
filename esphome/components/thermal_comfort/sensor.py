@@ -23,12 +23,12 @@ UNIT_FAHRENHEIT = "°F"
 
 CODEOWNERS = ["@DAVe3283", "@kahrendt"]
 
-absolute_humidity_ns = cg.esphome_ns.namespace("absolute_humidity")
-AbsoluteHumidityComponent = absolute_humidity_ns.class_(
-    "AbsoluteHumidityComponent", sensor.Sensor, cg.Component
+thermal_comfort_ns = cg.esphome_ns.namespace("thermal_comfort")
+ThermalComfortComponent = thermal_comfort_ns.class_(
+    "ThermalComfortComponent", sensor.Sensor, cg.Component
 )
 
-SaturationVaporPressureEquation = absolute_humidity_ns.enum(
+SaturationVaporPressureEquation = thermal_comfort_ns.enum(
     "SaturationVaporPressureEquation"
 )
 EQUATION = {
@@ -39,7 +39,7 @@ EQUATION = {
 
 CONFIG_SCHEMA = cv.Schema(
     {
-        cv.GenerateID(): cv.declare_id(AbsoluteHumidityComponent),
+        cv.GenerateID(): cv.declare_id(ThermalComfortComponent),
         cv.Required(CONF_TEMPERATURE): cv.use_id(sensor.Sensor),
         cv.Required(CONF_HUMIDITY): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_EQUATION, default="WOBUS"): cv.enum(EQUATION, upper=True),
