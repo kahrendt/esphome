@@ -10,6 +10,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/FreeRTOSConfig.h>
 #include <freertos/event_groups.h>
+
 #include <esp_mac.h>
 #include <rom/ets_sys.h>
 #include <esp_log.h>
@@ -19,7 +20,6 @@
 #include <lwip/inet.h>
 #include <lwip/netdb.h>
 #include <lwip/sockets.h>
-#include <lwip/ip_addr.h>
 #include <ping/ping_sock.h>
 
 #define RX_BUFFER_SIZE 1460
@@ -203,28 +203,29 @@ class WiFiCSIComponent : public Component {
     }
   }
 
-  static esp_err_t wifi_ping_router_start() {
+  static void wifi_ping_router_start() {
     static esp_ping_handle_t ping_handle = NULL;
-    esp_ping_config_t ping_config = {
-        .count = 0,
-        .interval_ms = 1000 / 100,
-        .timeout_ms = 1000,
-        .data_size = 1,
-        .tos = 0,
-        .task_stack_size = 4096,
-        .task_prio = 0,
-    };
+
+    esp_ping_config_t ping_config = ESP_PING_DEFAULT_CONFIG();
+    ping_config.count = 0;
+    ping_config.interval_ms = 1000 / 100;
+    ping_config.task_stack_size = 3072;
+    ping_config.data_size = 1;
 
     esp_netif_ip_info_t local_ip;
     esp_netif_get_ip_info(esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"), &local_ip);
-    ESP_LOGI(TAG, "got ip:" IPSTR ", gw: " IPSTR, IP2STR(&local_ip.ip), IP2STR(&local_ip.gw));
-    inet_addr_to_ip4addr(ip_2_ip4(&ping_config.target_addr), (struct in_addr *) &local_ip.gw);
+    // ESP_LOGI(TAG, "got ip:" IPSTR ", gw: " IPSTR, IP2STR(&local_ip.ip), IP2STR(&local_ip.gw));
+    char buf[32];
+    sprintf(buf, IPSTR, IP2STR(&local_ip.gw));
+    ip_addr_t gw_addr;
+    ip4addr_aton(buf, &gw_addr);
+    ping_config.target_addr = gw_addr;
+    // ping_config.target_addr.u_addr.ip4.addr = ip4_addr_get_u32(&local_ip.gw);
+    // ping_config.target_addr.type = ESP_IPADDR_TYPE_V4;
 
     esp_ping_callbacks_t cbs = {0};
     esp_ping_new_session(&ping_config, &cbs, &ping_handle);
     esp_ping_start(ping_handle);
-
-    return ESP_OK;
   }
 };  // namespace wifi_csi
 
