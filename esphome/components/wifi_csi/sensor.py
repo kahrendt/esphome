@@ -1,42 +1,43 @@
-# initially based off of TMP117 component
-
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import sensor, esp32
-from esphome.components.esp32 import add_idf_sdkconfig_option
-
-# from esphome.const import (
-#     CONF_MODEL,
-#     DEVICE_CLASS_WIND_SPEED,
-#     STATE_CLASS_MEASUREMENT,
-# )
-
-CODEOWNERS = ["@kahrendt"]
-DEPENDENCIES = ["esp32"]
-
-wifi_csi_ns = cg.esphome_ns.namespace("wifi_csi")
-
-WiFiCSIComponent = wifi_csi_ns.class_(
-    "WiFiCSIComponent", cg.PollingComponent, sensor.Sensor
+from esphome.components import sensor
+from esphome.const import (
+    STATE_CLASS_MEASUREMENT,
+)
+from . import (
+    CONF_WIFI_CSI_ID,
+    WiFiCSIComponent,
 )
 
+DEPENDENCIES = ["wifi_csi"]
+
+CONF_JITTER = "jitter"
+CONF_WANDER = "wander"
+
+
 CONFIG_SCHEMA = cv.All(
-    sensor.sensor_schema(
-        WiFiCSIComponent,
-    ).extend(cv.polling_component_schema("60s")),
-    # cv.only_with_esp_idf,
+    cv.Schema(
+        {
+            cv.GenerateID(CONF_WIFI_CSI_ID): cv.use_id(WiFiCSIComponent),
+            cv.Optional(CONF_JITTER): sensor.sensor_schema(
+                state_class=STATE_CLASS_MEASUREMENT,
+                accuracy_decimals=4,
+            ),
+            cv.Optional(CONF_WANDER): sensor.sensor_schema(
+                state_class=STATE_CLASS_MEASUREMENT,
+                accuracy_decimals=4,
+            ),
+        }
+    ),
 )
 
 
 async def to_code(config):
-    var = await sensor.new_sensor(config)
-    await cg.register_component(var, config)
+    hub = await cg.get_variable(config[CONF_WIFI_CSI_ID])
 
-    esp32.add_idf_component(
-        name="esp-radar",
-        repo="https://github.com/espressif/esp-csi/",
-        path="components",
-        components=["esp-radar"],
-    )
-
-    add_idf_sdkconfig_option("CONFIG_ESP32_WIFI_CSI_ENABLED", True)
+    if jitter_config := config.get(CONF_JITTER):
+        sens = await sensor.new_sensor(jitter_config)
+        cg.add(hub.set_jitter_sensor(sens))
+    if wander_config := config.get(CONF_WANDER):
+        sens = await sensor.new_sensor(wander_config)
+        cg.add(hub.set_wander_sensor(sens))

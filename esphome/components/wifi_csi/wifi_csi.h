@@ -4,6 +4,8 @@
 #include "esp_radar.h"
 #include "esphome/core/component.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
+#include "esphome/components/sensor/sensor.h"
+#include "esphome/components/switch/switch.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/FreeRTOSConfig.h>
@@ -47,52 +49,8 @@ class WiFiCSIComponent : public Component {
   void setup() override {
     ESP_LOGCONFIG("wifi_csi", "Setting up WiFi CSI");
 
-    // wifi_csi_config_t csi_conf = {
-    //     .lltf_en = true,
-    //     .htltf_en = false,
-    //     .stbc_htltf2_en = false,
-    //     .ltf_merge_en = true,
-    //     .channel_filter_en = true,
-    //     .manu_scale = true,
-    //     .shift = true,
-    // };
-
-    // wifi_radar_config_t radar_config = WIFI_RADAR_CONFIG_DEFAULT();
-    // radar_config.wifi_radar_cb = wifi_radar_callback_;
-    // wifi_radar_config_t radar_config = {
-    //     .filter_mac = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},  // No filtering based on MAC address
-    //     // .filter_dmac = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
-    //     // .filter_len = 0,
-    //     .wifi_radar_cb = this->wifi_radar_callback_,
-    //     // .wifi_radar_cb_ctx = NULL,
-    //     // .wifi_csi_filtered_cb = NULL,
-    //     // .wifi_csi_cb_ctx = NULL,
-    //     .csi_config = csi_conf,
-    // };
-    // wifi_csi_config_t csi_config = {
-    //     .lltf_en = true,
-    //     .htltf_en = false,
-    //     .stbc_htltf2_en = false,
-    //     .ltf_merge_en = true,
-    //     .channel_filter_en = true,
-    //     .manu_scale = true,
-    //     .shift = true,
-    // };
-
-    // // static wifi_ap_record_t s_ap_info = {0};
-    // ESP_ERROR_CHECK(esp_wifi_sta_get_ap_info(&s_ap_info));
-    // ESP_ERROR_CHECK(esp_wifi_set_csi_config(&csi_config));
-    // ESP_ERROR_CHECK(esp_wifi_set_csi_rx_cb(wifi_csi_rx_cb, s_ap_info.bssid));
-    // ESP_ERROR_CHECK(esp_wifi_set_csi(true));
-
     radar_info_queue_ = xQueueCreate(100, sizeof(wifi_radar_info_t *));
 
-    // wifi_radar_config_t conf = {
-    //     .filter_mac = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},  // No filtering based on MAC address
-    //     .wifi_radar_cb = wifi_radar_callback_,
-    // };
-
-    // wifi::bssid_t bssid = wifi::global_wifi_component->wifi_bssid();
     wifi_radar_config_t conf = {
         .filter_mac = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
         // .filter_mac = {0x1a, 0x00, 0x00, 0x00, 0x00, 0x00},
@@ -112,69 +70,22 @@ class WiFiCSIComponent : public Component {
                 .htltf_en = false,
                 .stbc_htltf2_en = false,
                 .ltf_merge_en = true,
-                .channel_filter_en = false,
+                .channel_filter_en = true,
                 .manu_scale = true,
                 .shift = true,
             },
     };
 
-    // memcpy(conf.filter_mac, bssid.data(), sizeof(bssid));
-
     wifi_ping_router_start();
-    // if (esp_radar_init())
-    //  if ((esp_radar_set_config(&conf)))
-    //   if (esp_radar_start())
-    //   this->publish_state(2);
-    // else
-    //   this->publish_state(5);
 
-    // wifi_ping_router_start();
     esp_radar_init();
     esp_radar_set_config(&conf);
     esp_radar_start();
 
-    start_training_();
+    // start_training_();
 
-    this->set_timeout("train", 10 * 1000, [this]() { this->stop_training_(); });
+    // this->set_timeout("train", 10 * 1000, [this]() { this->stop_training_(); });
   };
-
-  // static void wifi_csi_rx_cb(void *ctx, wifi_csi_info_t *info) {
-  //   if (!info || !info->buf || !info->mac) {
-  //     ESP_LOGW(TAG, "<%s> wifi_csi_cb", esp_err_to_name(ESP_ERR_INVALID_ARG));
-  //     return;
-  //   }
-
-  //   if (memcmp(info->mac, ctx, 6)) {
-  //     return;
-  //   }
-
-  //   static uint32_t s_count = 0;
-  //   const wifi_pkt_rx_ctrl_t *rx_ctrl = &info->rx_ctrl;
-
-  //   if (!s_count) {
-  //     ESP_LOGI(TAG, "================ CSI RECV ================");
-  //     ets_printf(
-  //         "type,seq,mac,rssi,rate,sig_mode,mcs,bandwidth,smoothing,not_sounding,aggregation,stbc,fec_coding,sgi,noise_"
-  //         "floor,ampdu_cnt,channel,secondary_channel,local_timestamp,ant,sig_len,rx_state,len,first_word,data\n");
-  //   }
-
-  //   /** Only LLTF sub-carriers are selected. */
-  //   info->len = 128;
-
-  //   printf("CSI_DATA,%d," MACSTR ",%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", s_count++,
-  //          MAC2STR(info->mac), rx_ctrl->rssi, rx_ctrl->rate, rx_ctrl->sig_mode, rx_ctrl->mcs, rx_ctrl->cwb,
-  //          rx_ctrl->smoothing, rx_ctrl->not_sounding, rx_ctrl->aggregation, rx_ctrl->stbc, rx_ctrl->fec_coding,
-  //          rx_ctrl->sgi, rx_ctrl->noise_floor, rx_ctrl->ampdu_cnt, rx_ctrl->channel, rx_ctrl->secondary_channel,
-  //          rx_ctrl->timestamp, rx_ctrl->ant, rx_ctrl->sig_len, rx_ctrl->rx_state);
-
-  //   printf(",%d,%d,\"[%d", info->len, info->first_word_invalid, info->buf[0]);
-
-  //   for (int i = 1; i < info->len; i++) {
-  //     printf(",%d", info->buf[i]);
-  //   }
-
-  //   printf("]\"\n");
-  // }
 
   void loop() override {
     wifi_radar_info_t *radar_info;
@@ -188,8 +99,20 @@ class WiFiCSIComponent : public Component {
   void dump_config() override { ESP_LOGCONFIG(TAG, "WiFi-CSI Component"); };
   float get_setup_priority() const override { return setup_priority::AFTER_WIFI; }
 
+  void set_training(bool state) {
+    if (state) {
+      this->start_training_();
+    } else {
+      this->stop_training_();
+    }
+  }
+
   void set_motion_sensor(binary_sensor::BinarySensor *motion_sensor) { this->motion_sensor_ = motion_sensor; }
   void set_presence_sensor(binary_sensor::BinarySensor *presence_sensor) { this->presence_sensor_ = presence_sensor; }
+  void set_training_switch(switch_::Switch *training_switch) { this->training_switch_ = training_switch; }
+
+  void set_jitter_sensor(sensor::Sensor *jitter_sensor) { this->jitter_sensor_ = jitter_sensor; }
+  void set_wander_sensor(sensor::Sensor *wander_sensor) { this->wander_sensor_ = wander_sensor; }
 
  protected:
   wifi_radar_info_t detection_threshold_{};
@@ -201,8 +124,10 @@ class WiFiCSIComponent : public Component {
 
   binary_sensor::BinarySensor *motion_sensor_{nullptr};
   binary_sensor::BinarySensor *presence_sensor_{nullptr};
+  sensor::Sensor *jitter_sensor_{nullptr};
+  sensor::Sensor *wander_sensor_{nullptr};
 
-  // xQueueHandle radar_info_queue_{};
+  switch_::Switch *training_switch_{nullptr};
 
   bool training_in_process_{false};
   bool current_motion_{false};
@@ -243,9 +168,11 @@ class WiFiCSIComponent : public Component {
     if (this->waveform_jitter_threshold_ == 0)
       return;
 
-    // this->measurements_[++this->measurements_count_ % 10] = *info;
-    this->jitter_buffer_[this->measurements_count_ % 10] = info->waveform_jitter;
+    this->wander_sensor_->publish_state(info->waveform_wander);
+    this->jitter_sensor_->publish_state(info->waveform_jitter);
+
     this->wander_buffer_[this->measurements_count_ % 10] = info->waveform_wander;
+    this->jitter_buffer_[this->measurements_count_ % 10] = info->waveform_jitter;
     ++this->measurements_count_;
 
     if (this->measurements_count_ < 10)
@@ -276,13 +203,6 @@ class WiFiCSIComponent : public Component {
     }
   }
 
-  // malloc(sizeof(wifi_radar_info_t));
-  // memcpy(radar_info, info, sizeof(wifi_radar_info_t));
-
-  // if (xQueueSend(g_radar_info_queue, &radar_info, 0) == pdFALSE) {
-  //   ESP_LOGW(TAG, "Radar info queue is full");
-  //   free(radar_info);
-  // }
   static esp_err_t wifi_ping_router_start() {
     static esp_ping_handle_t ping_handle = NULL;
     esp_ping_config_t ping_config = {
