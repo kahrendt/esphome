@@ -6,7 +6,7 @@
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/switch/switch.h"
 #include "esphome/components/statistics/aggregate.h"
-#include "esphome/components/statistics/continuous_singular.h"
+#include "esphome/components/statistics/daba_lite_queue.h"
 
 #include <complex>
 
@@ -35,22 +35,24 @@ static std::unique_ptr<statistics::Aggregate> running_chunk_aggregate_ =
     make_unique<statistics::Aggregate>(stats_conf_);
 ;
 
+static std::vector<std::unique_ptr<statistics::Aggregate>> channel_aggregates;
+
 class WiFiCSIComponent : public PollingComponent {
  public:
   void setup() override {
     ESP_LOGCONFIG("wifi_csi", "Setting up WiFi CSI");
-
-    // this->running_chunk_aggregate_ = make_unique<statistics::Aggregate>(stats_conf_);
 
     wifi_ping_router_start();
     wifi_csi_init();
   };
 
   void update() override {
-    this->jitter_sensor_->publish_state(running_chunk_aggregate_->get_mean());
-    this->wander_sensor_->publish_state(running_chunk_aggregate_->get_count());
+    this->jitter_sensor_->publish_state(channel_aggregates[1]->get_mean());
+    this->wander_sensor_->publish_state(channel_aggregates[1]->get_count());
 
-    *running_chunk_aggregate_ = statistics::Aggregate(stats_conf_);
+    for (int i = 0; i < 52; ++i) {
+      *channel_aggregates[i] = statistics::Aggregate(stats_conf_);
+    }
   };
 
   void dump_config() override { ESP_LOGCONFIG(TAG, "WiFi-CSI Component"); };
@@ -71,15 +73,15 @@ class WiFiCSIComponent : public PollingComponent {
         .stbc_htltf2_en = false,
         .ltf_merge_en = true,
         .channel_filter_en = true,
-        .manu_scale = true,
-        .shift = true,
+        .manu_scale = false,
+        .shift = false,
     };
 
     static wifi_ap_record_t s_ap_info = {0};
-    ESP_ERROR_CHECK(esp_wifi_sta_get_ap_info(&s_ap_info));
-    ESP_ERROR_CHECK(esp_wifi_set_csi_config(&csi_config));
-    ESP_ERROR_CHECK(esp_wifi_set_csi_rx_cb(this->wifi_csi_rx_callback, s_ap_info.bssid));
-    ESP_ERROR_CHECK(esp_wifi_set_csi(true));
+    esp_wifi_sta_get_ap_info(&s_ap_info);
+    esp_wifi_set_csi_config(&csi_config);
+    esp_wifi_set_csi_rx_cb(this->wifi_csi_rx_callback, s_ap_info.bssid);
+    esp_wifi_set_csi(true);
   }
 
   binary_sensor::BinarySensor *motion_sensor_{nullptr};
@@ -104,12 +106,31 @@ class WiFiCSIComponent : public PollingComponent {
     /** Only LLTF sub-carriers are selected. */
     info->len = 128;
 
-    std::complex<float> subcarrier_1(info->buf[2], info->buf[3]);
-    statistics::Aggregate new_value =
-        statistics::Aggregate(stats_conf_, std::abs(subcarrier_1), 1, rx_ctrl->timestamp, 0);
+    // sub-carriers 1 through 26
+    for (int i = 1; i < 27; i++) {
+      std::complex<float> subcarrier(info->buf[i * 2], info->buf[i * 2 + 1]);
+      if (channel_aggregates.size() != 52) {
+        channel_aggregates.emplace_back(
+            new statistics::Aggregate(stats_conf_, std::abs(subcarrier), 0, rx_ctrl->timestamp, 0));
+      } else {
+        statistics::Aggregate old_agg = *channel_aggregates[i];
+        *channel_aggregates[i] =
+            old_agg.combine_with(statistics::Aggregate(stats_conf_, std::abs(subcarrier), 0, rx_ctrl->timestamp, 0));
+      }
+    }
 
-    *running_chunk_aggregate_ = running_chunk_aggregate_->combine_with(new_value);
-    // amp_subcarrier_1_aggregate = amp_subcarrier_1_aggregate.combine_with(new_value);
+    // sub-carriers -26 through -1
+    for (int i = 38; i < 64; i++) {
+      std::complex<float> subcarrier(info->buf[i * 2], info->buf[i * 2 + 1]);
+      if (channel_aggregates.size() != 52) {
+        channel_aggregates.emplace_back(
+            new statistics::Aggregate(stats_conf_, std::abs(subcarrier), 0, rx_ctrl->timestamp, 0));
+      } else {
+        statistics::Aggregate old_agg = *channel_aggregates[i - 11];
+        *channel_aggregates[i - 11] =
+            old_agg.combine_with(statistics::Aggregate(stats_conf_, std::abs(subcarrier), 0, rx_ctrl->timestamp, 0));
+      }
+    }
   }
 
   static void wifi_ping_router_start() {
