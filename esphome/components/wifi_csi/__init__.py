@@ -16,7 +16,7 @@ wifi_csi_ns = cg.esphome_ns.namespace("wifi_csi")
 
 WiFiCSIComponent = wifi_csi_ns.class_(
     "WiFiCSIComponent",
-    cg.Component,
+    cg.PollingComponent,
 )
 
 
@@ -25,8 +25,8 @@ CONFIG_SCHEMA = cv.All(
         {
             cv.GenerateID(): cv.declare_id(WiFiCSIComponent),
         }
-    ),
-    cv.only_with_esp_idf,
+    ).extend(cv.polling_component_schema("1s"))
+    # cv.only_with_esp_idf,
 )
 
 # CONFIG_SCHEMA = cv.All(

@@ -1,15 +1,14 @@
 
 #pragma once
 
-#include "esp_radar.h"
 #include "esphome/core/component.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/switch/switch.h"
+#include "esphome/components/statistics/aggregate.h"
+#include "esphome/components/statistics/continuous_singular.h"
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/FreeRTOSConfig.h>
-#include <freertos/event_groups.h>
+#include <complex>
 
 #include <esp_mac.h>
 #include <rom/ets_sys.h>
@@ -22,90 +21,40 @@
 #include <lwip/sockets.h>
 #include <ping/ping_sock.h>
 
-#define RX_BUFFER_SIZE 1460
-#define KEEPALIVE_IDLE 1
-#define KEEPALIVE_INTERVAL 1
-#define KEEPALIVE_COUNT 3
-
 namespace esphome {
 namespace wifi_csi {
 
 static const char *const TAG = "wifi_csi";
-static QueueHandle_t radar_info_queue_ = NULL;
 
-static void wifi_radar_callback_(const wifi_radar_info_t *info, void *ctx) {
-  // ESP_LOGI(TAG, "radar callback");
-  wifi_radar_info_t *radar_info = (wifi_radar_info_t *) malloc(sizeof(wifi_radar_info_t));
-  memcpy(radar_info, info, sizeof(wifi_radar_info_t));
+static statistics::StatisticsCalculationConfig stats_conf_ = {
+    .group_type = statistics::GROUP_TYPE_SAMPLE,
+    .weight_type = statistics::WEIGHT_TYPE_SIMPLE,
+};
 
-  if (xQueueSend(radar_info_queue_, &radar_info, 0) == pdFALSE) {
-    ESP_LOGW(TAG, "Radar info queue is full");
-    free(radar_info);
-  }
-}
+static std::unique_ptr<statistics::Aggregate> running_chunk_aggregate_ =
+    make_unique<statistics::Aggregate>(stats_conf_);
+;
 
-class WiFiCSIComponent : public Component {
+class WiFiCSIComponent : public PollingComponent {
  public:
   void setup() override {
     ESP_LOGCONFIG("wifi_csi", "Setting up WiFi CSI");
 
-    radar_info_queue_ = xQueueCreate(100, sizeof(wifi_radar_info_t *));
-
-    wifi_radar_config_t conf = {
-        .filter_mac = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
-        // .filter_mac = {0x1a, 0x00, 0x00, 0x00, 0x00, 0x00},
-        // .filter_mac = {0xd0, 0x21, 0xf9, 0xbf, 0x2a, 0xc4},
-        .filter_dmac = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
-        .wifi_radar_cb = wifi_radar_callback_,
-        .wifi_radar_cb_ctx = NULL,
-        .wifi_csi_filtered_cb = NULL,
-        .wifi_csi_cb_ctx = NULL,
-        .csi_handle_priority = 5,
-        .csi_combine_priority = 5,
-        .csi_recv_interval = 10,
-        .csi_handle_time = 250,
-        .csi_config =
-            {
-                .lltf_en = true,
-                .htltf_en = false,
-                .stbc_htltf2_en = false,
-                .ltf_merge_en = true,
-                .channel_filter_en = true,
-                .manu_scale = true,
-                .shift = true,
-            },
-    };
+    // this->running_chunk_aggregate_ = make_unique<statistics::Aggregate>(stats_conf_);
 
     wifi_ping_router_start();
-
-    esp_radar_init();
-    esp_radar_set_config(&conf);
-    esp_radar_start();
-
-    // start_training_();
-
-    // this->set_timeout("train", 10 * 1000, [this]() { this->stop_training_(); });
+    wifi_csi_init();
   };
 
-  void loop() override {
-    wifi_radar_info_t *radar_info;
-    while (xQueueReceive(radar_info_queue_, &radar_info, 0)) {
-      detect_presence(radar_info);
+  void update() override {
+    this->jitter_sensor_->publish_state(running_chunk_aggregate_->get_mean());
+    this->wander_sensor_->publish_state(running_chunk_aggregate_->get_count());
 
-      free(radar_info);
-    }
+    *running_chunk_aggregate_ = statistics::Aggregate(stats_conf_);
   };
 
   void dump_config() override { ESP_LOGCONFIG(TAG, "WiFi-CSI Component"); };
   float get_setup_priority() const override { return setup_priority::AFTER_WIFI; }
-
-  void set_training(bool state) {
-    if (state) {
-      this->start_training_();
-    } else {
-      this->stop_training_();
-    }
-  }
 
   void set_motion_sensor(binary_sensor::BinarySensor *motion_sensor) { this->motion_sensor_ = motion_sensor; }
   void set_presence_sensor(binary_sensor::BinarySensor *presence_sensor) { this->presence_sensor_ = presence_sensor; }
@@ -115,12 +64,23 @@ class WiFiCSIComponent : public Component {
   void set_wander_sensor(sensor::Sensor *wander_sensor) { this->wander_sensor_ = wander_sensor; }
 
  protected:
-  wifi_radar_info_t detection_threshold_{};
+  void wifi_csi_init() {
+    wifi_csi_config_t csi_config = {
+        .lltf_en = true,
+        .htltf_en = false,
+        .stbc_htltf2_en = false,
+        .ltf_merge_en = true,
+        .channel_filter_en = true,
+        .manu_scale = true,
+        .shift = true,
+    };
 
-  wifi_radar_info_t measurements_[10];
-
-  float wander_buffer_[10];
-  float jitter_buffer_[10];
+    static wifi_ap_record_t s_ap_info = {0};
+    ESP_ERROR_CHECK(esp_wifi_sta_get_ap_info(&s_ap_info));
+    ESP_ERROR_CHECK(esp_wifi_set_csi_config(&csi_config));
+    ESP_ERROR_CHECK(esp_wifi_set_csi_rx_cb(this->wifi_csi_rx_callback, s_ap_info.bssid));
+    ESP_ERROR_CHECK(esp_wifi_set_csi(true));
+  }
 
   binary_sensor::BinarySensor *motion_sensor_{nullptr};
   binary_sensor::BinarySensor *presence_sensor_{nullptr};
@@ -129,78 +89,27 @@ class WiFiCSIComponent : public Component {
 
   switch_::Switch *training_switch_{nullptr};
 
-  bool training_in_process_{false};
-  bool current_motion_{false};
-
-  uint32_t measurements_count_{0};
-
-  float waveform_jitter_threshold_{0.002};
-  float waveform_wander_threshold_{0.002};
-
-  void start_training_() {
-    this->training_in_process_ = true;
-
-    esp_radar_train_remove();
-    esp_radar_train_start();
-
-    ESP_LOGI(TAG, "Started training");
-  }
-
-  void stop_training_() {
-    if (!training_in_process_) {
-      ESP_LOGW(TAG, "Can't stop training as it has not started");
+  static void wifi_csi_rx_callback(void *ctx, wifi_csi_info_t *info) {
+    if (!info || !info->buf) {
+      ESP_LOGW(TAG, "<%s> wifi_csi_cb", esp_err_to_name(ESP_ERR_INVALID_ARG));
       return;
     }
 
-    esp_radar_train_stop(&this->waveform_jitter_threshold_, &this->waveform_wander_threshold_);
-    this->training_in_process_ = false;
-
-    this->waveform_jitter_threshold_ = this->waveform_jitter_threshold_ * 1.1;
-    this->waveform_wander_threshold_ = this->waveform_wander_threshold_ * 1.1;
-
-    ESP_LOGI(TAG, "Stopped training and updated thresholds; %.4f, %.4f", this->waveform_jitter_threshold_,
-             this->waveform_wander_threshold_);
-  }
-  void detect_presence(const wifi_radar_info_t *info) {
-    if (this->training_in_process_)
+    if (memcmp(info->mac, ctx, 6)) {
       return;
-
-    if (this->waveform_jitter_threshold_ == 0)
-      return;
-
-    this->wander_sensor_->publish_state(info->waveform_wander);
-    this->jitter_sensor_->publish_state(info->waveform_jitter);
-
-    this->wander_buffer_[this->measurements_count_ % 10] = info->waveform_wander;
-    this->jitter_buffer_[this->measurements_count_ % 10] = info->waveform_jitter;
-    ++this->measurements_count_;
-
-    if (this->measurements_count_ < 10)
-      return;
-
-    uint8_t presence_count = 0;
-    uint8_t motion_count = 0;
-
-    for (int i = 0; i < 10; i++) {
-      if (this->wander_buffer_[i] > this->waveform_wander_threshold_) {
-        ++presence_count;
-      }
-      if (this->jitter_buffer_[i] > this->waveform_jitter_threshold_) {
-        ++motion_count;
-      }
     }
 
-    if (presence_count < 2) {
-      this->presence_sensor_->publish_state(false);
-    } else {
-      this->presence_sensor_->publish_state(true);
-    }
+    const wifi_pkt_rx_ctrl_t *rx_ctrl = &info->rx_ctrl;
 
-    if (motion_count < 2) {
-      this->motion_sensor_->publish_state(false);
-    } else {
-      this->motion_sensor_->publish_state(true);
-    }
+    /** Only LLTF sub-carriers are selected. */
+    info->len = 128;
+
+    std::complex<float> subcarrier_1(info->buf[2], info->buf[3]);
+    statistics::Aggregate new_value =
+        statistics::Aggregate(stats_conf_, std::abs(subcarrier_1), 1, rx_ctrl->timestamp, 0);
+
+    *running_chunk_aggregate_ = running_chunk_aggregate_->combine_with(new_value);
+    // amp_subcarrier_1_aggregate = amp_subcarrier_1_aggregate.combine_with(new_value);
   }
 
   static void wifi_ping_router_start() {
