@@ -6,9 +6,11 @@
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/switch/switch.h"
 #include "esphome/components/statistics/aggregate.h"
+#include "esphome/components/statistics/aggregate_queue.h"
 #include "esphome/components/statistics/daba_lite_queue.h"
 
 #include <complex>
+#include <cmath>
 
 #include <esp_mac.h>
 #include <rom/ets_sys.h>
@@ -31,11 +33,7 @@ static statistics::StatisticsCalculationConfig stats_conf_ = {
     .weight_type = statistics::WEIGHT_TYPE_SIMPLE,
 };
 
-static std::unique_ptr<statistics::Aggregate> running_chunk_aggregate_ =
-    make_unique<statistics::Aggregate>(stats_conf_);
-;
-
-static std::vector<std::unique_ptr<statistics::Aggregate>> channel_aggregates;
+static std::vector<statistics::Aggregate> channel_aggregates;
 
 class WiFiCSIComponent : public PollingComponent {
  public:
@@ -44,15 +42,50 @@ class WiFiCSIComponent : public PollingComponent {
 
     wifi_ping_router_start();
     wifi_csi_init();
+
+    statistics::TrackedStatisticsConfiguration tracked_stats_conf = {
+        .argmax = false,
+        .argmin = false,
+        .c2 = true,
+        .duration = false,
+        .duration_squared = false,
+        .m2 = true,
+        .max = true,
+        .mean = true,
+        .min = true,
+        .timestamp_m2 = false,
+        .timestamp_mean = false,
+        .timestamp_reference = false,
+    };
+    for (int i = 0; i < 52; ++i) {
+      this->amplitude_queues_.emplace_back(statistics::DABALiteQueue(stats_conf_));
+      this->amplitude_queues_[i].configure_capacity(50, tracked_stats_conf);
+    }
   };
 
   void update() override {
-    this->jitter_sensor_->publish_state(channel_aggregates[1]->get_mean());
-    this->wander_sensor_->publish_state(channel_aggregates[1]->get_count());
-
+    float zscore_sum = 0.0;
+    size_t count_valid = 0;
     for (int i = 0; i < 52; ++i) {
-      *channel_aggregates[i] = statistics::Aggregate(stats_conf_);
+      statistics::Aggregate current_agg = this->amplitude_queues_[i].compute_current_aggregate();
+
+      statistics::Aggregate new_aggregate = statistics::Aggregate(stats_conf_);
+      new_aggregate.add_measurement(channel_aggregates[i].get_mean(), 0, 0, 0);
+
+      this->amplitude_queues_[i].insert(new_aggregate);
+
+      float zscore = (new_aggregate.get_mean() - current_agg.get_mean()) / current_agg.compute_std_dev();
+      if (std::isfinite(zscore)) {
+        zscore_sum += std::abs(zscore);
+        ++count_valid;
+      }
+
+      channel_aggregates[i].clear();
     }
+
+    this->jitter_sensor_->publish_state(zscore_sum / count_valid);
+    // this->jitter_sensor_->publish_state(this->amplitude_queues_[1].compute_current_aggregate().get_mean());
+    this->wander_sensor_->publish_state(count_valid);
   };
 
   void dump_config() override { ESP_LOGCONFIG(TAG, "WiFi-CSI Component"); };
@@ -91,6 +124,8 @@ class WiFiCSIComponent : public PollingComponent {
 
   switch_::Switch *training_switch_{nullptr};
 
+  std::vector<statistics::DABALiteQueue> amplitude_queues_;
+
   static void wifi_csi_rx_callback(void *ctx, wifi_csi_info_t *info) {
     if (!info || !info->buf) {
       ESP_LOGW(TAG, "<%s> wifi_csi_cb", esp_err_to_name(ESP_ERR_INVALID_ARG));
@@ -106,30 +141,32 @@ class WiFiCSIComponent : public PollingComponent {
     /** Only LLTF sub-carriers are selected. */
     info->len = 128;
 
+    statistics::Aggregate temp_aggregate = statistics::Aggregate(stats_conf_);
+
     // sub-carriers 1 through 26
     for (int i = 1; i < 27; i++) {
       std::complex<float> subcarrier(info->buf[i * 2], info->buf[i * 2 + 1]);
+      temp_aggregate.add_measurement(std::abs(subcarrier), 0, rx_ctrl->timestamp, 0);
+
       if (channel_aggregates.size() != 52) {
-        channel_aggregates.emplace_back(
-            new statistics::Aggregate(stats_conf_, std::abs(subcarrier), 0, rx_ctrl->timestamp, 0));
+        channel_aggregates.emplace_back(temp_aggregate);
       } else {
-        statistics::Aggregate old_agg = *channel_aggregates[i];
-        *channel_aggregates[i] =
-            old_agg.combine_with(statistics::Aggregate(stats_conf_, std::abs(subcarrier), 0, rx_ctrl->timestamp, 0));
+        channel_aggregates[i - 1] += temp_aggregate;
       }
+      temp_aggregate.clear();
     }
 
     // sub-carriers -26 through -1
     for (int i = 38; i < 64; i++) {
       std::complex<float> subcarrier(info->buf[i * 2], info->buf[i * 2 + 1]);
+      temp_aggregate.add_measurement(std::abs(subcarrier), 0, rx_ctrl->timestamp, 0);
+
       if (channel_aggregates.size() != 52) {
-        channel_aggregates.emplace_back(
-            new statistics::Aggregate(stats_conf_, std::abs(subcarrier), 0, rx_ctrl->timestamp, 0));
+        channel_aggregates.emplace_back(temp_aggregate);
       } else {
-        statistics::Aggregate old_agg = *channel_aggregates[i - 11];
-        *channel_aggregates[i - 11] =
-            old_agg.combine_with(statistics::Aggregate(stats_conf_, std::abs(subcarrier), 0, rx_ctrl->timestamp, 0));
+        channel_aggregates[i - 11] += temp_aggregate;
       }
+      temp_aggregate.clear();
     }
   }
 
