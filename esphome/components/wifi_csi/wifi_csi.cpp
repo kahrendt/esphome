@@ -26,9 +26,6 @@ static const char *const TAG = "wifi_csi";
 void WiFiCSIComponent::setup() {
   ESP_LOGCONFIG("wifi_csi", "Setting up WiFi CSI");
 
-  wifi_ping_router_start_();
-  wifi_csi_init_();
-
   const statistics::TrackedStatisticsConfiguration tracked_stats_conf = {
       .argmax = false,
       .argmin = false,
@@ -43,10 +40,17 @@ void WiFiCSIComponent::setup() {
       .timestamp_mean = false,
       .timestamp_reference = false,
   };
+
   for (int i = 0; i < 52; ++i) {
+    statistics::Aggregate null_aggregate = statistics::Aggregate(stats_conf);
+    channel_aggregates.emplace_back(null_aggregate);
+
     this->amplitude_queues_.emplace_back(statistics::DABALiteQueue(stats_conf));
     this->amplitude_queues_[i].configure_capacity(50, tracked_stats_conf);
   }
+
+  wifi_ping_router_start_();
+  wifi_csi_init_();
 };
 
 void WiFiCSIComponent::update() {
@@ -115,11 +119,7 @@ void WiFiCSIComponent::wifi_csi_rx_callback(void *ctx, wifi_csi_info_t *info) {
     std::complex<float> subcarrier(info->buf[i * 2], info->buf[i * 2 + 1]);
     temp_aggregate.add_measurement(std::abs(subcarrier), 0, rx_ctrl->timestamp, 0);
 
-    if (channel_aggregates.size() != 52) {
-      channel_aggregates.emplace_back(temp_aggregate);
-    } else {
-      channel_aggregates[i - 1] += temp_aggregate;
-    }
+    channel_aggregates[i - 1] += temp_aggregate;
     temp_aggregate.clear();
   }
 
@@ -128,11 +128,8 @@ void WiFiCSIComponent::wifi_csi_rx_callback(void *ctx, wifi_csi_info_t *info) {
     std::complex<float> subcarrier(info->buf[i * 2], info->buf[i * 2 + 1]);
     temp_aggregate.add_measurement(std::abs(subcarrier), 0, rx_ctrl->timestamp, 0);
 
-    if (channel_aggregates.size() != 52) {
-      channel_aggregates.emplace_back(temp_aggregate);
-    } else {
-      channel_aggregates[i - 11] += temp_aggregate;
-    }
+    channel_aggregates[i - 11] += temp_aggregate;
+
     temp_aggregate.clear();
   }
 }
