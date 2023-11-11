@@ -3,9 +3,12 @@
 #include "esphome/components/statistics/aggregate.h"
 #include "esphome/components/statistics/aggregate_queue.h"
 #include "esphome/components/statistics/daba_lite_queue.h"
+#include "esphome/core/hal.h"
 
 #include <complex>
 #include <cmath>
+
+#include <queue>
 
 #include <esp_mac.h>
 #include <rom/ets_sys.h>
@@ -46,7 +49,7 @@ void WiFiCSIComponent::setup() {
     channel_aggregates.emplace_back(null_aggregate);
 
     this->amplitude_queues_.emplace_back(statistics::DABALiteQueue(stats_conf));
-    this->amplitude_queues_[i].configure_capacity(50, tracked_stats_conf);
+    this->amplitude_queues_[i].configure_capacity(120, tracked_stats_conf);
   }
 
   wifi_ping_router_start_();
@@ -54,8 +57,26 @@ void WiFiCSIComponent::setup() {
 };
 
 void WiFiCSIComponent::update() {
+  if ((this->training_) && (millis() < 10000)) {
+    return;
+  } else if (this->training_) {
+    this->training_ = false;
+    std::vector<float> variances;
+    for (int i = 0; i < 52; ++i) {
+      float variance = channel_aggregates[i].compute_variance();
+      if (std::isfinite(variance)) {
+        variances.emplace_back(variance);
+      }
+    }
+    std::sort(variances.begin(), variances.end());
+    ESP_LOGD(TAG, "min variance=%.4f; max variance=%.4f", variances.front(), variances.back());
+  }
+
   float zscore_sum = 0.0;
   size_t count_valid = 0;
+
+  float sum = 0.0;
+
   for (int i = 0; i < 52; ++i) {
     statistics::Aggregate current_agg = this->amplitude_queues_[i].compute_current_aggregate();
 
@@ -70,13 +91,31 @@ void WiFiCSIComponent::update() {
       ++count_valid;
     }
 
+    float mean = channel_aggregates[i].get_mean();
+    if (std::isfinite(mean)) {
+      sum += mean;
+    }
+    // float variance = channel_aggregates[i].compute_variance();
+    // if (std::isfinite(variance)) {
+    //   variances.emplace_back(variance);
+    // }
+
     channel_aggregates[i].clear();
   }
 
-  this->jitter_sensor_->publish_state(zscore_sum / count_valid);
+  float average_zscore = zscore_sum / count_valid;
+  float average_amplitude = sum / count_valid;
+
+  if (average_zscore > 3) {
+    this->motion_sensor_->publish_state(true);
+  } else if (average_zscore < 1) {
+    this->motion_sensor_->publish_state(false);
+  }
+
+  this->jitter_sensor_->publish_state(average_zscore);
   // this->jitter_sensor_->publish_state(this->amplitude_queues_[1].compute_current_aggregate().get_mean());
-  this->wander_sensor_->publish_state(count_valid);
-};
+  this->wander_sensor_->publish_state(average_amplitude);
+}
 
 void WiFiCSIComponent::dump_config() { ESP_LOGCONFIG(TAG, "WiFi-CSI Component"); };
 

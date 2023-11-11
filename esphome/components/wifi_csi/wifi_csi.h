@@ -55,6 +55,8 @@ class WiFiCSIComponent : public PollingComponent {
 
   switch_::Switch *training_switch_{nullptr};
 
+  bool training_{true};
+
   std::vector<statistics::DABALiteQueue> amplitude_queues_;
 
   static void wifi_csi_rx_callback(void *ctx, wifi_csi_info_t *info);
