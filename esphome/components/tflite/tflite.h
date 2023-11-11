@@ -10,6 +10,7 @@
 
 #include "melspectrogram_model.h"
 #include "embedding_model.h"
+#include "jarvis_model.h"
 
 #include "esphome/core/log.h"
 
@@ -31,6 +32,8 @@ class TFLiteComponent : public Component, public sensor::Sensor {
 
     embed_model = tflite::GetModel(embedding_model_tflite);
 
+    jarvis_model = tflite::GetModel(hey_jarvis_v0_1_tflite);
+
     if (mel_model->version() != TFLITE_SCHEMA_VERSION) {
       // MicroPrintf("Model provided is schema version %d not equal to supported "
       //             "version %d.",
@@ -41,6 +44,15 @@ class TFLiteComponent : public Component, public sensor::Sensor {
     }
 
     if (embed_model->version() != TFLITE_SCHEMA_VERSION) {
+      // MicroPrintf("Model provided is schema version %d not equal to supported "
+      //             "version %d.",
+      //             model->version(), TFLITE_SCHEMA_VERSION);
+      ESP_LOGD(TAG, "model schema problem");
+      this->mark_failed();
+      return;
+    }
+
+    if (jarvis_model->version() != TFLITE_SCHEMA_VERSION) {
       // MicroPrintf("Model provided is schema version %d not equal to supported "
       //             "version %d.",
       //             model->version(), TFLITE_SCHEMA_VERSION);
@@ -67,15 +79,62 @@ class TFLiteComponent : public Component, public sensor::Sensor {
     mel_resolver.AddReduceMax();
     mel_resolver.AddSub();
 
+    static tflite::MicroMutableOpResolver<5> embed_resolver;
+
+    embed_resolver.AddPad();
+    embed_resolver.AddConv2D();
+    embed_resolver.AddLeakyRelu();
+    embed_resolver.AddMaximum();
+    embed_resolver.AddMaxPool2D();
+
+    static tflite::MicroMutableOpResolver<10> jarvis_resolver;
+
+    jarvis_resolver.AddReshape();
+    jarvis_resolver.AddFullyConnected();
+    jarvis_resolver.AddMean();
+    jarvis_resolver.AddSub();
+    jarvis_resolver.AddMul();
+    jarvis_resolver.AddAdd();
+    jarvis_resolver.AddRsqrt();
+    jarvis_resolver.AddLogistic();
+    jarvis_resolver.AddGreaterEqual();
+    jarvis_resolver.AddIf();
+
     mel_tensor_arena = (uint8_t *) heap_caps_calloc(mel_kTensorArenaSize, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    embed_tensor_arena = (uint8_t *) heap_caps_calloc(embed_kTensorArenaSize, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    jarvis_tensor_arena = (uint8_t *) heap_caps_calloc(jarvis_kTensorArenaSize, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 
     // Build an interpreter to run the model with.
-    static tflite::MicroInterpreter static_interpreter(mel_model, mel_resolver, mel_tensor_arena, mel_kTensorArenaSize);
-    // static tflite::MicroInterpreter static_interpreter(model, resolver, tensor_arena, kTensorArenaSize);
-    mel_interpreter = &static_interpreter;
+    static tflite::MicroInterpreter static_interpreter_mel(mel_model, mel_resolver, mel_tensor_arena,
+                                                           mel_kTensorArenaSize);
+    mel_interpreter = &static_interpreter_mel;
+
+    static tflite::MicroInterpreter static_interpreter_embed(embed_model, embed_resolver, embed_tensor_arena,
+                                                             embed_kTensorArenaSize);
+    embed_interpreter = &static_interpreter_embed;
+
+    static tflite::MicroInterpreter static_interpreter_jarvis(embed_model, embed_resolver, embed_tensor_arena,
+                                                              embed_kTensorArenaSize);
+    jarvis_interpreter = &static_interpreter_jarvis;
 
     // Allocate memory from the tensor_arena for the model's tensors.
     TfLiteStatus allocate_status = mel_interpreter->AllocateTensors();
+    if (allocate_status != kTfLiteOk) {
+      // MicroPrintf("AllocateTensors() failed");
+      ESP_LOGE(TAG, "couldn't allocate, allocate_status=%d", allocate_status);
+      this->mark_failed();
+      return;
+    }
+
+    allocate_status = embed_interpreter->AllocateTensors();
+    if (allocate_status != kTfLiteOk) {
+      // MicroPrintf("AllocateTensors() failed");
+      ESP_LOGE(TAG, "couldn't allocate, allocate_status=%d", allocate_status);
+      this->mark_failed();
+      return;
+    }
+
+    allocate_status = jarvis_interpreter->AllocateTensors();
     if (allocate_status != kTfLiteOk) {
       // MicroPrintf("AllocateTensors() failed");
       ESP_LOGE(TAG, "couldn't allocate, allocate_status=%d", allocate_status);
@@ -87,13 +146,17 @@ class TFLiteComponent : public Component, public sensor::Sensor {
     mel_input = mel_interpreter->input(0);
     mel_output = mel_interpreter->output(0);
 
+    embed_input = embed_interpreter->input(0);
+    embed_output = embed_interpreter->output(0);
+
+    jarvis_input = jarvis_interpreter->input(0);
+    jarvis_output = jarvis_interpreter->output(0);
+
     if ((mel_input == nullptr) || (mel_output == nullptr)) {
       ESP_LOGE(TAG, "nullpointers");
       this->mark_failed();
     }
   }
-
-  void get_melspectrogram(int16_t *input) {}
 
   void loop() {
     float random_input[1280];
@@ -107,6 +170,23 @@ class TFLiteComponent : public Component, public sensor::Sensor {
       ESP_LOGE(TAG, "Invoke failed");
       return;
     }
+
+    embed_input = mel_output;
+    invoke_status = embed_interpreter->Invoke();
+    if (invoke_status != kTfLiteOk) {
+      // MicroPrintf("Invoke failed on x: %f\n", static_cast<double>(x));
+      ESP_LOGE(TAG, "Invoke failed");
+      return;
+    }
+
+    jarvis_input = embed_output;
+    invoke_status = jarvis_interpreter->Invoke();
+    if (invoke_status != kTfLiteOk) {
+      // MicroPrintf("Invoke failed on x: %f\n", static_cast<double>(x));
+      ESP_LOGE(TAG, "Invoke failed");
+      return;
+    }
+
     ESP_LOGD(TAG, "inference time=%u", (millis() - start_time));
 
     // // Calculate an x value to feed into the model. We compare the current
@@ -163,9 +243,23 @@ class TFLiteComponent : public Component, public sensor::Sensor {
   TfLiteTensor *embed_input{nullptr};
   TfLiteTensor *embed_output{nullptr};
 
-  static constexpr int mel_kTensorArenaSize{1086668};
+  const tflite::Model *jarvis_model{nullptr};
+  tflite::MicroInterpreter *jarvis_interpreter{nullptr};
+  TfLiteTensor *jarvis_input{nullptr};
+  TfLiteTensor *jarvis_output{nullptr};
+
+  // static constexpr int mel_kTensorArenaSize{543334};
+  static constexpr int mel_kTensorArenaSize{100000};
   // uint8_t tensor_arena[kTensorArenaSize];
   uint8_t *mel_tensor_arena;
+
+  static constexpr int embed_kTensorArenaSize{700000};
+  // uint8_t tensor_arena[kTensorArenaSize];
+  uint8_t *embed_tensor_arena;
+
+  static constexpr int jarvis_kTensorArenaSize{100000};
+  // uint8_t tensor_arena[kTensorArenaSize];
+  uint8_t *jarvis_tensor_arena;
 };
 
 }  // namespace tflite2
