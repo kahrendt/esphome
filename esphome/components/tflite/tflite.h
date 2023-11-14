@@ -79,30 +79,38 @@ class TFLiteComponent : public Component, public sensor::Sensor {
     mel_resolver.AddReduceMax();
     mel_resolver.AddSub();
 
-    static tflite::MicroMutableOpResolver<5> embed_resolver;
+    static tflite::MicroMutableOpResolver<7> embed_resolver;
 
+    // embed_resolver.AddPad();
+    // embed_resolver.AddConv2D();
+    // embed_resolver.AddLeakyRelu();
+    // embed_resolver.AddMaximum();
+    // embed_resolver.AddMaxPool2D();
+    embed_resolver.AddTranspose();
+    embed_resolver.AddReshape();
     embed_resolver.AddPad();
     embed_resolver.AddConv2D();
     embed_resolver.AddLeakyRelu();
     embed_resolver.AddMaximum();
     embed_resolver.AddMaxPool2D();
 
-    static tflite::MicroMutableOpResolver<10> jarvis_resolver;
+    // static tflite::MicroMutableOpResolver<10> jarvis_resolver;
 
-    jarvis_resolver.AddReshape();
-    jarvis_resolver.AddFullyConnected();
-    jarvis_resolver.AddMean();
-    jarvis_resolver.AddSub();
-    jarvis_resolver.AddMul();
-    jarvis_resolver.AddAdd();
-    jarvis_resolver.AddRsqrt();
-    jarvis_resolver.AddLogistic();
-    jarvis_resolver.AddGreaterEqual();
-    jarvis_resolver.AddIf();
+    // jarvis_resolver.AddReshape();
+    // jarvis_resolver.AddFullyConnected();
+    // jarvis_resolver.AddMean();
+    // jarvis_resolver.AddSub();
+    // jarvis_resolver.AddMul();
+    // jarvis_resolver.AddAdd();
+    // jarvis_resolver.AddRsqrt();
+    // jarvis_resolver.AddLogistic();
+    // jarvis_resolver.AddGreaterEqual();
+    // jarvis_resolver.AddIf();
 
     mel_tensor_arena = (uint8_t *) heap_caps_calloc(mel_kTensorArenaSize, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     embed_tensor_arena = (uint8_t *) heap_caps_calloc(embed_kTensorArenaSize, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    jarvis_tensor_arena = (uint8_t *) heap_caps_calloc(jarvis_kTensorArenaSize, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    // jarvis_tensor_arena = (uint8_t *) heap_caps_calloc(jarvis_kTensorArenaSize, 1, MALLOC_CAP_SPIRAM |
+    // MALLOC_CAP_8BIT);
 
     // Build an interpreter to run the model with.
     static tflite::MicroInterpreter static_interpreter_mel(mel_model, mel_resolver, mel_tensor_arena,
@@ -134,23 +142,28 @@ class TFLiteComponent : public Component, public sensor::Sensor {
       return;
     }
 
-    allocate_status = jarvis_interpreter->AllocateTensors();
-    if (allocate_status != kTfLiteOk) {
-      // MicroPrintf("AllocateTensors() failed");
-      ESP_LOGE(TAG, "couldn't allocate, allocate_status=%d", allocate_status);
-      this->mark_failed();
-      return;
-    }
+    // allocate_status = jarvis_interpreter->AllocateTensors();
+    // if (allocate_status != kTfLiteOk) {
+    //   // MicroPrintf("AllocateTensors() failed");
+    //   ESP_LOGE(TAG, "couldn't allocate, allocate_status=%d", allocate_status);
+    //   this->mark_failed();
+    //   return;
+    // }
 
     // Obtain pointers to the model's input and output tensors.
     mel_input = mel_interpreter->input(0);
     mel_output = mel_interpreter->output(0);
+    // mel_output = tflite::micro::GetEvalOutput(context, node, kOutputTensor);
+    mel_output->dims->data[0] = 1;
+    mel_output->dims->data[1] = 76;
+    mel_output->dims->data[2] = 32;
+    mel_output->dims->data[3] = 1;
 
     embed_input = embed_interpreter->input(0);
     embed_output = embed_interpreter->output(0);
 
-    jarvis_input = jarvis_interpreter->input(0);
-    jarvis_output = jarvis_interpreter->output(0);
+    // jarvis_input = jarvis_interpreter->input(0);
+    // jarvis_output = jarvis_interpreter->output(0);
 
     if ((mel_input == nullptr) || (mel_output == nullptr)) {
       ESP_LOGE(TAG, "nullpointers");
@@ -171,6 +184,9 @@ class TFLiteComponent : public Component, public sensor::Sensor {
       return;
     }
 
+    // embed_interpreter->ResizeInputTensor(/*tensor_index=*/0, std::vector<int>{1, 76, 32, 1});
+    embed_interpreter->AllocateTensors();
+    embed_input = embed_interpreter->input(0);
     embed_input = mel_output;
     invoke_status = embed_interpreter->Invoke();
     if (invoke_status != kTfLiteOk) {
@@ -179,13 +195,13 @@ class TFLiteComponent : public Component, public sensor::Sensor {
       return;
     }
 
-    jarvis_input = embed_output;
-    invoke_status = jarvis_interpreter->Invoke();
-    if (invoke_status != kTfLiteOk) {
-      // MicroPrintf("Invoke failed on x: %f\n", static_cast<double>(x));
-      ESP_LOGE(TAG, "Invoke failed");
-      return;
-    }
+    // jarvis_input = embed_output;
+    // invoke_status = jarvis_interpreter->Invoke();
+    // if (invoke_status != kTfLiteOk) {
+    //   // MicroPrintf("Invoke failed on x: %f\n", static_cast<double>(x));
+    //   ESP_LOGE(TAG, "Invoke failed");
+    //   return;
+    // }
 
     ESP_LOGD(TAG, "inference time=%u", (millis() - start_time));
 

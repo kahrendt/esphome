@@ -24,6 +24,14 @@
 #include <ringbuf.h>
 #endif
 
+#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
+#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/micro/system_setup.h"
+#include "tensorflow/lite/schema/schema_generated.h"
+// #include "feature_provider.h"
+#include "micro_model_settings.h"
+#include "model.h"
+
 namespace esphome {
 namespace voice_assistant {
 
@@ -195,6 +203,74 @@ class VoiceAssistant : public Component {
 
   State state_{State::IDLE};
   State desired_state_{State::IDLE};
+
+  const tflite::Model *model = nullptr;
+  tflite::MicroInterpreter *interpreter = nullptr;
+  TfLiteTensor *model_input = nullptr;
+
+  int32_t previous_time = 0;
+
+  // Create an area of memory to use for input, output, and intermediate arrays.
+  // The size of this will depend on the model you're using, and may need to be
+  // determined by experimentation.
+  static constexpr int kTensorArenaSize = 30 * 1024;
+  uint8_t tensor_arena[kTensorArenaSize];
+  int8_t feature_buffer[kFeatureElementCount];
+  int8_t *model_input_buffer = nullptr;
+
+  int feature_size_ = kFeatureElementCount;
+  int8_t *feature_data_;
+  // Make sure we don't try to use cached information if this is the first call
+  // into the provider.
+  bool is_first_run_{true};
+
+  // Fills the feature data with information from audio inputs, and returns how
+  // many feature slices were updated.
+  TfLiteStatus PopulateFeatureData(int32_t last_time_in_ms, int32_t time_in_ms, int *how_many_new_slices);
+
+  // This is an abstraction around an audio source like a microphone, and is
+  // expected to return 16-bit PCM sample data for a given point in time. The
+  // sample data itself should be used as quickly as possible by the caller, since
+  // to allow memory optimizations there are no guarantees that the samples won't
+  // be overwritten by new data in the future. In practice, implementations should
+  // ensure that there's a reasonable time allowed for clients to access the data
+  // before any reuse.
+  // The reference implementation can have no platform-specific dependencies, so
+  // it just returns an array filled with zeros. For real applications, you should
+  // ensure there's a specialized implementation that accesses hardware APIs.
+  TfLiteStatus GetAudioSamples(int start_ms, int duration_ms, int *audio_samples_size, int16_t **audio_samples);
+  TfLiteStatus GetAudioSamples1(int *audio_samples_size, int16_t **audio_samples);
+  // Returns the time that audio data was last captured in milliseconds. There's
+  // no contract about what time zero represents, the accuracy, or the granularity
+  // of the result. Subsequent calls will generally not return a lower value, but
+  // even that's not guaranteed if there's an overflow wraparound.
+  // The reference implementation of this function just returns a constantly
+  // incrementing value for each call, since it would need a non-portable platform
+  // call to access time information. For real applications, you'll need to write
+  // your own platform-specific implementation.
+  int32_t LatestAudioTimestamp();
+
+  /* ringbuffer to hold the incoming audio data */
+  // ringbuf_t *g_audio_capture_buffer;
+  int32_t g_latest_audio_timestamp = 0;
+  /* model requires 20ms new data from g_audio_capture_buffer and 10ms old data
+   * each time , storing old data in the histrory buffer , {
+   * history_samples_to_keep = 10 * 16 } */
+  static constexpr int32_t history_samples_to_keep =
+      ((kFeatureDurationMs - kFeatureStrideMs) * (kAudioSampleFrequency / 1000));
+  /* new samples to get each time from ringbuffer, { new_samples_to_get =  20 * 16
+   * } */
+  static constexpr int32_t new_samples_to_get = (kFeatureStrideMs * (kAudioSampleFrequency / 1000));
+
+  const int32_t kAudioCaptureBufferSize = 40000;
+  const int32_t i2s_bytes_to_read = 3200;
+
+  int16_t g_audio_output_buffer[kMaxAudioSampleSize * 32];
+  bool g_is_audio_initialized = false;
+  int16_t g_history_buffer[history_samples_to_keep];
+
+  uint8_t succesive_wake_words = 0;
+  float last_probability = 0.0;
 };
 
 template<typename... Ts> class StartAction : public Action<Ts...>, public Parented<VoiceAssistant> {

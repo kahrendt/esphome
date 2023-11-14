@@ -11,7 +11,7 @@ from esphome.const import (
 )
 from esphome import automation
 from esphome.automation import register_action, register_condition
-from esphome.components import microphone, speaker, media_player
+from esphome.components import microphone, speaker, media_player, esp32
 
 AUTO_LOAD = ["socket"]
 DEPENDENCIES = ["api", "microphone"]
@@ -260,6 +260,16 @@ async def to_code(config):
         )
 
     cg.add_define("USE_VOICE_ASSISTANT")
+    esp32.add_idf_component(
+        name="esp-tflite-micro",
+        repo="https://github.com/espressif/esp-tflite-micro",
+        # path="components",
+        # components=["esp-radar"],
+    )
+
+    cg.add_build_flag("-DTF_LITE_STATIC_MEMORY")
+    cg.add_build_flag("-DTF_LITE_DISABLE_X86_NEON")
+    cg.add_build_flag("-DESP_NN")
 
 
 VOICE_ASSISTANT_ACTION_SCHEMA = cv.Schema({cv.GenerateID(): cv.use_id(VoiceAssistant)})

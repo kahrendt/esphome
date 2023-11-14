@@ -6,9 +6,25 @@
 
 #include <cstdio>
 
+// #include "audio_provider.h"
+// // #include "command_responder.h"
+// #include "feature_provider.h"
+#include "micro_model_settings.h"
+#include "model.h"
+// #include "recognize_commands.h"
+#include "tensorflow/lite/micro/system_setup.h"
+#include "tensorflow/lite/schema/schema_generated.h"
+#include "tensorflow/lite/core/c/common.h"
+#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/micro/micro_log.h"
+#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
+#include "micro_features_generator.h"
+#include "micro_model_settings.h"
+
 namespace esphome {
 namespace voice_assistant {
 
+Features g_features;
 static const char *const TAG = "voice_assistant";
 
 #ifdef SAMPLE_RATE_HZ
@@ -102,11 +118,75 @@ void VoiceAssistant::setup() {
     this->mark_failed();
     return;
   }
+
+  // Map the model into a usable data structure. This doesn't involve any
+  // copying or parsing, it's a very lightweight operation.
+  model = tflite::GetModel(g_model);
+  if (model->version() != TFLITE_SCHEMA_VERSION) {
+    MicroPrintf("Model provided is schema version %d not equal to supported "
+                "version %d.",
+                model->version(), TFLITE_SCHEMA_VERSION);
+    return;
+  }
+
+  // Pull in only the operation implementations we need.
+  // This relies on a complete list of all the ops needed by this graph.
+  // An easier approach is to just use the AllOpsResolver, but this will
+  // incur some penalty in code space for op implementations that are not
+  // needed by this graph.
+  //
+  // tflite::AllOpsResolver resolver;
+  // NOLINTNEXTLINE(runtime-global-variables)
+  static tflite::MicroMutableOpResolver<4> micro_op_resolver;
+  if (micro_op_resolver.AddConv2D() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddFullyConnected() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddSoftmax() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddReshape() != kTfLiteOk) {
+    return;
+  }
+
+  // Build an interpreter to run the model with.
+  static tflite::MicroInterpreter static_interpreter(model, micro_op_resolver, tensor_arena, kTensorArenaSize);
+  interpreter = &static_interpreter;
+
+  // Allocate memory from the tensor_arena for the model's tensors.
+  TfLiteStatus allocate_status = interpreter->AllocateTensors();
+  if (allocate_status != kTfLiteOk) {
+    MicroPrintf("AllocateTensors() failed");
+    return;
+  }
+
+  // Get information about the memory area to use for the model's input.
+  model_input = interpreter->input(0);
+  if ((model_input->dims->size != 2) || (model_input->dims->data[0] != 1) ||
+      (model_input->dims->data[1] != (kFeatureCount * kFeatureSize)) || (model_input->type != kTfLiteInt8)) {
+    MicroPrintf("Bad input tensor parameters in model");
+    return;
+  }
+  model_input_buffer = tflite::GetTensorData<int8_t>(model_input);
+
+  // Prepare to access the audio spectrograms from a microphone or other source
+  // that will provide the inputs to the neural network.
+  // NOLINTNEXTLINE(runtime-global-variables)
+  // static FeatureProvider static_feature_provider(kFeatureElementCount, feature_buffer);
+  // feature_provider = &static_feature_provider;
+  for (int n = 0; n < feature_size_; ++n) {
+    feature_buffer[n] = 0;
+  }
+
+  previous_time = 0;
 }
 
 int VoiceAssistant::read_microphone_() {
   size_t bytes_read = 0;
   if (this->mic_->is_running()) {  // Read audio into input buffer
+    // bytes_read = this->mic_->read(this->input_buffer_, 3200);
     bytes_read = this->mic_->read(this->input_buffer_, INPUT_BUFFER_SIZE * sizeof(int16_t));
     if (bytes_read == 0) {
       memset(this->input_buffer_, 0, INPUT_BUFFER_SIZE * sizeof(int16_t));
@@ -119,10 +199,12 @@ int VoiceAssistant::read_microphone_() {
       rb_read(this->ring_buffer_, nullptr, bytes_read - available, 0);
     }
     rb_write(this->ring_buffer_, (char *) this->input_buffer_, bytes_read, 0);
+    g_latest_audio_timestamp = g_latest_audio_timestamp + ((1000 * (bytes_read / 2)) / kAudioSampleFrequency);
 #endif
   } else {
     ESP_LOGD(TAG, "microphone not running");
   }
+
   return bytes_read;
 }
 
@@ -179,25 +261,93 @@ void VoiceAssistant::loop() {
     }
     case State::WAITING_FOR_VAD: {
       size_t bytes_read = this->read_microphone_();
-      if (bytes_read > 0) {
-        vad_state_t vad_state =
-            vad_process(this->vad_instance_, this->input_buffer_, SAMPLE_RATE_HZ, VAD_FRAME_LENGTH_MS);
-        if (vad_state == VAD_SPEECH) {
-          if (this->vad_counter_ < this->vad_threshold_) {
-            this->vad_counter_++;
-          } else {
-            ESP_LOGD(TAG, "VAD detected speech");
-            this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
 
-            // Reset for next time
-            this->vad_counter_ = 0;
-          }
-        } else {
-          if (this->vad_counter_ > 0) {
-            this->vad_counter_--;
-          }
+      const int32_t current_time = LatestAudioTimestamp();
+      int how_many_new_slices = 0;
+
+      TfLiteStatus feature_status = this->PopulateFeatureData(previous_time, current_time, &how_many_new_slices);
+      previous_time = current_time;
+
+      if (feature_status != kTfLiteOk) {
+        ESP_LOGD(TAG, "Feature generation failed");
+        return;
+      }
+
+      // ESP_LOGD(TAG, "how_many_new_slices=%d", how_many_new_slices);
+
+      if (how_many_new_slices == 0) {
+        return;
+      }
+
+      // Copy feature buffer to input tensor
+      for (int i = 0; i < kFeatureElementCount; i++) {
+        model_input_buffer[i] = feature_buffer[i];
+      }
+
+      // Run the model on the spectrogram input and make sure it succeeds.
+      TfLiteStatus invoke_status = interpreter->Invoke();
+      if (invoke_status != kTfLiteOk) {
+        ESP_LOGD(TAG, "Invoke failed");
+        return;
+      }
+
+      // Obtain a pointer to the output tensor
+      TfLiteTensor *output = interpreter->output(0);
+
+      float output_scale = output->params.scale;
+      int output_zero_point = output->params.zero_point;
+      int max_idx = 0;
+      float max_result = 0.0;
+      // Dequantize output values and find the max
+      for (int i = 0; i < kCategoryCount; i++) {
+        float current_result = (tflite::GetTensorData<int8_t>(output)[i] - output_zero_point) * output_scale;
+        if (current_result > max_result) {
+          max_result = current_result;  // update max result
+          max_idx = i;                  // update category
         }
       }
+      // if (max_result > 0.8f) {
+      //   if (max_idx == 2) {
+      //     ESP_LOGD(TAG, "Detected %7s, score: %.2f", kCategoryLabels[max_idx], static_cast<double>(max_result));
+      //   }
+      // }
+
+      if ((max_result > 0.95f) && (max_idx == 2)) {
+        if (this->last_probability > 0.95f) {
+          ++this->succesive_wake_words;
+        }
+        this->last_probability = max_result;
+      } else {
+        this->last_probability = 0.0;
+        this->succesive_wake_words = 0;
+      }
+
+      if (this->succesive_wake_words >= 10) {
+        ESP_LOGD(TAG, "Wakeword detected");
+        this->succesive_wake_words = 0;
+        this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
+        this->use_wake_word_ = false;
+        this->wake_word_detected_trigger_->trigger();
+      }
+      //         if (bytes_read > 0) {
+      //   vad_state_t vad_state =
+      //       vad_process(this->vad_instance_, this->input_buffer_, SAMPLE_RATE_HZ, VAD_FRAME_LENGTH_MS);
+      //   if (vad_state == VAD_SPEECH) {
+      //     if (this->vad_counter_ < this->vad_threshold_) {
+      //       this->vad_counter_++;
+      //     } else {
+      //       ESP_LOGD(TAG, "VAD detected speech");
+      //       this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
+
+      //       // Reset for next time
+      //       this->vad_counter_ = 0;
+      //     }
+      //   } else {
+      //     if (this->vad_counter_ > 0) {
+      //       this->vad_counter_--;
+      //     }
+      //   }
+      // }
       break;
     }
 #endif
@@ -343,6 +493,166 @@ void VoiceAssistant::loop() {
       break;
   }
 }
+
+TfLiteStatus VoiceAssistant::PopulateFeatureData(int32_t last_time_in_ms, int32_t time_in_ms,
+                                                 int *how_many_new_slices) {
+  if (feature_size_ != kFeatureElementCount) {
+    MicroPrintf("Requested feature_buffer size %d doesn't match %d", feature_size_, kFeatureElementCount);
+    return kTfLiteError;
+  }
+
+  // Quantize the time into steps as long as each window stride, so we can
+  // figure out which audio data we need to fetch.
+  const int last_step = (last_time_in_ms / kFeatureStrideMs);
+  const int current_step = (time_in_ms / kFeatureStrideMs);
+
+  int slices_needed = current_step - last_step;
+  // If this is the first call, make sure we don't use any cached information.
+  if (is_first_run_) {
+    TfLiteStatus init_status = InitializeMicroFeatures();
+    if (init_status != kTfLiteOk) {
+      return init_status;
+    }
+    ESP_LOGI(TAG, "InitializeMicroFeatures successful");
+    is_first_run_ = false;
+    slices_needed = kFeatureCount;
+  }
+#if 1
+  if (slices_needed > kFeatureCount) {
+    slices_needed = kFeatureCount;
+  }
+  *how_many_new_slices = slices_needed;
+  // ESP_LOGD(TAG, "need slices=%d", slices_needed);
+
+  const int slices_to_keep = kFeatureCount - slices_needed;
+  const int slices_to_drop = kFeatureCount - slices_to_keep;
+  // If we can avoid recalculating some slices, just move the existing data
+  // up in the spectrogram, to perform something like this:
+  // last time = 80ms          current time = 120ms
+  // +-----------+             +-----------+
+  // | data@20ms |         --> | data@60ms |
+  // +-----------+       --    +-----------+
+  // | data@40ms |     --  --> | data@80ms |
+  // +-----------+   --  --    +-----------+
+  // | data@60ms | --  --      |  <empty>  |
+  // +-----------+   --        +-----------+
+  // | data@80ms | --          |  <empty>  |
+  // +-----------+             +-----------+
+  if (slices_to_keep > 0) {
+    for (int dest_slice = 0; dest_slice < slices_to_keep; ++dest_slice) {
+      int8_t *dest_slice_data = feature_buffer + (dest_slice * kFeatureSize);
+      const int src_slice = dest_slice + slices_to_drop;
+      const int8_t *src_slice_data = feature_buffer + (src_slice * kFeatureSize);
+      for (int i = 0; i < kFeatureSize; ++i) {
+        dest_slice_data[i] = src_slice_data[i];
+      }
+    }
+  }
+  // Any slices that need to be filled in with feature data have their
+  // appropriate audio data pulled, and features calculated for that slice.
+  if (slices_needed > 0) {
+    for (int new_slice = slices_to_keep; new_slice < kFeatureCount; ++new_slice) {
+      const int new_step = (current_step - kFeatureCount + 1) + new_slice;
+      const int32_t slice_start_ms = (new_step * kFeatureStrideMs);
+      int16_t *audio_samples = nullptr;
+      int audio_samples_size = 0;
+      // TODO(petewarden): Fix bug that leads to non-zero slice_start_ms
+      if (GetAudioSamples((slice_start_ms > 0 ? slice_start_ms : 0), kFeatureDurationMs, &audio_samples_size,
+                          &audio_samples) != kTfLiteOk) {
+        return kTfLiteError;
+      }
+      if (audio_samples_size < kMaxAudioSampleSize) {
+        ESP_LOGD(TAG, "Audio data size %d too small, want %d", audio_samples_size, kMaxAudioSampleSize);
+        return kTfLiteError;
+      }
+      int8_t *new_slice_data = feature_buffer + (new_slice * kFeatureSize);
+      // size_t num_samples_read;
+      // TfLiteStatus generate_status = GenerateMicroFeatures(
+      //     audio_samples, audio_samples_size, kFeatureSize,
+      //     new_slice_data, &num_samples_read);
+      TfLiteStatus generate_status = GenerateFeatures(audio_samples, audio_samples_size, &g_features);
+      if (generate_status != kTfLiteOk) {
+        return generate_status;
+      }
+
+      // copy features
+      for (int j = 0; j < kFeatureSize; ++j) {
+        new_slice_data[j] = g_features[0][j];
+      }
+    }
+  }
+#else
+  *how_many_new_slices = kFeatureCount;
+  int16_t *audio_samples = nullptr;
+  int audio_samples_size = 16000;
+  if (GetAudioSamples(0, kFeatureDurationMs, &audio_samples_size, &audio_samples) != kTfLiteOk) {
+    return kTfLiteError;
+  }
+
+  memset(g_features, 0, sizeof(g_features));
+
+  TfLiteStatus generate_status = GenerateFeatures(audio_samples, audio_samples_size, &g_features);
+  if (generate_status != kTfLiteOk) {
+    return generate_status;
+  }
+  // copy features
+  for (int i = 0; i < kFeatureCount; ++i) {
+    for (int j = 0; j < kFeatureSize; ++j) {
+      feature_buffer[i * kFeatureSize + j] = g_features[i][j];
+    }
+  }
+  vTaskDelay(pdMS_TO_TICKS(500));
+#endif
+  return kTfLiteOk;
+}
+
+TfLiteStatus VoiceAssistant::GetAudioSamples1(int *audio_samples_size, int16_t **audio_samples) {
+  int bytes_read = rb_read(this->ring_buffer_, (char *) (g_audio_output_buffer), 16000, 1000);
+  if (bytes_read < 0) {
+    ESP_LOGI(TAG, "Couldn't read data in time");
+    bytes_read = 0;
+  }
+  *audio_samples_size = bytes_read;
+  *audio_samples = g_audio_output_buffer;
+  return kTfLiteOk;
+}
+
+TfLiteStatus VoiceAssistant::GetAudioSamples(int start_ms, int duration_ms, int *audio_samples_size,
+                                             int16_t **audio_samples) {
+  // if (!g_is_audio_initialized) {
+  //   TfLiteStatus init_status = InitAudioRecording();
+  //   if (init_status != kTfLiteOk) {
+  //     return init_status;
+  //   }
+  //   g_is_audio_initialized = true;
+  // }
+  /* copy 160 samples (320 bytes) into output_buff from history */
+  memcpy((void *) (g_audio_output_buffer), (void *) (g_history_buffer), history_samples_to_keep * sizeof(int16_t));
+
+  /* copy 320 samples (640 bytes) from rb at ( int16_t*(g_audio_output_buffer) +
+   * 160 ), first 160 samples (320 bytes) will be from history */
+  int bytes_read = rb_read(this->ring_buffer_, ((char *) (g_audio_output_buffer + history_samples_to_keep)),
+                           new_samples_to_get * sizeof(int16_t), pdMS_TO_TICKS(200));
+  if (bytes_read < 0) {
+    ESP_LOGE(TAG, " Model Could not read data from Ring Buffer");
+  } else if (bytes_read < new_samples_to_get * sizeof(int16_t)) {
+    // ESP_LOGD(TAG, "RB FILLED RIGHT NOW IS %d", rb_filled(ring_buffer));
+    ESP_LOGD(TAG, " Partial Read of Data by Model ");
+    ESP_LOGD(TAG, " Could only read %d bytes when required %d bytes ", bytes_read,
+             (int) (new_samples_to_get * sizeof(int16_t)));
+    return kTfLiteError;
+  }
+
+  /* copy 320 bytes from output_buff into history */
+  memcpy((void *) (g_history_buffer), (void *) (g_audio_output_buffer + new_samples_to_get),
+         history_samples_to_keep * sizeof(int16_t));
+
+  *audio_samples_size = kMaxAudioSampleSize;
+  *audio_samples = g_audio_output_buffer;
+  return kTfLiteOk;
+}
+
+int32_t VoiceAssistant::LatestAudioTimestamp() { return g_latest_audio_timestamp; }
 
 #ifdef USE_SPEAKER
 void VoiceAssistant::write_speaker_() {
