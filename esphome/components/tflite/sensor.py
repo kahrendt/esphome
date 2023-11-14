@@ -42,5 +42,6 @@ async def to_code(config):
     )
 
     cg.add_build_flag("-DTF_LITE_STATIC_MEMORY")
+    cg.add_build_flag("-DTF_LITE_DISABLE_X86_NEON")
     cg.add_build_flag("-DESP_NN")
     # add_idf_sdkconfig_option("CONFIG_ESP32_WIFI_CSI_ENABLED", True)
