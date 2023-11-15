@@ -119,6 +119,37 @@ void VoiceAssistant::setup() {
     return;
   }
 
+  ExternalRAMAllocator<uint8_t> arena_allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
+  this->tensor_arena_ = arena_allocator.allocate(this->kTensorArenaSize_);
+  if (this->tensor_arena_ == nullptr) {
+    ESP_LOGW(TAG, "Could not allocate send buffer.");
+    this->mark_failed();
+    return;
+  }
+
+  ExternalRAMAllocator<int8_t> feature_buffer_allocator(ExternalRAMAllocator<int8_t>::ALLOW_FAILURE);
+  this->feature_buffer_ = feature_buffer_allocator.allocate(kFeatureElementCount);
+  if (this->feature_buffer_ == nullptr) {
+    ESP_LOGW(TAG, "Could not allocate send buffer.");
+    this->mark_failed();
+    return;
+  }
+
+  ExternalRAMAllocator<int16_t> audio_output_allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
+  this->g_audio_output_buffer_ = audio_output_allocator.allocate(kMaxAudioSampleSize * 32);
+  if (this->g_audio_output_buffer_ == nullptr) {
+    ESP_LOGW(TAG, "Could not allocate send buffer.");
+    this->mark_failed();
+    return;
+  }
+  ExternalRAMAllocator<int16_t> history_buffer_allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
+  this->g_history_buffer_ = history_buffer_allocator.allocate(history_samples_to_keep);
+  if (this->g_history_buffer_ == nullptr) {
+    ESP_LOGW(TAG, "Could not allocate send buffer.");
+    this->mark_failed();
+    return;
+  }
+
   // Map the model into a usable data structure. This doesn't involve any
   // copying or parsing, it's a very lightweight operation.
   model = tflite::GetModel(g_model);
@@ -152,7 +183,7 @@ void VoiceAssistant::setup() {
   }
 
   // Build an interpreter to run the model with.
-  static tflite::MicroInterpreter static_interpreter(model, micro_op_resolver, tensor_arena, kTensorArenaSize);
+  static tflite::MicroInterpreter static_interpreter(model, micro_op_resolver, this->tensor_arena_, kTensorArenaSize_);
   interpreter = &static_interpreter;
 
   // Allocate memory from the tensor_arena for the model's tensors.
@@ -177,7 +208,7 @@ void VoiceAssistant::setup() {
   // static FeatureProvider static_feature_provider(kFeatureElementCount, feature_buffer);
   // feature_provider = &static_feature_provider;
   for (int n = 0; n < feature_size_; ++n) {
-    feature_buffer[n] = 0;
+    this->feature_buffer_[n] = 0;
   }
 
   previous_time = 0;
@@ -227,10 +258,13 @@ void VoiceAssistant::loop() {
         if (this->use_wake_word_) {
           rb_reset(this->ring_buffer_);
           this->set_state_(State::START_MICROPHONE, State::WAIT_FOR_VAD);
+        } else if (this->use_local_wake_word_) {
+          rb_reset(this->ring_buffer_);
+          this->set_state_(State::START_MICROPHONE, State::WAIT_FOR_WAKE_WORD);
         } else
 #endif
         {
-          this->set_state_(State::START_PIPELINE, State::START_MICROPHONE);
+          { this->set_state_(State::START_PIPELINE, State::START_MICROPHONE); }
         }
       } else {
         this->high_freq_.stop();
@@ -253,13 +287,13 @@ void VoiceAssistant::loop() {
       break;
     }
 #ifdef USE_ESP_ADF
-    case State::WAIT_FOR_VAD: {
+    case State::WAIT_FOR_WAKE_WORD: {
       this->read_microphone_();
-      ESP_LOGD(TAG, "Waiting for speech...");
-      this->set_state_(State::WAITING_FOR_VAD);
+      ESP_LOGD(TAG, "Waiting for wake word...");
+      this->set_state_(State::WAITING_FOR_WAKE_WORD);
       break;
     }
-    case State::WAITING_FOR_VAD: {
+    case State::WAITING_FOR_WAKE_WORD: {
       size_t bytes_read = this->read_microphone_();
 
       const int32_t current_time = LatestAudioTimestamp();
@@ -281,7 +315,7 @@ void VoiceAssistant::loop() {
 
       // Copy feature buffer to input tensor
       for (int i = 0; i < kFeatureElementCount; i++) {
-        model_input_buffer[i] = feature_buffer[i];
+        model_input_buffer[i] = this->feature_buffer_[i];
       }
 
       // Run the model on the spectrogram input and make sure it succeeds.
@@ -313,41 +347,58 @@ void VoiceAssistant::loop() {
       // }
 
       if ((max_result > 0.95f) && (max_idx == 2)) {
-        if (this->last_probability > 0.95f) {
-          ++this->succesive_wake_words;
-        }
-        this->last_probability = max_result;
+        ++this->succesive_wake_words;
       } else {
-        this->last_probability = 0.0;
-        this->succesive_wake_words = 0;
+        if (this->succesive_wake_words > 0) {
+          --this->succesive_wake_words;
+        }
       }
+      // if ((max_result > 0.95f) && (max_idx == 2)) {
+      //   if (this->last_probability > 0.95f) {
+      //     ++this->succesive_wake_words;
+      //   }
+      //   this->last_probability = max_result;
+      // } else {
+      //   this->last_probability = 0.0;
+      //   this->succesive_wake_words = 0;
+      // }
 
       if (this->succesive_wake_words >= 10) {
         ESP_LOGD(TAG, "Wakeword detected");
         this->succesive_wake_words = 0;
+        // this->last_probability = 0.0f;
         this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
-        this->use_wake_word_ = false;
-        this->wake_word_detected_trigger_->trigger();
       }
-      //         if (bytes_read > 0) {
-      //   vad_state_t vad_state =
-      //       vad_process(this->vad_instance_, this->input_buffer_, SAMPLE_RATE_HZ, VAD_FRAME_LENGTH_MS);
-      //   if (vad_state == VAD_SPEECH) {
-      //     if (this->vad_counter_ < this->vad_threshold_) {
-      //       this->vad_counter_++;
-      //     } else {
-      //       ESP_LOGD(TAG, "VAD detected speech");
-      //       this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
+      break;
+    }
+    case State::WAIT_FOR_VAD: {
+      this->read_microphone_();
+      ESP_LOGD(TAG, "Waiting for speech...");
+      this->set_state_(State::WAITING_FOR_VAD);
+      break;
+    }
+    case State::WAITING_FOR_VAD: {
+      size_t bytes_read = this->read_microphone_();
 
-      //       // Reset for next time
-      //       this->vad_counter_ = 0;
-      //     }
-      //   } else {
-      //     if (this->vad_counter_ > 0) {
-      //       this->vad_counter_--;
-      //     }
-      //   }
-      // }
+      if (bytes_read > 0) {
+        vad_state_t vad_state =
+            vad_process(this->vad_instance_, this->input_buffer_, SAMPLE_RATE_HZ, VAD_FRAME_LENGTH_MS);
+        if (vad_state == VAD_SPEECH) {
+          if (this->vad_counter_ < this->vad_threshold_) {
+            this->vad_counter_++;
+          } else {
+            ESP_LOGD(TAG, "VAD detected speech");
+            this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
+
+            // Reset for next time
+            this->vad_counter_ = 0;
+          }
+        } else {
+          if (this->vad_counter_ > 0) {
+            this->vad_counter_--;
+          }
+        }
+      }
       break;
     }
 #endif
@@ -522,7 +573,6 @@ TfLiteStatus VoiceAssistant::PopulateFeatureData(int32_t last_time_in_ms, int32_
     slices_needed = kFeatureCount;
   }
   *how_many_new_slices = slices_needed;
-  // ESP_LOGD(TAG, "need slices=%d", slices_needed);
 
   const int slices_to_keep = kFeatureCount - slices_needed;
   const int slices_to_drop = kFeatureCount - slices_to_keep;
@@ -540,9 +590,9 @@ TfLiteStatus VoiceAssistant::PopulateFeatureData(int32_t last_time_in_ms, int32_
   // +-----------+             +-----------+
   if (slices_to_keep > 0) {
     for (int dest_slice = 0; dest_slice < slices_to_keep; ++dest_slice) {
-      int8_t *dest_slice_data = feature_buffer + (dest_slice * kFeatureSize);
+      int8_t *dest_slice_data = this->feature_buffer_ + (dest_slice * kFeatureSize);
       const int src_slice = dest_slice + slices_to_drop;
-      const int8_t *src_slice_data = feature_buffer + (src_slice * kFeatureSize);
+      const int8_t *src_slice_data = this->feature_buffer_ + (src_slice * kFeatureSize);
       for (int i = 0; i < kFeatureSize; ++i) {
         dest_slice_data[i] = src_slice_data[i];
       }
@@ -565,7 +615,7 @@ TfLiteStatus VoiceAssistant::PopulateFeatureData(int32_t last_time_in_ms, int32_
         ESP_LOGD(TAG, "Audio data size %d too small, want %d", audio_samples_size, kMaxAudioSampleSize);
         return kTfLiteError;
       }
-      int8_t *new_slice_data = feature_buffer + (new_slice * kFeatureSize);
+      int8_t *new_slice_data = this->feature_buffer_ + (new_slice * kFeatureSize);
       // size_t num_samples_read;
       // TfLiteStatus generate_status = GenerateMicroFeatures(
       //     audio_samples, audio_samples_size, kFeatureSize,
@@ -598,7 +648,7 @@ TfLiteStatus VoiceAssistant::PopulateFeatureData(int32_t last_time_in_ms, int32_
   // copy features
   for (int i = 0; i < kFeatureCount; ++i) {
     for (int j = 0; j < kFeatureSize; ++j) {
-      feature_buffer[i * kFeatureSize + j] = g_features[i][j];
+      this->feature_buffer_[i * kFeatureSize + j] = g_features[i][j];
     }
   }
   vTaskDelay(pdMS_TO_TICKS(500));
@@ -606,16 +656,16 @@ TfLiteStatus VoiceAssistant::PopulateFeatureData(int32_t last_time_in_ms, int32_
   return kTfLiteOk;
 }
 
-TfLiteStatus VoiceAssistant::GetAudioSamples1(int *audio_samples_size, int16_t **audio_samples) {
-  int bytes_read = rb_read(this->ring_buffer_, (char *) (g_audio_output_buffer), 16000, 1000);
-  if (bytes_read < 0) {
-    ESP_LOGI(TAG, "Couldn't read data in time");
-    bytes_read = 0;
-  }
-  *audio_samples_size = bytes_read;
-  *audio_samples = g_audio_output_buffer;
-  return kTfLiteOk;
-}
+// TfLiteStatus VoiceAssistant::GetAudioSamples1(int *audio_samples_size, int16_t **audio_samples) {
+//   int bytes_read = rb_read(this->ring_buffer_, (char *) (g_audio_output_buffer), 16000, 1000);
+//   if (bytes_read < 0) {
+//     ESP_LOGI(TAG, "Couldn't read data in time");
+//     bytes_read = 0;
+//   }
+//   *audio_samples_size = bytes_read;
+//   *audio_samples = g_audio_output_buffer;
+//   return kTfLiteOk;
+// }
 
 TfLiteStatus VoiceAssistant::GetAudioSamples(int start_ms, int duration_ms, int *audio_samples_size,
                                              int16_t **audio_samples) {
@@ -627,11 +677,16 @@ TfLiteStatus VoiceAssistant::GetAudioSamples(int start_ms, int duration_ms, int 
   //   g_is_audio_initialized = true;
   // }
   /* copy 160 samples (320 bytes) into output_buff from history */
-  memcpy((void *) (g_audio_output_buffer), (void *) (g_history_buffer), history_samples_to_keep * sizeof(int16_t));
+  memcpy((void *) (this->g_audio_output_buffer_), (void *) (this->g_history_buffer_),
+         history_samples_to_keep * sizeof(int16_t));
 
   /* copy 320 samples (640 bytes) from rb at ( int16_t*(g_audio_output_buffer) +
    * 160 ), first 160 samples (320 bytes) will be from history */
-  int bytes_read = rb_read(this->ring_buffer_, ((char *) (g_audio_output_buffer + history_samples_to_keep)),
+  if (rb_bytes_filled(this->ring_buffer_) < new_samples_to_get * sizeof(int16_t)) {
+    ESP_LOGD(TAG, " Buffer not full enough");
+    return kTfLiteError;
+  }
+  int bytes_read = rb_read(this->ring_buffer_, ((char *) (this->g_audio_output_buffer_ + history_samples_to_keep)),
                            new_samples_to_get * sizeof(int16_t), pdMS_TO_TICKS(200));
   if (bytes_read < 0) {
     ESP_LOGE(TAG, " Model Could not read data from Ring Buffer");
@@ -644,11 +699,11 @@ TfLiteStatus VoiceAssistant::GetAudioSamples(int start_ms, int duration_ms, int 
   }
 
   /* copy 320 bytes from output_buff into history */
-  memcpy((void *) (g_history_buffer), (void *) (g_audio_output_buffer + new_samples_to_get),
+  memcpy((void *) (this->g_history_buffer_), (void *) (this->g_audio_output_buffer_ + new_samples_to_get),
          history_samples_to_keep * sizeof(int16_t));
 
   *audio_samples_size = kMaxAudioSampleSize;
-  *audio_samples = g_audio_output_buffer;
+  *audio_samples = this->g_audio_output_buffer_;
   return kTfLiteOk;
 }
 
@@ -700,6 +755,10 @@ static const LogString *voice_assistant_state_to_string(State state) {
       return LOG_STR("START_MICROPHONE");
     case State::STARTING_MICROPHONE:
       return LOG_STR("STARTING_MICROPHONE");
+    case State::WAIT_FOR_WAKE_WORD:
+      return LOG_STR("WAIT_FOR_WAKE_WORD");
+    case State::WAITING_FOR_WAKE_WORD:
+      return LOG_STR("WAITING_FOR_WAKE_WORD");
     case State::WAIT_FOR_VAD:
       return LOG_STR("WAIT_FOR_VAD");
     case State::WAITING_FOR_VAD:
@@ -787,10 +846,13 @@ void VoiceAssistant::request_start(bool continuous, bool silence_detection) {
     if (this->use_wake_word_) {
       rb_reset(this->ring_buffer_);
       this->set_state_(State::START_MICROPHONE, State::WAIT_FOR_VAD);
+    } else if (this->use_local_wake_word_) {
+      rb_reset(this->ring_buffer_);
+      this->set_state_(State::START_MICROPHONE, State::WAIT_FOR_WAKE_WORD);
     } else
 #endif
     {
-      this->set_state_(State::START_PIPELINE, State::START_MICROPHONE);
+      { this->set_state_(State::START_PIPELINE, State::START_MICROPHONE); }
     }
   }
 }
@@ -803,6 +865,8 @@ void VoiceAssistant::request_stop() {
       break;
     case State::START_MICROPHONE:
     case State::STARTING_MICROPHONE:
+    case State::WAIT_FOR_WAKE_WORD:
+    case State::WAITING_FOR_WAKE_WORD:
     case State::WAIT_FOR_VAD:
     case State::WAITING_FOR_VAD:
     case State::START_PIPELINE:
@@ -933,6 +997,10 @@ void VoiceAssistant::on_event(const api::VoiceAssistantEventResponse &msg) {
           rb_reset(this->ring_buffer_);
           // No need to stop the microphone since we didn't use the speaker
           this->set_state_(State::WAIT_FOR_VAD, State::WAITING_FOR_VAD);
+        } else if (this->use_local_wake_word_) {
+          rb_reset(this->ring_buffer_);
+          // No need to stop the microphone since we didn't use the speaker
+          this->set_state_(State::WAIT_FOR_WAKE_WORD, State::WAITING_FOR_WAKE_WORD);
         } else
 #endif
         {
