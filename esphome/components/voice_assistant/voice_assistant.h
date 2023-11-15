@@ -47,6 +47,8 @@ enum class State {
   STARTING_MICROPHONE,
   WAIT_FOR_VAD,
   WAITING_FOR_VAD,
+  WAIT_FOR_WAKE_WORD,
+  WAITING_FOR_WAKE_WORD,
   START_PIPELINE,
   STARTING_PIPELINE,
   STREAMING_MICROPHONE,
@@ -98,6 +100,7 @@ class VoiceAssistant : public Component {
   bool is_continuous() const { return this->continuous_; }
 
   void set_use_wake_word(bool use_wake_word) { this->use_wake_word_ = use_wake_word; }
+  void set_use_local_wake_word(bool use_local_wake_word) { this->use_local_wake_word_ = use_local_wake_word; }
 #ifdef USE_ESP_ADF
   void set_vad_threshold(uint8_t vad_threshold) { this->vad_threshold_ = vad_threshold; }
 #endif
@@ -172,6 +175,7 @@ class VoiceAssistant : public Component {
 #endif
 
   bool use_wake_word_;
+  bool use_local_wake_word_;
   uint8_t noise_suppression_level_;
   uint8_t auto_gain_;
   float volume_multiplier_;
@@ -194,13 +198,16 @@ class VoiceAssistant : public Component {
   // Create an area of memory to use for input, output, and intermediate arrays.
   // The size of this will depend on the model you're using, and may need to be
   // determined by experimentation.
-  static constexpr int kTensorArenaSize = 30 * 1024;
-  uint8_t tensor_arena[kTensorArenaSize];
-  int8_t feature_buffer[kFeatureElementCount];
-  int8_t *model_input_buffer = nullptr;
+  static constexpr int kTensorArenaSize_ = 30 * 1024;
+
+  uint8_t *tensor_arena_{nullptr};
+  // uint8_t tensor_arena[kTensorArenaSize];
+  int8_t *feature_buffer_{nullptr};
+  // int8_t feature_buffer[kFeatureElementCount];
+  int8_t *model_input_buffer{nullptr};
 
   int feature_size_ = kFeatureElementCount;
-  int8_t *feature_data_;
+  // int8_t *feature_data_;
   // Make sure we don't try to use cached information if this is the first call
   // into the provider.
   bool is_first_run_{true};
@@ -246,9 +253,11 @@ class VoiceAssistant : public Component {
   const int32_t kAudioCaptureBufferSize = 40000;
   const int32_t i2s_bytes_to_read = 3200;
 
-  int16_t g_audio_output_buffer[kMaxAudioSampleSize * 32];
+  // int16_t g_audio_output_buffer[kMaxAudioSampleSize * 32];
+  int16_t *g_audio_output_buffer_;
   bool g_is_audio_initialized = false;
-  int16_t g_history_buffer[history_samples_to_keep];
+  int16_t *g_history_buffer_;
+  // int16_t g_history_buffer[history_samples_to_keep];
 
   uint8_t succesive_wake_words = 0;
   float last_probability = 0.0;

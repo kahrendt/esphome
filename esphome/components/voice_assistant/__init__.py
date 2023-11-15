@@ -28,6 +28,7 @@ CONF_ON_TTS_END = "on_tts_end"
 CONF_ON_END = "on_end"
 CONF_ON_ERROR = "on_error"
 CONF_USE_WAKE_WORD = "use_wake_word"
+CONF_USE_LOCAL_WAKE_WORD = "use_local_wake_word"
 CONF_VAD_THRESHOLD = "vad_threshold"
 
 CONF_NOISE_SUPPRESSION_LEVEL = "noise_suppression_level"
@@ -61,6 +62,7 @@ CONFIG_SCHEMA = cv.All(
                 media_player.MediaPlayer
             ),
             cv.Optional(CONF_USE_WAKE_WORD, default=False): cv.boolean,
+            cv.Optional(CONF_USE_LOCAL_WAKE_WORD, default=False): cv.boolean,
             cv.Optional(CONF_VAD_THRESHOLD): cv.All(
                 cv.requires_component("esp_adf"), cv.only_with_esp_idf, cv.uint8_t
             ),
@@ -109,6 +111,7 @@ async def to_code(config):
         cg.add(var.set_media_player(mp))
 
     cg.add(var.set_use_wake_word(config[CONF_USE_WAKE_WORD]))
+    cg.add(var.set_use_local_wake_word(config[CONF_USE_LOCAL_WAKE_WORD]))
 
     if (vad_threshold := config.get(CONF_VAD_THRESHOLD)) is not None:
         cg.add(var.set_vad_threshold(vad_threshold))
