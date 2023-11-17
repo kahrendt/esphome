@@ -198,7 +198,7 @@ class VoiceAssistant : public Component {
   // Create an area of memory to use for input, output, and intermediate arrays.
   // The size of this will depend on the model you're using, and may need to be
   // determined by experimentation.
-  static constexpr int kTensorArenaSize_ = 30 * 1024;
+  static constexpr int kTensorArenaSize_ = 30 * 1024 * 100;
 
   uint8_t *tensor_arena_{nullptr};
   // uint8_t tensor_arena[kTensorArenaSize];
@@ -261,6 +261,8 @@ class VoiceAssistant : public Component {
 
   uint8_t succesive_wake_words = 0;
   float last_probability = 0.0;
+
+  uint32_t last_wake_word_check_ = 0;
 };
 
 template<typename... Ts> class StartAction : public Action<Ts...>, public Parented<VoiceAssistant> {
