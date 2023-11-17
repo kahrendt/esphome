@@ -168,7 +168,7 @@ void VoiceAssistant::setup() {
   //
   // tflite::AllOpsResolver resolver;
   // NOLINTNEXTLINE(runtime-global-variables)
-  static tflite::MicroMutableOpResolver<4> micro_op_resolver;
+  static tflite::MicroMutableOpResolver<11> micro_op_resolver;
   if (micro_op_resolver.AddConv2D() != kTfLiteOk) {
     return;
   }
@@ -181,6 +181,27 @@ void VoiceAssistant::setup() {
   if (micro_op_resolver.AddReshape() != kTfLiteOk) {
     return;
   }
+  if (micro_op_resolver.AddStridedSlice() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddExpandDims() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddTranspose() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddBatchMatMul() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddSum() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddAdd() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddMaxPool2D() != kTfLiteOk) {
+    return;
+  }
 
   // Build an interpreter to run the model with.
   static tflite::MicroInterpreter static_interpreter(model, micro_op_resolver, this->tensor_arena_, kTensorArenaSize_);
@@ -189,7 +210,8 @@ void VoiceAssistant::setup() {
   // Allocate memory from the tensor_arena for the model's tensors.
   TfLiteStatus allocate_status = interpreter->AllocateTensors();
   if (allocate_status != kTfLiteOk) {
-    MicroPrintf("AllocateTensors() failed");
+    ESP_LOGE(TAG, "AllocateTensors() failed");
+    this->mark_failed();
     return;
   }
 
@@ -197,7 +219,8 @@ void VoiceAssistant::setup() {
   model_input = interpreter->input(0);
   if ((model_input->dims->size != 2) || (model_input->dims->data[0] != 1) ||
       (model_input->dims->data[1] != (kFeatureCount * kFeatureSize)) || (model_input->type != kTfLiteInt8)) {
-    MicroPrintf("Bad input tensor parameters in model");
+    ESP_LOGE(TAG, "Bad input tensor parameters in model");
+    this->mark_failed();
     return;
   }
   model_input_buffer = tflite::GetTensorData<int8_t>(model_input);
@@ -212,6 +235,20 @@ void VoiceAssistant::setup() {
   }
 
   previous_time = 0;
+
+#ifdef TF_LITE_STATIC_MEMORY
+  ESP_LOGCONFIG(TAG, "Using TF_LITE_STATIC_MEMORY\n");
+#endif
+
+// Output whether we are using esp nn
+#ifdef ESP_NN
+  ESP_LOGCONFIG(TAG, "Using ESP_NN\n");
+#endif
+
+// Output whether the neural network is optimised
+#ifdef CONFIG_NN_OPTIMIZED
+  ESP_LOGCONFIG(TAG, "Using CONFIG_NN_OPTIMIZED\n");
+#endif
 }
 
 int VoiceAssistant::read_microphone_() {
@@ -313,6 +350,11 @@ void VoiceAssistant::loop() {
         return;
       }
 
+      // if (millis() - this->last_wake_word_check_ < 100) {
+      //   return;
+      // }
+      // this->last_wake_word_check_ = millis();
+
       // Copy feature buffer to input tensor
       for (int i = 0; i < kFeatureElementCount; i++) {
         model_input_buffer[i] = this->feature_buffer_[i];
@@ -340,11 +382,12 @@ void VoiceAssistant::loop() {
           max_idx = i;                  // update category
         }
       }
-      // if (max_result > 0.8f) {
-      //   if (max_idx == 2) {
-      //     ESP_LOGD(TAG, "Detected %7s, score: %.2f", kCategoryLabels[max_idx], static_cast<double>(max_result));
-      //   }
-      // }
+      if (max_result > 0.8f) {
+        ESP_LOGD(TAG, "Detected %7s, score: %.2f", kCategoryLabels[max_idx], static_cast<double>(max_result));
+        // if (max_idx == 2) {
+        //   this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
+        // }
+      }
 
       if ((max_result > 0.95f) && (max_idx == 2)) {
         ++this->succesive_wake_words;
@@ -363,7 +406,7 @@ void VoiceAssistant::loop() {
       //   this->succesive_wake_words = 0;
       // }
 
-      if (this->succesive_wake_words >= 10) {
+      if (this->succesive_wake_words >= 5) {
         ESP_LOGD(TAG, "Wakeword detected");
         this->succesive_wake_words = 0;
         // this->last_probability = 0.0f;

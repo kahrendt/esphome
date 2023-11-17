@@ -269,10 +269,16 @@ async def to_code(config):
         # path="components",
         # components=["esp-radar"],
     )
+    # esp32.add_idf_component(
+    #     name="esp-nn",
+    #     repo="https://github.com/espressif/esp-nn",
+    #     # path="components",
+    #     # components=["esp-radar"],
+    # )
 
     cg.add_build_flag("-DTF_LITE_STATIC_MEMORY")
     cg.add_build_flag("-DTF_LITE_DISABLE_X86_NEON")
-    cg.add_build_flag("-DESP_NN")
+    # cg.add_build_flag("-DESP_NN")
 
 
 VOICE_ASSISTANT_ACTION_SCHEMA = cv.Schema({cv.GenerateID(): cv.use_id(VoiceAssistant)})
