@@ -168,23 +168,17 @@ void VoiceAssistant::setup() {
   //
   // tflite::AllOpsResolver resolver;
   // NOLINTNEXTLINE(runtime-global-variables)
-  static tflite::MicroMutableOpResolver<11> micro_op_resolver;
-  if (micro_op_resolver.AddConv2D() != kTfLiteOk) {
-    return;
-  }
-  if (micro_op_resolver.AddFullyConnected() != kTfLiteOk) {
-    return;
-  }
-  if (micro_op_resolver.AddSoftmax() != kTfLiteOk) {
-    return;
-  }
-  if (micro_op_resolver.AddReshape() != kTfLiteOk) {
-    return;
-  }
+  static tflite::MicroMutableOpResolver<10> micro_op_resolver;
   if (micro_op_resolver.AddStridedSlice() != kTfLiteOk) {
     return;
   }
   if (micro_op_resolver.AddExpandDims() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddConv2D() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddReshape() != kTfLiteOk) {
     return;
   }
   if (micro_op_resolver.AddTranspose() != kTfLiteOk) {
@@ -199,9 +193,84 @@ void VoiceAssistant::setup() {
   if (micro_op_resolver.AddAdd() != kTfLiteOk) {
     return;
   }
-  if (micro_op_resolver.AddMaxPool2D() != kTfLiteOk) {
+  if (micro_op_resolver.AddFullyConnected() != kTfLiteOk) {
     return;
   }
+  if (micro_op_resolver.AddSoftmax() != kTfLiteOk) {
+    return;
+  }
+  // if (micro_op_resolver.AddConv2D() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddFullyConnected() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddSoftmax() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddReshape() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddStridedSlice() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddExpandDims() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddTranspose() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddBatchMatMul() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddSum() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddSub() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddAdd() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddMaxPool2D() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddDequantize() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddWhile() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddQuantize() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddLess() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddLogicalAnd() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddMul() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddGather() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddConcatenation() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddSplit() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddTanh() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddLogistic() != kTfLiteOk) {
+  //   return;
+  // }
+  // if (micro_op_resolver.AddSlice() != kTfLiteOk) {
+  //   return;
+  // }
 
   // Build an interpreter to run the model with.
   static tflite::MicroInterpreter static_interpreter(model, micro_op_resolver, this->tensor_arena_, kTensorArenaSize_);
@@ -350,10 +419,10 @@ void VoiceAssistant::loop() {
         return;
       }
 
-      // if (millis() - this->last_wake_word_check_ < 100) {
-      //   return;
-      // }
-      // this->last_wake_word_check_ = millis();
+      if (millis() - this->last_wake_word_check_ < 1000) {
+        return;
+      }
+      this->last_wake_word_check_ = millis();
 
       // Copy feature buffer to input tensor
       for (int i = 0; i < kFeatureElementCount; i++) {
