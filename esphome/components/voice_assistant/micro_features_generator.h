@@ -19,7 +19,7 @@ limitations under the License.
 #include "tensorflow/lite/c/common.h"
 #include "micro_model_settings.h"
 
-using Features = int8_t[kFeatureCount][kFeatureSize];
+using Features = float[kFeatureSize];
 
 // Sets up any resources needed for the feature generation pipeline.
 TfLiteStatus InitializeMicroFeatures();
@@ -29,9 +29,7 @@ TfLiteStatus InitializeMicroFeatures();
 // TfLiteStatus GenerateMicroFeatures(const int16_t* input, int input_size,
 //                                    int output_size, int8_t* output,
 //                                    size_t* num_samples_read);
-
-TfLiteStatus GenerateFeatures(const int16_t* audio_data,
-                              const size_t audio_data_size,
-                              Features* features_output);
+TfLiteStatus GenerateSingleFloatFeature(const int16_t *audio_data, const int audio_data_size, float *feature_output);
+// TfLiteStatus GenerateFeatures(const int16_t *audio_data, const size_t audio_data_size, Features *features_output);
 
 #endif  // TENSORFLOW_LITE_MICRO_EXAMPLES_MICRO_SPEECH_MICRO_FEATURES_MICRO_FEATURES_GENERATOR_H_

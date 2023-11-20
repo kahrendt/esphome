@@ -18,7 +18,7 @@ limitations under the License.
 #include <cmath>
 #include <cstring>
 #include <esp_log.h>
-#include "audio_preprocessor_int8_model_data.h"
+#include "audio_preprocessor_float32_model_data.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/micro/micro_log.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
@@ -31,20 +31,18 @@ namespace {
 // FrontendState g_micro_features_state;
 bool g_is_first_time = true;
 
-const tflite::Model* model = nullptr;
-tflite::MicroInterpreter* interpreter = nullptr;
+const tflite::Model *model = nullptr;
+tflite::MicroInterpreter *interpreter = nullptr;
 
 constexpr size_t kArenaSize = 16 * 1024;
 alignas(16) uint8_t g_arena[kArenaSize];
 
-constexpr int kAudioSampleDurationCount =
-    kFeatureDurationMs * kAudioSampleFrequency / 1000;
-constexpr int kAudioSampleStrideCount =
-    kFeatureStrideMs * kAudioSampleFrequency / 1000;
+constexpr int kAudioSampleDurationCount = kFeatureDurationMs * kAudioSampleFrequency / 1000;
+constexpr int kAudioSampleStrideCount = kFeatureStrideMs * kAudioSampleFrequency / 1000;
 using AudioPreprocessorOpResolver = tflite::MicroMutableOpResolver<18>;
 }  // namespace
 
-TfLiteStatus RegisterOps(AudioPreprocessorOpResolver& op_resolver) {
+TfLiteStatus RegisterOps(AudioPreprocessorOpResolver &op_resolver) {
   TF_LITE_ENSURE_STATUS(op_resolver.AddReshape());
   TF_LITE_ENSURE_STATUS(op_resolver.AddCast());
   TF_LITE_ENSURE_STATUS(op_resolver.AddStridedSlice());
@@ -71,10 +69,11 @@ TfLiteStatus InitializeMicroFeatures() {
 
   // Map the model into a usable data structure. This doesn't involve any
   // copying or parsing, it's a very lightweight operation.
-  model = tflite::GetModel(g_audio_preprocessor_int8_tflite);
+  model = tflite::GetModel(g_audio_preprocessor_float32_tflite);
   if (model->version() != TFLITE_SCHEMA_VERSION) {
     MicroPrintf("Model provided for Feature generator is schema version %d "
-                "not equal to supported version %d.", model->version(), TFLITE_SCHEMA_VERSION);
+                "not equal to supported version %d.",
+                model->version(), TFLITE_SCHEMA_VERSION);
     return kTfLiteError;
   }
 
@@ -95,38 +94,48 @@ TfLiteStatus InitializeMicroFeatures() {
   return kTfLiteOk;
 }
 
-TfLiteStatus GenerateSingleFeature(const int16_t* audio_data,
-                                   const int audio_data_size,
-                                   int8_t* feature_output,
-                                   tflite::MicroInterpreter* interpreter) {
-  TfLiteTensor* input = interpreter->input(0);
-  TfLiteTensor* output = interpreter->output(0);
-  std::copy_n(audio_data, audio_data_size,
-              tflite::GetTensorData<int16_t>(input));
+TfLiteStatus GenerateSingleFeature(const int16_t *audio_data, const int audio_data_size, int8_t *feature_output,
+                                   tflite::MicroInterpreter *interpreter) {
+  TfLiteTensor *input = interpreter->input(0);
+  TfLiteTensor *output = interpreter->output(0);
+  std::copy_n(audio_data, audio_data_size, tflite::GetTensorData<int16_t>(input));
   if (interpreter->Invoke() != kTfLiteOk) {
     MicroPrintf("Feature generator model invocation failed");
   }
 
-  std::copy_n(tflite::GetTensorData<int8_t>(output), kFeatureSize,
-              feature_output);
+  std::copy_n(tflite::GetTensorData<int8_t>(output), kFeatureSize, feature_output);
 
   return kTfLiteOk;
 }
 
-TfLiteStatus GenerateFeatures(const int16_t* audio_data,
-                              const size_t audio_data_size,
-                              Features* features_output) {
-  size_t remaining_samples = audio_data_size;
-  size_t feature_index = 0;
-  while (remaining_samples >= kAudioSampleDurationCount &&
-         feature_index < kFeatureCount) {
-    TF_LITE_ENSURE_STATUS(
-        GenerateSingleFeature(audio_data, kAudioSampleDurationCount,
-                              (*features_output)[feature_index], interpreter));
-    feature_index++;
-    audio_data += kAudioSampleStrideCount;
-    remaining_samples -= kAudioSampleStrideCount;
+TfLiteStatus GenerateSingleFloatFeature(const int16_t *audio_data, const int audio_data_size, float *feature_output) {
+  TfLiteTensor *input = interpreter->input(0);
+  TfLiteTensor *output = interpreter->output(0);
+  std::copy_n(audio_data, audio_data_size, tflite::GetTensorData<int16_t>(input));
+  if (interpreter->Invoke() != kTfLiteOk) {
+    MicroPrintf("Feature generator model invocation failed");
   }
 
+  for (int i = 0; i < kFeatureCount; ++i) {
+    feature_output[i] = output->data.f[i];
+  }
+
+  // std::copy_n(tflite::GetTensorData<float>(output), kFeatureSize, feature_output);
+
   return kTfLiteOk;
 }
+
+// TfLiteStatus GenerateFeatures(const int16_t *audio_data, const size_t audio_data_size, Features *features_output) {
+//   size_t remaining_samples = audio_data_size;
+//   size_t feature_index = 0;
+//   while (remaining_samples >= kAudioSampleDurationCount && feature_index < kFeatureCount) {
+//     TF_LITE_ENSURE_STATUS(
+//         GenerateSingleFeature(audio_data, kAudioSampleDurationCount, (*features_output)[feature_index],
+//         interpreter));
+//     feature_index++;
+//     audio_data += kAudioSampleStrideCount;
+//     remaining_samples -= kAudioSampleStrideCount;
+//   }
+
+//   return kTfLiteOk;
+// }

@@ -209,8 +209,10 @@ class VoiceAssistant : public Component {
   State desired_state_{State::IDLE};
 
   const tflite::Model *model = nullptr;
-  tflite::MicroInterpreter *interpreter = nullptr;
+  tflite::MicroInterpreter *interpreter_kws = nullptr;
   TfLiteTensor *model_input = nullptr;
+  TfLiteTensor *memory_input = nullptr;
+  TfLiteTensor *memory_output = nullptr;
 
   int32_t previous_time = 0;
 
@@ -221,15 +223,19 @@ class VoiceAssistant : public Component {
 
   uint8_t *tensor_arena_{nullptr};
   // uint8_t tensor_arena[kTensorArenaSize];
-  int8_t *feature_buffer_{nullptr};
+  float *feature_buffer_{nullptr};
   // int8_t feature_buffer[kFeatureElementCount];
-  int8_t *model_input_buffer{nullptr};
+  float *model_input_buffer{nullptr};
+
+  float output_probabilities_[3];
 
   int feature_size_ = kFeatureElementCount;
   // int8_t *feature_data_;
   // Make sure we don't try to use cached information if this is the first call
   // into the provider.
   bool is_first_run_{true};
+
+  float *features_output_{nullptr};
 
   // Fills the feature data with information from audio inputs, and returns how
   // many feature slices were updated.
