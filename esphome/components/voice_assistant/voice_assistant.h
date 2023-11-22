@@ -259,8 +259,8 @@ class VoiceAssistant : public Component {
   int16_t *g_history_buffer_;
   // int16_t g_history_buffer[history_samples_to_keep];
 
-  uint8_t succesive_wake_words = 0;
-  float last_probability = 0.0;
+  uint8_t successive_wake_words = 0;
+  float max_probability_ = 0.0;
 };
 
 template<typename... Ts> class StartAction : public Action<Ts...>, public Parented<VoiceAssistant> {

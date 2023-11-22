@@ -342,17 +342,37 @@ void VoiceAssistant::loop() {
       }
       // if (max_result > 0.8f) {
       //   if (max_idx == 2) {
-      //     ESP_LOGD(TAG, "Detected %7s, score: %.2f", kCategoryLabels[max_idx], static_cast<double>(max_result));
+      ESP_LOGD(TAG, "Detected %7s, score: %.2f", kCategoryLabels[max_idx], static_cast<double>(max_result));
       //   }
       // }
 
-      if ((max_result > 0.95f) && (max_idx == 2)) {
-        ++this->succesive_wake_words;
+      if (max_idx == 2) {
+        ++this->successive_wake_words;
+        if (this->max_probability_ < max_result) {
+          this->max_probability_ = max_result;
+        }
       } else {
-        if (this->succesive_wake_words > 0) {
-          --this->succesive_wake_words;
+        if (this->successive_wake_words > 0) {
+          --this->successive_wake_words;
+        } else {
+          this->max_probability_ = 0.0;
         }
       }
+
+      if ((this->successive_wake_words >= 8) && (this->max_probability_ > 0.9)) {
+        ESP_LOGD(TAG, "Wakeword detected");
+        this->successive_wake_words = 0;
+        // this->last_probability = 0.0f;
+        this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
+      }
+
+      // if ((max_result > 0.95f) && (max_idx == 2)) {
+      //   ++this->succesive_wake_words;
+      // } else {
+      //   if (this->succesive_wake_words > 0) {
+      //     --this->succesive_wake_words;
+      //   }
+      // }
       // if ((max_result > 0.95f) && (max_idx == 2)) {
       //   if (this->last_probability > 0.95f) {
       //     ++this->succesive_wake_words;
@@ -363,12 +383,12 @@ void VoiceAssistant::loop() {
       //   this->succesive_wake_words = 0;
       // }
 
-      if (this->succesive_wake_words >= 10) {
-        ESP_LOGD(TAG, "Wakeword detected");
-        this->succesive_wake_words = 0;
-        // this->last_probability = 0.0f;
-        this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
-      }
+      // if (this->succesive_wake_words >= 10) {
+      //   ESP_LOGD(TAG, "Wakeword detected");
+      //   this->succesive_wake_words = 0;
+      //   // this->last_probability = 0.0f;
+      //   this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
+      // }
       break;
     }
     case State::WAIT_FOR_VAD: {
