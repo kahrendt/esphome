@@ -94,33 +94,36 @@ TfLiteStatus InitializeMicroFeatures() {
   return kTfLiteOk;
 }
 
-TfLiteStatus GenerateSingleFeature(const int16_t *audio_data, const int audio_data_size, int8_t *feature_output,
-                                   tflite::MicroInterpreter *interpreter) {
-  TfLiteTensor *input = interpreter->input(0);
-  TfLiteTensor *output = interpreter->output(0);
-  std::copy_n(audio_data, audio_data_size, tflite::GetTensorData<int16_t>(input));
-  if (interpreter->Invoke() != kTfLiteOk) {
-    MicroPrintf("Feature generator model invocation failed");
-  }
+// TfLiteStatus GenerateSingleFeature(const int16_t *audio_data, const int audio_data_size, int8_t *feature_output,
+//                                    tflite::MicroInterpreter *interpreter) {
+//   TfLiteTensor *input = interpreter->input(0);
+//   TfLiteTensor *output = interpreter->output(0);
+//   std::copy_n(audio_data, audio_data_size, tflite::GetTensorData<int16_t>(input));
+//   if (interpreter->Invoke() != kTfLiteOk) {
+//     MicroPrintf("Feature generator model invocation failed");
+//   }
 
-  std::copy_n(tflite::GetTensorData<int8_t>(output), kFeatureSize, feature_output);
+//   std::copy_n(tflite::GetTensorData<int8_t>(output), kFeatureSize, feature_output);
 
-  return kTfLiteOk;
-}
+//   return kTfLiteOk;
+// }
 
 TfLiteStatus GenerateSingleFloatFeature(const int16_t *audio_data, const int audio_data_size, float *feature_output) {
   TfLiteTensor *input = interpreter->input(0);
   TfLiteTensor *output = interpreter->output(0);
-  std::copy_n(audio_data, audio_data_size, tflite::GetTensorData<int16_t>(input));
+  std::copy_n(audio_data, kAudioSampleDurationCount, tflite::GetTensorData<int16_t>(input));
+  // std::copy_n(audio_data, audio_data_size, tflite::GetTensorData<int16_t>(input));
   if (interpreter->Invoke() != kTfLiteOk) {
     MicroPrintf("Feature generator model invocation failed");
   }
 
-  for (int i = 0; i < kFeatureCount; ++i) {
-    feature_output[i] = output->data.f[i];
-  }
+  // std::memcpy(feature_output, tflite::GetTensorData<float>(output), kFeatureSize * sizeof(float));
 
-  // std::copy_n(tflite::GetTensorData<float>(output), kFeatureSize, feature_output);
+  // for (int i = 0; i < kFeatureSize; ++i) {
+  //   feature_output[i] = output->data.f[i];
+  // }
+
+  std::copy_n(tflite::GetTensorData<float>(output), kFeatureSize, feature_output);
 
   return kTfLiteOk;
 }

@@ -219,9 +219,10 @@ class VoiceAssistant : public Component {
   // Create an area of memory to use for input, output, and intermediate arrays.
   // The size of this will depend on the model you're using, and may need to be
   // determined by experimentation.
-  static constexpr int kTensorArenaSize_ = 2 * 30 * 1024 * 100;
+  static constexpr int kTensorArenaSize_ = 4 * 1024 * 1000;
 
   uint8_t *tensor_arena_{nullptr};
+  uint8_t *var_arena_{nullptr};
   // uint8_t tensor_arena[kTensorArenaSize];
   float *feature_buffer_{nullptr};
   // int8_t feature_buffer[kFeatureElementCount];
@@ -251,7 +252,7 @@ class VoiceAssistant : public Component {
   // The reference implementation can have no platform-specific dependencies, so
   // it just returns an array filled with zeros. For real applications, you should
   // ensure there's a specialized implementation that accesses hardware APIs.
-  TfLiteStatus GetAudioSamples(int start_ms, int duration_ms, int *audio_samples_size, int16_t **audio_samples);
+  TfLiteStatus GetAudioSamples(int *audio_samples_size, int16_t **audio_samples);
   TfLiteStatus GetAudioSamples1(int *audio_samples_size, int16_t **audio_samples);
   // Returns the time that audio data was last captured in milliseconds. There's
   // no contract about what time zero represents, the accuracy, or the granularity

@@ -127,6 +127,13 @@ void VoiceAssistant::setup() {
     return;
   }
 
+  this->var_arena_ = arena_allocator.allocate(64000);
+  if (this->var_arena_ == nullptr) {
+    ESP_LOGW(TAG, "Could not allocate send buffer.");
+    this->mark_failed();
+    return;
+  }
+
   ExternalRAMAllocator<float> feature_buffer_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
   this->feature_buffer_ = feature_buffer_allocator.allocate(kFeatureElementCount);
   if (this->feature_buffer_ == nullptr) {
@@ -174,28 +181,31 @@ void VoiceAssistant::setup() {
   // incur some penalty in code space for op implementations that are not
   // needed by this graph.
   //
-  // tflite::AllOpsResolver resolver;
+  // tflite::AllOpsResolver micro_op_resolver;
   // NOLINTNEXTLINE(runtime-global-variables)
-  static tflite::MicroMutableOpResolver<7> micro_op_resolver;
+  static tflite::MicroMutableOpResolver<12> micro_op_resolver;
   // if (micro_op_resolver.AddCallOnce() != kTfLiteOk) {
   //   return;
   // }
   // if (micro_op_resolver.AddVarHandle() != kTfLiteOk) {
   //   return;
   // }
-  // if (micro_op_resolver.AddFullyConnected() != kTfLiteOk) {
+  // if (micro_op_resolver.AddReadVariable() != kTfLiteOk) {
   //   return;
   // }
-  // if (micro_op_resolver.AddSplitV() != kTfLiteOk) {
-  //   return;
-  // }
+  if (micro_op_resolver.AddFullyConnected() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddSplitV() != kTfLiteOk) {
+    return;
+  }
 
-  // if (micro_op_resolver.AddStridedSlice() != kTfLiteOk) {
-  //   return;
-  // }
-  // if (micro_op_resolver.AddConcatenation() != kTfLiteOk) {
-  //   return;
-  // }
+  if (micro_op_resolver.AddStridedSlice() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddConcatenation() != kTfLiteOk) {
+    return;
+  }
   // if (micro_op_resolver.AddAssignVariable() != kTfLiteOk) {
   //   return;
   // }
@@ -216,9 +226,9 @@ void VoiceAssistant::setup() {
   // if (micro_op_resolver.AddSum() != kTfLiteOk) {
   //   return;
   // }
-  // if (micro_op_resolver.AddAdd() != kTfLiteOk) {
-  //   return;
-  // }
+  if (micro_op_resolver.AddTanh() != kTfLiteOk) {
+    return;
+  }
   // if (micro_op_resolver.AddFullyConnected() != kTfLiteOk) {
   //   return;
   // }
@@ -228,9 +238,9 @@ void VoiceAssistant::setup() {
   if (micro_op_resolver.AddConv2D() != kTfLiteOk) {
     return;
   }
-  // if (micro_op_resolver.AddFullyConnected() != kTfLiteOk) {
-  //   return;
-  // }
+  if (micro_op_resolver.AddSplit() != kTfLiteOk) {
+    return;
+  }
   // if (micro_op_resolver.AddSoftmax() != kTfLiteOk) {
   //   return;
   // }
@@ -252,9 +262,9 @@ void VoiceAssistant::setup() {
   // if (micro_op_resolver.AddSum() != kTfLiteOk) {
   //   return;
   // }
-  // if (micro_op_resolver.AddSub() != kTfLiteOk) {
-  //   return;
-  // }
+  if (micro_op_resolver.AddSub() != kTfLiteOk) {
+    return;
+  }
   if (micro_op_resolver.AddAdd() != kTfLiteOk) {
     return;
   }
@@ -282,28 +292,24 @@ void VoiceAssistant::setup() {
   // if (micro_op_resolver.AddGather() != kTfLiteOk) {
   //   return;
   // }
-  // if (micro_op_resolver.AddConcatenation() != kTfLiteOk) {
+  // if (micro_op_resolver.AddMean() != kTfLiteOk) {
   //   return;
   // }
-  if (micro_op_resolver.AddDepthwiseConv2D() != kTfLiteOk) {
-    return;
-  }
-  if (micro_op_resolver.AddMean() != kTfLiteOk) {
-    return;
-  }
+  // if (micro_op_resolver.AddDepthwiseConv2D() != kTfLiteOk) {
+  //   return;
+  // }
   if (micro_op_resolver.AddLogistic() != kTfLiteOk) {
     return;
   }
-  // if (micro_op_resolver.AddSlice() != kTfLiteOk) {
-  //   return;
-  // }
-
-  // static uint8_t var_arena[4096];
-  // static tflite::MicroAllocator *ma = tflite::MicroAllocator::Create(var_arena, 4096);
-  // static tflite::MicroResourceVariables *mrv = tflite::MicroResourceVariables::Create(ma, 20);
+  // static uint8_t var_arena[52000];
+  static tflite::MicroAllocator *ma = tflite::MicroAllocator::Create(this->var_arena_, 64000);
+  static tflite::MicroResourceVariables *mrv = tflite::MicroResourceVariables::Create(ma, 7);
 
   // Build an interpreter to run the model with.
-  static tflite::MicroInterpreter static_interpreter(model, micro_op_resolver, this->tensor_arena_, kTensorArenaSize_);
+  static tflite::MicroInterpreter static_interpreter(model, micro_op_resolver, this->tensor_arena_, kTensorArenaSize_,
+                                                     mrv);
+  // static tflite::MicroInterpreter static_interpreter(model, micro_op_resolver, this->tensor_arena_,
+  // kTensorArenaSize_);
   interpreter_kws = &static_interpreter;
 
   // Allocate memory from the tensor_arena for the model's tensors.
@@ -339,12 +345,34 @@ void VoiceAssistant::setup() {
 
   // Prepare to access the audio spectrograms from a microphone or other source
   // that will provide the inputs to the neural network.
-  // NOLINTNEXTLINE(runtime-global-variables)
+  // NOLINTNEXTLINE(runtime-global-variables)2
   // static FeatureProvider static_feature_provider(kFeatureElementCount, feature_buffer);
   // feature_provider = &static_feature_provider;
   for (int n = 0; n < feature_size_; ++n) {
     this->feature_buffer_[n] = 0.0;
   }
+
+  for (int i = 0; i < 3 * 40; ++i) {
+    interpreter_kws->output(1)->data.f[i] = 0.0;
+  }
+  for (int i = 0; i < 5 * 38 * 16; ++i) {
+    interpreter_kws->output(2)->data.f[i] = 0.0;
+  }
+  for (int i = 0; i < 1 * 256; ++i) {
+    interpreter_kws->output(3)->data.f[i] = 0.0;
+  }
+  for (int i = 0; i < 1 * 256; ++i) {
+    interpreter_kws->output(4)->data.f[i] = 0.0;
+  }
+  // for (int i = 0; i < 1 * 57 * 1 * 64; ++i) {
+  //   interpreter_kws->output(5)->data.f[i] = 0.0;
+  // }
+  // for (int i = 0; i < 1 * 1 * 1 * 128; ++i) {
+  //   interpreter_kws->output(6)->data.f[i] = 0.0;
+  // }
+  // for (int i = 0; i < 1 * 49 * 1 * 128; ++i) {
+  //   interpreter_kws->output(7)->data.f[i] = 0.0;
+  // }
 
   // for (int n = 0; n < 1 * 49 * 128; ++n) {
   //   this->memory_input->data.f[n] = 0.0;
@@ -461,19 +489,31 @@ void VoiceAssistant::loop() {
         return;
       }
 
-      if (how_many_new_slices > 0) {
-        // ESP_LOGD(TAG, "New slices = %u", how_many_new_slices);
-      }
+      // if (millis() - this->last_wake_word_check_ < 200) {
+      //   return;
+      // }
+      // this->last_wake_word_check_ = millis();
+
+      // float max_result = 0.0;
+      // int max_idx = 0;
+      // for (int i = 0; i < kCategoryCount; i++) {
+      //   float current_result = output_probabilities_[i];
+      //   if (current_result > max_result) {
+      //     max_result = current_result;  // update max result
+      //     max_idx = i;                  // update category
+      //   }
+      // }
+
+      // // ESP_LOGD(TAG, "silence=%.3f,unknown=%.3f,computer=%.3f", output->data.f[0], output->data.f[1],
+      // // output->data.f[2]);
+
+      // // // if (max_result > 0.8f) {
+      // ESP_LOGD(TAG, "Detected %7s, score: %.5f", kCategoryLabels[max_idx], static_cast<double>(max_result));
 
       // if (max_idx == 2) {
       //   this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
       // }
       // }
-
-      // if (millis() - this->last_wake_word_check_ < 1000) {
-      //   return;
-      // }
-      // this->last_wake_word_check_ = millis();
 
       // // Copy feature buffer to input tensor
       // for (int i = 0; i < kFeatureSize; i++) {
@@ -734,50 +774,105 @@ TfLiteStatus VoiceAssistant::PopulateFeatureData(int32_t last_time_in_ms, int32_
   *how_many_new_slices = slices_needed;
   if (slices_needed > 0) {
     for (int new_slice = 0; new_slice < slices_needed; ++new_slice) {
-      const int new_step = (current_step - kFeatureCount + 1) + new_slice;
-      const int32_t slice_start_ms = (new_step * kFeatureStrideMs);
+      // const int new_step = (current_step - kFeatureCount + 1) + new_slice;
+      // const int32_t slice_start_ms = (new_step * kFeatureStrideMs);
       int16_t *audio_samples = nullptr;
       int audio_samples_size = 0;
       // TODO(petewarden): Fix bug that leads to non-zero slice_start_ms
-      if (GetAudioSamples((slice_start_ms > 0 ? slice_start_ms : 0), kFeatureDurationMs, &audio_samples_size,
-                          &audio_samples) != kTfLiteOk) {
+      if (GetAudioSamples(&audio_samples_size, &audio_samples) != kTfLiteOk) {
         return kTfLiteError;
       }
 
       TfLiteStatus generate_status =
           GenerateSingleFloatFeature(audio_samples, audio_samples_size, this->features_output_);
 
-      for (int i = 0; i < kFeatureSize; i++) {
+      // std::memcpy(tflite::GetTensorData<float>(this->interpreter_kws->input(0)), this->features_output_,
+      // kFeatureSize * sizeof(float));
+
+      for (int i = 0; i < kFeatureSize; ++i) {
         interpreter_kws->input(0)->data.f[i] = this->features_output_[i];
       }
 
+      // TfLiteTensor *input = interpreter_kws->input(0);
+      TfLiteTensor *input_mem_1 = interpreter_kws->input(1);
+      TfLiteTensor *input_mem_2 = interpreter_kws->input(2);
+      TfLiteTensor *input_mem_3 = interpreter_kws->input(3);
+      TfLiteTensor *input_mem_4 = interpreter_kws->input(4);
+      // TfLiteTensor *input_mem_5 = interpreter_kws->input(5);
+      // TfLiteTensor *input_mem_6 = interpreter_kws->input(6);
+      // TfLiteTensor *input_mem_7 = interpreter_kws->input(7);
+
+      TfLiteTensor *output_mem_1 = interpreter_kws->output(1);
+      TfLiteTensor *output_mem_2 = interpreter_kws->output(2);
+      TfLiteTensor *output_mem_3 = interpreter_kws->output(3);
+      TfLiteTensor *output_mem_4 = interpreter_kws->output(4);
+      // TfLiteTensor *output_mem_5 = interpreter_kws->output(5);
+      // TfLiteTensor *output_mem_6 = interpreter_kws->output(6);
+      // TfLiteTensor *output_mem_7 = interpreter_kws->output(7);
+
+      std::memcpy(tflite::GetTensorData<float>(input_mem_1), tflite::GetTensorData<float>(output_mem_1),
+                  3 * 40 * sizeof(float));
+      std::memcpy(tflite::GetTensorData<float>(input_mem_2), tflite::GetTensorData<float>(output_mem_2),
+                  5 * 38 * 16 * sizeof(float));
+      std::memcpy(tflite::GetTensorData<float>(input_mem_3), tflite::GetTensorData<float>(output_mem_3),
+                  256 * sizeof(float));
+      std::memcpy(tflite::GetTensorData<float>(input_mem_4), tflite::GetTensorData<float>(output_mem_4),
+                  256 * sizeof(float));
+
+      // std::memcpy(tflite::GetTensorData<float>(input_mem_1), tflite::GetTensorData<float>(output_mem_1),
+      //             input_mem_1->dims->data[1] * input_mem_1->dims->data[3] * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(input_mem_2), tflite::GetTensorData<float>(output_mem_2),
+      //             input_mem_2->dims->data[1] * input_mem_2->dims->data[3] * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(input_mem_3), tflite::GetTensorData<float>(output_mem_3),
+      //             input_mem_3->dims->data[1] * input_mem_3->dims->data[3] * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(input_mem_4), tflite::GetTensorData<float>(output_mem_4),
+      //             input_mem_4->dims->data[1] * input_mem_4->dims->data[3] * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(input_mem_5), tflite::GetTensorData<float>(output_mem_5),
+      //             input_mem_5->dims->data[1] * input_mem_5->dims->data[3] * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(input_mem_6), tflite::GetTensorData<float>(output_mem_6),
+      //             input_mem_6->dims->data[1] * input_mem_6->dims->data[3] * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(input_mem_7), tflite::GetTensorData<float>(output_mem_7),
+      //             input_mem_7->dims->data[1] * input_mem_7->dims->data[3] * sizeof(float));
+
+      // for (int i = 0; i < 1 * 11 * 1 * 40; ++i) {
+      //   interpreter_kws->input(1)->data.f[i] = interpreter_kws->output(1)->data.f[i];
+      // }
+      // for (int i = 0; i < 1 * 13 * 1 * 128; ++i) {
+      //   interpreter_kws->input(2)->data.f[i] = interpreter_kws->output(2)->data.f[i];
+      // }
+      // for (int i = 0; i < 1 * 15 * 1 * 64; ++i) {
+      //   interpreter_kws->input(3)->data.f[i] = interpreter_kws->output(3)->data.f[i];
+      // }
+      // for (int i = 0; i < 1 * 17 * 1 * 64; ++i) {
+      //   interpreter_kws->input(4)->data.f[i] = interpreter_kws->output(4)->data.f[i];
+      // }
+      // for (int i = 0; i < 1 * 57 * 1 * 64; ++i) {
+      //   interpreter_kws->input(5)->data.f[i] = interpreter_kws->output(5)->data.f[i];
+      // }
+      // for (int i = 0; i < 1 * 1 * 1 * 128; ++i) {
+      //   interpreter_kws->input(6)->data.f[i] = interpreter_kws->output(6)->data.f[i];
+      // }
+      // for (int i = 0; i < 1 * 49 * 1 * 128; ++i) {
+      //   interpreter_kws->input(7)->data.f[i] = interpreter_kws->output(7)->data.f[i];
+      // }
+
       // Run the model on the spectrogram input and make sure it succeeds.
+      uint32_t current_time = millis();
       TfLiteStatus invoke_status = interpreter_kws->Invoke();
-      if (invoke_status != kTfLiteOk) {
-        ESP_LOGD(TAG, "Invoke failed");
-        return kTfLiteError;
-      }
+      ESP_LOGD(TAG, "Inference time = %ums", (millis() - current_time));
+      // if (invoke_status != kTfLiteOk) {
+      //   ESP_LOGD(TAG, "Invoke failed");
+      //   return kTfLiteError;
+      // }
 
-      // Obtain a pointer to the output tensor
-      TfLiteTensor *output = interpreter_kws->output(0);
+      // // Obtain a pointer to the output tensor
+      // TfLiteTensor *output = interpreter_kws->output(0);
 
-      for (int i = 0; i < 3; ++i) {
-        this->output_probabilities_[i] = output->data.f[i];
-      }
+      // for (int i = 0; i < 3; ++i) {
+      //   this->output_probabilities_[i] = output->data.f[i];
+      // }
 
-      float max_result = 0.0;
-      int max_idx = 0;
-      for (int i = 0; i < kCategoryCount; i++) {
-        float current_result = interpreter_kws->output(0)->data.f[i];
-        if (current_result > max_result) {
-          max_result = current_result;  // update max result
-          max_idx = i;                  // update category
-        }
-      }
-
-      // if (max_result > 0.8f) {
-      ESP_LOGD(TAG, "Detected %7s, score: %.5f", kCategoryLabels[max_idx], static_cast<double>(max_result));
-      return generate_status;
+      // return generate_status;
     }
   }
 
@@ -880,8 +975,7 @@ TfLiteStatus VoiceAssistant::PopulateFeatureData(int32_t last_time_in_ms, int32_
 //   return kTfLiteOk;
 // }
 
-TfLiteStatus VoiceAssistant::GetAudioSamples(int start_ms, int duration_ms, int *audio_samples_size,
-                                             int16_t **audio_samples) {
+TfLiteStatus VoiceAssistant::GetAudioSamples(int *audio_samples_size, int16_t **audio_samples) {
   // if (!g_is_audio_initialized) {
   //   TfLiteStatus init_status = InitAudioRecording();
   //   if (init_status != kTfLiteOk) {
@@ -915,7 +1009,8 @@ TfLiteStatus VoiceAssistant::GetAudioSamples(int start_ms, int duration_ms, int 
   memcpy((void *) (this->g_history_buffer_), (void *) (this->g_audio_output_buffer_ + new_samples_to_get),
          history_samples_to_keep * sizeof(int16_t));
 
-  *audio_samples_size = kMaxAudioSampleSize;
+  // *audio_samples_size = kMaxAudioSampleSize;
+  // *audio_samples_size = bytes_read / sizeof(int16_t);
   *audio_samples = this->g_audio_output_buffer_;
   return kTfLiteOk;
 }
