@@ -518,11 +518,11 @@ void VoiceAssistant::loop() {
         }
       }
 
-      ESP_LOGD(TAG, "silence=%.3f,unknown=%.3f,computer=%.3f", tflite::GetTensorData<float>(output)[0],
-               tflite::GetTensorData<float>(output)[1], tflite::GetTensorData<float>(output)[2]);
+      // ESP_LOGD(TAG, "silence=%.3f,unknown=%.3f,computer=%.3f", tflite::GetTensorData<float>(output)[0],
+      //          tflite::GetTensorData<float>(output)[1], tflite::GetTensorData<float>(output)[2]);
 
       // // // if (max_result > 0.8f) {
-      // ESP_LOGD(TAG, "Detected %7s, score: %.5f", kCategoryLabels[max_idx], static_cast<double>(max_result));
+      ESP_LOGD(TAG, "Detected %7s, score: %.5f", kCategoryLabels[max_idx], static_cast<double>(max_result));
 
       // if (max_idx == 2) {
       //   this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
