@@ -222,10 +222,8 @@ class VoiceAssistant : public Component {
   static constexpr int kTensorArenaSize_ = 4 * 1024 * 1000;
 
   uint8_t *tensor_arena_{nullptr};
-  uint8_t *var_arena_{nullptr};
-  // uint8_t tensor_arena[kTensorArenaSize];
+  // uint8_t *var_arena_{nullptr};
   float *feature_buffer_{nullptr};
-  // int8_t feature_buffer[kFeatureElementCount];
   float *model_input_buffer{nullptr};
 
   float output_probabilities_[3];
@@ -236,7 +234,7 @@ class VoiceAssistant : public Component {
   // into the provider.
   bool is_first_run_{true};
 
-  float *features_output_{nullptr};
+  // float *features_output_{nullptr};
 
   // Fills the feature data with information from audio inputs, and returns how
   // many feature slices were updated.
@@ -252,8 +250,8 @@ class VoiceAssistant : public Component {
   // The reference implementation can have no platform-specific dependencies, so
   // it just returns an array filled with zeros. For real applications, you should
   // ensure there's a specialized implementation that accesses hardware APIs.
-  TfLiteStatus GetAudioSamples(int *audio_samples_size, int16_t **audio_samples);
-  TfLiteStatus GetAudioSamples1(int *audio_samples_size, int16_t **audio_samples);
+  TfLiteStatus GetAudioSamples(int start_ms, int duration_ms, int *audio_samples_size, int16_t **audio_samples);
+
   // Returns the time that audio data was last captured in milliseconds. There's
   // no contract about what time zero represents, the accuracy, or the granularity
   // of the result. Subsequent calls will generally not return a lower value, but

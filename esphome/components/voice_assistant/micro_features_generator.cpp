@@ -111,23 +111,30 @@ TfLiteStatus InitializeMicroFeatures() {
 TfLiteStatus GenerateSingleFloatFeature(const int16_t *audio_data, const int audio_data_size, float *feature_output) {
   TfLiteTensor *input = interpreter->input(0);
   TfLiteTensor *output = interpreter->output(0);
-  std::copy_n(audio_data, kAudioSampleDurationCount, tflite::GetTensorData<int16_t>(input));
+  std::copy_n(audio_data, audio_data_size, tflite::GetTensorData<int16_t>(input));
   // std::copy_n(audio_data, audio_data_size, tflite::GetTensorData<int16_t>(input));
   if (interpreter->Invoke() != kTfLiteOk) {
     MicroPrintf("Feature generator model invocation failed");
   }
 
-  // std::memcpy(feature_output, tflite::GetTensorData<float>(output), kFeatureSize * sizeof(float));
-
-  // for (int i = 0; i < kFeatureSize; ++i) {
-  //   feature_output[i] = output->data.f[i];
-  // }
-
-  std::copy_n(tflite::GetTensorData<float>(output), kFeatureSize, feature_output);
+  std::memcpy(feature_output, tflite::GetTensorData<float>(output), kFeatureSize * sizeof(float));
 
   return kTfLiteOk;
 }
 
+TfLiteStatus GenerateFloatFeatures(const int16_t *audio_data, const size_t audio_data_size, Features *features_output) {
+  size_t remaining_samples = audio_data_size;
+  size_t feature_index = 0;
+  while (remaining_samples >= kAudioSampleDurationCount && feature_index < kFeatureCount) {
+    TF_LITE_ENSURE_STATUS(
+        GenerateSingleFloatFeature(audio_data, kAudioSampleDurationCount, (*features_output)[feature_index]));
+    feature_index++;
+    audio_data += kAudioSampleStrideCount;
+    remaining_samples -= kAudioSampleStrideCount;
+  }
+
+  return kTfLiteOk;
+}
 // TfLiteStatus GenerateFeatures(const int16_t *audio_data, const size_t audio_data_size, Features *features_output) {
 //   size_t remaining_samples = audio_data_size;
 //   size_t feature_index = 0;
