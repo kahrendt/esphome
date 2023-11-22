@@ -401,7 +401,7 @@ void VoiceAssistant::loop() {
         }
       }
 
-      if ((this->successive_wake_words >= 8) && (this->max_probability_ > 0.9)) {
+      if ((this->successive_wake_words >= 10) && (this->max_probability_ > 0.95)) {
         ESP_LOGD(TAG, "Wakeword detected");
         this->successive_wake_words = 0;
         // this->last_probability = 0.0f;
