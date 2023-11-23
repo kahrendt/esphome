@@ -183,7 +183,7 @@ void VoiceAssistant::setup() {
   //
   // tflite::AllOpsResolver micro_op_resolver;
   // NOLINTNEXTLINE(runtime-global-variables)
-  static tflite::MicroMutableOpResolver<13> micro_op_resolver;
+  static tflite::MicroMutableOpResolver<14> micro_op_resolver;
   // if (micro_op_resolver.AddCallOnce() != kTfLiteOk) {
   //   return;
   // }
@@ -299,6 +299,9 @@ void VoiceAssistant::setup() {
     return;
   }
   if (micro_op_resolver.AddLogistic() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddAveragePool2D() != kTfLiteOk) {
     return;
   }
   // static uint8_t var_arena[52000];
