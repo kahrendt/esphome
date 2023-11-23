@@ -183,7 +183,7 @@ void VoiceAssistant::setup() {
   //
   // tflite::AllOpsResolver micro_op_resolver;
   // NOLINTNEXTLINE(runtime-global-variables)
-  static tflite::MicroMutableOpResolver<14> micro_op_resolver;
+  static tflite::MicroMutableOpResolver<16> micro_op_resolver;
   // if (micro_op_resolver.AddCallOnce() != kTfLiteOk) {
   //   return;
   // }
@@ -203,9 +203,9 @@ void VoiceAssistant::setup() {
   // if (micro_op_resolver.AddStridedSlice() != kTfLiteOk) {
   //   return;
   // }
-  // if (micro_op_resolver.AddConcatenation() != kTfLiteOk) {
-  //   return;
-  // }
+  if (micro_op_resolver.AddConcatenation() != kTfLiteOk) {
+    return;
+  }
   // if (micro_op_resolver.AddAssignVariable() != kTfLiteOk) {
   //   return;
   // }
@@ -213,9 +213,9 @@ void VoiceAssistant::setup() {
     return;
   }
 
-  // if (micro_op_resolver.AddMaxPool2D() != kTfLiteOk) {
-  //   return;
-  // }
+  if (micro_op_resolver.AddStridedSlice() != kTfLiteOk) {
+    return;
+  }
 
   // if (micro_op_resolver.AddTranspose() != kTfLiteOk) {
   //   return;
@@ -355,15 +355,30 @@ void VoiceAssistant::setup() {
     this->feature_buffer_[n] = 0.0;
   }
 
-  // for (int i = 0; i < 1 * 57 * 1 * 64; ++i) {
-  //   interpreter_kws->output(5)->data.f[i] = 0.0;
-  // }
-  // for (int i = 0; i < 1 * 1 * 1 * 128; ++i) {
-  //   interpreter_kws->output(6)->data.f[i] = 0.0;
-  // }
-  // for (int i = 0; i < 1 * 49 * 1 * 128; ++i) {
-  //   interpreter_kws->output(7)->data.f[i] = 0.0;
-  // }
+  for (int i = 0; i < 1 * 19 * 40; ++i) {
+    interpreter_kws->output(1)->data.f[i] = 0.0;
+  }
+  for (int i = 0; i < 1 * 3 * 37 * 64; ++i) {
+    interpreter_kws->output(2)->data.f[i] = 0.0;
+  }
+  for (int i = 0; i < 1 * 3 * 35 * 64; ++i) {
+    interpreter_kws->output(3)->data.f[i] = 0.0;
+  }
+  for (int i = 0; i < 1 * 3 * 33 * 64; ++i) {
+    interpreter_kws->output(4)->data.f[i] = 0.0;
+  }
+  for (int i = 0; i < 1 * 3 * 31 * 64; ++i) {
+    interpreter_kws->output(5)->data.f[i] = 0.0;
+  }
+  for (int i = 0; i < 1 * 3 * 29 * 64; ++i) {
+    interpreter_kws->output(6)->data.f[i] = 0.0;
+  }
+  for (int i = 0; i < 1 * 21 * 27 * 64; ++i) {
+    interpreter_kws->output(7)->data.f[i] = 0.0;
+  }
+  for (int i = 0; i < 1 * 1 * 1 * 64; ++i) {
+    interpreter_kws->output(8)->data.f[i] = 0.0;
+  }
 
   // for (int n = 0; n < 1 * 49 * 128; ++n) {
   //   this->memory_input->data.f[n] = 0.0;
@@ -489,9 +504,9 @@ void VoiceAssistant::loop() {
       }
       this->last_wake_word_check_ = millis();
 
-      for (int i = 0; i < kFeatureElementCount; ++i) {
-        model_input_buffer[i] = this->feature_buffer_[i];
-      }
+      // for (int i = 0; i < kFeatureElementCount; ++i) {
+      //   model_input_buffer[i] = this->feature_buffer_[i];
+      // }
 
       // for (int i = 0; i < kFeatureSize; ++i) {
       //   for (int j = 0; j < kFeatureCount; ++j) {
@@ -499,33 +514,33 @@ void VoiceAssistant::loop() {
       //   }
       // }
 
-      uint32_t prior_invoke = millis();
-      // Run the model on the spectrogram input and make sure it succeeds.
-      TfLiteStatus invoke_status = interpreter_kws->Invoke();
-      if (invoke_status != kTfLiteOk) {
-        ESP_LOGD(TAG, "Invoke failed");
-        return;
-      }
+      // uint32_t prior_invoke = millis();
+      // // Run the model on the spectrogram input and make sure it succeeds.
+      // TfLiteStatus invoke_status = interpreter_kws->Invoke();
+      // if (invoke_status != kTfLiteOk) {
+      //   ESP_LOGD(TAG, "Invoke failed");
+      //   return;
+      // }
 
-      ESP_LOGD(TAG, "inference latency=%u", (millis() - prior_invoke));
+      // ESP_LOGD(TAG, "inference latency=%u", (millis() - prior_invoke));
 
-      TfLiteTensor *output = interpreter_kws->output(0);
+      // TfLiteTensor *output = interpreter_kws->output(0);
 
-      float max_result = 0.0;
-      int max_idx = 0;
-      for (int i = 0; i < kCategoryCount; i++) {
-        float current_result = tflite::GetTensorData<float>(output)[i];
-        if (current_result > max_result) {
-          max_result = current_result;  // update max result
-          max_idx = i;                  // update category
-        }
-      }
+      // float max_result = 0.0;
+      // int max_idx = 0;
+      // for (int i = 0; i < kCategoryCount; i++) {
+      //   float current_result = tflite::GetTensorData<float>(output)[i];
+      //   if (current_result > max_result) {
+      //     max_result = current_result;  // update max result
+      //     max_idx = i;                  // update category
+      //   }
+      // }
 
-      // ESP_LOGD(TAG, "silence=%.3f,unknown=%.3f,computer=%.3f", tflite::GetTensorData<float>(output)[0],
-      //          tflite::GetTensorData<float>(output)[1], tflite::GetTensorData<float>(output)[2]);
+      // // ESP_LOGD(TAG, "silence=%.3f,unknown=%.3f,computer=%.3f", tflite::GetTensorData<float>(output)[0],
+      // //          tflite::GetTensorData<float>(output)[1], tflite::GetTensorData<float>(output)[2]);
 
-      // // // if (max_result > 0.8f) {
-      ESP_LOGD(TAG, "Detected %7s, score: %.5f", kCategoryLabels[max_idx], static_cast<double>(max_result));
+      // // // // if (max_result > 0.8f) {
+      // ESP_LOGD(TAG, "Detected %7s, score: %.5f", kCategoryLabels[max_idx], static_cast<double>(max_result));
 
       // if (max_idx == 2) {
       //   this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
@@ -846,7 +861,57 @@ TfLiteStatus VoiceAssistant::PopulateFeatureData(int32_t last_time_in_ms, int32_
       // copy features
       for (int j = 0; j < kFeatureSize; ++j) {
         new_slice_data[j] = g_features[0][j];
+        tflite::GetTensorData<float>(interpreter_kws->output(0))[j] = g_features[0][j];
       }
+
+      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(1)),
+                  tflite::GetTensorData<float>(interpreter_kws->output(1)), 19 * 40 * sizeof(float));
+      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(2)),
+                  tflite::GetTensorData<float>(interpreter_kws->output(2)), 3 * 37 * 64 * sizeof(float));
+      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(3)),
+                  tflite::GetTensorData<float>(interpreter_kws->output(3)), 3 * 35 * 64 * sizeof(float));
+      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(4)),
+                  tflite::GetTensorData<float>(interpreter_kws->output(4)), 3 * 33 * 64 * sizeof(float));
+      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(5)),
+                  tflite::GetTensorData<float>(interpreter_kws->output(5)), 3 * 31 * 64 * sizeof(float));
+      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(6)),
+                  tflite::GetTensorData<float>(interpreter_kws->output(6)), 3 * 29 * 64 * sizeof(float));
+      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(7)),
+                  tflite::GetTensorData<float>(interpreter_kws->output(7)), 21 * 27 * 64 * sizeof(float));
+      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(8)),
+                  tflite::GetTensorData<float>(interpreter_kws->output(8)), 64 * sizeof(float));
+
+      // for (int i = 0; i < kFeatureElementCount; ++i) {
+      //   model_input_buffer[i] = this->feature_buffer_[i];
+      // }
+
+      uint32_t prior_invoke = millis();
+      // Run the model on the spectrogram input and make sure it succeeds.
+      TfLiteStatus invoke_status = interpreter_kws->Invoke();
+      if (invoke_status != kTfLiteOk) {
+        ESP_LOGD(TAG, "Invoke failed");
+        return kTfLiteError;
+      }
+
+      ESP_LOGD(TAG, "inference latency=%u", (millis() - prior_invoke));
+
+      TfLiteTensor *output = interpreter_kws->output(0);
+
+      float max_result = 0.0;
+      int max_idx = 0;
+      for (int i = 0; i < kCategoryCount; i++) {
+        float current_result = tflite::GetTensorData<float>(output)[i];
+        if (current_result > max_result) {
+          max_result = current_result;  // update max result
+          max_idx = i;                  // update category
+        }
+      }
+
+      // ESP_LOGD(TAG, "silence=%.3f,unknown=%.3f,computer=%.3f", tflite::GetTensorData<float>(output)[0],
+      //          tflite::GetTensorData<float>(output)[1], tflite::GetTensorData<float>(output)[2]);
+
+      // // // if (max_result > 0.8f) {
+      ESP_LOGD(TAG, "Detected %7s, score: %.5f", kCategoryLabels[max_idx], static_cast<double>(max_result));
     }
   }
 
