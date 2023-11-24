@@ -127,12 +127,12 @@ void VoiceAssistant::setup() {
     return;
   }
 
-  // this->var_arena_ = arena_allocator.allocate(64000);
-  // if (this->var_arena_ == nullptr) {
-  //   ESP_LOGW(TAG, "Could not allocate send buffer.");
-  //   this->mark_failed();
-  //   return;
-  // }
+  this->var_arena_ = arena_allocator.allocate(64000);
+  if (this->var_arena_ == nullptr) {
+    ESP_LOGW(TAG, "Could not allocate send buffer.");
+    this->mark_failed();
+    return;
+  }
 
   ExternalRAMAllocator<float> feature_buffer_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
   this->feature_buffer_ = feature_buffer_allocator.allocate(kFeatureElementCount);
@@ -183,39 +183,39 @@ void VoiceAssistant::setup() {
   //
   // tflite::AllOpsResolver micro_op_resolver;
   // NOLINTNEXTLINE(runtime-global-variables)
-  static tflite::MicroMutableOpResolver<16> micro_op_resolver;
-  // if (micro_op_resolver.AddCallOnce() != kTfLiteOk) {
-  //   return;
-  // }
-  // if (micro_op_resolver.AddVarHandle() != kTfLiteOk) {
-  //   return;
-  // }
-  // if (micro_op_resolver.AddReadVariable() != kTfLiteOk) {
-  //   return;
-  // }
+  static tflite::MicroMutableOpResolver<21> micro_op_resolver;
+  if (micro_op_resolver.AddCallOnce() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddVarHandle() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddReadVariable() != kTfLiteOk) {
+    return;
+  }
   if (micro_op_resolver.AddFullyConnected() != kTfLiteOk) {
     return;
   }
-  // if (micro_op_resolver.AddSplitV() != kTfLiteOk) {
-  //   return;
-  // }
-
-  // if (micro_op_resolver.AddStridedSlice() != kTfLiteOk) {
-  //   return;
-  // }
-  if (micro_op_resolver.AddConcatenation() != kTfLiteOk) {
-    return;
-  }
-  // if (micro_op_resolver.AddAssignVariable() != kTfLiteOk) {
-  //   return;
-  // }
-  if (micro_op_resolver.AddReshape() != kTfLiteOk) {
+  if (micro_op_resolver.AddPad() != kTfLiteOk) {
     return;
   }
 
   if (micro_op_resolver.AddStridedSlice() != kTfLiteOk) {
     return;
   }
+  if (micro_op_resolver.AddConcatenation() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddAssignVariable() != kTfLiteOk) {
+    return;
+  }
+  if (micro_op_resolver.AddReshape() != kTfLiteOk) {
+    return;
+  }
+
+  // if (micro_op_resolver.AddStridedSlice() != kTfLiteOk) {
+  //   return;
+  // }
 
   // if (micro_op_resolver.AddTranspose() != kTfLiteOk) {
   //   return;
@@ -304,15 +304,14 @@ void VoiceAssistant::setup() {
   if (micro_op_resolver.AddAveragePool2D() != kTfLiteOk) {
     return;
   }
-  // static uint8_t var_arena[52000];
-  // static tflite::MicroAllocator *ma = tflite::MicroAllocator::Create(this->var_arena_, 64000);
-  // static tflite::MicroResourceVariables *mrv = tflite::MicroResourceVariables::Create(ma, 7);
+  static uint8_t var_arena[52000];
+  static tflite::MicroAllocator *ma = tflite::MicroAllocator::Create(this->var_arena_, 64000);
+  static tflite::MicroResourceVariables *mrv = tflite::MicroResourceVariables::Create(ma, 7);
 
-  // Build an interpreter to run the model with.
+  // Build an interpreter to run the model with.static
+  tflite::MicroInterpreter static_interpreter(model, micro_op_resolver, this->tensor_arena_, kTensorArenaSize_, mrv);
   // static tflite::MicroInterpreter static_interpreter(model, micro_op_resolver, this->tensor_arena_,
-  // kTensorArenaSize_,
-  //                                                    mrv);
-  static tflite::MicroInterpreter static_interpreter(model, micro_op_resolver, this->tensor_arena_, kTensorArenaSize_);
+  // kTensorArenaSize_);
   interpreter_kws = &static_interpreter;
 
   // Allocate memory from the tensor_arena for the model's tensors.
@@ -355,30 +354,30 @@ void VoiceAssistant::setup() {
     this->feature_buffer_[n] = 0.0;
   }
 
-  for (int i = 0; i < 1 * 10 * 40; ++i) {
-    interpreter_kws->output(1)->data.f[i] = 0.0;
-  }
-  for (int i = 0; i < 1 * 3 * 19 * 32; ++i) {
-    interpreter_kws->output(2)->data.f[i] = 0.0;
-  }
-  for (int i = 0; i < 1 * 3 * 17 * 32; ++i) {
-    interpreter_kws->output(3)->data.f[i] = 0.0;
-  }
-  for (int i = 0; i < 1 * 3 * 15 * 32; ++i) {
-    interpreter_kws->output(4)->data.f[i] = 0.0;
-  }
-  for (int i = 0; i < 1 * 3 * 13 * 32; ++i) {
-    interpreter_kws->output(5)->data.f[i] = 0.0;
-  }
-  for (int i = 0; i < 1 * 3 * 11 * 32; ++i) {
-    interpreter_kws->output(6)->data.f[i] = 0.0;
-  }
-  for (int i = 0; i < 1 * 30 * 9 * 32; ++i) {
-    interpreter_kws->output(7)->data.f[i] = 0.0;
-  }
-  for (int i = 0; i < 1 * 1 * 1 * 32; ++i) {
-    interpreter_kws->output(8)->data.f[i] = 0.0;
-  }
+  // for (int i = 0; i < 1 * 10 * 40; ++i) {
+  //   interpreter_kws->output(1)->data.f[i] = 0.0;
+  // }
+  // for (int i = 0; i < 1 * 3 * 19 * 32; ++i) {
+  //   interpreter_kws->output(2)->data.f[i] = 0.0;
+  // }
+  // for (int i = 0; i < 1 * 3 * 17 * 32; ++i) {
+  //   interpreter_kws->output(3)->data.f[i] = 0.0;
+  // }
+  // for (int i = 0; i < 1 * 3 * 15 * 32; ++i) {
+  //   interpreter_kws->output(4)->data.f[i] = 0.0;
+  // }
+  // for (int i = 0; i < 1 * 3 * 13 * 32; ++i) {
+  //   interpreter_kws->output(5)->data.f[i] = 0.0;
+  // }
+  // for (int i = 0; i < 1 * 3 * 11 * 32; ++i) {
+  //   interpreter_kws->output(6)->data.f[i] = 0.0;
+  // }
+  // for (int i = 0; i < 1 * 30 * 9 * 32; ++i) {
+  //   interpreter_kws->output(7)->data.f[i] = 0.0;
+  // }
+  // for (int i = 0; i < 1 * 1 * 1 * 32; ++i) {
+  //   interpreter_kws->output(8)->data.f[i] = 0.0;
+  // }
 
   // for (int n = 0; n < 1 * 49 * 128; ++n) {
   //   this->memory_input->data.f[n] = 0.0;
@@ -859,27 +858,31 @@ TfLiteStatus VoiceAssistant::PopulateFeatureData(int32_t last_time_in_ms, int32_
       }
 
       // copy features
-      for (int j = 0; j < kFeatureSize; ++j) {
-        new_slice_data[j] = g_features[0][j];
-        tflite::GetTensorData<float>(interpreter_kws->output(0))[j] = g_features[0][j];
+      // for (int j = 0; j < kFeatureSize; ++j) {
+      //   new_slice_data[j] = g_features[0][j];
+      //   // tflite::GetTensorData<float>(interpreter_kws->input(0))[j] = g_features[0][j];
+      // }
+
+      for (int i = 0; i < kFeatureSize; ++i) {
+        interpreter_kws->input(0)->data.f[i] = g_features[0][i];
       }
 
-      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(1)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(1)), 10 * 32 * sizeof(float));
-      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(2)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(2)), 3 * 19 * 32 * sizeof(float));
-      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(3)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(3)), 3 * 17 * 32 * sizeof(float));
-      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(4)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(4)), 3 * 15 * 32 * sizeof(float));
-      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(5)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(5)), 3 * 13 * 32 * sizeof(float));
-      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(6)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(6)), 3 * 11 * 32 * sizeof(float));
-      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(7)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(7)), 30 * 9 * 32 * sizeof(float));
-      std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(8)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(8)), 32 * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(1)),
+      //             tflite::GetTensorData<float>(interpreter_kws->output(1)), 10 * 32 * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(2)),
+      //             tflite::GetTensorData<float>(interpreter_kws->output(2)), 3 * 19 * 32 * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(3)),
+      //             tflite::GetTensorData<float>(interpreter_kws->output(3)), 3 * 17 * 32 * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(4)),
+      //             tflite::GetTensorData<float>(interpreter_kws->output(4)), 3 * 15 * 32 * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(5)),
+      //             tflite::GetTensorData<float>(interpreter_kws->output(5)), 3 * 13 * 32 * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(6)),
+      //             tflite::GetTensorData<float>(interpreter_kws->output(6)), 3 * 11 * 32 * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(7)),
+      //             tflite::GetTensorData<float>(interpreter_kws->output(7)), 30 * 9 * 32 * sizeof(float));
+      // std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(8)),
+      //             tflite::GetTensorData<float>(interpreter_kws->output(8)), 32 * sizeof(float));
 
       // for (int i = 0; i < kFeatureElementCount; ++i) {
       //   model_input_buffer[i] = this->feature_buffer_[i];

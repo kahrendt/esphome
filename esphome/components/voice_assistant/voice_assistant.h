@@ -222,7 +222,7 @@ class VoiceAssistant : public Component {
   static constexpr int kTensorArenaSize_ = 4 * 1024 * 1000;
 
   uint8_t *tensor_arena_{nullptr};
-  // uint8_t *var_arena_{nullptr};
+  uint8_t *var_arena_{nullptr};
   float *feature_buffer_{nullptr};
   float *model_input_buffer{nullptr};
 
