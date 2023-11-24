@@ -355,28 +355,28 @@ void VoiceAssistant::setup() {
     this->feature_buffer_[n] = 0.0;
   }
 
-  for (int i = 0; i < 1 * 19 * 40; ++i) {
+  for (int i = 0; i < 1 * 10 * 40; ++i) {
     interpreter_kws->output(1)->data.f[i] = 0.0;
   }
-  for (int i = 0; i < 1 * 3 * 37 * 64; ++i) {
+  for (int i = 0; i < 1 * 3 * 19 * 32; ++i) {
     interpreter_kws->output(2)->data.f[i] = 0.0;
   }
-  for (int i = 0; i < 1 * 3 * 35 * 64; ++i) {
+  for (int i = 0; i < 1 * 3 * 17 * 32; ++i) {
     interpreter_kws->output(3)->data.f[i] = 0.0;
   }
-  for (int i = 0; i < 1 * 3 * 33 * 64; ++i) {
+  for (int i = 0; i < 1 * 3 * 15 * 32; ++i) {
     interpreter_kws->output(4)->data.f[i] = 0.0;
   }
-  for (int i = 0; i < 1 * 3 * 31 * 64; ++i) {
+  for (int i = 0; i < 1 * 3 * 13 * 32; ++i) {
     interpreter_kws->output(5)->data.f[i] = 0.0;
   }
-  for (int i = 0; i < 1 * 3 * 29 * 64; ++i) {
+  for (int i = 0; i < 1 * 3 * 11 * 32; ++i) {
     interpreter_kws->output(6)->data.f[i] = 0.0;
   }
-  for (int i = 0; i < 1 * 21 * 27 * 64; ++i) {
+  for (int i = 0; i < 1 * 30 * 9 * 32; ++i) {
     interpreter_kws->output(7)->data.f[i] = 0.0;
   }
-  for (int i = 0; i < 1 * 1 * 1 * 64; ++i) {
+  for (int i = 0; i < 1 * 1 * 1 * 32; ++i) {
     interpreter_kws->output(8)->data.f[i] = 0.0;
   }
 
@@ -865,21 +865,21 @@ TfLiteStatus VoiceAssistant::PopulateFeatureData(int32_t last_time_in_ms, int32_
       }
 
       std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(1)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(1)), 19 * 40 * sizeof(float));
+                  tflite::GetTensorData<float>(interpreter_kws->output(1)), 10 * 32 * sizeof(float));
       std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(2)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(2)), 3 * 37 * 64 * sizeof(float));
+                  tflite::GetTensorData<float>(interpreter_kws->output(2)), 3 * 19 * 32 * sizeof(float));
       std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(3)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(3)), 3 * 35 * 64 * sizeof(float));
+                  tflite::GetTensorData<float>(interpreter_kws->output(3)), 3 * 17 * 32 * sizeof(float));
       std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(4)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(4)), 3 * 33 * 64 * sizeof(float));
+                  tflite::GetTensorData<float>(interpreter_kws->output(4)), 3 * 15 * 32 * sizeof(float));
       std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(5)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(5)), 3 * 31 * 64 * sizeof(float));
+                  tflite::GetTensorData<float>(interpreter_kws->output(5)), 3 * 13 * 32 * sizeof(float));
       std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(6)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(6)), 3 * 29 * 64 * sizeof(float));
+                  tflite::GetTensorData<float>(interpreter_kws->output(6)), 3 * 11 * 32 * sizeof(float));
       std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(7)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(7)), 21 * 27 * 64 * sizeof(float));
+                  tflite::GetTensorData<float>(interpreter_kws->output(7)), 30 * 9 * 32 * sizeof(float));
       std::memcpy(tflite::GetTensorData<float>(interpreter_kws->input(8)),
-                  tflite::GetTensorData<float>(interpreter_kws->output(8)), 64 * sizeof(float));
+                  tflite::GetTensorData<float>(interpreter_kws->output(8)), 32 * sizeof(float));
 
       // for (int i = 0; i < kFeatureElementCount; ++i) {
       //   model_input_buffer[i] = this->feature_buffer_[i];
