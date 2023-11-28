@@ -105,8 +105,8 @@ void VoiceAssistant::setup() {
     return;
   }
 
-  this->local_wake_word_inference_ = new LocalWakeWord();
-  this->local_wake_word_inference_->intialize_models();
+  this->local_wake_word_ = new LocalWakeWord();
+  this->local_wake_word_->intialize_models();
 }
 
 int VoiceAssistant::read_microphone_() {
@@ -190,55 +190,11 @@ void VoiceAssistant::loop() {
     }
     case State::WAITING_FOR_WAKE_WORD: {
       size_t bytes_read = this->read_microphone_();
-      this->local_wake_word_model_inference();
+      bool wakeword_detected = this->local_wake_word_->run_inference(this->ring_buffer_);
 
-      // this->populate_feature_data_(0, 0, &how_man_new_slices)
-
-      // const int32_t current_time = this->llatest_audio_time_stamp_();
-      // int how_many_new_slices = 0;
-
-      // TfLiteStatus feature_status =
-      //     this->populate_feature_data_(this->previous_time_, current_time, &how_many_new_slices);
-      // this->previous_time_ = current_time;
-
-      // if (feature_status != kTfLiteOk) {
-      //   ESP_LOGD(TAG, "Feature generation failed");
-      //   return;
-      // }
-
-      // // Return if the streaming model doesn't consistently predict the wake word
-      // if (this->succesive_wake_words < 5) {
-      //   return;
-      // }
-
-      // ESP_LOGD(TAG, "Streaming model predicts wakeword");
-      // this->succesive_wake_words = 0;
-      // this->features_count_ = 0;  // reset coutner of features so we don't reduplicate our inference
-
-      // for (int i = 0; i < kFeatureElementCount; ++i) {
-      //   this->nonstreaming_model_input_[i] = this->feature_buffer_[i];
-      // }
-
-      // uint32_t prior_invoke = millis();
-      // // Run the model on the spectrogram input and make sure it succeeds.
-      // TfLiteStatus invoke_status = this->nonstreaming_interpreter_->Invoke();
-      // if (invoke_status != kTfLiteOk) {
-      //   ESP_LOGD(TAG, "Nonstreaming model invoke failed");
-      //   return;
-      // }
-
-      // ESP_LOGV(TAG, "Nonstreaming inference latency=%u ms", (millis() - prior_invoke));
-
-      // TfLiteTensor *output = this->nonstreaming_interpreter_->output(0);
-
-      // ESP_LOGV(TAG, "Nonstreaming Model Predictions: silence=%.3f, unknown=%.3f, computer=%.3f",
-      //          tflite::GetTensorData<float>(output)[0], tflite::GetTensorData<float>(output)[1],
-      //          tflite::GetTensorData<float>(output)[2]);
-
-      // // If the nonstreaming model predicts the wake word, then start the assist pipeline
-      // if (tflite::GetTensorData<float>(output)[2] > 0.9f) {
-      //   this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
-      // }
+      if (wakeword_detected) {
+        this->set_state_(State::START_PIPELINE, State::STREAMING_MICROPHONE);
+      }
 
       break;
     }

@@ -28,48 +28,48 @@ class LocalWakeWord {
  public:
   bool intialize_models() {
     ExternalRAMAllocator<uint8_t> arena_allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
+    ExternalRAMAllocator<float> feature_buffer_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
+    ExternalRAMAllocator<int16_t> audio_samples_allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
 
     this->streaming_tensor_arena_ = arena_allocator.allocate(streaming_model_arena_size_);
     if (this->streaming_tensor_arena_ == nullptr) {
-      ESP_LOGW(TAG_LOCAL, "Could not allocate send buffer.");
+      ESP_LOGE(TAG_LOCAL, "Could not allocate the streaming model's tensor arena.");
       return false;
     }
 
     this->nonstreaming_tensor_arena_ = arena_allocator.allocate(nonstreaming_model_arena_size_);
     if (this->nonstreaming_tensor_arena_ == nullptr) {
-      ESP_LOGW(TAG_LOCAL, "Could not allocate send buffer.");
+      ESP_LOGE(TAG_LOCAL, "Could not allocate the nonstreaming model's tensor arena.");
       return false;
     }
 
     this->streaming_var_arena_ = arena_allocator.allocate(streaming_var_arena_size_);
     if (this->streaming_var_arena_ == nullptr) {
-      ESP_LOGW(TAG_LOCAL, "Could not allocate send buffer.");
+      ESP_LOGE(TAG_LOCAL, "Could not allocate the streaming model variable's tensor arena.");
       return false;
     }
 
     this->preprocessor_tensor_arena_ = arena_allocator.allocate(this->preprocessor_arena_size_);
     if (this->preprocessor_tensor_arena_ == nullptr) {
-      ESP_LOGW(TAG_LOCAL, "Could not allocate send buffer.");
+      ESP_LOGE(TAG_LOCAL, "Could not allocate the audio preprocessor model's tensor arena.");
       return false;
     }
 
-    ExternalRAMAllocator<float> feature_buffer_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
     this->feature_buffer_ = feature_buffer_allocator.allocate(kFeatureElementCount);
     if (this->feature_buffer_ == nullptr) {
-      ESP_LOGW(TAG_LOCAL, "Could not allocate send buffer.");
+      ESP_LOGE(TAG_LOCAL, "Could not allocate the audio features buffer.");
       return false;
     }
 
-    ExternalRAMAllocator<int16_t> audio_buffer_allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
-    this->preprocessor_audio_buffer_ = audio_buffer_allocator.allocate(kMaxAudioSampleSize * 32);
+    this->preprocessor_audio_buffer_ = audio_samples_allocator.allocate(kMaxAudioSampleSize * 32);
     if (this->preprocessor_audio_buffer_ == nullptr) {
-      ESP_LOGW(TAG_LOCAL, "Could not allocate send buffer.");
+      ESP_LOGE(TAG_LOCAL, "Could not allocate the audio preprocessor's buffer.");
       return false;
     }
-    ExternalRAMAllocator<int16_t> stride_buffer_allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
-    this->preprocessor_stride_buffer_ = stride_buffer_allocator.allocate(HISTORY_SAMPLES_TO_KEEP);
+
+    this->preprocessor_stride_buffer_ = audio_samples_allocator.allocate(HISTORY_SAMPLES_TO_KEEP);
     if (this->preprocessor_stride_buffer_ == nullptr) {
-      ESP_LOGW(TAG_LOCAL, "Could not allocate send buffer.");
+      ESP_LOGE(TAG_LOCAL, "Could not allocate the audio preprocessor's stride buffer.");
       return false;
     }
 
@@ -91,12 +91,11 @@ class LocalWakeWord {
     }
 
     static tflite::MicroMutableOpResolver<18> preprocessor_op_resolver;
-    this->register_preprocessor_ops(preprocessor_op_resolver);
-
     static tflite::MicroMutableOpResolver<7> nonstreaming_op_resolver;
-    this->register_nonstreaming_ops(nonstreaming_op_resolver);
-
     static tflite::MicroMutableOpResolver<12> streaming_op_resolver;
+
+    this->register_preprocessor_ops(preprocessor_op_resolver);
+    this->register_nonstreaming_ops(nonstreaming_op_resolver);
     this->register_streaming_ops(streaming_op_resolver);
 
     tflite::MicroAllocator *ma = tflite::MicroAllocator::Create(this->streaming_var_arena_, streaming_var_arena_size_);
@@ -106,7 +105,6 @@ class LocalWakeWord {
                                                                     this->preprocessor_tensor_arena_,
                                                                     preprocessor_arena_size_);
 
-    // Build an interpreter to run the model with.static
     static tflite::MicroInterpreter static_streaming_interpreter(
         this->streaming_model_, streaming_op_resolver, this->streaming_tensor_arena_, streaming_model_arena_size_, mrv);
 
@@ -119,23 +117,24 @@ class LocalWakeWord {
 
     // Allocate memory for the models' tensors.
     if (this->preprocessor_interperter_->AllocateTensors() != kTfLiteOk) {
-      ESP_LOGE(TAG_LOCAL, "Failed to allocate tensors for the wake word audio preprocessor");
+      ESP_LOGE(TAG_LOCAL, "Failed to allocate tensors for the audio preprocessor");
       return false;
     }
 
     if (this->streaming_interpreter_->AllocateTensors() != kTfLiteOk) {
-      ESP_LOGE(TAG_LOCAL, "Failed to allocate tensors for the wake word streaming model");
+      ESP_LOGE(TAG_LOCAL, "Failed to allocate tensors for the streaming model");
       return false;
     }
 
     if (this->nonstreaming_interpreter_->AllocateTensors() != kTfLiteOk) {
-      ESP_LOGE(TAG_LOCAL, "Failed to allocate tensors for the wake word nonstreaming model");
+      ESP_LOGE(TAG_LOCAL, "Failed to allocate tensors for the nonstreaming model");
       return false;
     }
 
     this->streaming_model_input_ = tflite::GetTensorData<float>(this->streaming_interpreter_->input(0));
     this->nonstreaming_model_input_ = tflite::GetTensorData<float>(this->nonstreaming_interpreter_->input(0));
 
+    // Reset the feature buffer
     for (int n = 0; n < kFeatureElementCount; ++n) {
       this->feature_buffer_[n] = 0.0;
     }
@@ -143,14 +142,51 @@ class LocalWakeWord {
     return true;
   }
 
-  TfLiteStatus populate_feature_data(int *how_many_new_slices, ringbuf_handle_t &ring_buffer) {
+  bool run_inference(ringbuf_handle_t &ring_buffer) {
+    this->populate_feature_data(ring_buffer);
+    if (this->succesive_wake_words >= 5) {
+      ESP_LOGD(TAG_LOCAL, "Streaming model predicts wakeword");
+      this->succesive_wake_words = 0;
+      this->features_count_ = 0;  // reset counter of features so we don't reduplicate our inference
+
+      // Copy the entire spectogram as input to the nonstreaming model
+      for (int i = 0; i < kFeatureElementCount; ++i) {
+        this->nonstreaming_model_input_[i] = this->feature_buffer_[i];
+      }
+
+      uint32_t prior_invoke = millis();
+
+      // Run the model on the spectrogram input and make sure it succeeds.
+      TfLiteStatus invoke_status = this->nonstreaming_interpreter_->Invoke();
+      if (invoke_status != kTfLiteOk) {
+        ESP_LOGD(TAG_LOCAL, "Nonstreaming model invoke failed");
+        return false;
+      }
+
+      ESP_LOGV(TAG_LOCAL, "Nonstreaming inference latency=%u ms", (millis() - prior_invoke));
+
+      TfLiteTensor *output = this->nonstreaming_interpreter_->output(0);
+
+      ESP_LOGV(TAG, "Nonstreaming Model Predictions: silence=%.3f, unknown=%.3f, computer=%.3f",
+               tflite::GetTensorData<float>(output)[0], tflite::GetTensorData<float>(output)[1],
+               tflite::GetTensorData<float>(output)[2]);
+
+      // If the nonstreaming model predicts the wake word, then start the assist pipeline
+      if (tflite::GetTensorData<float>(output)[2] > 0.9f) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool populate_feature_data(ringbuf_handle_t &ring_buffer) {
     int slices_needed = rb_bytes_filled(ring_buffer) / (NEW_SAMPLES_TO_GET * sizeof(int16_t));
-    *how_many_new_slices = slices_needed;
+    // *how_many_new_slices = slices_needed;
 
     if (slices_needed > kFeatureCount) {
       slices_needed = kFeatureCount;
     }
-    *how_many_new_slices = slices_needed;
+    // *how_many_new_slices = slices_needed;
 
     const int slices_to_keep = kFeatureCount - slices_needed;
     const int slices_to_drop = kFeatureCount - slices_to_keep;
@@ -185,11 +221,11 @@ class LocalWakeWord {
         int audio_samples_size = 0;
 
         if (this->stride_audio_samples_(&audio_samples_size, &audio_samples, ring_buffer) != kTfLiteOk) {
-          return kTfLiteError;
+          return false;
         }
         if (audio_samples_size < kMaxAudioSampleSize) {
           ESP_LOGD(TAG_LOCAL, "Audio data size %d too small, want %d", audio_samples_size, kMaxAudioSampleSize);
-          return kTfLiteError;
+          return false;
         }
         static constexpr int kAudioSampleDurationCount = kFeatureDurationMs * kAudioSampleFrequency / 1000;
 
@@ -214,7 +250,8 @@ class LocalWakeWord {
         TfLiteStatus invoke_status = this->streaming_interpreter_->Invoke();
         if (invoke_status != kTfLiteOk) {
           ESP_LOGD(TAG_LOCAL, "Invoke failed");
-          return kTfLiteError;
+          // return kTfLiteError;
+          return false;
         }
         ESP_LOGV(TAG_LOCAL, "Streaming Inference Latency=%u ms", (millis() - prior_invoke));
 
@@ -261,7 +298,7 @@ class LocalWakeWord {
       }
     }
 
-    return kTfLiteOk;
+    return true;
   }
 
  protected:

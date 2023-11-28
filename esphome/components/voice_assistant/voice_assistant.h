@@ -202,16 +202,7 @@ class VoiceAssistant : public Component {
   State state_{State::IDLE};
   State desired_state_{State::IDLE};
 
-  LocalWakeWord *local_wake_word_inference_;
-
-  bool local_wake_word_model_inference() {
-    int how_many_new_slices = 0;
-
-    TfLiteStatus feature_status =
-        this->local_wake_word_inference_->populate_feature_data(&how_many_new_slices, this->ring_buffer_);
-
-    return true;
-  }
+  LocalWakeWord *local_wake_word_;
 };
 
 template<typename... Ts> class StartAction : public Action<Ts...>, public Parented<VoiceAssistant> {
