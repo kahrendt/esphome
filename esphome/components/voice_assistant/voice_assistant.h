@@ -24,13 +24,7 @@
 #include <ringbuf.h>
 #endif
 
-#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
-#include "tensorflow/lite/micro/micro_interpreter.h"
-#include "tensorflow/lite/micro/system_setup.h"
-#include "tensorflow/lite/schema/schema_generated.h"
-// #include "feature_provider.h"
-#include "micro_model_settings.h"
-#include "model.h"
+#include "local_wake_word.h"
 
 namespace esphome {
 namespace voice_assistant {
@@ -208,85 +202,21 @@ class VoiceAssistant : public Component {
   State state_{State::IDLE};
   State desired_state_{State::IDLE};
 
-  const tflite::Model *model = nullptr;
-  tflite::MicroInterpreter *interpreter_kws = nullptr;
-  TfLiteTensor *model_input = nullptr;
-  TfLiteTensor *memory_input = nullptr;
-  TfLiteTensor *memory_output = nullptr;
+  LocalWakeWord *local_wake_word_inference_;
+  int32_t g_latest_audio_timestamp;
+  int32_t previous_time_ = 0;
 
-  int32_t previous_time = 0;
+  int32_t latest_audio_timestamp_() { return g_latest_audio_timestamp; }
 
-  // Create an area of memory to use for input, output, and intermediate arrays.
-  // The size of this will depend on the model you're using, and may need to be
-  // determined by experimentation.
-  static constexpr int kTensorArenaSize_ = 4 * 1024 * 1000;
+  bool local_wake_word_model_inference() {
+    int how_many_new_slices = 0;
+    const int32_t current_time = this->latest_audio_timestamp_();
 
-  uint8_t *tensor_arena_{nullptr};
-  uint8_t *var_arena_{nullptr};
-  float *feature_buffer_{nullptr};
-  float *model_input_buffer{nullptr};
-
-  float output_probabilities_[3];
-
-  int feature_size_ = kFeatureElementCount;
-  // int8_t *feature_data_;
-  // Make sure we don't try to use cached information if this is the first call
-  // into the provider.
-  bool is_first_run_{true};
-
-  // float *features_output_{nullptr};
-
-  // Fills the feature data with information from audio inputs, and returns how
-  // many feature slices were updated.
-  TfLiteStatus PopulateFeatureData(int32_t last_time_in_ms, int32_t time_in_ms, int *how_many_new_slices);
-
-  // This is an abstraction around an audio source like a microphone, and is
-  // expected to return 16-bit PCM sample data for a given point in time. The
-  // sample data itself should be used as quickly as possible by the caller, since
-  // to allow memory optimizations there are no guarantees that the samples won't
-  // be overwritten by new data in the future. In practice, implementations should
-  // ensure that there's a reasonable time allowed for clients to access the data
-  // before any reuse.
-  // The reference implementation can have no platform-specific dependencies, so
-  // it just returns an array filled with zeros. For real applications, you should
-  // ensure there's a specialized implementation that accesses hardware APIs.
-  TfLiteStatus GetAudioSamples(int start_ms, int duration_ms, int *audio_samples_size, int16_t **audio_samples);
-
-  // Returns the time that audio data was last captured in milliseconds. There's
-  // no contract about what time zero represents, the accuracy, or the granularity
-  // of the result. Subsequent calls will generally not return a lower value, but
-  // even that's not guaranteed if there's an overflow wraparound.
-  // The reference implementation of this function just returns a constantly
-  // incrementing value for each call, since it would need a non-portable platform
-  // call to access time information. For real applications, you'll need to write
-  // your own platform-specific implementation.
-  int32_t LatestAudioTimestamp();
-
-  /* ringbuffer to hold the incoming audio data */
-  // ringbuf_t *g_audio_capture_buffer;
-  int32_t g_latest_audio_timestamp = 0;
-  /* model requires 20ms new data from g_audio_capture_buffer and 10ms old data
-   * each time , storing old data in the histrory buffer , {
-   * history_samples_to_keep = 10 * 16 } */
-  static constexpr int32_t history_samples_to_keep =
-      ((kFeatureDurationMs - kFeatureStrideMs) * (kAudioSampleFrequency / 1000));
-  /* new samples to get each time from ringbuffer, { new_samples_to_get =  20 * 16
-   * } */
-  static constexpr int32_t new_samples_to_get = (kFeatureStrideMs * (kAudioSampleFrequency / 1000));
-
-  const int32_t kAudioCaptureBufferSize = 40000;
-  const int32_t i2s_bytes_to_read = 3200;
-
-  // int16_t g_audio_output_buffer[kMaxAudioSampleSize * 32];
-  int16_t *g_audio_output_buffer_;
-  bool g_is_audio_initialized = false;
-  int16_t *g_history_buffer_;
-  // int16_t g_history_buffer[history_samples_to_keep];
-
-  uint8_t succesive_wake_words = 0;
-  float last_probability = 0.0;
-
-  uint32_t last_wake_word_check_ = 0;
+    TfLiteStatus feature_status = this->local_wake_word_inference_->populate_feature_data(
+        this->previous_time_, current_time, &how_many_new_slices, this->ring_buffer_);
+    this->previous_time_ = current_time;
+    return true;
+  }
 };
 
 template<typename... Ts> class StartAction : public Action<Ts...>, public Parented<VoiceAssistant> {

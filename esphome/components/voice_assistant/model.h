@@ -18,10 +18,5 @@ limitations under the License.
 // for devices that don't have a file system. It was created using the command:
 // xxd -i model.tflite > model.cc
 
-#ifndef TENSORFLOW_LITE_MICRO_EXAMPLES_MICRO_SPEECH_MICRO_FEATURES_MODEL_H_
-#define TENSORFLOW_LITE_MICRO_EXAMPLES_MICRO_SPEECH_MICRO_FEATURES_MODEL_H_
-
-extern const unsigned char g_model[];
-extern const int g_model_len;
-
-#endif  // TENSORFLOW_LITE_MICRO_EXAMPLES_MICRO_SPEECH_MICRO_FEATURES_MODEL_H_
+extern const unsigned char streaming_model[];
+extern const unsigned char nonstreaming_model[];

@@ -1,14 +1,15 @@
-// We need to keep the data array aligned on some architectures.
-#ifdef __has_attribute
-#define HAVE_ATTRIBUTE(x) __has_attribute(x)
-#else
-#define HAVE_ATTRIBUTE(x) 0
-#endif
-#if HAVE_ATTRIBUTE(aligned) || (defined(__GNUC__) && !defined(__clang__))
-#define DATA_ALIGN_ATTRIBUTE __attribute__((aligned(4)))
-#else
-#define DATA_ALIGN_ATTRIBUTE
-#endif
+#pragma once
+// // We need to keep the data array aligned on some architectures.
+// #ifdef __has_attribute
+// #define HAVE_ATTRIBUTE(x) __has_attribute(x)
+// #else
+// #define HAVE_ATTRIBUTE(x) 0
+// #endif
+// #if HAVE_ATTRIBUTE(aligned) || (defined(__GNUC__) && !defined(__clang__))
+// #define DATA_ALIGN_ATTRIBUTE __attribute__((aligned(4)))
+// #else
+// #define DATA_ALIGN_ATTRIBUTE
+// #endif
 
 const unsigned char g_audio_preprocessor_float32_tflite[] = {
     0x1c, 0x00, 0x00, 0x00, 0x54, 0x46, 0x4c, 0x33, 0x14, 0x00, 0x20, 0x00, 0x1c, 0x00, 0x18, 0x00, 0x14, 0x00, 0x10,
@@ -420,5 +421,3 @@ const unsigned char g_audio_preprocessor_float32_tflite[] = {
     0x10, 0x00, 0x0f, 0x00, 0x08, 0x00, 0x00, 0x00, 0x04, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x08,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x0c, 0x00, 0x00, 0x00, 0x53, 0x69, 0x67, 0x6e, 0x61, 0x6c, 0x57, 0x69,
     0x6e, 0x64, 0x6f, 0x77, 0x00, 0x00, 0x00, 0x00};
-// unsigned int tflite_micro_tensorflow_lite_micro_examples_micro_speech_models_audio_preprocessor_float_tflite_len =
-// 7760;
