@@ -125,7 +125,7 @@ int VoiceAssistant::read_microphone_() {
       rb_read(this->ring_buffer_, nullptr, bytes_read - available, 0);
     }
     rb_write(this->ring_buffer_, (char *) this->input_buffer_, bytes_read, 0);
-    g_latest_audio_timestamp = g_latest_audio_timestamp + ((1000 * (bytes_read / 2)) / SAMPLE_RATE_HZ);
+    // g_latest_audio_timestamp = g_latest_audio_timestamp + ((1000 * (bytes_read / 2)) / SAMPLE_RATE_HZ);
 #endif
   } else {
     ESP_LOGD(TAG, "microphone not running");

@@ -239,8 +239,7 @@ class LocalWakeWord {
     return true;
   }
 
-  TfLiteStatus populate_feature_data(int32_t last_time_in_ms, int32_t time_in_ms, int *how_many_new_slices,
-                                     ringbuf_handle_t &ring_buffer) {
+  TfLiteStatus populate_feature_data(int *how_many_new_slices, ringbuf_handle_t &ring_buffer) {
     // Quantize the time into steps as long as each window stride, so we can
     // figure out which audio data we need to fetch.
     // const int last_step = (last_time_in_ms / kFeatureStrideMs);
