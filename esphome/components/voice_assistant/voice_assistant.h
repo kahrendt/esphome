@@ -203,18 +203,13 @@ class VoiceAssistant : public Component {
   State desired_state_{State::IDLE};
 
   LocalWakeWord *local_wake_word_inference_;
-  // int32_t g_latest_audio_timestamp;
-  // int32_t previous_time_ = 0;
-
-  // int32_t latest_audio_timestamp_() { return g_latest_audio_timestamp; }
 
   bool local_wake_word_model_inference() {
     int how_many_new_slices = 0;
-    // const int32_t current_time = this->latest_audio_timestamp_();
 
     TfLiteStatus feature_status =
         this->local_wake_word_inference_->populate_feature_data(&how_many_new_slices, this->ring_buffer_);
-    // this->previous_time_ = current_time;
+
     return true;
   }
 };
