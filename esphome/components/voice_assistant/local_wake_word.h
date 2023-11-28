@@ -243,12 +243,12 @@ class LocalWakeWord {
                                      ringbuf_handle_t &ring_buffer) {
     // Quantize the time into steps as long as each window stride, so we can
     // figure out which audio data we need to fetch.
-    const int last_step = (last_time_in_ms / kFeatureStrideMs);
-    const int current_step = (time_in_ms / kFeatureStrideMs);
+    // const int last_step = (last_time_in_ms / kFeatureStrideMs);
+    // const int current_step = (time_in_ms / kFeatureStrideMs);
 
-    int slices_needed = current_step - last_step;
+    // int slices_needed = current_step - last_step;
     // If this is the first call, make sure we don't use any cached information.
-
+    int slices_needed = rb_bytes_filled(ring_buffer) / (NEW_SAMPLES_TO_GET * sizeof(int16_t));
     *how_many_new_slices = slices_needed;
 
     if (slices_needed > kFeatureCount) {
@@ -285,8 +285,8 @@ class LocalWakeWord {
     // appropriate audio data pulled, and features calculated for that slice.
     if (slices_needed > 0) {
       for (int new_slice = slices_to_keep; new_slice < kFeatureCount; ++new_slice) {
-        const int new_step = (current_step - kFeatureCount + 1) + new_slice;
-        const int32_t slice_start_ms = (new_step * kFeatureStrideMs);
+        // const int new_step = (current_step - kFeatureCount + 1) + new_slice;
+        // const int32_t slice_start_ms = (new_step * kFeatureStrideMs);
         int16_t *audio_samples = nullptr;
         int audio_samples_size = 0;
 
