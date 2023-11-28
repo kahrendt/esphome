@@ -91,12 +91,15 @@ class LocalWakeWord {
     }
 
     static tflite::MicroMutableOpResolver<18> preprocessor_op_resolver;
-    static tflite::MicroMutableOpResolver<7> nonstreaming_op_resolver;
+    static tflite::MicroMutableOpResolver<8> nonstreaming_op_resolver;
     static tflite::MicroMutableOpResolver<12> streaming_op_resolver;
 
-    this->register_preprocessor_ops(preprocessor_op_resolver);
-    this->register_nonstreaming_ops(nonstreaming_op_resolver);
-    this->register_streaming_ops(streaming_op_resolver);
+    if (!this->register_preprocessor_ops_(preprocessor_op_resolver))
+      return false;
+    if (!this->register_nonstreaming_ops_(nonstreaming_op_resolver))
+      return false;
+    if (!this->register_streaming_ops_(streaming_op_resolver))
+      return false;
 
     tflite::MicroAllocator *ma = tflite::MicroAllocator::Create(this->streaming_var_arena_, streaming_var_arena_size_);
     tflite::MicroResourceVariables *mrv = tflite::MicroResourceVariables::Create(ma, 8);
@@ -111,21 +114,20 @@ class LocalWakeWord {
     static tflite::MicroInterpreter static_nonstreaming_interpreter(this->nonstreaming_model_, nonstreaming_op_resolver,
                                                                     this->nonstreaming_tensor_arena_,
                                                                     nonstreaming_model_arena_size_);
+
     this->preprocessor_interperter_ = &static_preprocessor_interpreter;
     this->streaming_interpreter_ = &static_streaming_interpreter;
     this->nonstreaming_interpreter_ = &static_nonstreaming_interpreter;
 
-    // Allocate memory for the models' tensors.
+    // Allocate tensors for each models.
     if (this->preprocessor_interperter_->AllocateTensors() != kTfLiteOk) {
       ESP_LOGE(TAG_LOCAL, "Failed to allocate tensors for the audio preprocessor");
       return false;
     }
-
     if (this->streaming_interpreter_->AllocateTensors() != kTfLiteOk) {
       ESP_LOGE(TAG_LOCAL, "Failed to allocate tensors for the streaming model");
       return false;
     }
-
     if (this->nonstreaming_interpreter_->AllocateTensors() != kTfLiteOk) {
       ESP_LOGE(TAG_LOCAL, "Failed to allocate tensors for the nonstreaming model");
       return false;
@@ -143,11 +145,13 @@ class LocalWakeWord {
   }
 
   bool run_inference(ringbuf_handle_t &ring_buffer) {
-    this->populate_feature_data(ring_buffer);
+    this->populate_feature_data_(ring_buffer);
     if (this->succesive_wake_words >= 5) {
-      ESP_LOGD(TAG_LOCAL, "Streaming model predicts wakeword");
+      ESP_LOGD(TAG_LOCAL, "Streaming model predicted the wake word");
       this->succesive_wake_words = 0;
-      this->features_count_ = 0;  // reset counter of features so we don't reduplicate our inference
+
+      this->features_count_ = 0;  // reset counter of features so we don't reduplicate our inference; the internal
+                                  // variables for the streaming model do not reset
 
       // Copy the entire spectogram as input to the nonstreaming model
       for (int i = 0; i < kFeatureElementCount; ++i) {
@@ -171,134 +175,12 @@ class LocalWakeWord {
                tflite::GetTensorData<float>(output)[0], tflite::GetTensorData<float>(output)[1],
                tflite::GetTensorData<float>(output)[2]);
 
-      // If the nonstreaming model predicts the wake word, then start the assist pipeline
+      // If the nonstreaming model predicts the wake word, then return true
       if (tflite::GetTensorData<float>(output)[2] > 0.9f) {
         return true;
       }
     }
     return false;
-  }
-
-  bool populate_feature_data(ringbuf_handle_t &ring_buffer) {
-    int slices_needed = rb_bytes_filled(ring_buffer) / (NEW_SAMPLES_TO_GET * sizeof(int16_t));
-    // *how_many_new_slices = slices_needed;
-
-    if (slices_needed > kFeatureCount) {
-      slices_needed = kFeatureCount;
-    }
-    // *how_many_new_slices = slices_needed;
-
-    const int slices_to_keep = kFeatureCount - slices_needed;
-    const int slices_to_drop = kFeatureCount - slices_to_keep;
-    // If we can avoid recalculating some slices, just move the existing data
-    // up in the spectrogram, to perform something like this:
-    // last time = 80ms          current time = 120ms
-    // +-----------+             +-----------+
-    // | data@20ms |         --> | data@60ms |
-    // +-----------+       --    +-----------+
-    // | data@40ms |     --  --> | data@80ms |
-    // +-----------+   --  --    +-----------+
-    // | data@60ms | --  --      |  <empty>  |
-    // +-----------+   --        +-----------+
-    // | data@80ms | --          |  <empty>  |
-    // +-----------+             +-----------+
-    if (slices_to_keep > 0) {
-      for (int dest_slice = 0; dest_slice < slices_to_keep; ++dest_slice) {
-        float *dest_slice_data = this->feature_buffer_ + (dest_slice * kFeatureSize);
-        const int src_slice = dest_slice + slices_to_drop;
-        const float *src_slice_data = this->feature_buffer_ + (src_slice * kFeatureSize);
-        for (int i = 0; i < kFeatureSize; ++i) {
-          dest_slice_data[i] = src_slice_data[i];
-        }
-      }
-    }
-
-    // Any slices that need to be filled in with feature data have their
-    // appropriate audio data pulled, and features calculated for that slice.
-    if (slices_needed > 0) {
-      for (int new_slice = slices_to_keep; new_slice < kFeatureCount; ++new_slice) {
-        int16_t *audio_samples = nullptr;
-        int audio_samples_size = 0;
-
-        if (this->stride_audio_samples_(&audio_samples_size, &audio_samples, ring_buffer) != kTfLiteOk) {
-          return false;
-        }
-        if (audio_samples_size < kMaxAudioSampleSize) {
-          ESP_LOGD(TAG_LOCAL, "Audio data size %d too small, want %d", audio_samples_size, kMaxAudioSampleSize);
-          return false;
-        }
-        static constexpr int kAudioSampleDurationCount = kFeatureDurationMs * kAudioSampleFrequency / 1000;
-
-        float *new_slice_data = this->feature_buffer_ + (new_slice * kFeatureSize);
-
-        if (this->features_count_ < 49) {
-          ++this->features_count_;
-        }
-
-        TfLiteStatus generate_status =
-            this->generate_single_float_feature(audio_samples, kAudioSampleDurationCount, new_slice_data);
-        if (generate_status != kTfLiteOk) {
-          return generate_status;
-        }
-
-        for (int i = 0; i < kFeatureSize; ++i) {
-          this->streaming_model_input_[i] = new_slice_data[i];
-        }
-
-        uint32_t prior_invoke = millis();
-        // Run the model on the spectrogram input and make sure it succeeds.
-        TfLiteStatus invoke_status = this->streaming_interpreter_->Invoke();
-        if (invoke_status != kTfLiteOk) {
-          ESP_LOGD(TAG_LOCAL, "Invoke failed");
-          // return kTfLiteError;
-          return false;
-        }
-        ESP_LOGV(TAG_LOCAL, "Streaming Inference Latency=%u ms", (millis() - prior_invoke));
-
-        TfLiteTensor *output = this->streaming_interpreter_->output(0);
-
-        float max_result = 0.0;
-        int max_idx = 0;
-        for (int i = 0; i < kCategoryCount; i++) {
-          float current_result = tflite::GetTensorData<float>(output)[i];
-          if (current_result > max_result) {
-            max_result = current_result;  // update max result
-            max_idx = i;                  // update category
-          }
-        }
-
-        if ((max_result > 0.8f) && (max_idx == 2) && (this->features_count_ > 30)) {
-          ++this->succesive_wake_words;
-        } else {
-          if (this->succesive_wake_words > 0) {
-            --this->succesive_wake_words;
-          }
-        }
-        // if ((max_result > 0.95f) && (max_idx == 2)) {
-        //   if (this->last_probability > 0.95f) {
-        //     ++this->succesive_wake_words;
-        //   }
-        //   this->last_probability = max_result;
-        // } else {
-        //   this->last_probability = 0.0;
-        //   this->succesive_wake_words = 0;
-        // }
-
-        // if (millis() - this->last_wake_word_check_ > 100) {
-        // if ((tflite::GetTensorData<float>(output)[2] > 0.5)) {
-        ESP_LOGD(TAG_LOCAL, "silence=%.3f,unknown=%.3f,computer=%.3f", tflite::GetTensorData<float>(output)[0],
-                 tflite::GetTensorData<float>(output)[1], tflite::GetTensorData<float>(output)[2]);
-        // }
-
-        // this->last_wake_word_check_ = millis();
-        // }
-
-        // // // if (max_result > 0.8f) {
-        // ESP_LOGD(TAG_LOCAL, "Detected %7s, score: %.5f", kCategoryLabels[max_idx], static_cast<double>(max_result));
-      }
-    }
-
-    return true;
   }
 
  protected:
@@ -325,24 +207,6 @@ class LocalWakeWord {
   float *feature_buffer_{nullptr};
   float *streaming_model_input_{nullptr};
   float *nonstreaming_model_input_{nullptr};
-
-  float output_probabilities_[3];
-
-  // // Fills the feature data with information from audio inputs, and returns how
-  // // many feature slices were updated.
-  // TfLiteStatus populate_feature_data_(int32_t last_time_in_ms, int32_t time_in_ms, int *how_many_new_slices);
-
-  // // This is an abstraction around an audio source like a microphone, and is
-  // // expected to return 16-bit PCM sample data for a given point in time. The
-  // // sample data itself should be used as quickly as possible by the caller, since
-  // // to allow memory optimizations there are no guarantees that the samples won't
-  // // be overwritten by new data in the future. In practice, implementations should
-  // // ensure that there's a reasonable time allowed for clients to access the data
-  // // before any reuse.
-  // // The reference implementation can have no platform-specific dependencies, so
-  // // it just returns an array filled with zeros. For real applications, you should
-  // // ensure there's a specialized implementation that accesses hardware APIs.
-  // TfLiteStatus stride_audio_samples_(int *audio_samples_size, int16_t **audio_samples);
 
   // Stores audio fed into feature generator
   int16_t *preprocessor_audio_buffer_;
@@ -384,7 +248,114 @@ class LocalWakeWord {
   int kAudioSampleDurationCount = kFeatureDurationMs * kAudioSampleFrequency / 1000;
   int kAudioSampleStrideCount = kFeatureStrideMs * kAudioSampleFrequency / 1000;
 
-  TfLiteStatus stride_audio_samples_(int *audio_samples_size, int16_t **audio_samples, ringbuf_handle_t &ring_buffer) {
+  bool populate_feature_data_(ringbuf_handle_t &ring_buffer) {
+    int slices_needed = rb_bytes_filled(ring_buffer) / (NEW_SAMPLES_TO_GET * sizeof(int16_t));
+
+    if (slices_needed > kFeatureCount) {
+      slices_needed = kFeatureCount;
+    }
+
+    const int slices_to_keep = kFeatureCount - slices_needed;
+    const int slices_to_drop = kFeatureCount - slices_to_keep;
+    // If we can avoid recalculating some slices, just move the existing data
+    // up in the spectrogram, to perform something like this:
+    // last time = 80ms          current time = 120ms
+    // +-----------+             +-----------+
+    // | data@20ms |         --> | data@60ms |
+    // +-----------+       --    +-----------+
+    // | data@40ms |     --  --> | data@80ms |
+    // +-----------+   --  --    +-----------+
+    // | data@60ms | --  --      |  <empty>  |
+    // +-----------+   --        +-----------+
+    // | data@80ms | --          |  <empty>  |
+    // +-----------+             +-----------+
+    if (slices_to_keep > 0) {
+      for (int dest_slice = 0; dest_slice < slices_to_keep; ++dest_slice) {
+        float *dest_slice_data = this->feature_buffer_ + (dest_slice * kFeatureSize);
+        const int src_slice = dest_slice + slices_to_drop;
+        const float *src_slice_data = this->feature_buffer_ + (src_slice * kFeatureSize);
+        for (int i = 0; i < kFeatureSize; ++i) {
+          dest_slice_data[i] = src_slice_data[i];
+        }
+      }
+    }
+
+    // Any slices that need to be filled in with feature data have their
+    // appropriate audio data pulled, and features calculated for that slice.
+    if (slices_needed > 0) {
+      for (int new_slice = slices_to_keep; new_slice < kFeatureCount; ++new_slice) {
+        int16_t *audio_samples = nullptr;
+        int audio_samples_size = 0;
+
+        if (!this->stride_audio_samples_(&audio_samples_size, &audio_samples, ring_buffer)) {
+          return false;
+        }
+        if (audio_samples_size < kMaxAudioSampleSize) {
+          ESP_LOGD(TAG_LOCAL, "Audio data size %d too small, want %d", audio_samples_size, kMaxAudioSampleSize);
+          return false;
+        }
+        static constexpr int kAudioSampleDurationCount = kFeatureDurationMs * kAudioSampleFrequency / 1000;
+
+        float *new_slice_data = this->feature_buffer_ + (new_slice * kFeatureSize);
+
+        if (this->features_count_ < 49) {
+          ++this->features_count_;
+        }
+
+        TfLiteStatus generate_status =
+            this->generate_single_float_feature(audio_samples, kAudioSampleDurationCount, new_slice_data);
+        if (generate_status != kTfLiteOk) {
+          return generate_status;
+        }
+
+        for (int i = 0; i < kFeatureSize; ++i) {
+          this->streaming_model_input_[i] = new_slice_data[i];
+        }
+
+        uint32_t prior_invoke = millis();
+
+        // Run the model on the spectrogram input and make sure it succeeds.
+        TfLiteStatus invoke_status = this->streaming_interpreter_->Invoke();
+        if (invoke_status != kTfLiteOk) {
+          ESP_LOGD(TAG_LOCAL, "Invoke failed");
+          // return kTfLiteError;
+          return false;
+        }
+
+        ESP_LOGV(TAG_LOCAL, "Streaming Inference Latency=%u ms", (millis() - prior_invoke));
+
+        TfLiteTensor *output = this->streaming_interpreter_->output(0);
+
+        float max_result = 0.0;
+        int max_idx = 0;
+        for (int i = 0; i < kCategoryCount; i++) {
+          float current_result = tflite::GetTensorData<float>(output)[i];
+          if (current_result > max_result) {
+            max_result = current_result;  // update max result
+            max_idx = i;                  // update category
+          }
+        }
+
+        if ((max_result > 0.8f) && (max_idx == 2) && (this->features_count_ > 30)) {
+          ++this->succesive_wake_words;
+        } else {
+          if (this->succesive_wake_words > 0) {
+            --this->succesive_wake_words;
+          }
+        }
+
+        // if ((tflite::GetTensorData<float>(output)[2] > 0.5)) {
+        ESP_LOGD(TAG_LOCAL, "silence=%.3f,unknown=%.3f,computer=%.3f", tflite::GetTensorData<float>(output)[0],
+                 tflite::GetTensorData<float>(output)[1], tflite::GetTensorData<float>(output)[2]);
+        // }
+      }
+    }
+
+    return true;
+  }
+
+  // Return true if successful
+  bool stride_audio_samples_(int *audio_samples_size, int16_t **audio_samples, ringbuf_handle_t &ring_buffer) {
     /* copy 160 samples (320 bytes) into output_buff from history */
     memcpy((void *) (this->preprocessor_audio_buffer_), (void *) (this->preprocessor_stride_buffer_),
            HISTORY_SAMPLES_TO_KEEP * sizeof(int16_t));
@@ -393,7 +364,7 @@ class LocalWakeWord {
      * 160 ), first 160 samples (320 bytes) will be from history */
     if (rb_bytes_filled(ring_buffer) < NEW_SAMPLES_TO_GET * sizeof(int16_t)) {
       ESP_LOGD(TAG_LOCAL, " Buffer not full enough");
-      return kTfLiteError;
+      return false;
     }
     int bytes_read = rb_read(ring_buffer, ((char *) (this->preprocessor_audio_buffer_ + HISTORY_SAMPLES_TO_KEEP)),
                              NEW_SAMPLES_TO_GET * sizeof(int16_t), pdMS_TO_TICKS(200));
@@ -403,7 +374,7 @@ class LocalWakeWord {
       ESP_LOGD(TAG_LOCAL, " Partial Read of Data by Model");
       ESP_LOGD(TAG_LOCAL, " Could only read %d bytes when required %d bytes ", bytes_read,
                (int) (NEW_SAMPLES_TO_GET * sizeof(int16_t)));
-      return kTfLiteError;
+      return false;
     }
 
     /* copy 320 bytes from output_buff into history */
@@ -411,61 +382,101 @@ class LocalWakeWord {
            (void *) (this->preprocessor_audio_buffer_ + NEW_SAMPLES_TO_GET), HISTORY_SAMPLES_TO_KEEP * sizeof(int16_t));
 
     *audio_samples_size = kMaxAudioSampleSize;
-    // *audio_samples_size = bytes_read / sizeof(int16_t);
+
     *audio_samples = this->preprocessor_audio_buffer_;
-    return kTfLiteOk;
+    return true;
   }
 
-  // TfLiteStatus RegisterOps(AudioPreprocessorOpResolver &op_resolver) { return kTfLiteOk; }
-
-  bool register_preprocessor_ops(tflite::MicroMutableOpResolver<18> &op_resolver) {
-    TF_LITE_ENSURE_STATUS(op_resolver.AddReshape());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddCast());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddStridedSlice());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddConcatenation());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddMul());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddAdd());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddDiv());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddMinimum());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddMaximum());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddWindow());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddFftAutoScale());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddRfft());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddEnergy());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddFilterBank());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddFilterBankSquareRoot());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddFilterBankSpectralSubtraction());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddPCAN());
-    TF_LITE_ENSURE_STATUS(op_resolver.AddFilterBankLog());
+  // Return true on success
+  bool register_preprocessor_ops_(tflite::MicroMutableOpResolver<18> &op_resolver) {
+    if (op_resolver.AddReshape() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddCast() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddStridedSlice() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddConcatenation() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddMul() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddAdd() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddDiv() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddMinimum() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddMaximum() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddWindow() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddFftAutoScale() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddRfft() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddEnergy() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddFilterBank() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddFilterBankSquareRoot() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddFilterBankSpectralSubtraction() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddPCAN() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddFilterBankLog() != kTfLiteOk)
+      return false;
 
     return true;
   }
 
-  bool register_streaming_ops(tflite::MicroMutableOpResolver<12> &op_resolver) {
-    op_resolver.AddCallOnce();
-    op_resolver.AddVarHandle();
-    op_resolver.AddReshape();
-    op_resolver.AddReadVariable();
-    op_resolver.AddStridedSlice();
-    op_resolver.AddConcatenation();
-    op_resolver.AddAssignVariable();
-    op_resolver.AddConv2D();
-    op_resolver.AddDepthwiseConv2D();
-    op_resolver.AddAveragePool2D();
-    op_resolver.AddFullyConnected();
-    op_resolver.AddSoftmax();
+  // Return true if successful
+  bool register_streaming_ops_(tflite::MicroMutableOpResolver<12> &op_resolver) {
+    if (op_resolver.AddCallOnce() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddVarHandle() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddReshape() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddReadVariable() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddStridedSlice() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddConcatenation() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddAssignVariable() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddConv2D() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddDepthwiseConv2D() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddAveragePool2D() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddFullyConnected() != kTfLiteOk)
+      return false;
+    if (op_resolver.AddSoftmax() != kTfLiteOk)
+      return false;
 
     return true;
   }
 
-  bool register_nonstreaming_ops(tflite::MicroMutableOpResolver<7> &op_resolver) {
-    op_resolver.AddReshape();
-    op_resolver.AddConv2D();
-    op_resolver.AddDepthwiseConv2D();
-    op_resolver.AddMul();
-    op_resolver.AddAdd();
-    op_resolver.AddMean();
-    op_resolver.AddLogistic();
+  // Return true if successful
+  bool register_nonstreaming_ops_(tflite::MicroMutableOpResolver<8> &op_resolver) {
+    if (op_resolver.AddReshape())
+      return false;
+    if (op_resolver.AddConv2D())
+      return false;
+    if (op_resolver.AddDepthwiseConv2D())
+      return false;
+    if (op_resolver.AddMul())
+      return false;
+    if (op_resolver.AddAdd())
+      return false;
+    if (op_resolver.AddMean())
+      return false;
+    if (op_resolver.AddLogistic())
+      return false;
+    if (op_resolver.AddSoftmax())
+      return false;
 
     return true;
   }

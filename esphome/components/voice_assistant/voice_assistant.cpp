@@ -106,7 +106,11 @@ void VoiceAssistant::setup() {
   }
 
   this->local_wake_word_ = new LocalWakeWord();
-  this->local_wake_word_->intialize_models();
+  if (!this->local_wake_word_->intialize_models()) {
+    ESP_LOGE(TAG, "Failed to setup local wake word inference models.");
+    this->mark_failed();
+    return;
+  }
 }
 
 int VoiceAssistant::read_microphone_() {
