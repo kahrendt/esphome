@@ -25,11 +25,11 @@ static const char *const TAG_LOCAL = "local_wake_word";
 // Constants used for audio preprocessor model
 enum {
   PREPROCESSOR_FEATURE_SIZE = 40,   // The number of features the audio preprocessor generates per slice
-  PREPROCESSOR_FEATURE_COUNT = 49,  // The number of slices in the spectrogram
+  PREPROCESSOR_FEATURE_COUNT = 99,  // The number of slices in the spectrogram
   FEATURE_STRIDE_MS = 20,           // How frequently the preprocessor generates a new set of features
   FEATURE_DURATION_MS = 30,         // Duration of each slice used as input into the preprocessor
   AUDIO_SAMPLE_FREQUENCY = 16000,   // Audio sample frequency in hertz
-  SPECTROGRAM_PIXELS = (PREPROCESSOR_FEATURE_SIZE * PREPROCESSOR_FEATURE_COUNT),
+  SPECTROGRAM_TOTAL_PIXELS = (PREPROCESSOR_FEATURE_SIZE * PREPROCESSOR_FEATURE_COUNT),
   HISTORY_SAMPLES_TO_KEEP = ((FEATURE_DURATION_MS - FEATURE_STRIDE_MS) * (AUDIO_SAMPLE_FREQUENCY / 1000)),
   NEW_SAMPLES_TO_GET = (FEATURE_STRIDE_MS * (AUDIO_SAMPLE_FREQUENCY / 1000)),
   SAMPLE_DURATION_COUNT = FEATURE_DURATION_MS * AUDIO_SAMPLE_FREQUENCY / 1000,
@@ -48,6 +48,9 @@ enum {
 enum {
   STREAMING_MODEL_CATEGORIES = 3,
 };
+
+static constexpr float STREAMING_MODEL_PROBABILITY_CUTOFF = 0.95;
+static constexpr int STREAMING_MODEL_SUCCESSIVE_WORDS_NEEDED = 40;
 
 class LocalWakeWord {
  public:
@@ -80,7 +83,7 @@ class LocalWakeWord {
       return false;
     }
 
-    this->spectrogram_ = spectrogram_allocator.allocate(SPECTROGRAM_PIXELS);
+    this->spectrogram_ = spectrogram_allocator.allocate(SPECTROGRAM_TOTAL_PIXELS);
     if (this->spectrogram_ == nullptr) {
       ESP_LOGE(TAG_LOCAL, "Could not allocate the audio features buffer.");
       return false;
@@ -116,7 +119,7 @@ class LocalWakeWord {
     }
 
     static tflite::MicroMutableOpResolver<18> preprocessor_op_resolver;
-    static tflite::MicroMutableOpResolver<8> nonstreaming_op_resolver;
+    static tflite::MicroMutableOpResolver<9> nonstreaming_op_resolver;
     static tflite::MicroMutableOpResolver<12> streaming_op_resolver;
 
     if (!this->register_preprocessor_ops_(preprocessor_op_resolver))
@@ -162,7 +165,7 @@ class LocalWakeWord {
     this->nonstreaming_model_input_ = tflite::GetTensorData<float>(this->nonstreaming_interpreter_->input(0));
 
     // Reset the feature buffer
-    for (int n = 0; n < SPECTROGRAM_PIXELS; ++n) {
+    for (int n = 0; n < SPECTROGRAM_TOTAL_PIXELS; ++n) {
       this->spectrogram_[n] = 0.0;
     }
 
@@ -171,7 +174,7 @@ class LocalWakeWord {
 
   bool run_inference(ringbuf_handle_t &ring_buffer) {
     this->populate_feature_data_(ring_buffer);
-    if (this->succesive_wake_words >= 5) {
+    if (this->succesive_wake_words >= STREAMING_MODEL_SUCCESSIVE_WORDS_NEEDED) {
       ESP_LOGD(TAG_LOCAL, "Streaming model predicted the wake word");
       this->succesive_wake_words = 0;
 
@@ -179,14 +182,16 @@ class LocalWakeWord {
       // variables for the streaming model do not reset
       this->spectrogram_current_features_count_ = 0;
 
+      // return true;
+
       // Copy the entire spectogram as input to the nonstreaming model
-      for (int i = 0; i < SPECTROGRAM_PIXELS; ++i) {
+      for (int i = 0; i < SPECTROGRAM_TOTAL_PIXELS; ++i) {
         this->nonstreaming_model_input_[i] = this->spectrogram_[i];
       }
 
       uint32_t prior_invoke = millis();
 
-      // Run the model on the spectrogram input and make sure it succeeds.
+      // Run the nonstreaming model on the entire spectrogram input and make sure it succeeds.
       TfLiteStatus invoke_status = this->nonstreaming_interpreter_->Invoke();
       if (invoke_status != kTfLiteOk) {
         ESP_LOGD(TAG_LOCAL, "Nonstreaming model invoke failed");
@@ -197,7 +202,7 @@ class LocalWakeWord {
 
       TfLiteTensor *output = this->nonstreaming_interpreter_->output(0);
 
-      ESP_LOGV(TAG, "Nonstreaming Model Predictions: silence=%.3f, unknown=%.3f, computer=%.3f",
+      ESP_LOGD(TAG, "Nonstreaming Model Predictions: silence=%.3f, unknown=%.3f, wakeword=%.3f",
                tflite::GetTensorData<float>(output)[0], tflite::GetTensorData<float>(output)[1],
                tflite::GetTensorData<float>(output)[2]);
 
@@ -234,6 +239,7 @@ class LocalWakeWord {
 
   uint8_t spectrogram_current_features_count_ = 0;
 
+  // Adapted from TFLite micro speech example
   bool populate_feature_data_(ringbuf_handle_t &ring_buffer) {
     int slices_needed = rb_bytes_filled(ring_buffer) / (NEW_SAMPLES_TO_GET * sizeof(int16_t));
 
@@ -272,6 +278,7 @@ class LocalWakeWord {
       for (int new_slice = slices_to_keep; new_slice < PREPROCESSOR_FEATURE_COUNT; ++new_slice) {
         int16_t *audio_samples = nullptr;
 
+        // Get next slice of audio samples
         if (!this->stride_audio_samples_(&audio_samples, ring_buffer)) {
           return false;
         }
@@ -282,19 +289,21 @@ class LocalWakeWord {
           ++this->spectrogram_current_features_count_;
         }
 
+        // Compute the features for the newest slice of audio samples and store them in the spectrogram
         TfLiteStatus generate_status =
             this->generate_single_float_feature(audio_samples, SAMPLE_DURATION_COUNT, new_slice_data);
         if (generate_status != kTfLiteOk) {
           return generate_status;
         }
 
+        // Copy the newest slice's features as input into the streaming model
         for (int i = 0; i < PREPROCESSOR_FEATURE_SIZE; ++i) {
           this->streaming_model_input_[i] = new_slice_data[i];
         }
 
         uint32_t prior_invoke = millis();
 
-        // Run the model on the spectrogram input and make sure it succeeds.
+        // Run the streaming model on only the newest slice's features
         TfLiteStatus invoke_status = this->streaming_interpreter_->Invoke();
         if (invoke_status != kTfLiteOk) {
           ESP_LOGD(TAG_LOCAL, "Invoke failed");
@@ -316,7 +325,7 @@ class LocalWakeWord {
           }
         }
 
-        if ((max_result > 0.8f) && (max_idx == 2) &&
+        if ((max_result > STREAMING_MODEL_PROBABILITY_CUTOFF) && (max_idx == 2) &&
             (this->spectrogram_current_features_count_ > PREPROCESSOR_FEATURE_COUNT / 2)) {
           ++this->succesive_wake_words;
         } else {
@@ -326,7 +335,7 @@ class LocalWakeWord {
         }
 
         // if ((tflite::GetTensorData<float>(output)[2] > 0.5)) {
-        ESP_LOGD(TAG_LOCAL, "silence=%.3f,unknown=%.3f,computer=%.3f", tflite::GetTensorData<float>(output)[0],
+        ESP_LOGD(TAG_LOCAL, "silence=%.3f,unknown=%.3f,wakeword=%.3f", tflite::GetTensorData<float>(output)[0],
                  tflite::GetTensorData<float>(output)[1], tflite::GetTensorData<float>(output)[2]);
         // }
       }
@@ -335,6 +344,7 @@ class LocalWakeWord {
     return true;
   }
 
+  // Adapted from TFLite micro speech example
   // Return true if successful
   bool stride_audio_samples_(int16_t **audio_samples, ringbuf_handle_t &ring_buffer) {
     // Copy 320 bytes (160 samples over 10 ms) into preprocessor_audio_buffer_ from history in
@@ -443,8 +453,10 @@ class LocalWakeWord {
   }
 
   // Return true if successful
-  bool register_nonstreaming_ops_(tflite::MicroMutableOpResolver<8> &op_resolver) {
+  bool register_nonstreaming_ops_(tflite::MicroMutableOpResolver<9> &op_resolver) {
     if (op_resolver.AddReshape())
+      return false;
+    if (op_resolver.AddPad())
       return false;
     if (op_resolver.AddConv2D())
       return false;
@@ -464,6 +476,7 @@ class LocalWakeWord {
     return true;
   }
 
+  // Adapted from TFLite micro speech example
   TfLiteStatus generate_single_float_feature(const int16_t *audio_data, const int audio_data_size,
                                              float feature_output[PREPROCESSOR_FEATURE_SIZE]) {
     TfLiteTensor *input = this->preprocessor_interperter_->input(0);
