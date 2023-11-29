@@ -22,46 +22,71 @@ namespace voice_assistant {
 
 static const char *const TAG_LOCAL = "local_wake_word";
 
-using AudioPreprocessorOpResolver = tflite::MicroMutableOpResolver<18>;
+// Constants used for audio preprocessor model
+enum {
+  PREPROCESSOR_FEATURE_SIZE = 40,   // The number of features the audio preprocessor generates per slice
+  PREPROCESSOR_FEATURE_COUNT = 49,  // The number of slices in the spectrogram
+  FEATURE_STRIDE_MS = 20,           // How frequently the preprocessor generates a new set of features
+  FEATURE_DURATION_MS = 30,         // Duration of each slice used as input into the preprocessor
+  AUDIO_SAMPLE_FREQUENCY = 16000,   // Audio sample frequency in hertz
+  SPECTROGRAM_PIXELS = (PREPROCESSOR_FEATURE_SIZE * PREPROCESSOR_FEATURE_COUNT),
+  HISTORY_SAMPLES_TO_KEEP = ((FEATURE_DURATION_MS - FEATURE_STRIDE_MS) * (AUDIO_SAMPLE_FREQUENCY / 1000)),
+  NEW_SAMPLES_TO_GET = (FEATURE_STRIDE_MS * (AUDIO_SAMPLE_FREQUENCY / 1000)),
+  SAMPLE_DURATION_COUNT = FEATURE_DURATION_MS * AUDIO_SAMPLE_FREQUENCY / 1000,
+  MAX_AUDIO_SAMPLE_SIZE = 512,
+};
+
+// Constants used for setting up tensor arenas
+// TODO: Optimize these values; they are currently much larger than needed
+enum {
+  STREAMING_MODEL_ARENA_SIZE = 1024 * 1000,
+  STREAMING_MODEL_VARIABLE_ARENA_SIZE = 10 * 1000,
+  NONSTREAMING_MODEL_ARENA_SIZE = 1024 * 1000,
+  PREPROCESSOR_ARENA_SIZE = 16 * 1024,
+};
+
+enum {
+  STREAMING_MODEL_CATEGORIES = 3,
+};
 
 class LocalWakeWord {
  public:
   bool intialize_models() {
     ExternalRAMAllocator<uint8_t> arena_allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
-    ExternalRAMAllocator<float> feature_buffer_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
+    ExternalRAMAllocator<float> spectrogram_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
     ExternalRAMAllocator<int16_t> audio_samples_allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
 
-    this->streaming_tensor_arena_ = arena_allocator.allocate(streaming_model_arena_size_);
+    this->streaming_tensor_arena_ = arena_allocator.allocate(STREAMING_MODEL_ARENA_SIZE);
     if (this->streaming_tensor_arena_ == nullptr) {
       ESP_LOGE(TAG_LOCAL, "Could not allocate the streaming model's tensor arena.");
       return false;
     }
 
-    this->nonstreaming_tensor_arena_ = arena_allocator.allocate(nonstreaming_model_arena_size_);
+    this->nonstreaming_tensor_arena_ = arena_allocator.allocate(NONSTREAMING_MODEL_ARENA_SIZE);
     if (this->nonstreaming_tensor_arena_ == nullptr) {
       ESP_LOGE(TAG_LOCAL, "Could not allocate the nonstreaming model's tensor arena.");
       return false;
     }
 
-    this->streaming_var_arena_ = arena_allocator.allocate(streaming_var_arena_size_);
+    this->streaming_var_arena_ = arena_allocator.allocate(STREAMING_MODEL_VARIABLE_ARENA_SIZE);
     if (this->streaming_var_arena_ == nullptr) {
       ESP_LOGE(TAG_LOCAL, "Could not allocate the streaming model variable's tensor arena.");
       return false;
     }
 
-    this->preprocessor_tensor_arena_ = arena_allocator.allocate(this->preprocessor_arena_size_);
+    this->preprocessor_tensor_arena_ = arena_allocator.allocate(PREPROCESSOR_ARENA_SIZE);
     if (this->preprocessor_tensor_arena_ == nullptr) {
       ESP_LOGE(TAG_LOCAL, "Could not allocate the audio preprocessor model's tensor arena.");
       return false;
     }
 
-    this->feature_buffer_ = feature_buffer_allocator.allocate(kFeatureElementCount);
-    if (this->feature_buffer_ == nullptr) {
+    this->spectrogram_ = spectrogram_allocator.allocate(SPECTROGRAM_PIXELS);
+    if (this->spectrogram_ == nullptr) {
       ESP_LOGE(TAG_LOCAL, "Could not allocate the audio features buffer.");
       return false;
     }
 
-    this->preprocessor_audio_buffer_ = audio_samples_allocator.allocate(kMaxAudioSampleSize * 32);
+    this->preprocessor_audio_buffer_ = audio_samples_allocator.allocate(MAX_AUDIO_SAMPLE_SIZE * 32);
     if (this->preprocessor_audio_buffer_ == nullptr) {
       ESP_LOGE(TAG_LOCAL, "Could not allocate the audio preprocessor's buffer.");
       return false;
@@ -101,19 +126,19 @@ class LocalWakeWord {
     if (!this->register_streaming_ops_(streaming_op_resolver))
       return false;
 
-    tflite::MicroAllocator *ma = tflite::MicroAllocator::Create(this->streaming_var_arena_, streaming_var_arena_size_);
+    tflite::MicroAllocator *ma =
+        tflite::MicroAllocator::Create(this->streaming_var_arena_, STREAMING_MODEL_VARIABLE_ARENA_SIZE);
     tflite::MicroResourceVariables *mrv = tflite::MicroResourceVariables::Create(ma, 8);
 
-    static tflite::MicroInterpreter static_preprocessor_interpreter(this->preprocessor_model_, preprocessor_op_resolver,
-                                                                    this->preprocessor_tensor_arena_,
-                                                                    preprocessor_arena_size_);
+    static tflite::MicroInterpreter static_preprocessor_interpreter(
+        this->preprocessor_model_, preprocessor_op_resolver, this->preprocessor_tensor_arena_, PREPROCESSOR_ARENA_SIZE);
 
     static tflite::MicroInterpreter static_streaming_interpreter(
-        this->streaming_model_, streaming_op_resolver, this->streaming_tensor_arena_, streaming_model_arena_size_, mrv);
+        this->streaming_model_, streaming_op_resolver, this->streaming_tensor_arena_, STREAMING_MODEL_ARENA_SIZE, mrv);
 
     static tflite::MicroInterpreter static_nonstreaming_interpreter(this->nonstreaming_model_, nonstreaming_op_resolver,
                                                                     this->nonstreaming_tensor_arena_,
-                                                                    nonstreaming_model_arena_size_);
+                                                                    NONSTREAMING_MODEL_ARENA_SIZE);
 
     this->preprocessor_interperter_ = &static_preprocessor_interpreter;
     this->streaming_interpreter_ = &static_streaming_interpreter;
@@ -137,8 +162,8 @@ class LocalWakeWord {
     this->nonstreaming_model_input_ = tflite::GetTensorData<float>(this->nonstreaming_interpreter_->input(0));
 
     // Reset the feature buffer
-    for (int n = 0; n < kFeatureElementCount; ++n) {
-      this->feature_buffer_[n] = 0.0;
+    for (int n = 0; n < SPECTROGRAM_PIXELS; ++n) {
+      this->spectrogram_[n] = 0.0;
     }
 
     return true;
@@ -150,12 +175,13 @@ class LocalWakeWord {
       ESP_LOGD(TAG_LOCAL, "Streaming model predicted the wake word");
       this->succesive_wake_words = 0;
 
-      this->features_count_ = 0;  // reset counter of features so we don't reduplicate our inference; the internal
-                                  // variables for the streaming model do not reset
+      // Reset counter of features so we don't reduplicate our inference; the internal
+      // variables for the streaming model do not reset
+      this->spectrogram_current_features_count_ = 0;
 
       // Copy the entire spectogram as input to the nonstreaming model
-      for (int i = 0; i < kFeatureElementCount; ++i) {
-        this->nonstreaming_model_input_[i] = this->feature_buffer_[i];
+      for (int i = 0; i < SPECTROGRAM_PIXELS; ++i) {
+        this->nonstreaming_model_input_[i] = this->spectrogram_[i];
       }
 
       uint32_t prior_invoke = millis();
@@ -191,20 +217,12 @@ class LocalWakeWord {
   tflite::MicroInterpreter *nonstreaming_interpreter_{nullptr};
   tflite::MicroInterpreter *preprocessor_interperter_{nullptr};
 
-  // Create an area of memory to use for input, output, and intermediate arrays.
-  // The size of this will depend on the model you're using, and may need to be
-  // determined by experimentation.
-  static constexpr int streaming_model_arena_size_ = 1 * 1024 * 1000;
-  static constexpr int streaming_var_arena_size_ = 1 * 10 * 1000;
-  static constexpr int nonstreaming_model_arena_size_ = 1 * 1024 * 1000;
-  static constexpr size_t preprocessor_arena_size_ = 16 * 1024;
-
   uint8_t *streaming_var_arena_{nullptr};
   uint8_t *streaming_tensor_arena_{nullptr};
   uint8_t *nonstreaming_tensor_arena_{nullptr};
   uint8_t *preprocessor_tensor_arena_{nullptr};
 
-  float *feature_buffer_{nullptr};
+  float *spectrogram_{nullptr};
   float *streaming_model_input_{nullptr};
   float *nonstreaming_model_input_{nullptr};
 
@@ -214,51 +232,19 @@ class LocalWakeWord {
 
   uint8_t succesive_wake_words = 0;
 
-  uint8_t features_count_ = 0;
-
-  // The following values are derived from values used during model training.
-  // If you change the way you preprocess the input, update all these constants.
-  int kMaxAudioSampleSize = 512;
-  static constexpr int kAudioSampleFrequency = 16000;
-  static constexpr int kFeatureSize = 40;
-  int kFeatureCount = 49;
-  int kFeatureElementCount = (kFeatureSize * kFeatureCount);
-  int kFeatureStrideMs = 20;
-  static constexpr int kFeatureDurationMs = 30;
-
-  /* model requires 20ms new data from g_audio_capture_buffer and 10ms old data
-   * each time , storing old data in the histrory buffer , {
-   * history_samples_to_keep = 10 * 16 } */
-  int32_t HISTORY_SAMPLES_TO_KEEP = ((kFeatureDurationMs - kFeatureStrideMs) * (kAudioSampleFrequency / 1000));
-  /* new samples to get each time from ringbuffer, { new_samples_to_get =  20 * 16
-   * } */
-  int32_t NEW_SAMPLES_TO_GET = (kFeatureStrideMs * (kAudioSampleFrequency / 1000));
-
-  // Variables for the model's output categories.
-  static constexpr int kCategoryCount = 3;
-  const char *kCategoryLabels[kCategoryCount] = {
-      "silence",
-      "unknown",
-      "computer",
-  };
-
-  const tflite::Model *model = nullptr;
-  tflite::MicroInterpreter *interpreter = nullptr;
-
-  int kAudioSampleDurationCount = kFeatureDurationMs * kAudioSampleFrequency / 1000;
-  int kAudioSampleStrideCount = kFeatureStrideMs * kAudioSampleFrequency / 1000;
+  uint8_t spectrogram_current_features_count_ = 0;
 
   bool populate_feature_data_(ringbuf_handle_t &ring_buffer) {
     int slices_needed = rb_bytes_filled(ring_buffer) / (NEW_SAMPLES_TO_GET * sizeof(int16_t));
 
-    if (slices_needed > kFeatureCount) {
-      slices_needed = kFeatureCount;
+    if (slices_needed > PREPROCESSOR_FEATURE_COUNT) {
+      slices_needed = PREPROCESSOR_FEATURE_COUNT;
     }
 
-    const int slices_to_keep = kFeatureCount - slices_needed;
-    const int slices_to_drop = kFeatureCount - slices_to_keep;
-    // If we can avoid recalculating some slices, just move the existing data
-    // up in the spectrogram, to perform something like this:
+    const int slices_to_keep = PREPROCESSOR_FEATURE_COUNT - slices_needed;
+    const int slices_to_drop = PREPROCESSOR_FEATURE_COUNT - slices_to_keep;
+
+    // We move the existing data up in the spectrogram, to perform something like this:
     // last time = 80ms          current time = 120ms
     // +-----------+             +-----------+
     // | data@20ms |         --> | data@60ms |
@@ -271,10 +257,10 @@ class LocalWakeWord {
     // +-----------+             +-----------+
     if (slices_to_keep > 0) {
       for (int dest_slice = 0; dest_slice < slices_to_keep; ++dest_slice) {
-        float *dest_slice_data = this->feature_buffer_ + (dest_slice * kFeatureSize);
+        float *dest_slice_data = this->spectrogram_ + (dest_slice * PREPROCESSOR_FEATURE_SIZE);
         const int src_slice = dest_slice + slices_to_drop;
-        const float *src_slice_data = this->feature_buffer_ + (src_slice * kFeatureSize);
-        for (int i = 0; i < kFeatureSize; ++i) {
+        const float *src_slice_data = this->spectrogram_ + (src_slice * PREPROCESSOR_FEATURE_SIZE);
+        for (int i = 0; i < PREPROCESSOR_FEATURE_SIZE; ++i) {
           dest_slice_data[i] = src_slice_data[i];
         }
       }
@@ -283,32 +269,26 @@ class LocalWakeWord {
     // Any slices that need to be filled in with feature data have their
     // appropriate audio data pulled, and features calculated for that slice.
     if (slices_needed > 0) {
-      for (int new_slice = slices_to_keep; new_slice < kFeatureCount; ++new_slice) {
+      for (int new_slice = slices_to_keep; new_slice < PREPROCESSOR_FEATURE_COUNT; ++new_slice) {
         int16_t *audio_samples = nullptr;
-        int audio_samples_size = 0;
 
-        if (!this->stride_audio_samples_(&audio_samples_size, &audio_samples, ring_buffer)) {
+        if (!this->stride_audio_samples_(&audio_samples, ring_buffer)) {
           return false;
         }
-        if (audio_samples_size < kMaxAudioSampleSize) {
-          ESP_LOGD(TAG_LOCAL, "Audio data size %d too small, want %d", audio_samples_size, kMaxAudioSampleSize);
-          return false;
-        }
-        static constexpr int kAudioSampleDurationCount = kFeatureDurationMs * kAudioSampleFrequency / 1000;
 
-        float *new_slice_data = this->feature_buffer_ + (new_slice * kFeatureSize);
+        float *new_slice_data = this->spectrogram_ + (new_slice * PREPROCESSOR_FEATURE_SIZE);
 
-        if (this->features_count_ < 49) {
-          ++this->features_count_;
+        if (this->spectrogram_current_features_count_ < PREPROCESSOR_FEATURE_COUNT) {
+          ++this->spectrogram_current_features_count_;
         }
 
         TfLiteStatus generate_status =
-            this->generate_single_float_feature(audio_samples, kAudioSampleDurationCount, new_slice_data);
+            this->generate_single_float_feature(audio_samples, SAMPLE_DURATION_COUNT, new_slice_data);
         if (generate_status != kTfLiteOk) {
           return generate_status;
         }
 
-        for (int i = 0; i < kFeatureSize; ++i) {
+        for (int i = 0; i < PREPROCESSOR_FEATURE_SIZE; ++i) {
           this->streaming_model_input_[i] = new_slice_data[i];
         }
 
@@ -328,7 +308,7 @@ class LocalWakeWord {
 
         float max_result = 0.0;
         int max_idx = 0;
-        for (int i = 0; i < kCategoryCount; i++) {
+        for (int i = 0; i < STREAMING_MODEL_CATEGORIES; i++) {
           float current_result = tflite::GetTensorData<float>(output)[i];
           if (current_result > max_result) {
             max_result = current_result;  // update max result
@@ -336,7 +316,8 @@ class LocalWakeWord {
           }
         }
 
-        if ((max_result > 0.8f) && (max_idx == 2) && (this->features_count_ > 30)) {
+        if ((max_result > 0.8f) && (max_idx == 2) &&
+            (this->spectrogram_current_features_count_ > PREPROCESSOR_FEATURE_COUNT / 2)) {
           ++this->succesive_wake_words;
         } else {
           if (this->succesive_wake_words > 0) {
@@ -355,33 +336,35 @@ class LocalWakeWord {
   }
 
   // Return true if successful
-  bool stride_audio_samples_(int *audio_samples_size, int16_t **audio_samples, ringbuf_handle_t &ring_buffer) {
-    /* copy 160 samples (320 bytes) into output_buff from history */
+  bool stride_audio_samples_(int16_t **audio_samples, ringbuf_handle_t &ring_buffer) {
+    // Copy 320 bytes (160 samples over 10 ms) into preprocessor_audio_buffer_ from history in
+    // preprocessor_stride_buffer_
     memcpy((void *) (this->preprocessor_audio_buffer_), (void *) (this->preprocessor_stride_buffer_),
            HISTORY_SAMPLES_TO_KEEP * sizeof(int16_t));
 
-    /* copy 320 samples (640 bytes) from rb at ( int16_t*(g_audio_output_buffer) +
-     * 160 ), first 160 samples (320 bytes) will be from history */
     if (rb_bytes_filled(ring_buffer) < NEW_SAMPLES_TO_GET * sizeof(int16_t)) {
-      ESP_LOGD(TAG_LOCAL, " Buffer not full enough");
+      ESP_LOGD(TAG_LOCAL, "Audio Buffer not full enough");
       return false;
     }
+
+    // Copy 640 bytes (320 samples over 20 ms) from the ring buffer
+    // The first 320 bytes (160 samples over 10 ms) will be from history
     int bytes_read = rb_read(ring_buffer, ((char *) (this->preprocessor_audio_buffer_ + HISTORY_SAMPLES_TO_KEEP)),
                              NEW_SAMPLES_TO_GET * sizeof(int16_t), pdMS_TO_TICKS(200));
+
     if (bytes_read < 0) {
-      ESP_LOGE(TAG_LOCAL, " Model Could not read data from Ring Buffer");
+      ESP_LOGE(TAG_LOCAL, "Could not read data from Ring Buffer");
     } else if (bytes_read < NEW_SAMPLES_TO_GET * sizeof(int16_t)) {
-      ESP_LOGD(TAG_LOCAL, " Partial Read of Data by Model");
-      ESP_LOGD(TAG_LOCAL, " Could only read %d bytes when required %d bytes ", bytes_read,
+      ESP_LOGD(TAG_LOCAL, "Partial Read of Data by Model");
+      ESP_LOGD(TAG_LOCAL, "Could only read %d bytes when required %d bytes ", bytes_read,
                (int) (NEW_SAMPLES_TO_GET * sizeof(int16_t)));
       return false;
     }
 
-    /* copy 320 bytes from output_buff into history */
+    // Copy the last 320 bytes (160 samples over 10 ms) from the audio buffer into history stride buffer for the next
+    // iteration
     memcpy((void *) (this->preprocessor_stride_buffer_),
            (void *) (this->preprocessor_audio_buffer_ + NEW_SAMPLES_TO_GET), HISTORY_SAMPLES_TO_KEEP * sizeof(int16_t));
-
-    *audio_samples_size = kMaxAudioSampleSize;
 
     *audio_samples = this->preprocessor_audio_buffer_;
     return true;
@@ -482,16 +465,16 @@ class LocalWakeWord {
   }
 
   TfLiteStatus generate_single_float_feature(const int16_t *audio_data, const int audio_data_size,
-                                             float feature_output[kFeatureSize]) {
+                                             float feature_output[PREPROCESSOR_FEATURE_SIZE]) {
     TfLiteTensor *input = this->preprocessor_interperter_->input(0);
     TfLiteTensor *output = this->preprocessor_interperter_->output(0);
     std::copy_n(audio_data, audio_data_size, tflite::GetTensorData<int16_t>(input));
 
     if (this->preprocessor_interperter_->Invoke() != kTfLiteOk) {
-      MicroPrintf("Feature generator model invocation failed");
+      ESP_LOGE(TAG_LOCAL, "Failed to preprocess audio for local wake word.");
     }
 
-    std::memcpy(feature_output, tflite::GetTensorData<float>(output), kFeatureSize * sizeof(float));
+    std::memcpy(feature_output, tflite::GetTensorData<float>(output), PREPROCESSOR_FEATURE_SIZE * sizeof(float));
 
     return kTfLiteOk;
   }
