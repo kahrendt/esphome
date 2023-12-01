@@ -1,15 +1,6 @@
 #pragma once
-// // We need to keep the data array aligned on some architectures.
-// #ifdef __has_attribute
-// #define HAVE_ATTRIBUTE(x) __has_attribute(x)
-// #else
-// #define HAVE_ATTRIBUTE(x) 0
-// #endif
-// #if HAVE_ATTRIBUTE(aligned) || (defined(__GNUC__) && !defined(__clang__))
-// #define DATA_ALIGN_ATTRIBUTE __attribute__((aligned(4)))
-// #else
-// #define DATA_ALIGN_ATTRIBUTE
-// #endif
+
+// From TFLite Micro's micro_speech example
 
 const unsigned char g_audio_preprocessor_float32_tflite[] = {
     0x1c, 0x00, 0x00, 0x00, 0x54, 0x46, 0x4c, 0x33, 0x14, 0x00, 0x20, 0x00, 0x1c, 0x00, 0x18, 0x00, 0x14, 0x00, 0x10,

@@ -1,3 +1,5 @@
+#pragma once
+
 // From TFLite Micro's micro_speech example
 
 const unsigned char g_audio_preprocessor_int8_tflite[] = {
