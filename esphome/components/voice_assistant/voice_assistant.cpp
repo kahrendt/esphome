@@ -116,7 +116,6 @@ void VoiceAssistant::setup() {
 int VoiceAssistant::read_microphone_() {
   size_t bytes_read = 0;
   if (this->mic_->is_running()) {  // Read audio into input buffer
-    // bytes_read = this->mic_->read(this->input_buffer_, 3200);
     bytes_read = this->mic_->read(this->input_buffer_, INPUT_BUFFER_SIZE * sizeof(int16_t));
     if (bytes_read == 0) {
       memset(this->input_buffer_, 0, INPUT_BUFFER_SIZE * sizeof(int16_t));
@@ -129,12 +128,10 @@ int VoiceAssistant::read_microphone_() {
       rb_read(this->ring_buffer_, nullptr, bytes_read - available, 0);
     }
     rb_write(this->ring_buffer_, (char *) this->input_buffer_, bytes_read, 0);
-    // g_latest_audio_timestamp = g_latest_audio_timestamp + ((1000 * (bytes_read / 2)) / SAMPLE_RATE_HZ);
 #endif
   } else {
     ESP_LOGD(TAG, "microphone not running");
   }
-
   return bytes_read;
 }
 
@@ -163,7 +160,7 @@ void VoiceAssistant::loop() {
         } else
 #endif
         {
-          { this->set_state_(State::START_PIPELINE, State::START_MICROPHONE); }
+          this->set_state_(State::START_PIPELINE, State::START_MICROPHONE);
         }
       } else {
         this->high_freq_.stop();
@@ -210,7 +207,6 @@ void VoiceAssistant::loop() {
     }
     case State::WAITING_FOR_VAD: {
       size_t bytes_read = this->read_microphone_();
-
       if (bytes_read > 0) {
         vad_state_t vad_state =
             vad_process(this->vad_instance_, this->input_buffer_, SAMPLE_RATE_HZ, VAD_FRAME_LENGTH_MS);
@@ -519,7 +515,7 @@ void VoiceAssistant::request_start(bool continuous, bool silence_detection) {
     } else
 #endif
     {
-      { this->set_state_(State::START_PIPELINE, State::START_MICROPHONE); }
+      this->set_state_(State::START_PIPELINE, State::START_MICROPHONE);
     }
   }
 }
