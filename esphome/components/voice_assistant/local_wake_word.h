@@ -75,6 +75,10 @@ class LocalWakeWord {
 
   uint8_t spectrogram_current_features_count_ = 0;
 
+  void copy_streaming_external_variables_();
+
+  void clear_streaming_external_variables_();
+
   // Adapted from TFLite micro speech example
   bool populate_feature_data_(ringbuf_handle_t &ring_buffer);
 

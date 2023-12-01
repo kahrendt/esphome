@@ -101,6 +101,8 @@ bool LocalWakeWord::intialize_models() {
   static tflite::MicroInterpreter static_preprocessor_interpreter(
       this->preprocessor_model_, preprocessor_op_resolver, this->preprocessor_tensor_arena_, PREPROCESSOR_ARENA_SIZE);
 
+  // static tflite::MicroInterpreter static_streaming_interpreter(
+  //     this->streaming_model_, streaming_op_resolver, this->streaming_tensor_arena_, STREAMING_MODEL_ARENA_SIZE);
   static tflite::MicroInterpreter static_streaming_interpreter(
       this->streaming_model_, streaming_op_resolver, this->streaming_tensor_arena_, STREAMING_MODEL_ARENA_SIZE, mrv);
 
@@ -129,7 +131,10 @@ bool LocalWakeWord::intialize_models() {
   this->streaming_model_input_ = tflite::GetTensorData<float>(this->streaming_interpreter_->input(0));
   this->nonstreaming_model_input_ = tflite::GetTensorData<float>(this->nonstreaming_interpreter_->input(0));
 
-  // Reset the feature buffer
+  // Clear the external variables for the streaming model
+  this->clear_streaming_external_variables_();
+
+  // Clear the spectrogram
   for (int n = 0; n < SPECTROGRAM_TOTAL_PIXELS; ++n) {
     this->spectrogram_[n] = 0.0;
   }
@@ -169,6 +174,8 @@ bool LocalWakeWord::run_inference(ringbuf_handle_t &ring_buffer) {
 
     ESP_LOGD(TAG_LOCAL, "Nonstreaming Model Predictions: wakeword=%.3f, unknown=%.3f",
              tflite::GetTensorData<float>(output)[0], tflite::GetTensorData<float>(output)[1]);
+
+    this->clear_streaming_external_variables_();
 
     // If the nonstreaming model predicts the wake word, then return true
     if (tflite::GetTensorData<float>(output)[0] > NONSTREAMING_MODEL_PROBABILITY_CUTOFF) {
@@ -248,6 +255,8 @@ bool LocalWakeWord::populate_feature_data_(ringbuf_handle_t &ring_buffer) {
       }
 
       ESP_LOGV(TAG_LOCAL, "Streaming Inference Latency=%u ms", (millis() - prior_invoke));
+
+      this->copy_streaming_external_variables_();
 
       TfLiteTensor *output = this->streaming_interpreter_->output(0);
 
@@ -411,6 +420,57 @@ bool LocalWakeWord::generate_single_float_feature(const int16_t *audio_data, con
   std::memcpy(feature_output, tflite::GetTensorData<float>(output), PREPROCESSOR_FEATURE_SIZE * sizeof(float));
 
   return true;
+}
+
+void LocalWakeWord::copy_streaming_external_variables_() {
+  const size_t external_variables_count = this->streaming_interpreter_->inputs_size();
+  // ESP_LOGD(TAG_LOCAL, "external variables count = %u", external_variables_count);
+
+  for (int i = 1; i < external_variables_count; ++i) {
+    TfLiteTensor *input_tensor = this->streaming_interpreter_->input(i);
+    TfLiteTensor *output_tensor = this->streaming_interpreter_->output(i);
+
+    // size_t elements = 1;
+
+    // for (int j = 0; j < input_tensor->dims->size; ++j) {
+    //   elements *= input_tensor->dims->data[j];
+    // }
+
+    // for (int j = 0; j < elements; ++j) {
+    //   input_tensor->data.f[j] = output_tensor->data.f[j];
+    //   // tflite::GetTensorData<float>(input_tensor)[j] = tflite::GetTensorData<float>(output_tensor)[j];
+    // }
+
+    size_t bytes_to_copy = output_tensor->bytes;
+
+    // if (bytes_to_copy != input_tensor->bytes) {
+    //   ESP_LOGD(TAG_LOCAL, "Mismatched tensor variable sizes!");
+    //   return;
+    // } else {
+    //   ESP_LOGD(TAG_LOCAL, "Copying %u bytes", bytes_to_copy);
+    // }
+
+    memcpy((void *) (tflite::GetTensorData<float>(input_tensor)),
+           (void *) (tflite::GetTensorData<float>(output_tensor)), bytes_to_copy);
+  }
+}
+
+void LocalWakeWord::clear_streaming_external_variables_() {
+  const size_t external_variables_count = this->streaming_interpreter_->inputs_size();
+  for (int i = 1; i < external_variables_count; ++i) {
+    TfLiteTensor *input_tensor = this->streaming_interpreter_->input(i);
+
+    size_t elements = 1;
+
+    for (int j = 0; j < input_tensor->dims->size; ++j) {
+      elements *= input_tensor->dims->data[j];
+    }
+
+    for (int j = 0; j < elements; ++j) {
+      input_tensor->data.f[j] = 0.0;
+      // tflite::GetTensorData<float>(input_tensor)[j] = 0.0;
+    }
+  }
 }
 
 }  // namespace voice_assistant
