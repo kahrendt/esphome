@@ -28,7 +28,7 @@ namespace micro_wake_word {
 static const char *const TAG = "micro_wake_word";
 
 static const size_t SAMPLE_RATE_HZ = 16000;  // 16 kHz
-static const size_t BUFFER_LENGTH = 500;     // 0.5 seconds
+static const size_t BUFFER_LENGTH = 200;     // 0.2 seconds
 static const size_t BUFFER_SIZE = SAMPLE_RATE_HZ / 1000 * BUFFER_LENGTH;
 static const size_t INPUT_BUFFER_SIZE = 32 * SAMPLE_RATE_HZ / 1000;  // 32ms * 16kHz / 1000ms
 
