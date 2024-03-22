@@ -49,8 +49,8 @@ static const uint32_t PREPROCESSOR_ARENA_SIZE = 9528;
 static const uint8_t MIN_SLICES_BEFORE_DETECTION = 74;
 
 // Number of bytes in memory needed for the streaming wake word model
-static const uint32_t STREAMING_MODEL_ARENA_SIZE = 64000;
-static const uint32_t STREAMING_MODEL_VARIABLE_ARENA_SIZE = 1024;
+static const uint32_t STREAMING_MODEL_ARENA_SIZE = 42000;
+static const uint32_t STREAMING_MODEL_VARIABLE_ARENA_SIZE = 512;
 
 enum State {
   IDLE,
@@ -131,11 +131,18 @@ class MicroWakeWord : public Component {
 
   bool detected_{false};
 
+  /** Allocates various buffers
+   *
+   * Attempts to allocate preprocessor_audio_buffer_, new_features_data_, input_buffer_, and ring_buffer_
+   * @return True if successfully allocates all buffers
+   */
+  bool allocate_buffers_();
+
+  void deallocate_buffers_();
   /** Detects if wake word has been said
    *
    * If enough audio samples are available, it will generate one slice of new features.
    * If the streaming model predicts the wake word, then the nonstreaming model confirms it.
-   * @param ring_Buffer Ring buffer containing raw audio samples
    * @return True if the wake word is detected, false otherwise
    */
   bool detect_wake_word_();
@@ -145,7 +152,6 @@ class MicroWakeWord : public Component {
 
   /** Shifts previous feature slices over by one and generates a new slice of features
    *
-   * @param ring_buffer ring buffer containing raw audio samples
    * @return True if a new slice of features was generated, false otherwise
    */
   bool update_features_();
