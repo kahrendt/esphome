@@ -49,7 +49,7 @@ static const uint32_t PREPROCESSOR_ARENA_SIZE = 9528;
 static const uint8_t MIN_SLICES_BEFORE_DETECTION = 74;
 
 // Number of bytes in memory needed for the streaming wake word model
-static const uint32_t STREAMING_MODEL_ARENA_SIZE = 64000;
+static const uint32_t STREAMING_MODEL_ARENA_SIZE = 48000;
 static const uint32_t STREAMING_MODEL_VARIABLE_ARENA_SIZE = 1024;
 
 enum State {
@@ -59,6 +59,21 @@ enum State {
   DETECTING_WAKE_WORD,
   STOP_MICROPHONE,
   STOPPING_MICROPHONE,
+};
+
+struct WakeWordModel {
+  const uint8_t *model_start;
+  float probability_cutoff;
+  size_t sliding_window_average_size;
+  size_t last_n_index{0};
+  uint8_t *tensor_arena{nullptr};
+  uint8_t *var_arena{nullptr};
+  const tflite::Model *streaming_model{nullptr};
+  tflite::MicroInterpreter *interpreter{nullptr};
+  tflite::MicroResourceVariables *mrv{nullptr};
+  tflite::MicroAllocator *ma{nullptr};
+  std::string wake_word;
+  std::vector<float> recent_streaming_probabilities;
 };
 
 class MicroWakeWord : public Component {
@@ -75,25 +90,16 @@ class MicroWakeWord : public Component {
 
   bool initialize_models();
 
-  std::string get_wake_word() { return this->wake_word_; }
-
-  // Increasing either of these will reduce the rate of false acceptances while increasing the false rejection rate
-  void set_probability_cutoff(float probability_cutoff) { this->probability_cutoff_ = probability_cutoff; }
-  void set_sliding_window_average_size(size_t size);
-
   void set_microphone(microphone::Microphone *microphone) { this->microphone_ = microphone; }
 
   Trigger<std::string> *get_wake_word_detected_trigger() const { return this->wake_word_detected_trigger_; }
 
-  void set_model_start(const uint8_t *model_start) { this->model_start_ = model_start; }
-  void set_wake_word(const std::string &wake_word) { this->wake_word_ = wake_word; }
+  void add_model(const uint8_t *model_start, float probability_cutoff, size_t sliding_window_average_size,
+                 const std::string &wake_word);
 
  protected:
   void set_state_(State state);
   int read_microphone_();
-
-  const uint8_t *model_start_;
-  std::string wake_word_;
 
   microphone::Microphone *microphone_{nullptr};
   Trigger<std::string> *wake_word_detected_trigger_ = new Trigger<std::string>();
@@ -104,32 +110,25 @@ class MicroWakeWord : public Component {
 
   int16_t *input_buffer_;
 
+  std::vector<WakeWordModel> wake_word_models_;
+
   const tflite::Model *preprocessor_model_{nullptr};
-  const tflite::Model *streaming_model_{nullptr};
-  tflite::MicroInterpreter *streaming_interpreter_{nullptr};
   tflite::MicroInterpreter *preprocessor_interperter_{nullptr};
-
-  std::vector<float> recent_streaming_probabilities_;
-  size_t last_n_index_{0};
-
-  float probability_cutoff_{0.5};
-  size_t sliding_window_average_size_{10};
 
   // When the wake word detection first starts or after the word has been detected once, we ignore this many audio
   // feature slices before accepting a positive detection again
   int16_t ignore_windows_{-MIN_SLICES_BEFORE_DETECTION};
 
-  uint8_t *streaming_var_arena_{nullptr};
-  uint8_t *streaming_tensor_arena_{nullptr};
+  // uint8_t *streaming_var_arena_{nullptr};
+  // uint8_t *streaming_tensor_arena_{nullptr};
   uint8_t *preprocessor_tensor_arena_{nullptr};
   int8_t *new_features_data_{nullptr};
-
-  tflite::MicroResourceVariables *mrv_{nullptr};
 
   // Stores audio fed into feature generator preprocessor
   int16_t *preprocessor_audio_buffer_;
 
   bool detected_{false};
+  std::string *detected_wake_word_{nullptr};
 
   /** Detects if wake word has been said
    *
@@ -165,7 +164,7 @@ class MicroWakeWord : public Component {
    *
    * @return Probability of the wake word between 0.0 and 1.0
    */
-  float perform_streaming_inference_();
+  float perform_streaming_inference_(WakeWordModel model);
 
   /** Strides the audio samples by keeping the last 10 ms of the previous slice
    *

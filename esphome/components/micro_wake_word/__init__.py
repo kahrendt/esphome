@@ -41,9 +41,11 @@ CODEOWNERS = ["@kahrendt", "@jesserockz"]
 DEPENDENCIES = ["microphone"]
 DOMAIN = "micro_wake_word"
 
+CONF_MODELS = "models"
 CONF_PROBABILITY_CUTOFF = "probability_cutoff"
 CONF_SLIDING_WINDOW_AVERAGE_SIZE = "sliding_window_average_size"
 CONF_ON_WAKE_WORD_DETECTED = "on_wake_word_detected"
+
 
 TYPE_HTTP = "http"
 
@@ -260,18 +262,24 @@ MODEL_SOURCE_SCHEMA = cv.Any(
     msg="Not a valid model name, local path, http(s) url, or github shorthand",
 )
 
+MODEL_SCHEMA = cv.Schema(
+    {
+        cv.Required(CONF_MODEL): MODEL_SOURCE_SCHEMA,
+        cv.Optional(CONF_PROBABILITY_CUTOFF): cv.percentage,
+        cv.Optional(CONF_SLIDING_WINDOW_AVERAGE_SIZE): cv.positive_int,
+        cv.GenerateID(CONF_RAW_DATA_ID): cv.declare_id(cg.uint8),
+    }
+)
+
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(MicroWakeWord),
             cv.GenerateID(CONF_MICROPHONE): cv.use_id(microphone.Microphone),
-            cv.Optional(CONF_PROBABILITY_CUTOFF): cv.percentage,
-            cv.Optional(CONF_SLIDING_WINDOW_AVERAGE_SIZE): cv.positive_int,
+            cv.Required(CONF_MODELS): cv.ensure_list(MODEL_SCHEMA),
             cv.Optional(CONF_ON_WAKE_WORD_DETECTED): automation.validate_automation(
                 single=True
             ),
-            cv.Required(CONF_MODEL): MODEL_SOURCE_SCHEMA,
-            cv.GenerateID(CONF_RAW_DATA_ID): cv.declare_id(cg.uint8),
         }
     ).extend(cv.COMPONENT_SCHEMA),
     cv.only_with_esp_idf,
@@ -302,13 +310,6 @@ async def to_code(config):
     mic = await cg.get_variable(config[CONF_MICROPHONE])
     cg.add(var.set_microphone(mic))
 
-    if on_wake_word_detection_config := config.get(CONF_ON_WAKE_WORD_DETECTED):
-        await automation.build_automation(
-            var.get_wake_word_detected_trigger(),
-            [(cg.std_string, "wake_word")],
-            on_wake_word_detection_config,
-        )
-
     esp32.add_idf_component(
         name="esp-tflite-micro",
         repo="https://github.com/espressif/esp-tflite-micro",
@@ -318,39 +319,54 @@ async def to_code(config):
     cg.add_build_flag("-DTF_LITE_DISABLE_X86_NEON")
     cg.add_build_flag("-DESP_NN")
 
-    model_config = config.get(CONF_MODEL)
-    data = []
-    if model_config[CONF_TYPE] == TYPE_GIT:
-        # compute path to model file
-        key = f"{model_config[CONF_URL]}@{model_config.get(CONF_REF)}"
-        base_dir = Path(CORE.data_dir) / DOMAIN
-        h = hashlib.new("sha256")
-        h.update(key.encode())
-        file: Path = base_dir / h.hexdigest()[:8] / model_config[CONF_FILE]
+    if on_wake_word_detection_config := config.get(CONF_ON_WAKE_WORD_DETECTED):
+        await automation.build_automation(
+            var.get_wake_word_detected_trigger(),
+            [(cg.std_string, "wake_word")],
+            on_wake_word_detection_config,
+        )
 
-    elif model_config[CONF_TYPE] == TYPE_LOCAL:
-        file = model_config[CONF_PATH]
+    for model_parameters in config[CONF_MODELS]:
 
-    elif model_config[CONF_TYPE] == TYPE_HTTP:
-        file = _compute_local_file_path(model_config) / "manifest.json"
+        model_config = model_parameters.get(CONF_MODEL)
+        data = []
+        if model_config[CONF_TYPE] == TYPE_GIT:
+            # compute path to model file
+            key = f"{model_config[CONF_URL]}@{model_config.get(CONF_REF)}"
+            base_dir = Path(CORE.data_dir) / DOMAIN
+            h = hashlib.new("sha256")
+            h.update(key.encode())
+            file: Path = base_dir / h.hexdigest()[:8] / model_config[CONF_FILE]
 
-    manifest, data = _load_model_data(file)
+        elif model_config[CONF_TYPE] == TYPE_LOCAL:
+            file = model_config[CONF_PATH]
 
-    rhs = [HexInt(x) for x in data]
-    prog_arr = cg.progmem_array(config[CONF_RAW_DATA_ID], rhs)
-    cg.add(var.set_model_start(prog_arr))
+        elif model_config[CONF_TYPE] == TYPE_HTTP:
+            file = _compute_local_file_path(model_config) / "manifest.json"
 
-    probability_cutoff = config.get(
-        CONF_PROBABILITY_CUTOFF, manifest[KEY_MICRO][CONF_PROBABILITY_CUTOFF]
-    )
-    cg.add(var.set_probability_cutoff(probability_cutoff))
-    sliding_window_average_size = config.get(
-        CONF_SLIDING_WINDOW_AVERAGE_SIZE,
-        manifest[KEY_MICRO][CONF_SLIDING_WINDOW_AVERAGE_SIZE],
-    )
-    cg.add(var.set_sliding_window_average_size(sliding_window_average_size))
+        manifest, data = _load_model_data(file)
 
-    cg.add(var.set_wake_word(manifest[KEY_WAKE_WORD]))
+        rhs = [HexInt(x) for x in data]
+        prog_arr = cg.progmem_array(model_parameters[CONF_RAW_DATA_ID], rhs)
+        # cg.add(var.set_model_start(prog_arr))
+
+        probability_cutoff = model_parameters.get(
+            CONF_PROBABILITY_CUTOFF, manifest[KEY_MICRO][CONF_PROBABILITY_CUTOFF]
+        )
+        # cg.add(var.set_probability_cutoff(probability_cutoff))
+        sliding_window_average_size = model_parameters.get(
+            CONF_SLIDING_WINDOW_AVERAGE_SIZE,
+            manifest[KEY_MICRO][CONF_SLIDING_WINDOW_AVERAGE_SIZE],
+        )
+
+        cg.add(
+            var.add_model(
+                prog_arr,
+                probability_cutoff,
+                sliding_window_average_size,
+                manifest[KEY_WAKE_WORD],
+            )
+        )
 
 
 MICRO_WAKE_WORD_ACTION_SCHEMA = cv.Schema({cv.GenerateID(): cv.use_id(MicroWakeWord)})
