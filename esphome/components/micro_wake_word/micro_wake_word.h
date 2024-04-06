@@ -119,32 +119,28 @@ class MicroWakeWord : public Component {
   // feature slices before accepting a positive detection again
   int16_t ignore_windows_{-MIN_SLICES_BEFORE_DETECTION};
 
-  // uint8_t *streaming_var_arena_{nullptr};
-  // uint8_t *streaming_tensor_arena_{nullptr};
   uint8_t *preprocessor_tensor_arena_{nullptr};
   int8_t *new_features_data_{nullptr};
 
-  // Stores audio fed into feature generator preprocessor
+  // Stores audio fed into feature generator preprocessor and used for striding samples in each window
   int16_t *preprocessor_audio_buffer_;
 
   bool detected_{false};
   std::string *detected_wake_word_{nullptr};
 
-  /** Detects if wake word has been said
+  /** Detects if a wake word has been said
    *
    * If enough audio samples are available, it will generate one slice of new features.
-   * If the streaming model predicts the wake word, then the nonstreaming model confirms it.
-   * @param ring_Buffer Ring buffer containing raw audio samples
-   * @return True if the wake word is detected, false otherwise
+   * It then loops through and performs inference with each of the loaded models.
+   * @return True if a wake word is detected, false otherwise
    */
   bool detect_wake_word_();
 
-  /// @brief Returns true if there are enough audio samples in the buffer to generate another slice of features
+  /// @brief Returns true if there are enough audio samples in the ring buffer to generate a slice of features
   bool slice_available_();
 
-  /** Shifts previous feature slices over by one and generates a new slice of features
+  /** Strides the audio window samples and computes/stores new features in this->new_features_data_
    *
-   * @param ring_buffer ring buffer containing raw audio samples
    * @return True if a new slice of features was generated, false otherwise
    */
   bool update_features_();
@@ -152,7 +148,7 @@ class MicroWakeWord : public Component {
   /** Generates features from audio samples
    *
    * Adapted from TFLite micro speech example
-   * @param audio_data Pointer to array with the audio samples
+   * @param audio_data Pointer to array with strided audio samples
    * @param audio_data_size The number of samples to use as input to the preprocessor model
    * @param feature_output Array that will store the features
    * @return True if successful, false otherwise.
@@ -160,16 +156,16 @@ class MicroWakeWord : public Component {
   bool generate_single_feature_(const int16_t *audio_data, int audio_data_size,
                                 int8_t feature_output[PREPROCESSOR_FEATURE_SIZE]);
 
-  /** Performs inference over the most recent feature slice with the streaming model
+  /** Performs inference over the most recent features slice with the specified model
    *
+   * @param model WakeWordModel struct to infer with
    * @return Probability of the wake word between 0.0 and 1.0
    */
   float perform_streaming_inference_(WakeWordModel model);
 
-  /** Strides the audio samples by keeping the last 10 ms of the previous slice
+  /** Strides the audio samples by keeping the last 10 ms of the previous window
    *
    * Adapted from the TFLite micro speech example
-   * @param ring_buffer Ring buffer containing raw audio samples
    * @param audio_samples Pointer to an array that will store the strided audio samples
    * @return True if successful, false otherwise
    */
