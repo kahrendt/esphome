@@ -10,6 +10,8 @@
 
 #ifdef USE_ESP_IDF
 
+#define MWW_TIMING_DEBUG
+
 #include "esphome/core/automation.h"
 #include "esphome/core/component.h"
 #include "esphome/core/ring_buffer.h"
@@ -98,6 +100,11 @@ class MicroWakeWord : public Component {
                  const std::string &wake_word);
 
  protected:
+#ifdef MWW_TIMING_DEBUG
+  size_t window_counter_{0};
+  size_t millis_start_of_counter_{0};
+#endif
+
   void set_state_(State state);
   int read_microphone_();
 
@@ -122,7 +129,7 @@ class MicroWakeWord : public Component {
   uint8_t *preprocessor_tensor_arena_{nullptr};
   int8_t *new_features_data_{nullptr};
 
-  // Stores audio fed into feature generator preprocessor and used for striding samples in each window
+  // Stores audio fed into feature generator preprocessor. Also used for striding samples in each window
   int16_t *preprocessor_audio_buffer_;
 
   bool detected_{false};
@@ -136,26 +143,6 @@ class MicroWakeWord : public Component {
    */
   bool detect_wake_word_();
 
-  /// @brief Returns true if there are enough audio samples in the ring buffer to generate a slice of features
-  bool slice_available_();
-
-  /** Strides the audio window samples and computes/stores new features in this->new_features_data_
-   *
-   * @return True if a new slice of features was generated, false otherwise
-   */
-  bool update_features_();
-
-  /** Generates features from audio samples
-   *
-   * Adapted from TFLite micro speech example
-   * @param audio_data Pointer to array with strided audio samples
-   * @param audio_data_size The number of samples to use as input to the preprocessor model
-   * @param feature_output Array that will store the features
-   * @return True if successful, false otherwise.
-   */
-  bool generate_single_feature_(const int16_t *audio_data, int audio_data_size,
-                                int8_t feature_output[PREPROCESSOR_FEATURE_SIZE]);
-
   /** Performs inference over the most recent features slice with the specified model
    *
    * @param model WakeWordModel struct to infer with
@@ -163,13 +150,24 @@ class MicroWakeWord : public Component {
    */
   float perform_streaming_inference_(WakeWordModel model);
 
-  /** Strides the audio samples by keeping the last 10 ms of the previous window
+  /** Reads in new audio data from ring buffer to create the next sample window
    *
+   * Moves the last 10 ms of audio from the previous window to the start of the new window.
+   * The next 20 ms of audio is copied from the ring buffer is inserted into the new window.
+   * The new window's audio samples are stored in preprocessor_audio_buffer_.
    * Adapted from the TFLite micro speech example
-   * @param audio_samples Pointer to an array that will store the strided audio samples
    * @return True if successful, false otherwise
    */
-  bool stride_audio_samples_(int16_t **audio_samples);
+  bool stride_audio_samples_();
+
+  /** Generates features for a window of audio samples
+   *
+   * Feeds the strided audio samples in preprocessor_audio_buffer_ into the preprocessor.
+   * The generated features are stored in new_features_data_.
+   * Adapted from TFLite micro speech example
+   * @return True if successful, false otherwise.
+   */
+  bool generate_features_for_window_();
 
   /// @brief Returns true if successfully registered the preprocessor's TensorFlow operations
   bool register_preprocessor_ops_(tflite::MicroMutableOpResolver<18> &op_resolver);

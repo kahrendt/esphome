@@ -300,49 +300,25 @@ bool MicroWakeWord::initialize_models() {
   return true;
 }
 
-bool MicroWakeWord::update_features_() {
+bool MicroWakeWord::detect_wake_word_() {
   // Retrieve strided audio samples
-  int16_t *audio_samples = nullptr;
-  if (!this->stride_audio_samples_(&audio_samples)) {
+  if (!this->stride_audio_samples_()) {
     return false;
   }
 
   // Compute the features for the newest audio samples
-  if (!this->generate_single_feature_(audio_samples, SAMPLE_DURATION_COUNT, this->new_features_data_)) {
+  if (!this->generate_features_for_window_()) {
     return false;
   }
 
-  return true;
-}
-
-float MicroWakeWord::perform_streaming_inference_(WakeWordModel model) {
-  TfLiteTensor *input = model.interpreter->input(0);
-
-  size_t bytes_to_copy = input->bytes;
-
-  memcpy((void *) (tflite::GetTensorData<int8_t>(input)), (const void *) (this->new_features_data_), bytes_to_copy);
-
-  uint32_t prior_invoke = millis();
-
-  TfLiteStatus invoke_status = model.interpreter->Invoke();
-  if (invoke_status != kTfLiteOk) {
-    ESP_LOGW(TAG, "Streaming Interpreter Invoke failed");
-    return false;
+#ifdef MWW_TIMING_DEBUG
+  if (this->window_counter_ >= 50) {
+    ESP_LOGD(TAG, "50 audio features in %d ms", (millis() - this->millis_start_of_counter_));
+    this->window_counter_ = 0;
+    this->millis_start_of_counter_ = millis();
   }
-
-  ESP_LOGV(TAG, "Streaming Inference Latency=%u ms", (millis() - prior_invoke));
-
-  TfLiteTensor *output = model.interpreter->output(0);
-
-  return static_cast<float>(output->data.uint8[0]) / 255.0;
-  // return 0.1;
-}
-
-bool MicroWakeWord::detect_wake_word_() {
-  // Preprocess the newest audio samples into features
-  if (!this->update_features_()) {
-    return false;
-  }
+  ++this->window_counter_;
+#endif
 
   // Increase the counter since the last positive detection
   this->ignore_windows_ = std::min(this->ignore_windows_ + 1, 0);
@@ -386,14 +362,31 @@ bool MicroWakeWord::detect_wake_word_() {
   return false;
 }
 
-bool MicroWakeWord::slice_available_() {
-  size_t available = this->ring_buffer_->available();
+float MicroWakeWord::perform_streaming_inference_(WakeWordModel model) {
+  TfLiteTensor *input = model.interpreter->input(0);
 
-  return available > (NEW_SAMPLES_TO_GET * sizeof(int16_t));
+  size_t bytes_to_copy = input->bytes;
+
+  memcpy((void *) (tflite::GetTensorData<int8_t>(input)), (const void *) (this->new_features_data_), bytes_to_copy);
+
+  uint32_t prior_invoke = millis();
+
+  TfLiteStatus invoke_status = model.interpreter->Invoke();
+  if (invoke_status != kTfLiteOk) {
+    ESP_LOGW(TAG, "Streaming Interpreter Invoke failed");
+    return false;
+  }
+
+  ESP_LOGV(TAG, "Streaming Inference Latency=%u ms", (millis() - prior_invoke));
+
+  TfLiteTensor *output = model.interpreter->output(0);
+
+  return static_cast<float>(output->data.uint8[0]) / 255.0;
 }
 
-bool MicroWakeWord::stride_audio_samples_(int16_t **audio_samples) {
-  if (!this->slice_available_()) {
+bool MicroWakeWord::stride_audio_samples_() {
+  // Ensure we have enough new audio samples in the ring buffer for a full window
+  if (this->ring_buffer_->available() < NEW_SAMPLES_TO_GET * sizeof(int16_t)) {
     return false;
   }
 
@@ -415,21 +408,20 @@ bool MicroWakeWord::stride_audio_samples_(int16_t **audio_samples) {
     return false;
   }
 
-  *audio_samples = this->preprocessor_audio_buffer_;
   return true;
 }
 
-bool MicroWakeWord::generate_single_feature_(const int16_t *audio_data, const int audio_data_size,
-                                             int8_t feature_output[PREPROCESSOR_FEATURE_SIZE]) {
+bool MicroWakeWord::generate_features_for_window_() {
   TfLiteTensor *input = this->preprocessor_interperter_->input(0);
   TfLiteTensor *output = this->preprocessor_interperter_->output(0);
-  std::copy_n(audio_data, audio_data_size, tflite::GetTensorData<int16_t>(input));
+  std::copy_n(this->preprocessor_audio_buffer_, SAMPLE_DURATION_COUNT, tflite::GetTensorData<int16_t>(input));
 
   if (this->preprocessor_interperter_->Invoke() != kTfLiteOk) {
     ESP_LOGE(TAG, "Failed to preprocess audio for local wake word.");
     return false;
   }
-  std::memcpy(feature_output, tflite::GetTensorData<int8_t>(output), PREPROCESSOR_FEATURE_SIZE * sizeof(int8_t));
+  std::memcpy(this->new_features_data_, tflite::GetTensorData<int8_t>(output),
+              PREPROCESSOR_FEATURE_SIZE * sizeof(int8_t));
 
   return true;
 }
