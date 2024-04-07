@@ -137,12 +137,16 @@ void MicroWakeWord::loop() {
       }
       break;
     case State::DETECTING_WAKE_WORD:
+      size_t start_of_detection;
+      start_of_detection = millis();
       this->read_microphone_();
+      ESP_LOGD(TAG, "read microphone took %d ms", (millis() - start_of_detection));
       if (this->detect_wake_word_()) {
         ESP_LOGD(TAG, "Wake Word '%s' Detected", (*this->detected_wake_word_).c_str());
         this->detected_ = true;
         this->set_state_(State::STOP_MICROPHONE);
       }
+      ESP_LOGD(TAG, "inference and microphone read time %d ms", (millis() - start_of_detection));
       break;
     case State::STOP_MICROPHONE:
       ESP_LOGD(TAG, "Stopping Microphone");
