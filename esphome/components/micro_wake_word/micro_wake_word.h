@@ -127,7 +127,6 @@ class MicroWakeWord : public Component {
   int16_t ignore_windows_{-MIN_SLICES_BEFORE_DETECTION};
 
   uint8_t *preprocessor_tensor_arena_{nullptr};
-  int8_t *new_features_data_{nullptr};
 
   // Stores audio fed into feature generator preprocessor. Also used for striding samples in each window
   int16_t *preprocessor_audio_buffer_;
@@ -146,9 +145,10 @@ class MicroWakeWord : public Component {
   /** Performs inference over the most recent features slice with the specified model
    *
    * @param model WakeWordModel struct to infer with
+   * @param features int8_t array containing the audio features
    * @return Probability of the wake word between 0.0 and 1.0
    */
-  float perform_streaming_inference_(WakeWordModel model);
+  float perform_streaming_inference_(WakeWordModel model, int8_t features[PREPROCESSOR_FEATURE_SIZE]);
 
   /** Reads in new audio data from ring buffer to create the next sample window
    *
@@ -165,9 +165,10 @@ class MicroWakeWord : public Component {
    * Feeds the strided audio samples in preprocessor_audio_buffer_ into the preprocessor.
    * The generated features are stored in new_features_data_.
    * Adapted from TFLite micro speech example
+   * @param features int8_t array to store the audio features
    * @return True if successful, false otherwise.
    */
-  bool generate_features_for_window_();
+  bool generate_features_for_window_(int8_t features[PREPROCESSOR_FEATURE_SIZE]);
 
   /// @brief Returns true if successfully registered the preprocessor's TensorFlow operations
   bool register_preprocessor_ops_(tflite::MicroMutableOpResolver<18> &op_resolver);
