@@ -124,6 +124,7 @@ void MicroWakeWord::loop() {
       this->microphone_->start();
       this->set_state_(State::STARTING_MICROPHONE);
       this->high_freq_.start();
+      this->reset_states_();
       break;
     case State::STARTING_MICROPHONE:
       if (this->microphone_->is_running()) {
@@ -322,31 +323,39 @@ bool MicroWakeWord::detect_wake_word_() {
     if (model.last_n_index == model.sliding_window_average_size)
       model.last_n_index = 0;
 
-    float sum = 0.0;
-    for (auto &prob : model.recent_streaming_probabilities) {
-      sum += prob;
-    }
-
-    float sliding_window_average = sum / static_cast<float>(model.sliding_window_average_size);
-
     // Verify we have enough samples since the last positive detection
     if (this->ignore_windows_ < 0) {
       continue;
     }
 
-    // Detect the wake word if the sliding window average is above the cutoff
-    if (sliding_window_average > model.probability_cutoff) {
-      this->ignore_windows_ = -MIN_SLICES_BEFORE_DETECTION;
-      for (auto &prob : model.recent_streaming_probabilities) {
-        prob = 0.0;
-      }
-
+    if (model.wake_word_detected()) {
       this->detected_wake_word_ = &model.wake_word;
 
-      ESP_LOGD(TAG, "Wake word sliding average probability is %.3f and most recent probability is %.3f",
-               sliding_window_average, streaming_prob);
+      // ESP_LOGD(TAG, "Wake word sliding average probability is %.3f and most recent probability is %.3f",
+      //          sliding_window_average, streaming_prob);
       return true;
     }
+
+    // float sum = 0.0;
+    // for (auto &prob : model.recent_streaming_probabilities) {
+    //   sum += prob;
+    // }
+
+    // float sliding_window_average = sum / static_cast<float>(model.sliding_window_average_size);
+
+    // Detect the wake word if the sliding window average is above the cutoff
+    // if (sliding_window_average > model.probability_cutoff) {
+    // this->ignore_windows_ = -MIN_SLICES_BEFORE_DETECTION;
+    // for (auto &prob : model.recent_streaming_probabilities) {
+    //   prob = 0.0;
+    // }
+
+    // this->detected_wake_word_ = &model.wake_word;
+
+    // ESP_LOGD(TAG, "Wake word sliding average probability is %.3f and most recent probability is %.3f",
+    //          sliding_window_average, streaming_prob);
+    // return true;
+    // }
   }
   return false;
 }
@@ -412,6 +421,16 @@ bool MicroWakeWord::generate_features_for_window_(int8_t features[PREPROCESSOR_F
   std::memcpy(features, tflite::GetTensorData<int8_t>(output), PREPROCESSOR_FEATURE_SIZE * sizeof(int8_t));
 
   return true;
+}
+
+void MicroWakeWord::reset_states_() {
+  this->ring_buffer_->reset();
+  this->ignore_windows_ = -MIN_SLICES_BEFORE_DETECTION;
+  for (auto &model : this->wake_word_models_) {
+    for (auto &prob : model.recent_streaming_probabilities) {
+      prob = 0.0;
+    }
+  }
 }
 
 bool MicroWakeWord::register_preprocessor_ops_(tflite::MicroMutableOpResolver<18> &op_resolver) {
@@ -492,6 +511,23 @@ bool MicroWakeWord::register_streaming_ops_(tflite::MicroMutableOpResolver<17> &
     return false;
 
   return true;
+}
+
+bool WakeWordModel::wake_word_detected() {
+  float sum = 0.0;
+  for (auto &prob : this->recent_streaming_probabilities) {
+    sum += prob;
+  }
+
+  float sliding_window_average = sum / static_cast<float>(this->sliding_window_average_size);
+
+  // Detect the wake word if the sliding window average is above the cutoff
+  if (sliding_window_average > this->probability_cutoff) {
+    // ESP_LOGD(TAG, "Wake word sliding average probability is %.3f and most recent probability is %.3f",
+    //          sliding_window_average, streaming_prob);
+    return true;
+  }
+  return false;
 }
 
 }  // namespace micro_wake_word

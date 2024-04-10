@@ -76,6 +76,7 @@ struct WakeWordModel {
   tflite::MicroAllocator *ma{nullptr};
   std::string wake_word;
   std::vector<float> recent_streaming_probabilities;
+  bool wake_word_detected();
 };
 
 class MicroWakeWord : public Component {
@@ -127,7 +128,7 @@ class MicroWakeWord : public Component {
   uint8_t *preprocessor_tensor_arena_{nullptr};
 
   // Stores audio fed into feature generator preprocessor. Also used for striding samples in each window
-  int16_t *preprocessor_audio_buffer_;
+  int16_t *preprocessor_audio_buffer_{nullptr};
 
   bool detected_{false};
   std::string *detected_wake_word_{nullptr};
@@ -140,7 +141,7 @@ class MicroWakeWord : public Component {
    */
   bool detect_wake_word_();
 
-  /** Performs inference over the most recent features slice with the specified model
+  /** Performs inference over the provided features with the specified model
    *
    * @param model WakeWordModel struct to infer with
    * @param features int8_t array containing the audio features
@@ -151,9 +152,9 @@ class MicroWakeWord : public Component {
   /** Reads in new audio data from ring buffer to create the next sample window
    *
    * Moves the last 10 ms of audio from the previous window to the start of the new window.
-   * The next 20 ms of audio is copied from the ring buffer is inserted into the new window.
+   * The next 20 ms of audio is copied from the ring buffer and inserted into the new window.
    * The new window's audio samples are stored in preprocessor_audio_buffer_.
-   * Adapted from the TFLite micro speech example
+   * Adapted from the TFLite micro speech example.
    * @return True if successful, false otherwise
    */
   bool stride_audio_samples_();
@@ -161,12 +162,14 @@ class MicroWakeWord : public Component {
   /** Generates features for a window of audio samples
    *
    * Feeds the strided audio samples in preprocessor_audio_buffer_ into the preprocessor.
-   * The generated features are stored in new_features_data_.
-   * Adapted from TFLite micro speech example
+   * Adapted from TFLite micro speech example.
    * @param features int8_t array to store the audio features
    * @return True if successful, false otherwise.
    */
   bool generate_features_for_window_(int8_t features[PREPROCESSOR_FEATURE_SIZE]);
+
+  /// @brief Resets the ring buffer, ignore_windows_, and sliding window probabilities
+  void reset_states_();
 
   /// @brief Returns true if successfully registered the preprocessor's TensorFlow operations
   bool register_preprocessor_ops_(tflite::MicroMutableOpResolver<18> &op_resolver);
