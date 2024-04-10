@@ -115,8 +115,6 @@ class MicroWakeWord : public Component {
 
   std::unique_ptr<RingBuffer> ring_buffer_;
 
-  int16_t *input_buffer_;
-
   std::vector<WakeWordModel> wake_word_models_;
 
   const tflite::Model *preprocessor_model_{nullptr};

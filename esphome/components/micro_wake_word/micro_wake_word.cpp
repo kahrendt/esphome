@@ -65,14 +65,6 @@ void MicroWakeWord::dump_config() {
 void MicroWakeWord::setup() {
   ESP_LOGCONFIG(TAG, "Setting up microWakeWord...");
 
-  ExternalRAMAllocator<int16_t> allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
-  this->input_buffer_ = allocator.allocate(INPUT_BUFFER_SIZE * sizeof(int16_t));
-  if (this->input_buffer_ == nullptr) {
-    ESP_LOGW(TAG, "Could not allocate input buffer");
-    this->mark_failed();
-    return;
-  }
-
   this->ring_buffer_ = RingBuffer::create(BUFFER_SIZE * sizeof(int16_t));
   if (this->ring_buffer_ == nullptr) {
     ESP_LOGW(TAG, "Could not allocate ring buffer");
@@ -90,7 +82,9 @@ void MicroWakeWord::setup() {
 }
 
 int MicroWakeWord::read_microphone_() {
-  size_t bytes_read = this->microphone_->read(this->input_buffer_, INPUT_BUFFER_SIZE * sizeof(int16_t));
+  int16_t input_buffer[INPUT_BUFFER_SIZE];
+
+  size_t bytes_read = this->microphone_->read(input_buffer, INPUT_BUFFER_SIZE * sizeof(int16_t));
   if (bytes_read == 0) {
     return 0;
   }
@@ -106,7 +100,7 @@ int MicroWakeWord::read_microphone_() {
     this->ring_buffer_->reset();
   }
 
-  return this->ring_buffer_->write((void *) this->input_buffer_, bytes_read);
+  return this->ring_buffer_->write((void *) input_buffer, bytes_read);
 }
 
 void MicroWakeWord::add_model(const uint8_t *model_start, float probability_cutoff, size_t sliding_window_average_size,
@@ -195,7 +189,6 @@ void MicroWakeWord::set_state_(State state) {
 
 bool MicroWakeWord::initialize_models() {
   ExternalRAMAllocator<uint8_t> arena_allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
-  ExternalRAMAllocator<int8_t> features_allocator(ExternalRAMAllocator<int8_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<int16_t> audio_samples_allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
 
   this->preprocessor_tensor_arena_ = arena_allocator.allocate(PREPROCESSOR_ARENA_SIZE);
