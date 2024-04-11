@@ -56,9 +56,7 @@ static const LogString *micro_wake_word_state_to_string(State state) {
 void MicroWakeWord::dump_config() {
   ESP_LOGCONFIG(TAG, "microWakeWord models:");
   for (auto &model : this->wake_word_models_) {
-    ESP_LOGCONFIG(TAG, "  - Wake Word: %s", model.wake_word.c_str());
-    ESP_LOGCONFIG(TAG, "    Probability cutoff: %.3f", model.probability_cutoff);
-    ESP_LOGCONFIG(TAG, "    Sliding window size: %d", model.sliding_window_average_size);
+    model.log_model_config();
   }
 }
 
@@ -105,14 +103,8 @@ int MicroWakeWord::read_microphone_() {
 
 void MicroWakeWord::add_model(const uint8_t *model_start, float probability_cutoff, size_t sliding_window_average_size,
                               const std::string &wake_word) {
-  WakeWordModel new_model;
-  new_model.model_start = model_start;
-  new_model.probability_cutoff = probability_cutoff;
-  new_model.sliding_window_average_size = sliding_window_average_size;
-  new_model.recent_streaming_probabilities.resize(sliding_window_average_size, 0.0);
-  new_model.wake_word = wake_word;
-
-  this->wake_word_models_.push_back(new_model);
+  this->wake_word_models_.push_back(
+      WakeWordModel(model_start, probability_cutoff, sliding_window_average_size, wake_word));
 }
 
 void MicroWakeWord::loop() {
@@ -134,7 +126,7 @@ void MicroWakeWord::loop() {
     case State::DETECTING_WAKE_WORD:
       this->read_microphone_();
       if (this->detect_wake_word_()) {
-        ESP_LOGD(TAG, "Wake Word '%s' Detected", (*this->detected_wake_word_).c_str());
+        ESP_LOGD(TAG, "Wake Word '%s' Detected", (this->detected_wake_word_).c_str());
         this->detected_ = true;
         this->set_state_(State::STOP_MICROPHONE);
       }
@@ -150,8 +142,8 @@ void MicroWakeWord::loop() {
         this->set_state_(State::IDLE);
         if (this->detected_) {
           this->detected_ = false;
-          this->wake_word_detected_trigger_->trigger(*this->detected_wake_word_);
-          this->detected_wake_word_ = nullptr;
+          this->wake_word_detected_trigger_->trigger(this->detected_wake_word_);
+          this->detected_wake_word_ = "";
         }
       }
       break;
@@ -232,58 +224,10 @@ bool MicroWakeWord::initialize_models() {
     return false;
 
   for (auto &model : this->wake_word_models_) {
-    model.tensor_arena = arena_allocator.allocate(STREAMING_MODEL_ARENA_SIZE);
-    if (model.tensor_arena == nullptr) {
-      ESP_LOGE(TAG, "Could not allocate the streaming model's tensor arena.");
+    if (!model.initialize_model(streaming_op_resolver)) {
+      ESP_LOGE(TAG, "Failed to initialize a wake word model.");
       return false;
     }
-
-    model.var_arena = arena_allocator.allocate(STREAMING_MODEL_VARIABLE_ARENA_SIZE);
-    if (model.var_arena == nullptr) {
-      ESP_LOGE(TAG, "Could not allocate the streaming model variable's tensor arena.");
-      return false;
-    }
-
-    model.streaming_model = tflite::GetModel(model.model_start);
-    if (model.streaming_model->version() != TFLITE_SCHEMA_VERSION) {
-      ESP_LOGE(TAG, "Wake word's streaming model's schema is not supported");
-      return false;
-    }
-    model.ma = tflite::MicroAllocator::Create(model.var_arena, STREAMING_MODEL_VARIABLE_ARENA_SIZE);
-    model.mrv = tflite::MicroResourceVariables::Create(model.ma, 15);
-
-    model.interpreter = new tflite::MicroInterpreter(model.streaming_model, streaming_op_resolver, model.tensor_arena,
-                                                     STREAMING_MODEL_ARENA_SIZE, model.mrv);
-
-    if (model.interpreter->AllocateTensors() != kTfLiteOk) {
-      ESP_LOGE(TAG, "Failed to allocate tensors for the streaming model");
-      return false;
-    }
-
-    // Verify input tensor matches expected values
-    TfLiteTensor *input = model.interpreter->input(0);
-    if ((input->dims->size != 3) || (input->dims->data[0] != 1) || (input->dims->data[0] != 1) ||
-        (input->dims->data[1] != 1) || (input->dims->data[2] != PREPROCESSOR_FEATURE_SIZE)) {
-      ESP_LOGE(TAG, "Wake word detection model tensor input dimensions is not 1x1x%u", input->dims->data[2]);
-      return false;
-    }
-
-    if (input->type != kTfLiteInt8) {
-      ESP_LOGE(TAG, "Wake word detection model tensor input is not int8.");
-      return false;
-    }
-
-    // Verify output tensor matches expected values
-    TfLiteTensor *output = model.interpreter->output(0);
-    if ((output->dims->size != 2) || (output->dims->data[0] != 1) || (output->dims->data[1] != 1)) {
-      ESP_LOGE(TAG, "Wake word detection model tensor output dimension is not 1x1.");
-    }
-
-    if (output->type != kTfLiteUInt8) {
-      ESP_LOGE(TAG, "Wake word detection model tensor output is not uint8.");
-      return false;
-    }
-    ESP_LOGD(TAG, "Added a model");
   }
   return true;
 }
@@ -315,13 +259,7 @@ bool MicroWakeWord::detect_wake_word_() {
 
   for (auto &model : this->wake_word_models_) {
     // Perform inference
-    float streaming_prob = this->perform_streaming_inference_(model, audio_features);
-
-    // Add the most recent probability to the sliding window
-    model.recent_streaming_probabilities[model.last_n_index] = streaming_prob;
-    ++model.last_n_index;
-    if (model.last_n_index == model.sliding_window_average_size)
-      model.last_n_index = 0;
+    model.perform_streaming_inference(audio_features);
 
     // Verify we have enough samples since the last positive detection
     if (this->ignore_windows_ < 0) {
@@ -329,57 +267,14 @@ bool MicroWakeWord::detect_wake_word_() {
     }
 
     if (model.wake_word_detected()) {
-      this->detected_wake_word_ = &model.wake_word;
+      this->detected_wake_word_ = model.get_wake_word();
 
       // ESP_LOGD(TAG, "Wake word sliding average probability is %.3f and most recent probability is %.3f",
       //          sliding_window_average, streaming_prob);
       return true;
     }
-
-    // float sum = 0.0;
-    // for (auto &prob : model.recent_streaming_probabilities) {
-    //   sum += prob;
-    // }
-
-    // float sliding_window_average = sum / static_cast<float>(model.sliding_window_average_size);
-
-    // Detect the wake word if the sliding window average is above the cutoff
-    // if (sliding_window_average > model.probability_cutoff) {
-    // this->ignore_windows_ = -MIN_SLICES_BEFORE_DETECTION;
-    // for (auto &prob : model.recent_streaming_probabilities) {
-    //   prob = 0.0;
-    // }
-
-    // this->detected_wake_word_ = &model.wake_word;
-
-    // ESP_LOGD(TAG, "Wake word sliding average probability is %.3f and most recent probability is %.3f",
-    //          sliding_window_average, streaming_prob);
-    // return true;
-    // }
   }
   return false;
-}
-
-float MicroWakeWord::perform_streaming_inference_(WakeWordModel model, int8_t features[PREPROCESSOR_FEATURE_SIZE]) {
-  TfLiteTensor *input = model.interpreter->input(0);
-
-  size_t bytes_to_copy = input->bytes;
-
-  memcpy((void *) (tflite::GetTensorData<int8_t>(input)), (const void *) (features), bytes_to_copy);
-
-  uint32_t prior_invoke = millis();
-
-  TfLiteStatus invoke_status = model.interpreter->Invoke();
-  if (invoke_status != kTfLiteOk) {
-    ESP_LOGW(TAG, "Streaming Interpreter Invoke failed");
-    return false;
-  }
-
-  ESP_LOGV(TAG, "Streaming Inference Latency=%u ms", (millis() - prior_invoke));
-
-  TfLiteTensor *output = model.interpreter->output(0);
-
-  return static_cast<float>(output->data.uint8[0]) / 255.0;
 }
 
 bool MicroWakeWord::stride_audio_samples_() {
@@ -427,9 +322,7 @@ void MicroWakeWord::reset_states_() {
   this->ring_buffer_->reset();
   this->ignore_windows_ = -MIN_SLICES_BEFORE_DETECTION;
   for (auto &model : this->wake_word_models_) {
-    for (auto &prob : model.recent_streaming_probabilities) {
-      prob = 0.0;
-    }
+    model.reset_probabilities();
   }
 }
 
@@ -511,23 +404,6 @@ bool MicroWakeWord::register_streaming_ops_(tflite::MicroMutableOpResolver<17> &
     return false;
 
   return true;
-}
-
-bool WakeWordModel::wake_word_detected() {
-  float sum = 0.0;
-  for (auto &prob : this->recent_streaming_probabilities) {
-    sum += prob;
-  }
-
-  float sliding_window_average = sum / static_cast<float>(this->sliding_window_average_size);
-
-  // Detect the wake word if the sliding window average is above the cutoff
-  if (sliding_window_average > this->probability_cutoff) {
-    // ESP_LOGD(TAG, "Wake word sliding average probability is %.3f and most recent probability is %.3f",
-    //          sliding_window_average, streaming_prob);
-    return true;
-  }
-  return false;
 }
 
 }  // namespace micro_wake_word
