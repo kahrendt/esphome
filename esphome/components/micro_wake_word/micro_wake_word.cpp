@@ -55,7 +55,7 @@ static const LogString *micro_wake_word_state_to_string(State state) {
 
 void MicroWakeWord::dump_config() {
   ESP_LOGCONFIG(TAG, "microWakeWord models:");
-  for (auto &model : this->wake_word_models_) {
+  for (auto &model : this->streaming_models_) {
     model.log_model_config();
   }
 }
@@ -103,8 +103,8 @@ int MicroWakeWord::read_microphone_() {
 
 void MicroWakeWord::add_model(const uint8_t *model_start, float probability_cutoff, size_t sliding_window_average_size,
                               const std::string &wake_word) {
-  this->wake_word_models_.push_back(
-      WakeWordModel(model_start, probability_cutoff, sliding_window_average_size, wake_word));
+  this->streaming_models_.push_back(
+      StreamingModel(model_start, probability_cutoff, sliding_window_average_size, wake_word));
 }
 
 void MicroWakeWord::loop() {
@@ -125,7 +125,9 @@ void MicroWakeWord::loop() {
       break;
     case State::DETECTING_WAKE_WORD:
       this->read_microphone_();
-      if (this->detect_wake_word_()) {
+      this->update_model_probabilities_();
+      if (this->detect_independent_wake_words_()) {  // TODO: Add a config option to select the desired mode
+                                                     // if (this->detect_ensemble_wake_word_()) {
         ESP_LOGD(TAG, "Wake Word '%s' Detected", (this->detected_wake_word_).c_str());
         this->detected_ = true;
         this->set_state_(State::STOP_MICROPHONE);
@@ -141,8 +143,8 @@ void MicroWakeWord::loop() {
       if (this->microphone_->is_stopped()) {
         this->set_state_(State::IDLE);
         if (this->detected_) {
-          this->detected_ = false;
           this->wake_word_detected_trigger_->trigger(this->detected_wake_word_);
+          this->detected_ = false;
           this->detected_wake_word_ = "";
         }
       }
@@ -200,13 +202,9 @@ bool MicroWakeWord::initialize_models() {
   if (!this->register_preprocessor_ops_(preprocessor_op_resolver))
     return false;
 
-  this->preprocessor_model_ = tflite::GetModel(G_AUDIO_PREPROCESSOR_INT8_TFLITE);
-  if (this->preprocessor_model_->version() != TFLITE_SCHEMA_VERSION) {
-    ESP_LOGE(TAG, "Wake word's audio preprocessor model's schema is not supported");
-    return false;
-  }
   static tflite::MicroInterpreter static_preprocessor_interpreter(
-      this->preprocessor_model_, preprocessor_op_resolver, this->preprocessor_tensor_arena_, PREPROCESSOR_ARENA_SIZE);
+      tflite::GetModel(G_AUDIO_PREPROCESSOR_INT8_TFLITE), preprocessor_op_resolver, this->preprocessor_tensor_arena_,
+      PREPROCESSOR_ARENA_SIZE);
   this->preprocessor_interperter_ = &static_preprocessor_interpreter;
 
   // Allocate tensors for preprocessor model.
@@ -223,7 +221,7 @@ bool MicroWakeWord::initialize_models() {
   if (!this->register_streaming_ops_(streaming_op_resolver))
     return false;
 
-  for (auto &model : this->wake_word_models_) {
+  for (auto &model : this->streaming_models_) {
     if (!model.initialize_model(streaming_op_resolver)) {
       ESP_LOGE(TAG, "Failed to initialize a wake word model.");
       return false;
@@ -232,49 +230,69 @@ bool MicroWakeWord::initialize_models() {
   return true;
 }
 
-bool MicroWakeWord::detect_wake_word_() {
+void MicroWakeWord::update_model_probabilities_() {
   // Retrieve strided audio samples
   if (!this->stride_audio_samples_()) {
-    return false;
+    return;
   }
 
   int8_t audio_features[PREPROCESSOR_FEATURE_SIZE];
 
   // Compute the features for the newest audio samples
   if (!this->generate_features_for_window_(audio_features)) {
-    return false;
+    return;
   }
 
 #ifdef MWW_TIMING_DEBUG
+  ++this->window_counter_;
   if (this->window_counter_ >= 50) {
     ESP_LOGD(TAG, "50 audio features in %d ms", (millis() - this->millis_start_of_counter_));
+    ESP_LOGD(TAG, "audio buffer %d %d", this->preprocessor_audio_buffer_[0], this->preprocessor_audio_buffer_[1]);
     this->window_counter_ = 0;
     this->millis_start_of_counter_ = millis();
   }
-  ++this->window_counter_;
 #endif
 
   // Increase the counter since the last positive detection
   this->ignore_windows_ = std::min(this->ignore_windows_ + 1, 0);
 
-  for (auto &model : this->wake_word_models_) {
+  for (auto &model : this->streaming_models_) {
     // Perform inference
     model.perform_streaming_inference(audio_features);
+  }
+}
 
-    // Verify we have enough samples since the last positive detection
-    if (this->ignore_windows_ < 0) {
-      continue;
-    }
+bool MicroWakeWord::detect_independent_wake_words_() {
+  // Verify we have processed samples since the last positive detection
+  if (this->ignore_windows_ < 0) {
+    return false;
+  }
 
+  for (auto &model : this->streaming_models_) {
     if (model.wake_word_detected()) {
       this->detected_wake_word_ = model.get_wake_word();
-
-      // ESP_LOGD(TAG, "Wake word sliding average probability is %.3f and most recent probability is %.3f",
-      //          sliding_window_average, streaming_prob);
       return true;
     }
   }
+
   return false;
+}
+
+bool MicroWakeWord::detect_ensemble_wake_word_() {
+  // Verify we have processed samples since the last positive detection
+  if (this->ignore_windows_ < 0) {
+    return false;
+  }
+
+  for (auto &model : this->streaming_models_) {
+    if (!model.wake_word_detected()) {
+      return false;
+    } else {
+      this->detected_wake_word_ = model.get_wake_word();
+    }
+  }
+
+  return true;
 }
 
 bool MicroWakeWord::stride_audio_samples_() {
@@ -319,9 +337,10 @@ bool MicroWakeWord::generate_features_for_window_(int8_t features[PREPROCESSOR_F
 }
 
 void MicroWakeWord::reset_states_() {
+  ESP_LOGD(TAG, "Resetting buffers and probabilities");
   this->ring_buffer_->reset();
   this->ignore_windows_ = -MIN_SLICES_BEFORE_DETECTION;
-  for (auto &model : this->wake_word_models_) {
+  for (auto &model : this->streaming_models_) {
     model.reset_probabilities();
   }
 }

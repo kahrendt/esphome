@@ -1,11 +1,12 @@
 #pragma once
+
+#ifdef USE_ESP_IDF
+
 #include "esphome/core/helpers.h"
 
 namespace esphome {
 namespace micro_wake_word {
 
-// The following are dictated by the preprocessor model
-//
 // The number of features the audio preprocessor generates per slice
 static const uint8_t PREPROCESSOR_FEATURE_SIZE = 40;
 // How frequently the preprocessor generates a new set of features
@@ -24,9 +25,7 @@ static const uint16_t SAMPLE_DURATION_COUNT = FEATURE_DURATION_MS * AUDIO_SAMPLE
 // Number of bytes in memory needed for the preprocessor arena
 static const uint32_t PREPROCESSOR_ARENA_SIZE = 9528;
 
-// The following configure the streaming wake word model
-//
-// The number of audio slices to process before accepting a positive detection
-static const uint8_t MIN_SLICES_BEFORE_DETECTION = 74;
 }  // namespace micro_wake_word
 }  // namespace esphome
+
+#endif

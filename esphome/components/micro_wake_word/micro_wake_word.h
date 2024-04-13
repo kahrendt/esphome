@@ -13,7 +13,7 @@
 #define MWW_TIMING_DEBUG
 
 #include "preprocessor_settings.h"
-#include "wake_word_model.h"
+#include "streaming_model.h"
 
 #include "esphome/core/automation.h"
 #include "esphome/core/component.h"
@@ -28,31 +28,6 @@
 namespace esphome {
 namespace micro_wake_word {
 
-// // The following are dictated by the preprocessor model
-// //
-// // The number of features the audio preprocessor generates per slice
-// static const uint8_t PREPROCESSOR_FEATURE_SIZE = 40;
-// // How frequently the preprocessor generates a new set of features
-// static const uint8_t FEATURE_STRIDE_MS = 20;
-// // Duration of each slice used as input into the preprocessor
-// static const uint8_t FEATURE_DURATION_MS = 30;
-// // Audio sample frequency in hertz
-// static const uint16_t AUDIO_SAMPLE_FREQUENCY = 16000;
-// // The number of old audio samples that are saved to be part of the next feature window
-// static const uint16_t HISTORY_SAMPLES_TO_KEEP =
-//     ((FEATURE_DURATION_MS - FEATURE_STRIDE_MS) * (AUDIO_SAMPLE_FREQUENCY / 1000));
-// // The number of new audio samples to receive to be included with the next feature window
-// static const uint16_t NEW_SAMPLES_TO_GET = (FEATURE_STRIDE_MS * (AUDIO_SAMPLE_FREQUENCY / 1000));
-// // The total number of audio samples included in the feature window
-// static const uint16_t SAMPLE_DURATION_COUNT = FEATURE_DURATION_MS * AUDIO_SAMPLE_FREQUENCY / 1000;
-// // Number of bytes in memory needed for the preprocessor arena
-// static const uint32_t PREPROCESSOR_ARENA_SIZE = 9528;
-
-// // The following configure the streaming wake word model
-// //
-// // The number of audio slices to process before accepting a positive detection
-// static const uint8_t MIN_SLICES_BEFORE_DETECTION = 74;
-
 enum State {
   IDLE,
   START_MICROPHONE,
@@ -62,21 +37,8 @@ enum State {
   STOPPING_MICROPHONE,
 };
 
-// struct WakeWordModel {
-//   const uint8_t *model_start;
-//   float probability_cutoff;
-//   size_t sliding_window_average_size;
-//   size_t last_n_index{0};
-//   uint8_t *tensor_arena{nullptr};
-//   uint8_t *var_arena{nullptr};
-//   const tflite::Model *streaming_model{nullptr};
-//   tflite::MicroInterpreter *interpreter{nullptr};
-//   tflite::MicroResourceVariables *mrv{nullptr};
-//   tflite::MicroAllocator *ma{nullptr};
-//   std::string wake_word;
-//   std::vector<float> recent_streaming_probabilities;
-//   bool wake_word_detected();
-// };
+// The number of audio slices to process before accepting a positive detection
+static const uint8_t MIN_SLICES_BEFORE_DETECTION = 74;
 
 class MicroWakeWord : public Component {
  public:
@@ -115,9 +77,8 @@ class MicroWakeWord : public Component {
 
   std::unique_ptr<RingBuffer> ring_buffer_;
 
-  std::vector<WakeWordModel> wake_word_models_;
+  std::vector<StreamingModel> streaming_models_;
 
-  const tflite::Model *preprocessor_model_{nullptr};
   tflite::MicroInterpreter *preprocessor_interperter_{nullptr};
 
   // When the wake word detection first starts or after the word has been detected once, we ignore this many audio
@@ -132,21 +93,28 @@ class MicroWakeWord : public Component {
   bool detected_{false};
   std::string detected_wake_word_{""};
 
-  /** Detects if a wake word has been said
+  /** Performs inference with each configured model
    *
    * If enough audio samples are available, it will generate one slice of new features.
    * It then loops through and performs inference with each of the loaded models.
-   * @return True if a wake word is detected, false otherwise
    */
-  bool detect_wake_word_();
+  void update_model_probabilities_();
 
-  // /** Performs inference over the provided features with the specified model
-  //  *
-  //  * @param model WakeWordModel struct to infer with
-  //  * @param features int8_t array containing the audio features
-  //  * @return Probability of the wake word between 0.0 and 1.0
-  //  */
-  // float perform_streaming_inference_(WakeWordModel model, int8_t features[PREPROCESSOR_FEATURE_SIZE]);
+  /** Checks every model's recent probabilities to determine if the wake word has been predicted
+   *
+   * Verifies the models have processed enough new samples for accurate predictions.
+   * Sets detected_wake_word_ to the wake word, if one is detected.
+   * @return True if a wake word is predicted, false otherwise
+   */
+  bool detect_independent_wake_words_();
+
+  /** Checks every model's recent probabilities to determine if every model predicts the wake word
+   *
+   * Verifies the models have processed enough new samples for accurate predictions.
+   * Sets detected_wake_word_ to the wake word, if every model predicts it.
+   * @return True if a wake word is predicted, false otherwise
+   */
+  bool detect_ensemble_wake_word_();
 
   /** Reads in new audio data from ring buffer to create the next sample window
    *

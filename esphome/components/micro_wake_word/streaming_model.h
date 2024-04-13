@@ -1,5 +1,14 @@
-// #include "micro_wake_word.h"
 #pragma once
+
+/**
+ * This is a workaround until we can figure out a way to get
+ * the tflite-micro idf component code available in CI
+ *
+ * */
+//
+#ifndef CLANG_TIDY
+
+#ifdef USE_ESP_IDF
 
 #include "preprocessor_settings.h"
 
@@ -10,13 +19,13 @@
 namespace esphome {
 namespace micro_wake_word {
 
-static const uint32_t STREAMING_MODEL_ARENA_SIZE = 48000;
+static const uint32_t STREAMING_MODEL_ARENA_SIZE = 45672;
 static const uint32_t STREAMING_MODEL_VARIABLE_ARENA_SIZE = 1024;
 
-class WakeWordModel {
+class StreamingModel {
  public:
-  WakeWordModel(const uint8_t *model_start, float probability_cutoff, size_t sliding_window_average_size,
-                const std::string &wake_word) {
+  StreamingModel(const uint8_t *model_start, float probability_cutoff, size_t sliding_window_average_size,
+                 const std::string &wake_word) {
     this->model_start_ = model_start;
     this->probability_cutoff_ = probability_cutoff;
     this->sliding_window_average_size_ = sliding_window_average_size;
@@ -27,7 +36,7 @@ class WakeWordModel {
   void log_model_config();
 
   std::string get_wake_word() { return this->wake_word_; }
-  bool perform_streaming_inference(int8_t features[PREPROCESSOR_FEATURE_SIZE]);
+  bool perform_streaming_inference(const int8_t features[PREPROCESSOR_FEATURE_SIZE]);
   void reset_probabilities();
 
   bool initialize_model(tflite::MicroMutableOpResolver<17> &op_resolver);
@@ -49,3 +58,6 @@ class WakeWordModel {
 };
 }  // namespace micro_wake_word
 }  // namespace esphome
+
+#endif
+#endif
