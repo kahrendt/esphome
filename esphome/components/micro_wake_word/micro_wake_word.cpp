@@ -56,12 +56,20 @@ static const LogString *micro_wake_word_state_to_string(State state) {
 void MicroWakeWord::dump_config() {
   ESP_LOGCONFIG(TAG, "microWakeWord models:");
   for (auto &model : this->streaming_models_) {
-    model.log_model_config();
+    model->log_model_config();
   }
 }
 
 void MicroWakeWord::setup() {
   ESP_LOGCONFIG(TAG, "Setting up microWakeWord...");
+
+  ExternalRAMAllocator<int16_t> allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
+  this->input_buffer_ = allocator.allocate(INPUT_BUFFER_SIZE * sizeof(int16_t));
+  if (this->input_buffer_ == nullptr) {
+    ESP_LOGW(TAG, "Could not allocate input buffer");
+    this->mark_failed();
+    return;
+  }
 
   this->ring_buffer_ = RingBuffer::create(BUFFER_SIZE * sizeof(int16_t));
   if (this->ring_buffer_ == nullptr) {
@@ -80,9 +88,7 @@ void MicroWakeWord::setup() {
 }
 
 int MicroWakeWord::read_microphone_() {
-  int16_t input_buffer[INPUT_BUFFER_SIZE];
-
-  size_t bytes_read = this->microphone_->read(input_buffer, INPUT_BUFFER_SIZE * sizeof(int16_t));
+  size_t bytes_read = this->microphone_->read(this->input_buffer_, INPUT_BUFFER_SIZE * sizeof(int16_t));
   if (bytes_read == 0) {
     return 0;
   }
@@ -98,13 +104,13 @@ int MicroWakeWord::read_microphone_() {
     this->ring_buffer_->reset();
   }
 
-  return this->ring_buffer_->write((void *) input_buffer, bytes_read);
+  return this->ring_buffer_->write((void *) this->input_buffer_, bytes_read);
 }
 
 void MicroWakeWord::add_model(const uint8_t *model_start, float probability_cutoff, size_t sliding_window_average_size,
                               const std::string &wake_word) {
   this->streaming_models_.push_back(
-      StreamingModel(model_start, probability_cutoff, sliding_window_average_size, wake_word));
+      new StreamingModel(model_start, probability_cutoff, sliding_window_average_size, wake_word));
 }
 
 void MicroWakeWord::loop() {
@@ -222,7 +228,7 @@ bool MicroWakeWord::initialize_models() {
     return false;
 
   for (auto &model : this->streaming_models_) {
-    if (!model.initialize_model(streaming_op_resolver)) {
+    if (!model->initialize_model(streaming_op_resolver)) {
       ESP_LOGE(TAG, "Failed to initialize a wake word model.");
       return false;
     }
@@ -258,7 +264,7 @@ void MicroWakeWord::update_model_probabilities_() {
 
   for (auto &model : this->streaming_models_) {
     // Perform inference
-    model.perform_streaming_inference(audio_features);
+    model->perform_streaming_inference(audio_features);
   }
 }
 
@@ -269,8 +275,8 @@ bool MicroWakeWord::detect_independent_wake_words_() {
   }
 
   for (auto &model : this->streaming_models_) {
-    if (model.wake_word_detected()) {
-      this->detected_wake_word_ = model.get_wake_word();
+    if (model->wake_word_detected()) {
+      this->detected_wake_word_ = model->get_wake_word();
       return true;
     }
   }
@@ -285,10 +291,10 @@ bool MicroWakeWord::detect_ensemble_wake_word_() {
   }
 
   for (auto &model : this->streaming_models_) {
-    if (!model.wake_word_detected()) {
+    if (!model->wake_word_detected()) {
       return false;
     } else {
-      this->detected_wake_word_ = model.get_wake_word();
+      this->detected_wake_word_ = model->get_wake_word();
     }
   }
 
@@ -341,7 +347,7 @@ void MicroWakeWord::reset_states_() {
   this->ring_buffer_->reset();
   this->ignore_windows_ = -MIN_SLICES_BEFORE_DETECTION;
   for (auto &model : this->streaming_models_) {
-    model.reset_probabilities();
+    model->reset_probabilities();
   }
 }
 

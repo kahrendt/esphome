@@ -77,7 +77,7 @@ class MicroWakeWord : public Component {
 
   std::unique_ptr<RingBuffer> ring_buffer_;
 
-  std::vector<StreamingModel> streaming_models_;
+  std::vector<StreamingModel *> streaming_models_;
 
   tflite::MicroInterpreter *preprocessor_interperter_{nullptr};
 
@@ -87,6 +87,7 @@ class MicroWakeWord : public Component {
 
   uint8_t *preprocessor_tensor_arena_{nullptr};
 
+  int16_t *input_buffer_{nullptr};
   // Stores audio fed into feature generator preprocessor. Also used for striding samples in each window
   int16_t *preprocessor_audio_buffer_{nullptr};
 
