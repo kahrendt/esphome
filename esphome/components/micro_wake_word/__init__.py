@@ -428,7 +428,7 @@ async def to_code(config):
                 probability_cutoff,
                 sliding_window_average_size,
                 manifest[KEY_WAKE_WORD],
-                45672,  # Tensor arena size for original Inception-based models
+                28000,  # Tensor arena size for original Inception-based models
             )
         )
 

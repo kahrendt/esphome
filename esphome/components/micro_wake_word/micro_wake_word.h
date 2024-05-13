@@ -13,6 +13,9 @@
 #include "preprocessor_settings.h"
 #include "streaming_model.h"
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+
 #include "esphome/core/automation.h"
 #include "esphome/core/component.h"
 #include "esphome/core/ring_buffer.h"
@@ -37,6 +40,27 @@ enum State {
 
 // The number of audio slices to process before accepting a positive detection
 static const uint8_t MIN_SLICES_BEFORE_DETECTION = 74;
+
+enum class TaskEventType : uint8_t {
+  STARTING = 0,
+  STARTED,
+  DETECTING,
+  DETECTED,
+  STOPPING,
+  STOPPED,
+  WARNING = 255,
+};
+
+struct TaskEvent {
+  TaskEventType type;
+  esp_err_t err;
+  char wakeword[32];
+};
+
+struct DataEvent {
+  bool stop;
+  int8_t data[PREPROCESSOR_FEATURE_SIZE];
+};
 
 class MicroWakeWord : public Component {
  public:
@@ -63,6 +87,18 @@ class MicroWakeWord : public Component {
 #endif
 
  protected:
+  TaskHandle_t inference_task_handle_{nullptr};
+  QueueHandle_t features_queue_;
+  QueueHandle_t event_queue_;
+  // StaticTask_t xTaskBuffer_;
+  // StackType_t xStack_[4092];
+
+  void generate_features_();
+
+  void watch_();
+
+  static void inference_task_(void *params);
+
   microphone::Microphone *microphone_{nullptr};
   Trigger<std::string> *wake_word_detected_trigger_ = new Trigger<std::string>();
   State state_{State::IDLE};
@@ -76,7 +112,7 @@ class MicroWakeWord : public Component {
   VADModel *vad_model_;
 #endif
 
-  tflite::MicroMutableOpResolver<17> streaming_op_resolver_;
+  tflite::MicroMutableOpResolver<20> streaming_op_resolver_;
   tflite::MicroMutableOpResolver<18> preprocessor_op_resolver_;
 
   tflite::MicroInterpreter *preprocessor_interpreter_{nullptr};
@@ -161,7 +197,7 @@ class MicroWakeWord : public Component {
   bool register_preprocessor_ops_(tflite::MicroMutableOpResolver<18> &op_resolver);
 
   /// @brief Returns true if successfully registered the streaming model's TensorFlow operations
-  bool register_streaming_ops_(tflite::MicroMutableOpResolver<17> &op_resolver);
+  bool register_streaming_ops_(tflite::MicroMutableOpResolver<20> &op_resolver);
 };
 
 template<typename... Ts> class StartAction : public Action<Ts...>, public Parented<MicroWakeWord> {

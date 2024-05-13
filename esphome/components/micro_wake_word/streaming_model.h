@@ -15,11 +15,28 @@
 #include <tensorflow/lite/core/c/common.h>
 #include <tensorflow/lite/micro/micro_interpreter.h>
 #include <tensorflow/lite/micro/micro_mutable_op_resolver.h>
+// #include <tensorflow/lite/micro/kernels/esp_nn/conv.cc>
+
+extern long long conv_total_time;
+extern long long dc_total_time;
+extern long long pooling_total_time;
+extern long long add_total_time;
+extern long long fc_total_time;
 
 namespace esphome {
 namespace micro_wake_word {
 
-static const uint32_t STREAMING_MODEL_VARIABLE_ARENA_SIZE = 1024;
+static const uint32_t STREAMING_MODEL_VARIABLE_ARENA_SIZE = 2048;
+
+// long long total_time = 0;
+// long long start_time = 0;
+// extern long long softmax_total_time;
+// extern long long dc_total_time;
+
+// extern long long fc_total_time;
+// extern long long pooling_total_time;
+// extern long long add_total_time;
+// extern long long mul_total_time;
 
 class StreamingModel {
  public:
@@ -34,7 +51,7 @@ class StreamingModel {
   /// @brief Allocates tensor and variable arenas and sets up the model interpreter
   /// @param op_resolver MicroMutableOpResolver object that must exist until the model is unloaded
   /// @return True if successful, false otherwise
-  bool load_model(tflite::MicroMutableOpResolver<17> &op_resolver);
+  bool load_model(tflite::MicroMutableOpResolver<20> &op_resolver);
 
   /// @brief Destroys the TFLite interpreter and frees the tensor and variable arenas' memory
   void unload_model();

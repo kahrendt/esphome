@@ -32,11 +32,12 @@ void VADModel::log_model_config() {
   ESP_LOGCONFIG(TAG, "    Sliding window size: %d", this->sliding_window_size_);
 }
 
-bool StreamingModel::load_model(tflite::MicroMutableOpResolver<17> &op_resolver) {
+bool StreamingModel::load_model(tflite::MicroMutableOpResolver<20> &op_resolver) {
   ExternalRAMAllocator<uint8_t> arena_allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
 
   if (this->tensor_arena_ == nullptr) {
-    this->tensor_arena_ = arena_allocator.allocate(this->tensor_arena_size_);
+    this->tensor_arena_ = (uint8_t *) malloc(this->tensor_arena_size_);
+    // this->tensor_arena_ = arena_allocator.allocate(this->tensor_arena_size_);
     if (this->tensor_arena_ == nullptr) {
       ESP_LOGE(TAG, "Could not allocate the streaming model's tensor arena.");
       return false;
@@ -44,13 +45,14 @@ bool StreamingModel::load_model(tflite::MicroMutableOpResolver<17> &op_resolver)
   }
 
   if (this->var_arena_ == nullptr) {
-    this->var_arena_ = arena_allocator.allocate(STREAMING_MODEL_VARIABLE_ARENA_SIZE);
+    this->var_arena_ = (uint8_t *) malloc(STREAMING_MODEL_VARIABLE_ARENA_SIZE);
+    // this->var_arena_ = arena_allocator.allocate(STREAMING_MODEL_VARIABLE_ARENA_SIZE);
     if (this->var_arena_ == nullptr) {
       ESP_LOGE(TAG, "Could not allocate the streaming model's variable tensor arena.");
       return false;
     }
     this->ma_ = tflite::MicroAllocator::Create(this->var_arena_, STREAMING_MODEL_VARIABLE_ARENA_SIZE);
-    this->mrv_ = tflite::MicroResourceVariables::Create(this->ma_, 20);
+    this->mrv_ = tflite::MicroResourceVariables::Create(this->ma_, 50);
   }
 
   const tflite::Model *model = tflite::GetModel(this->model_start_);
@@ -115,11 +117,39 @@ bool StreamingModel::perform_streaming_inference(const int8_t features[PREPROCES
 
     memcpy((void *) (tflite::GetTensorData<int8_t>(input)), (const void *) (features), bytes_to_copy);
 
+    // long long start_time = esp_timer_get_time();
+
     TfLiteStatus invoke_status = this->interpreter_->Invoke();
     if (invoke_status != kTfLiteOk) {
       ESP_LOGW(TAG, "Streaming interpreter invoke failed");
       return false;
     }
+
+    // long long total_time = (esp_timer_get_time() - start_time);
+    // printf("Total time = %lld\n", total_time / 1000);
+    // // printf("Softmax time = %lld\n", softmax_total_time / 1000);
+    // printf("FC time = %lld\n", fc_total_time / 1000);
+    // printf("DC time = %lld\n", dc_total_time / 1000);
+    // printf("conv time = %lld\n", conv_total_time / 1000);
+    // printf("Pooling time = %lld\n", pooling_total_time / 1000);
+    // printf("add time = %lld\n", add_total_time / 1000);
+    // printf("mul time = %lld\n", mul_total_time / 1000);
+
+    // ESP_LOGD(TAG, "conv total time %llu", conv_total_time);
+    // ESP_LOGD(TAG, "depthconv total time %llu", dc_total_time);
+    // ESP_LOGD(TAG, "pooling total time %llu", pooling_total_time);
+    // ESP_LOGD(TAG, "add total time %llu", add_total_time);
+    // ESP_LOGD(TAG, "fc total time %llu", fc_total_time);
+
+    // /* Reset times */
+    // total_time = 0;
+    // // softmax_total_time = 0;
+    dc_total_time = 0;
+    conv_total_time = 0;
+    fc_total_time = 0;
+    pooling_total_time = 0;
+    add_total_time = 0;
+    // mul_total_time = 0;
 
     TfLiteTensor *output = this->interpreter_->output(0);
 
