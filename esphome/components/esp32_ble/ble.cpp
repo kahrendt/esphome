@@ -246,6 +246,7 @@ bool ESP32BLE::ble_dismantle_() {
         return false;
       }
     }
+    esp_bt_mem_release(ESP_BT_MODE_BTDM);
     if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE) {
       ESP_LOGE(TAG, "esp bt controller disable failed");
       return false;
