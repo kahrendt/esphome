@@ -48,6 +48,7 @@ enum class TaskEventType : uint8_t {
   DETECTED,
   STOPPING,
   STOPPED,
+  ERROR = 244,
   WARNING = 255,
 };
 
@@ -90,8 +91,6 @@ class MicroWakeWord : public Component {
   TaskHandle_t inference_task_handle_{nullptr};
   QueueHandle_t features_queue_;
   QueueHandle_t event_queue_;
-  // StaticTask_t xTaskBuffer_;
-  // StackType_t xStack_[4092];
 
   void generate_features_();
 
@@ -102,7 +101,6 @@ class MicroWakeWord : public Component {
   microphone::Microphone *microphone_{nullptr};
   Trigger<std::string> *wake_word_detected_trigger_ = new Trigger<std::string>();
   State state_{State::IDLE};
-  HighFrequencyLoopRequester high_freq_;
 
   std::unique_ptr<RingBuffer> ring_buffer_;
 

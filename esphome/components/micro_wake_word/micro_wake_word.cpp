@@ -109,7 +109,6 @@ void MicroWakeWord::loop() {
       ESP_LOGD(TAG, "Starting Microphone");
       this->microphone_->start();
       this->set_state_(State::STARTING_MICROPHONE);
-      // this->high_freq_.start();
       break;
     case State::STARTING_MICROPHONE:
       if (this->microphone_->is_running()) {
@@ -117,21 +116,14 @@ void MicroWakeWord::loop() {
       }
       break;
     case State::DETECTING_WAKE_WORD:
-      // this->update_model_probabilities_();
       this->generate_features_();
       this->read_microphone_();
       this->watch_();
-      // if (this->detect_wake_words_()) {
-      //   ESP_LOGD(TAG, "Wake Word '%s' Detected", (this->detected_wake_word_).c_str());
-      //   this->detected_ = true;
-      //   this->set_state_(State::STOP_MICROPHONE);
-      // }
       break;
     case State::STOP_MICROPHONE:
       ESP_LOGD(TAG, "Stopping Microphone");
       this->microphone_->stop();
       this->set_state_(State::STOPPING_MICROPHONE);
-      // this->high_freq_.stop();
       this->unload_models_();
       this->deallocate_buffers_();
       break;
@@ -345,14 +337,13 @@ void MicroWakeWord::watch_() {
         if (this->ignore_windows_ == 0) {
           ESP_LOGD(TAG, "Wake Word '%s' Detected", event.wakeword);
           this->detected_ = true;
-          xQueueReset(this->features_queue_);
+          this->detected_wake_word_ = event.wakeword;
           DataEvent data_event;
           data_event.stop = true;
-          xQueueSend(this->features_queue_, &data_event, 0);
+          xQueueSendToFront(this->features_queue_, &data_event, 0);
         }
         break;
       case TaskEventType::STOPPED:
-        // this->state_ = speaker::STATE_STOPPED;
         vTaskDelete(this->inference_task_handle_);
         this->inference_task_handle_ = nullptr;
         xQueueReset(this->features_queue_);
@@ -362,6 +353,10 @@ void MicroWakeWord::watch_() {
       case TaskEventType::WARNING:
         ESP_LOGW(TAG, "Error performing wake word inference: %s", esp_err_to_name(event.err));
         this->status_set_warning();
+        break;
+      case TaskEventType::ERROR:
+        ESP_LOGW(TAG, "Error performing wake word inference");  // TODO handle this better...
+        this->status_set_error();
         break;
     }
   }
@@ -386,36 +381,6 @@ void MicroWakeWord::generate_features_() {
   }
 }
 
-void MicroWakeWord::update_model_probabilities_() {
-  if (!this->stride_audio_samples_()) {
-    return;
-  }
-
-  int8_t audio_features[PREPROCESSOR_FEATURE_SIZE];
-
-  if (!this->generate_features_for_window_(audio_features)) {
-    return;
-  }
-
-  // Increase the counter since the last positive detection
-  this->ignore_windows_ = std::min(this->ignore_windows_ + 1, 0);
-
-  DataEvent event;
-  event.stop = false;
-  memcpy(event.data, audio_features, PREPROCESSOR_FEATURE_SIZE);
-
-  xQueueSend(this->features_queue_, &event, 0);
-  //   for (auto &model : this->wake_word_models_) {
-  //     // Perform inference
-  //     size_t start_time = micros();
-  //     model.perform_streaming_inference(audio_features);
-  //     ESP_LOGD(TAG, "inference time: %d", (micros() - start_time));
-  //   }
-  // #ifdef USE_MWW_VAD
-  //   this->vad_model_->perform_streaming_inference(audio_features);
-  // #endif
-}
-
 void MicroWakeWord::inference_task_(void *params) {
   MicroWakeWord *this_instance = (MicroWakeWord *) params;
   DataEvent data_event;
@@ -424,27 +389,34 @@ void MicroWakeWord::inference_task_(void *params) {
   event.type = TaskEventType::STARTING;
   xQueueSend(this_instance->event_queue_, &event, portMAX_DELAY);
 
+  bool initialized = true;
+
   // Setup streaming models
   for (auto &model : this_instance->wake_word_models_) {
     if (!model.load_model(this_instance->streaming_op_resolver_)) {
       ESP_LOGE(TAG, "Failed to initialize a wake word model.");
-      // return false;
+      event.type = TaskEventType::ERROR;
+      xQueueSend(this_instance->event_queue_, &event, portMAX_DELAY);
+      initialized = false;
     }
   }
 #ifdef USE_MWW_VAD
   if (!this_instance->vad_model_->load_model(this_instance->streaming_op_resolver_)) {
     ESP_LOGE(TAG, "Failed to initialize VAD model.");
-    // return false;
+    event.type = TaskEventType::ERROR;
+    xQueueSend(this_instance->event_queue_, &event, portMAX_DELAY);
+    initialized = false;
   }
 #endif
 
-  event.type = TaskEventType::STARTED;
-  xQueueSend(this_instance->event_queue_, &event, portMAX_DELAY);
+  if (initialized) {
+    event.type = TaskEventType::STARTED;
+    xQueueSend(this_instance->event_queue_, &event, portMAX_DELAY);
+  }
 
-  int8_t features_buffer[PREPROCESSOR_FEATURE_SIZE];
   size_t inference_count = 0;
   size_t total_inference_time = 0;
-  while (true) {
+  while (initialized) {
     if (xQueueReceive(this_instance->features_queue_, &data_event, 10 / portTICK_PERIOD_MS) != pdTRUE) {
       continue;
     }
@@ -454,25 +426,23 @@ void MicroWakeWord::inference_task_(void *params) {
       break;
     }
 
-    memmove(features_buffer, data_event.data, PREPROCESSOR_FEATURE_SIZE);
-
     for (auto &model : this_instance->wake_word_models_) {
-      // Perform inference
       size_t start_time = micros();
-      model.perform_streaming_inference(features_buffer);
+      model.perform_streaming_inference(data_event.data);
       total_inference_time += (micros() - start_time);
       ++inference_count;
       // ESP_LOGD(TAG, "inference time %d; count=%d", (micros() - start_time), inference_count);
     }
 
-    if (inference_count >= 1000) {
+    if (inference_count >= 999) {
       ESP_LOGD(TAG, "average inference time %.1f", (static_cast<float>(total_inference_time) / inference_count));
       inference_count = 0;
       total_inference_time = 0;
     }
 
 #ifdef USE_MWW_VAD
-    this_instance->vad_model_->perform_streaming_inference(features_buffer);
+    this_instance->vad_model_->perform_streaming_inference(data_event.data);
+    // this_instance->vad_model_->perform_streaming_inference(features_buffer);
 #endif
 
 #ifdef USE_MWW_VAD
@@ -487,7 +457,7 @@ void MicroWakeWord::inference_task_(void *params) {
           event.type = TaskEventType::DETECTED;
           std::string wakeword = model.get_wake_word();
           std::strcpy(event.wakeword, wakeword.c_str());
-          xQueueSend(this_instance->event_queue_, &event, portMAX_DELAY);
+          xQueueSendToFront(this_instance->event_queue_, &event, portMAX_DELAY);
 #ifdef USE_MWW_VAD
         } else {
           ESP_LOGD(TAG, "Wake word model predicts %s, but VAD model doesn't.", model.get_wake_word().c_str());
@@ -516,34 +486,6 @@ void MicroWakeWord::inference_task_(void *params) {
   while (true) {
     delay(10);
   }
-}
-
-bool MicroWakeWord::detect_wake_words_() {
-  // Verify we have processed samples since the last positive detection
-  if (this->ignore_windows_ < 0) {
-    return false;
-  }
-
-#ifdef USE_MWW_VAD
-  bool vad_state = this->vad_model_->determine_detected();
-#endif
-
-  for (auto &model : this->wake_word_models_) {
-    if (model.determine_detected()) {
-#ifdef USE_MWW_VAD
-      if (vad_state) {
-#endif
-        this->detected_wake_word_ = model.get_wake_word();
-        return true;
-#ifdef USE_MWW_VAD
-      } else {
-        ESP_LOGD(TAG, "Wake word model predicts %s, but VAD model doesn't.", model.get_wake_word().c_str());
-      }
-#endif
-    }
-  }
-
-  return false;
 }
 
 bool MicroWakeWord::stride_audio_samples_() {
@@ -577,8 +519,7 @@ bool MicroWakeWord::generate_features_for_window_(int8_t features[PREPROCESSOR_F
   TfLiteTensor *input = this->preprocessor_interpreter_->input(0);
   TfLiteTensor *output = this->preprocessor_interpreter_->output(0);
   std::copy_n(this->preprocessor_audio_buffer_, SAMPLE_DURATION_COUNT, tflite::GetTensorData<int16_t>(input));
-  // ESP_LOGD(TAG, "audio samples[0]=%d and [1]=%d", this->preprocessor_audio_buffer_[0],
-  //  this->preprocessor_audio_buffer_[1]);
+
   if (this->preprocessor_interpreter_->Invoke() != kTfLiteOk) {
     ESP_LOGE(TAG, "Failed to preprocess audio for local wake word.");
     return false;

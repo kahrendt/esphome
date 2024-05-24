@@ -15,7 +15,6 @@
 #include <tensorflow/lite/core/c/common.h>
 #include <tensorflow/lite/micro/micro_interpreter.h>
 #include <tensorflow/lite/micro/micro_mutable_op_resolver.h>
-// #include <tensorflow/lite/micro/kernels/esp_nn/conv.cc>
 
 extern long long conv_total_time;
 extern long long dc_total_time;
@@ -57,6 +56,9 @@ class StreamingModel {
   void unload_model();
 
  protected:
+  size_t inference_count_{0};
+  size_t inference_duration_{0};
+
   size_t sliding_window_size_;
   size_t last_n_index_{0};
   size_t tensor_arena_size_;

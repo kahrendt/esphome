@@ -117,14 +117,30 @@ bool StreamingModel::perform_streaming_inference(const int8_t features[PREPROCES
 
     memcpy((void *) (tflite::GetTensorData<int8_t>(input)), (const void *) (features), bytes_to_copy);
 
-    // long long start_time = esp_timer_get_time();
-
+    long long start_time = esp_timer_get_time();
     TfLiteStatus invoke_status = this->interpreter_->Invoke();
     if (invoke_status != kTfLiteOk) {
       ESP_LOGW(TAG, "Streaming interpreter invoke failed");
       return false;
     }
-
+    this->inference_duration_ += (esp_timer_get_time() - start_time);
+    ++this->inference_count_;
+    if (this->inference_count_ >= 1000) {
+      ESP_LOGD(TAG, "total inference time %.2f",
+               (static_cast<float>(this->inference_duration_) / this->inference_count_));
+      ESP_LOGD(TAG, "conv total time %.2f", (static_cast<float>(conv_total_time) / this->inference_count_));
+      ESP_LOGD(TAG, "depthconv total time %.2f", (static_cast<float>(dc_total_time) / this->inference_count_));
+      ESP_LOGD(TAG, "pooling total time %.2f", (static_cast<float>(pooling_total_time) / this->inference_count_));
+      ESP_LOGD(TAG, "add total time %.2f", (static_cast<float>(add_total_time) / this->inference_count_));
+      ESP_LOGD(TAG, "fc total time %.2f", (static_cast<float>(fc_total_time) / this->inference_count_));
+      this->inference_count_ = 0;
+      this->inference_duration_ = 0;
+      dc_total_time = 0;
+      conv_total_time = 0;
+      fc_total_time = 0;
+      pooling_total_time = 0;
+      add_total_time = 0;
+    }
     // long long total_time = (esp_timer_get_time() - start_time);
     // printf("Total time = %lld\n", total_time / 1000);
     // // printf("Softmax time = %lld\n", softmax_total_time / 1000);
@@ -135,20 +151,14 @@ bool StreamingModel::perform_streaming_inference(const int8_t features[PREPROCES
     // printf("add time = %lld\n", add_total_time / 1000);
     // printf("mul time = %lld\n", mul_total_time / 1000);
 
-    // ESP_LOGD(TAG, "conv total time %llu", conv_total_time);
-    // ESP_LOGD(TAG, "depthconv total time %llu", dc_total_time);
-    // ESP_LOGD(TAG, "pooling total time %llu", pooling_total_time);
-    // ESP_LOGD(TAG, "add total time %llu", add_total_time);
-    // ESP_LOGD(TAG, "fc total time %llu", fc_total_time);
-
     // /* Reset times */
     // total_time = 0;
     // // softmax_total_time = 0;
-    dc_total_time = 0;
-    conv_total_time = 0;
-    fc_total_time = 0;
-    pooling_total_time = 0;
-    add_total_time = 0;
+    // dc_total_time = 0;
+    // conv_total_time = 0;
+    // fc_total_time = 0;
+    // pooling_total_time = 0;
+    // add_total_time = 0;
     // mul_total_time = 0;
 
     TfLiteTensor *output = this->interpreter_->output(0);
