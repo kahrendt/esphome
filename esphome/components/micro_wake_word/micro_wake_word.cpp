@@ -88,8 +88,8 @@ void MicroWakeWord::setup() {
 void MicroWakeWord::add_wake_word_model(const uint8_t *model_start, float probability_cutoff,
                                         size_t sliding_window_average_size, const std::string &wake_word,
                                         size_t tensor_arena_size) {
-  this->wake_word_models_.emplace_back(model_start, probability_cutoff, sliding_window_average_size, wake_word,
-                                       tensor_arena_size);
+  this->wake_word_models_.push_back(
+      WakeWordModel(model_start, probability_cutoff, sliding_window_average_size, wake_word, tensor_arena_size));
 }
 
 #ifdef USE_MICRO_WAKE_WORD_VAD
@@ -379,8 +379,8 @@ bool MicroWakeWord::generate_features_for_window_(int8_t features[PREPROCESSOR_F
     // input = (((feature / 25.6) / 26.0) * 256) - 128
     // To simplify this and perform it in 32-bit integer math, we rearrange to:
     // input = (feature * 256) / (25.6 * 26.0) - 128
-    int32_t value_scale = 256;
-    int32_t value_div = (int32_t) ((25.6f * 26.0f) + 0.5f);
+    constexpr int32_t value_scale = 256;
+    constexpr int32_t value_div = 666;  // 666 = 25.6 * 26.0 after rounding
     int32_t value = ((frontend_output.values[i] * value_scale) + (value_div / 2)) / value_div;
     value -= 128;
     if (value < -128) {
