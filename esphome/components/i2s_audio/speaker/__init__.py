@@ -1,14 +1,20 @@
-import esphome.codegen as cg
-import esphome.config_validation as cv
 from esphome import pins
-from esphome.const import CONF_ID, CONF_MODE
+import esphome.codegen as cg
 from esphome.components import esp32, speaker
+import esphome.config_validation as cv
+from esphome.const import CONF_ID, CONF_MODE
 
 from .. import (
+    BITS_PER_SAMPLE,
+    CONF_BITS_PER_SAMPLE,
     CONF_I2S_AUDIO_ID,
     CONF_I2S_DOUT_PIN,
+    CONF_I2S_MODE,
+    CONF_PRIMARY,
+    I2S_MODE_OPTIONS,
     I2SAudioComponent,
     I2SAudioOut,
+    _validate_bits,
     i2s_audio_ns,
 )
 
@@ -64,6 +70,12 @@ CONFIG_SCHEMA = cv.All(
                     cv.Optional(CONF_MODE, default="mono"): cv.one_of(
                         *EXTERNAL_DAC_OPTIONS, lower=True
                     ),
+                    cv.Optional(CONF_BITS_PER_SAMPLE, default="16bit"): cv.All(
+                        _validate_bits, cv.enum(BITS_PER_SAMPLE)
+                    ),
+                    cv.Optional(CONF_I2S_MODE, default=CONF_PRIMARY): cv.enum(
+                        I2S_MODE_OPTIONS, lower=True
+                    ),
                 }
             ).extend(cv.COMPONENT_SCHEMA),
         },
@@ -85,3 +97,5 @@ async def to_code(config):
     else:
         cg.add(var.set_dout_pin(config[CONF_I2S_DOUT_PIN]))
         cg.add(var.set_external_dac_channels(2 if config[CONF_MODE] == "stereo" else 1))
+        cg.add(var.set_bits_per_sample(config[CONF_BITS_PER_SAMPLE]))
+        cg.add(var.set_i2s_mode(config[CONF_I2S_MODE]))

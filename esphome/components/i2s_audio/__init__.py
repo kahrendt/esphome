@@ -1,16 +1,15 @@
-import esphome.config_validation as cv
-import esphome.final_validate as fv
-import esphome.codegen as cg
-
 from esphome import pins
-from esphome.const import CONF_ID
+import esphome.codegen as cg
 from esphome.components.esp32 import get_esp32_variant
 from esphome.components.esp32.const import (
     VARIANT_ESP32,
+    VARIANT_ESP32C3,
     VARIANT_ESP32S2,
     VARIANT_ESP32S3,
-    VARIANT_ESP32C3,
 )
+import esphome.config_validation as cv
+from esphome.const import CONF_ID
+import esphome.final_validate as fv
 
 CODEOWNERS = ["@jesserockz"]
 DEPENDENCIES = ["esp32"]
@@ -28,6 +27,15 @@ CONF_I2S_AUDIO_ID = "i2s_audio_id"
 CONF_I2S_MODE = "i2s_mode"
 CONF_PRIMARY = "primary"
 CONF_SECONDARY = "secondary"
+
+CONF_BITS_PER_SAMPLE = "bits_per_sample"
+i2s_bits_per_sample_t = cg.global_ns.enum("i2s_bits_per_sample_t")
+BITS_PER_SAMPLE = {
+    16: i2s_bits_per_sample_t.I2S_BITS_PER_SAMPLE_16BIT,
+    32: i2s_bits_per_sample_t.I2S_BITS_PER_SAMPLE_32BIT,
+}
+
+_validate_bits = cv.float_with_unit("bits", "bit")
 
 i2s_audio_ns = cg.esphome_ns.namespace("i2s_audio")
 I2SAudioComponent = i2s_audio_ns.class_("I2SAudioComponent", cg.Component)

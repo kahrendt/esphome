@@ -1,20 +1,22 @@
-import esphome.config_validation as cv
-import esphome.codegen as cg
-
 from esphome import pins
-from esphome.const import CONF_CHANNEL, CONF_ID, CONF_NUMBER, CONF_SAMPLE_RATE
-from esphome.components import microphone, esp32
+import esphome.codegen as cg
+from esphome.components import esp32, microphone
 from esphome.components.adc import ESP32_VARIANT_ADC1_PIN_TO_CHANNEL, validate_adc_pin
+import esphome.config_validation as cv
+from esphome.const import CONF_CHANNEL, CONF_ID, CONF_NUMBER, CONF_SAMPLE_RATE
 
 from .. import (
+    BITS_PER_SAMPLE,
+    CONF_BITS_PER_SAMPLE,
+    CONF_I2S_AUDIO_ID,
+    CONF_I2S_DIN_PIN,
     CONF_I2S_MODE,
     CONF_PRIMARY,
     I2S_MODE_OPTIONS,
-    i2s_audio_ns,
     I2SAudioComponent,
     I2SAudioIn,
-    CONF_I2S_AUDIO_ID,
-    CONF_I2S_DIN_PIN,
+    _validate_bits,
+    i2s_audio_ns,
 )
 
 CODEOWNERS = ["@jesserockz"]
@@ -23,7 +25,6 @@ DEPENDENCIES = ["i2s_audio"]
 CONF_ADC_PIN = "adc_pin"
 CONF_ADC_TYPE = "adc_type"
 CONF_PDM = "pdm"
-CONF_BITS_PER_SAMPLE = "bits_per_sample"
 CONF_USE_APLL = "use_apll"
 
 I2SAudioMicrophone = i2s_audio_ns.class_(
@@ -35,16 +36,9 @@ CHANNELS = {
     "left": i2s_channel_fmt_t.I2S_CHANNEL_FMT_ONLY_LEFT,
     "right": i2s_channel_fmt_t.I2S_CHANNEL_FMT_ONLY_RIGHT,
 }
-i2s_bits_per_sample_t = cg.global_ns.enum("i2s_bits_per_sample_t")
-BITS_PER_SAMPLE = {
-    16: i2s_bits_per_sample_t.I2S_BITS_PER_SAMPLE_16BIT,
-    32: i2s_bits_per_sample_t.I2S_BITS_PER_SAMPLE_32BIT,
-}
 
 INTERNAL_ADC_VARIANTS = [esp32.const.VARIANT_ESP32]
 PDM_VARIANTS = [esp32.const.VARIANT_ESP32, esp32.const.VARIANT_ESP32S3]
-
-_validate_bits = cv.float_with_unit("bits", "bit")
 
 
 def validate_esp32_variant(config):

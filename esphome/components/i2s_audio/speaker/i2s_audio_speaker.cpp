@@ -64,9 +64,9 @@ void I2SAudioSpeaker::player_task(void *params) {
   xQueueSend(this_speaker->event_queue_, &event, portMAX_DELAY);
 
   i2s_driver_config_t config = {
-      .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_TX),
+      .mode = (i2s_mode_t) (this_speaker->i2s_mode_ | I2S_MODE_TX),
       .sample_rate = 16000,
-      .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+      .bits_per_sample = this_speaker->bits_per_sample_,
       .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
       .communication_format = I2S_COMM_FORMAT_STAND_I2S,
       .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
@@ -134,8 +134,14 @@ void I2SAudioSpeaker::player_task(void *params) {
     while (remaining > 0) {
       uint32_t sample = (buffer[current] << 16) | (buffer[current] & 0xFFFF);
 
-      esp_err_t err = i2s_write(this_speaker->parent_->get_port(), &sample, sizeof(sample), &bytes_written,
-                                (10 / portTICK_PERIOD_MS));
+      esp_err_t err = ESP_OK;
+      if (this_speaker->bits_per_sample_ == I2S_BITS_PER_SAMPLE_16BIT) {
+        err = i2s_write(this_speaker->parent_->get_port(), &sample, sizeof(sample), &bytes_written,
+                        (10 / portTICK_PERIOD_MS));
+      } else if (this_speaker->bits_per_sample_ == I2S_BITS_PER_SAMPLE_32BIT) {
+        err = i2s_write_expand(this_speaker->parent_->get_port(), &sample, sizeof(sample), I2S_BITS_PER_SAMPLE_16BIT,
+                               this_speaker->bits_per_sample_, &bytes_written, (10 / portTICK_PERIOD_MS));
+      }
       if (err != ESP_OK) {
         event = {.type = TaskEventType::WARNING, .err = err};
         if (xQueueSend(this_speaker->event_queue_, &event, 10 / portTICK_PERIOD_MS) != pdTRUE) {
