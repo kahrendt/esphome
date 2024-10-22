@@ -20,12 +20,24 @@ IS_PLATFORM_COMPONENT = True
 media_player_ns = cg.esphome_ns.namespace("media_player")
 
 MediaPlayer = media_player_ns.class_("MediaPlayer")
+MediaFile = media_player_ns.struct("MediaFile")
+MediaFileType = media_player_ns.enum("MediaFileType", is_class=True)
+MEDIA_FILE_TYPE_ENUM = {
+    "NONE": MediaFileType.NONE,
+    "WAV": MediaFileType.WAV,
+    "MP3": MediaFileType.MP3,
+    "FLAC": MediaFileType.FLAC,
+}
+
 
 PlayAction = media_player_ns.class_(
     "PlayAction", automation.Action, cg.Parented.template(MediaPlayer)
 )
 PlayMediaAction = media_player_ns.class_(
     "PlayMediaAction", automation.Action, cg.Parented.template(MediaPlayer)
+)
+PlayLocalMediaAction = media_player_ns.class_(
+    "PlayLocalMediaAction", automation.Action, cg.Parented.template(MediaPlayer)
 )
 ToggleAction = media_player_ns.class_(
     "ToggleAction", automation.Action, cg.Parented.template(MediaPlayer)
@@ -60,6 +72,7 @@ AnnoucementTrigger = media_player_ns.class_(
     "AnnouncementTrigger", automation.Trigger.template()
 )
 IsIdleCondition = media_player_ns.class_("IsIdleCondition", automation.Condition)
+IsPausedCondition = media_player_ns.class_("IsPausedCondition", automation.Condition)
 IsPlayingCondition = media_player_ns.class_("IsPlayingCondition", automation.Condition)
 
 
@@ -158,6 +171,9 @@ async def media_player_play_media_action(config, action_id, template_arg, args):
 )
 @automation.register_condition(
     "media_player.is_idle", IsIdleCondition, MEDIA_PLAYER_ACTION_SCHEMA
+)
+@automation.register_condition(
+    "media_player.is_paused", IsPausedCondition, MEDIA_PLAYER_ACTION_SCHEMA
 )
 @automation.register_condition(
     "media_player.is_playing", IsPlayingCondition, MEDIA_PLAYER_ACTION_SCHEMA
