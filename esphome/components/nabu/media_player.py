@@ -26,7 +26,7 @@ from esphome.external_files import download_content
 
 _LOGGER = logging.getLogger(__name__)
 
-AUTO_LOAD = ["audio"]
+AUTO_LOAD = ["audio", "psram"]
 
 CODEOWNERS = ["@synesthesiam", "@kahrendt"]
 DEPENDENCIES = ["media_player"]
@@ -185,22 +185,24 @@ MEDIA_FILE_TYPE_SCHEMA = cv.Schema(
 )
 
 
-CONFIG_SCHEMA = media_player.MEDIA_PLAYER_SCHEMA.extend(
-    {
-        cv.GenerateID(): cv.declare_id(NabuMediaPlayer),
-        cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
-        cv.Optional(CONF_AUDIO_DAC): cv.use_id(audio_dac.AudioDac),
-        cv.Optional(CONF_SAMPLE_RATE, default=16000): cv.int_range(min=1),
-        cv.Optional(CONF_VOLUME_INCREMENT, default=0.05): cv.percentage,
-        cv.Optional(CONF_VOLUME_MAX, default=1.0): cv.percentage,
-        cv.Optional(CONF_VOLUME_MIN, default=0.0): cv.percentage,
-        cv.Optional(CONF_FILES): cv.ensure_list(MEDIA_FILE_TYPE_SCHEMA),
-        cv.Optional(CONF_ON_MUTE): automation.validate_automation(single=True),
-        cv.Optional(CONF_ON_UNMUTE): automation.validate_automation(single=True),
-        cv.Optional(CONF_ON_VOLUME): automation.validate_automation(single=True),
-    }
+CONFIG_SCHEMA = cv.All(
+    media_player.MEDIA_PLAYER_SCHEMA.extend(
+        {
+            cv.GenerateID(): cv.declare_id(NabuMediaPlayer),
+            cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
+            cv.Optional(CONF_AUDIO_DAC): cv.use_id(audio_dac.AudioDac),
+            cv.Optional(CONF_SAMPLE_RATE, default=16000): cv.int_range(min=1),
+            cv.Optional(CONF_VOLUME_INCREMENT, default=0.05): cv.percentage,
+            cv.Optional(CONF_VOLUME_MAX, default=1.0): cv.percentage,
+            cv.Optional(CONF_VOLUME_MIN, default=0.0): cv.percentage,
+            cv.Optional(CONF_FILES): cv.ensure_list(MEDIA_FILE_TYPE_SCHEMA),
+            cv.Optional(CONF_ON_MUTE): automation.validate_automation(single=True),
+            cv.Optional(CONF_ON_UNMUTE): automation.validate_automation(single=True),
+            cv.Optional(CONF_ON_VOLUME): automation.validate_automation(single=True),
+        }
+    ),
+    cv.only_with_esp_idf,
 )
-
 FINAL_VALIDATE_SCHEMA = _supported_local_file_validate
 
 
@@ -274,19 +276,6 @@ async def to_code(config):
             )
 
 
-DUCKING_SET_SCHEMA = cv.Schema(
-    {
-        cv.GenerateID(): cv.use_id(NabuMediaPlayer),
-        cv.Required(CONF_DECIBEL_REDUCTION): cv.templatable(
-            cv.int_range(min=0, max=51)
-        ),
-        cv.Optional(CONF_DURATION, default="0.0s"): cv.templatable(
-            cv.positive_time_period_seconds
-        ),
-    }
-)
-
-
 @automation.register_action(
     "nabu.play_local_media_file",
     PlayLocalMediaAction,
@@ -306,6 +295,19 @@ async def media_player_play_media_action(config, action_id, template_arg, args):
     cg.add(var.set_media_file(media_file))
     cg.add(var.set_announcement(config[CONF_ANNOUNCEMENT]))
     return var
+
+
+DUCKING_SET_SCHEMA = cv.Schema(
+    {
+        cv.GenerateID(): cv.use_id(NabuMediaPlayer),
+        cv.Required(CONF_DECIBEL_REDUCTION): cv.templatable(
+            cv.int_range(min=0, max=51)
+        ),
+        cv.Optional(CONF_DURATION, default="0.0s"): cv.templatable(
+            cv.positive_time_period_seconds
+        ),
+    }
+)
 
 
 @automation.register_action("nabu.set_ducking", DuckingSetAction, DUCKING_SET_SCHEMA)
