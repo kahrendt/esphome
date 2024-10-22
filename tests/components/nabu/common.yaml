@@ -1,0 +1,86 @@
+esphome:
+  on_boot:
+    then:
+      - media_player.volume_set: 0.5
+      - media_player.volume_up:
+      - media_player.volume_down:
+      - if:
+          condition:
+            or:
+              - media_player.is_idle:
+              - media_player.is_paused:
+              - media_player.is_playing:
+          then:
+            - media_player.play_media: http://localhost/media.mp3
+      - media_player.pause:
+      - media_player.toggle:
+      - media_player.stop:
+      - nabu.play_local_media_file: wake_word_trigger_sound
+      - nabu.play_local_media_file:
+          media_file: wake_word_trigger_sound
+          announcement: true
+
+wifi:
+  ssid: MySSID
+  password: password1
+
+i2c:
+  sda: GPIO5
+  scl: GPIO6
+
+audio_dac:
+  - platform: aic3204
+    id: internal_dac
+
+logger:
+
+i2s_audio:
+  i2s_mclk_pin: 15
+  i2s_lrclk_pin: 16
+  i2s_bclk_pin: 17
+
+speaker:
+  - platform: i2s_audio
+    id: speaker_id
+    dac_type: external
+    i2s_dout_pin: 12
+    sample_rate: 16000
+
+media_player:
+  - platform: nabu
+    id: nabu_media_player
+    name: Media Player
+    speaker: speaker_id
+    audio_dac: internal_dac
+    sample_rate: 16000
+    volume_increment: 0.02
+    volume_min: 0.0
+    volume_max: 1.0
+    files:
+      - id: wake_word_trigger_sound
+        file: ../../components/nabu/wake_word_triggered.flac
+    on_mute:
+      logger.log: "Mute trigger"
+    on_unmute:
+      logger.log: "Unmute trigger"
+    on_volume:
+      logger.log:
+        format: "volume set to %.3f"
+        args: [x]
+    on_pause:
+      logger.log: "Pause trigger"
+    on_play:
+      logger.log: "Play trigger"
+    on_idle:
+      logger.log: "Idle trigger"
+    on_state:
+      logger.log: "State trigger"
+    on_announcement:
+      - nabu.set_ducking:
+          decibel_reduction: 20
+          duration: 0.0s
+      - wait_until:
+          media_player.is_idle:
+      - nabu.set_ducking:
+          decibel_reduction: 0
+          duration: 2.0s
