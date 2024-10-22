@@ -84,20 +84,6 @@ def _download_web_file(value):
     return value
 
 
-LOCAL_SCHEMA = cv.Schema(
-    {
-        cv.Required(CONF_PATH): cv.file_,
-    }
-)
-
-WEB_SCHEMA = cv.All(
-    {
-        cv.Required(CONF_URL): cv.url,
-    },
-    _download_web_file,
-)
-
-
 def _validate_file_shorthand(value):
     value = cv.string_strict(value)
     if value.startswith("http://") or value.startswith("https://"):
@@ -115,52 +101,10 @@ def _validate_file_shorthand(value):
     )
 
 
-TYPED_FILE_SCHEMA = cv.typed_schema(
-    {
-        TYPE_LOCAL: LOCAL_SCHEMA,
-        TYPE_WEB: WEB_SCHEMA,
-    },
-)
-
-
 def _file_schema(value):
     if isinstance(value, str):
         return _validate_file_shorthand(value)
     return TYPED_FILE_SCHEMA(value)
-
-
-TYPED_FILE_SCHEMA = cv.typed_schema(
-    {
-        TYPE_LOCAL: LOCAL_SCHEMA,
-        TYPE_WEB: WEB_SCHEMA,
-    },
-)
-
-
-MEDIA_FILE_TYPE_SCHEMA = cv.Schema(
-    {
-        cv.Required(CONF_ID): cv.declare_id(MediaFile),
-        cv.Required(CONF_FILE): _file_schema,
-        cv.GenerateID(CONF_RAW_DATA_ID): cv.declare_id(cg.uint8),
-    }
-)
-
-
-CONFIG_SCHEMA = media_player.MEDIA_PLAYER_SCHEMA.extend(
-    {
-        cv.GenerateID(): cv.declare_id(NabuMediaPlayer),
-        cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
-        cv.Optional(CONF_AUDIO_DAC): cv.use_id(audio_dac.AudioDac),
-        cv.Optional(CONF_SAMPLE_RATE, default=16000): cv.int_range(min=1),
-        cv.Optional(CONF_VOLUME_INCREMENT, default=0.05): cv.percentage,
-        cv.Optional(CONF_VOLUME_MAX, default=1.0): cv.percentage,
-        cv.Optional(CONF_VOLUME_MIN, default=0.0): cv.percentage,
-        cv.Optional(CONF_FILES): cv.ensure_list(MEDIA_FILE_TYPE_SCHEMA),
-        cv.Optional(CONF_ON_MUTE): automation.validate_automation(single=True),
-        cv.Optional(CONF_ON_UNMUTE): automation.validate_automation(single=True),
-        cv.Optional(CONF_ON_VOLUME): automation.validate_automation(single=True),
-    }
-)
 
 
 def _read_audio_file_and_type(file_config):
@@ -209,6 +153,53 @@ def _supported_local_file_validate(config):
             if str(media_file_type) == str(MEDIA_FILE_TYPE_ENUM["NONE"]):
                 raise cv.Invalid("Unsupported local media file.")
 
+
+LOCAL_SCHEMA = cv.Schema(
+    {
+        cv.Required(CONF_PATH): cv.file_,
+    }
+)
+
+WEB_SCHEMA = cv.All(
+    {
+        cv.Required(CONF_URL): cv.url,
+    },
+    _download_web_file,
+)
+
+
+TYPED_FILE_SCHEMA = cv.typed_schema(
+    {
+        TYPE_LOCAL: LOCAL_SCHEMA,
+        TYPE_WEB: WEB_SCHEMA,
+    },
+)
+
+
+MEDIA_FILE_TYPE_SCHEMA = cv.Schema(
+    {
+        cv.Required(CONF_ID): cv.declare_id(MediaFile),
+        cv.Required(CONF_FILE): _file_schema,
+        cv.GenerateID(CONF_RAW_DATA_ID): cv.declare_id(cg.uint8),
+    }
+)
+
+
+CONFIG_SCHEMA = media_player.MEDIA_PLAYER_SCHEMA.extend(
+    {
+        cv.GenerateID(): cv.declare_id(NabuMediaPlayer),
+        cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
+        cv.Optional(CONF_AUDIO_DAC): cv.use_id(audio_dac.AudioDac),
+        cv.Optional(CONF_SAMPLE_RATE, default=16000): cv.int_range(min=1),
+        cv.Optional(CONF_VOLUME_INCREMENT, default=0.05): cv.percentage,
+        cv.Optional(CONF_VOLUME_MAX, default=1.0): cv.percentage,
+        cv.Optional(CONF_VOLUME_MIN, default=0.0): cv.percentage,
+        cv.Optional(CONF_FILES): cv.ensure_list(MEDIA_FILE_TYPE_SCHEMA),
+        cv.Optional(CONF_ON_MUTE): automation.validate_automation(single=True),
+        cv.Optional(CONF_ON_UNMUTE): automation.validate_automation(single=True),
+        cv.Optional(CONF_ON_VOLUME): automation.validate_automation(single=True),
+    }
+)
 
 FINAL_VALIDATE_SCHEMA = _supported_local_file_validate
 
