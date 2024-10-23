@@ -5,9 +5,6 @@
 #include "audio_mixer.h"
 #include "audio_pipeline.h"
 
-#ifdef USE_AUDIO_DAC
-#include "esphome/components/audio_dac/audio_dac.h"
-#endif
 #include "esphome/components/media_player/media_player.h"
 #include "esphome/components/speaker/speaker.h"
 
@@ -58,10 +55,6 @@ class NabuMediaPlayer : public Component, public media_player::MediaPlayer {
 
   void set_volume_max(float volume_max) { this->volume_max_ = volume_max; }
   void set_volume_min(float volume_min) { this->volume_min_ = volume_min; }
-
-#ifdef USE_AUDIO_DAC
-  void set_audio_dac(audio_dac::AudioDac *audio_dac) { this->audio_dac_ = audio_dac; }
-#endif
 
   void set_speaker(speaker::Speaker *speaker) { this->speaker_ = speaker; }
 
@@ -121,10 +114,6 @@ class NabuMediaPlayer : public Component, public media_player::MediaPlayer {
 
   float volume_max_;
   float volume_min_;
-
-#ifdef USE_AUDIO_DAC
-  audio_dac::AudioDac *audio_dac_{nullptr};
-#endif
 
   // Used to save volume/mute state for restoration on reboot
   ESPPreferenceObject pref_;

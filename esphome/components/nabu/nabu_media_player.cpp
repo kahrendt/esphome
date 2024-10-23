@@ -40,8 +40,8 @@ namespace nabu {
 //  - Media player commands are received by the ``control`` function. The commands are added to the
 //    ``media_control_command_queue_`` to be processed in the component's loop
 //    - Starting a stream intializes the appropriate pipeline or stops it if it is already running
-//    - Volume and mute commands are achieved by the ``mute``, ``unmute``, ``set_volume`` functions. Volume changes use
-//      an ``audio_dac`` component if configured. If one isn't, software volume control is used.
+//    - Volume and mute commands are achieved by the ``mute``, ``unmute``, ``set_volume`` functions. The speaker
+//      component handles the implementation details.
 //      - Volume commands are ignored if the media control queue is full to avoid crashing when the track wheel is spun
 //      fast
 //    - Pausing is sent to the ``AudioMixer`` task. It only effects the media stream.
@@ -412,22 +412,7 @@ void NabuMediaPlayer::save_volume_restore_state_() {
 }
 
 void NabuMediaPlayer::set_mute_state_(bool mute_state) {
-#ifdef USE_AUDIO_DAC
-  if (this->audio_dac_ != nullptr) {
-    if (mute_state) {
-      this->audio_dac_->set_mute_on();
-    } else {
-      this->audio_dac_->set_mute_off();
-    }
-  } else
-#endif
-  {  // Fall back to software mute control if there is no audio_dac or if it isn't configured
-    if (mute_state) {
-      this->speaker_->set_volume(0.0f);
-    } else if (this->speaker_->get_volume() == 0.0f) {
-      this->set_volume_(this->volume, false);  // restore previous volume
-    }
-  }
+  this->speaker_->set_mute_state(mute_state);
 
   bool old_mute_state = this->is_muted_;
   this->is_muted_ = mute_state;
@@ -447,25 +432,11 @@ void NabuMediaPlayer::set_volume_(float volume, bool publish) {
   // Remap the volume to fit with in the configured limits
   float bounded_volume = remap<float, float>(volume, 0.0f, 1.0f, this->volume_min_, this->volume_max_);
 
-#ifdef USE_AUDIO_DAC
-  if (this->audio_dac_ != nullptr) {
-    this->audio_dac_->set_volume(bounded_volume);
-  } else
-#endif
-  {  // Fall back to the speaker's volume control if there is no audio_dac or if it isn't configured
-    this->speaker_->set_volume(bounded_volume);
-  }
+  this->speaker_->set_volume(bounded_volume);
 
   if (publish) {
     this->volume = volume;
     this->save_volume_restore_state_();
-  }
-
-  // Turn on the mute state if the volume is effectively zero, off otherwise
-  if (volume < 0.001) {
-    this->set_mute_state_(true);
-  } else {
-    this->set_mute_state_(false);
   }
 
   this->defer([this, volume]() { this->volume_trigger_->trigger(volume); });

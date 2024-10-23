@@ -6,7 +6,7 @@ from pathlib import Path
 
 from esphome import automation, external_files
 import esphome.codegen as cg
-from esphome.components import audio_dac, media_player, speaker
+from esphome.components import media_player, speaker
 from esphome.components.media_player import MEDIA_FILE_TYPE_ENUM, MediaFile
 import esphome.config_validation as cv
 from esphome.const import (
@@ -37,7 +37,6 @@ TYPE_WEB = "web"
 
 CONF_DECIBEL_REDUCTION = "decibel_reduction"
 
-CONF_AUDIO_DAC = "audio_dac"
 CONF_ANNOUNCEMENT = "announcement"
 CONF_MEDIA_FILE = "media_file"
 CONF_VOLUME_INCREMENT = "volume_increment"
@@ -190,7 +189,6 @@ CONFIG_SCHEMA = cv.All(
         {
             cv.GenerateID(): cv.declare_id(NabuMediaPlayer),
             cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
-            cv.Optional(CONF_AUDIO_DAC): cv.use_id(audio_dac.AudioDac),
             cv.Optional(CONF_SAMPLE_RATE, default=16000): cv.int_range(min=1),
             cv.Optional(CONF_VOLUME_INCREMENT, default=0.05): cv.percentage,
             cv.Optional(CONF_VOLUME_MAX, default=1.0): cv.percentage,
@@ -242,10 +240,6 @@ async def to_code(config):
             [(cg.float_, "x")],
             on_volume,
         )
-
-    if audio_dac_config := config.get(CONF_AUDIO_DAC):
-        aud_dac = await cg.get_variable(audio_dac_config)
-        cg.add(var.set_audio_dac(aud_dac))
 
     if files_list := config.get(CONF_FILES):
         for file_config in files_list:
