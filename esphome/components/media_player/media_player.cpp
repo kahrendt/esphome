@@ -46,21 +46,6 @@ const char *media_player_command_to_string(MediaPlayerCommand command) {
   }
 }
 
-const char *media_player_file_type_to_string(MediaFileType file_type) {
-  switch (file_type) {
-    // case MediaFileType::NONE:
-    //   return "unknown";
-    case MediaFileType::FLAC:
-      return "FLAC";
-    case MediaFileType::MP3:
-      return "MP3";
-    case MediaFileType::WAV:
-      return "WAV";
-    default:
-      return "unknonw";
-  }
-}
-
 void MediaPlayerCall::validate_() {
   if (this->media_url_.has_value()) {
     if (this->command_.has_value()) {
@@ -124,11 +109,6 @@ MediaPlayerCall &MediaPlayerCall::set_command(const std::string &command) {
 
 MediaPlayerCall &MediaPlayerCall::set_media_url(const std::string &media_url) {
   this->media_url_ = media_url;
-  return *this;
-}
-
-MediaPlayerCall &MediaPlayerCall::set_local_media_file(MediaFile *media_file) {
-  this->media_file_ = media_file;
   return *this;
 }
 

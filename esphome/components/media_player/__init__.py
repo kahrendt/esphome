@@ -20,14 +20,6 @@ IS_PLATFORM_COMPONENT = True
 media_player_ns = cg.esphome_ns.namespace("media_player")
 
 MediaPlayer = media_player_ns.class_("MediaPlayer")
-MediaFile = media_player_ns.struct("MediaFile")
-MediaFileType = media_player_ns.enum("MediaFileType", is_class=True)
-MEDIA_FILE_TYPE_ENUM = {
-    "NONE": MediaFileType.NONE,
-    "WAV": MediaFileType.WAV,
-    "MP3": MediaFileType.MP3,
-    "FLAC": MediaFileType.FLAC,
-}
 
 
 PlayAction = media_player_ns.class_(
