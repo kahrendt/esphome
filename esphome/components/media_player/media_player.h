@@ -70,7 +70,7 @@ class MediaPlayerCall {
   MediaPlayerCall &set_volume(float volume);
   MediaPlayerCall &set_announcement(bool announce);
 
-  virtual void perform();
+  void perform();
 
   const optional<MediaPlayerCommand> &get_command() const { return command_; }
   const optional<std::string> &get_media_url() const { return media_url_; }
