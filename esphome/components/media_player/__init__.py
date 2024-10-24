@@ -28,9 +28,6 @@ PlayAction = media_player_ns.class_(
 PlayMediaAction = media_player_ns.class_(
     "PlayMediaAction", automation.Action, cg.Parented.template(MediaPlayer)
 )
-PlayLocalMediaAction = media_player_ns.class_(
-    "PlayLocalMediaAction", automation.Action, cg.Parented.template(MediaPlayer)
-)
 ToggleAction = media_player_ns.class_(
     "ToggleAction", automation.Action, cg.Parented.template(MediaPlayer)
 )
