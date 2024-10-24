@@ -5,6 +5,8 @@
 #include "audio_mixer.h"
 #include "audio_pipeline.h"
 
+#include "nabu_media_helpers.h"
+
 #include "esphome/components/media_player/media_player.h"
 #include "esphome/components/speaker/speaker.h"
 
@@ -62,6 +64,8 @@ class NabuMediaPlayer : public Component, public media_player::MediaPlayer {
   Trigger<> *get_unmute_trigger() const { return this->unmute_trigger_; }
   Trigger<float> *get_volume_trigger() const { return this->volume_trigger_; }
 
+  void play_file(MediaFile *media_file, bool announcement);
+
  protected:
   // Receives commands from HA or from the voice assistant component
   // Sends commands to the media_control_commanda_queue_
@@ -97,10 +101,10 @@ class NabuMediaPlayer : public Component, public media_player::MediaPlayer {
   AudioPipelineState media_pipeline_state_{AudioPipelineState::STOPPED};
   AudioPipelineState announcement_pipeline_state_{AudioPipelineState::STOPPED};
 
-  optional<std::string> media_url_{};                        // only modified by control function
-  optional<std::string> announcement_url_{};                 // only modified by control function
-  optional<media_player::MediaFile *> media_file_{};         // only modified by control fucntion
-  optional<media_player::MediaFile *> announcement_file_{};  // only modified by control fucntion
+  optional<std::string> media_url_{};          // only modified by control function
+  optional<std::string> announcement_url_{};   // only modified by control function
+  optional<MediaFile *> media_file_{};         // only modified by play_file function
+  optional<MediaFile *> announcement_file_{};  // only modified by play_file function
 
   QueueHandle_t media_control_command_queue_;
 
@@ -132,13 +136,10 @@ template<typename... Ts> class DuckingSetAction : public Action<Ts...>, public P
 };
 
 template<typename... Ts> class PlayLocalMediaAction : public Action<Ts...>, public Parented<NabuMediaPlayer> {
-  TEMPLATABLE_VALUE(media_player::MediaFile *, media_file)
+  TEMPLATABLE_VALUE(MediaFile *, media_file)
   TEMPLATABLE_VALUE(bool, announcement)
   void play(Ts... x) override {
-    this->parent_->make_call()
-        .set_announcement(this->announcement_.value(x...))
-        .set_local_media_file(this->media_file_.value(x...))
-        .perform();
+    this->parent_->play_file(this->media_file_.value(x...), this->announcement_.value(x...));
   }
 };
 

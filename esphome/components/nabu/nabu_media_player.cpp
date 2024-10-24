@@ -65,6 +65,19 @@ static const float FIRST_BOOT_DEFAULT_VOLUME = 0.5f;
 
 static const char *const TAG = "nabu_media_player";
 
+const char *media_player_file_type_to_string(MediaFileType file_type) {
+  switch (file_type) {
+    case MediaFileType::FLAC:
+      return "FLAC";
+    case MediaFileType::MP3:
+      return "MP3";
+    case MediaFileType::WAV:
+      return "WAV";
+    default:
+      return "unknown";
+  }
+}
+
 void NabuMediaPlayer::setup() {
   state = media_player::MEDIA_PLAYER_STATE_IDLE;
 
@@ -334,6 +347,20 @@ void NabuMediaPlayer::set_ducking_reduction(uint8_t decibel_reduction, float dur
   }
 }
 
+void NabuMediaPlayer::play_file(MediaFile *media_file, bool announcement) {
+  MediaCallCommand media_command;
+
+  media_command.new_file = true;
+  if (announcement) {
+    this->announcement_file_ = media_file;
+    media_command.announce = true;
+  } else {
+    this->media_file_ = media_file;
+    media_command.announce = false;
+  }
+  xQueueSend(this->media_control_command_queue_, &media_command, portMAX_DELAY);
+}
+
 void NabuMediaPlayer::control(const media_player::MediaPlayerCall &call) {
   MediaCallCommand media_command;
 
@@ -352,17 +379,6 @@ void NabuMediaPlayer::control(const media_player::MediaPlayerCall &call) {
     } else {
       this->media_url_ = new_uri;
     }
-    xQueueSend(this->media_control_command_queue_, &media_command, portMAX_DELAY);
-    return;
-  }
-
-  if (call.get_local_media_file().has_value()) {
-    if (call.get_announcement().has_value() && call.get_announcement().value()) {
-      this->announcement_file_ = call.get_local_media_file().value();
-    } else {
-      this->media_file_ = call.get_local_media_file().value();
-    }
-    media_command.new_file = true;
     xQueueSend(this->media_control_command_queue_, &media_command, portMAX_DELAY);
     return;
   }
