@@ -7,7 +7,6 @@ from pathlib import Path
 from esphome import automation, external_files
 import esphome.codegen as cg
 from esphome.components import media_player, speaker
-from esphome.components.media_player import MEDIA_FILE_TYPE_ENUM, MediaFile
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_DURATION,
@@ -55,6 +54,16 @@ NabuMediaPlayer = nabu_ns.class_(
     media_player.MediaPlayer,
     cg.Component,
 )
+
+MediaFile = nabu_ns.struct("MediaFile")
+MediaFileType = nabu_ns.enum("MediaFileType", is_class=True)
+MEDIA_FILE_TYPE_ENUM = {
+    "NONE": MediaFileType.NONE,
+    "WAV": MediaFileType.WAV,
+    "MP3": MediaFileType.MP3,
+    "FLAC": MediaFileType.FLAC,
+}
+
 
 DuckingSetAction = nabu_ns.class_(
     "DuckingSetAction", automation.Action, cg.Parented.template(NabuMediaPlayer)
