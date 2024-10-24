@@ -6,9 +6,10 @@
 #include <wav_decoder.h>
 #include <mp3_decoder.h>
 
+#include "nabu_media_helpers.h"
 #include "esphome/components/audio/audio.h"
-#include "esphome/components/media_player/media_player.h"
 
+#include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
 
 namespace esphome {
@@ -36,7 +37,7 @@ class AudioDecoder {
                size_t internal_buffer_size);
   ~AudioDecoder();
 
-  esp_err_t start(media_player::MediaFileType media_file_type);
+  esp_err_t start(MediaFileType media_file_type);
 
   AudioDecoderState decode(bool stop_gracefully);
 
@@ -68,7 +69,7 @@ class AudioDecoder {
   std::unique_ptr<wav_decoder::WAVDecoder> wav_decoder_;
   size_t wav_bytes_left_;
 
-  media_player::MediaFileType media_file_type_{media_player::MediaFileType::NONE};
+  MediaFileType media_file_type_{MediaFileType::NONE};
   optional<audio::AudioStreamInfo> audio_stream_info_{};
 
   size_t potentially_failed_count_{0};

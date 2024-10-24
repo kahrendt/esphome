@@ -2,6 +2,7 @@
 
 #include "audio_reader.h"
 
+#include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
 
 #if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
@@ -41,8 +42,8 @@ esp_err_t AudioReader::allocate_buffers_() {
   return ESP_OK;
 }
 
-esp_err_t AudioReader::start(media_player::MediaFile *media_file, media_player::MediaFileType &file_type) {
-  file_type = media_player::MediaFileType::NONE;
+esp_err_t AudioReader::start(MediaFile *media_file, MediaFileType &file_type) {
+  file_type = MediaFileType::NONE;
 
   esp_err_t err = this->allocate_buffers_();
   if (err != ESP_OK) {
@@ -58,8 +59,8 @@ esp_err_t AudioReader::start(media_player::MediaFile *media_file, media_player::
   return ESP_OK;
 }
 
-esp_err_t AudioReader::start(const std::string &uri, media_player::MediaFileType &file_type) {
-  file_type = media_player::MediaFileType::NONE;
+esp_err_t AudioReader::start(const std::string &uri, MediaFileType &file_type) {
+  file_type = MediaFileType::NONE;
 
   esp_err_t err = this->allocate_buffers_();
   if (err != ESP_OK) {
@@ -112,13 +113,13 @@ esp_err_t AudioReader::start(const std::string &uri, media_player::MediaFileType
   std::string url_string = url;
 
   if (str_endswith(url_string, ".wav")) {
-    file_type = media_player::MediaFileType::WAV;
+    file_type = MediaFileType::WAV;
   } else if (str_endswith(url_string, ".mp3")) {
-    file_type = media_player::MediaFileType::MP3;
+    file_type = MediaFileType::MP3;
   } else if (str_endswith(url_string, ".flac")) {
-    file_type = media_player::MediaFileType::FLAC;
+    file_type = MediaFileType::FLAC;
   } else {
-    file_type = media_player::MediaFileType::NONE;
+    file_type = MediaFileType::NONE;
     this->cleanup_connection_();
     return ESP_ERR_NOT_SUPPORTED;
   }

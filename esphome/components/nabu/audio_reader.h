@@ -2,7 +2,7 @@
 
 #ifdef USE_ESP_IDF
 
-#include "esphome/components/media_player/media_player.h"
+#include "nabu_media_helpers.h"
 #include "esphome/core/ring_buffer.h"
 
 #include <esp_http_client.h>
@@ -21,8 +21,8 @@ class AudioReader {
   AudioReader(esphome::RingBuffer *output_ring_buffer, size_t transfer_buffer_size);
   ~AudioReader();
 
-  esp_err_t start(const std::string &uri, media_player::MediaFileType &file_type);
-  esp_err_t start(media_player::MediaFile *media_file, media_player::MediaFileType &file_type);
+  esp_err_t start(const std::string &uri, MediaFileType &file_type);
+  esp_err_t start(MediaFile *media_file, MediaFileType &file_type);
 
   AudioReaderState read();
 
@@ -46,7 +46,7 @@ class AudioReader {
 
   esp_http_client_handle_t client_{nullptr};
 
-  media_player::MediaFile *current_media_file_{nullptr};
+  MediaFile *current_media_file_{nullptr};
 };
 }  // namespace nabu
 }  // namespace esphome

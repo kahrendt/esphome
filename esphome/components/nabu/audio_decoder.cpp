@@ -32,7 +32,7 @@ AudioDecoder::~AudioDecoder() {
     this->flac_decoder_ = nullptr;
   }
 
-  if (this->media_file_type_ == media_player::MediaFileType::MP3) {
+  if (this->media_file_type_ == MediaFileType::MP3) {
     MP3FreeDecoder(this->mp3_decoder_);
   }
 
@@ -42,7 +42,7 @@ AudioDecoder::~AudioDecoder() {
   }
 }
 
-esp_err_t AudioDecoder::start(media_player::MediaFileType media_file_type) {
+esp_err_t AudioDecoder::start(MediaFileType media_file_type) {
   esp_err_t err = this->allocate_buffers_();
 
   if (err != ESP_OK) {
@@ -60,17 +60,17 @@ esp_err_t AudioDecoder::start(media_player::MediaFileType media_file_type) {
   this->end_of_file_ = false;
 
   switch (this->media_file_type_) {
-    case media_player::MediaFileType::FLAC:
+    case MediaFileType::FLAC:
       this->flac_decoder_ = make_unique<flac::FLACDecoder>(this->input_buffer_);
       break;
-    case media_player::MediaFileType::MP3:
+    case MediaFileType::MP3:
       this->mp3_decoder_ = MP3InitDecoder();
       break;
-    case media_player::MediaFileType::WAV:
+    case MediaFileType::WAV:
       this->wav_decoder_ = make_unique<wav_decoder::WAVDecoder>(&this->input_buffer_current_);
       this->wav_decoder_->reset();
       break;
-    case media_player::MediaFileType::NONE:
+    case MediaFileType::NONE:
       return ESP_ERR_NOT_SUPPORTED;
       break;
   }
@@ -147,16 +147,16 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
         }
       } else {
         switch (this->media_file_type_) {
-          case media_player::MediaFileType::FLAC:
+          case MediaFileType::FLAC:
             state = this->decode_flac_();
             break;
-          case media_player::MediaFileType::MP3:
+          case MediaFileType::MP3:
             state = this->decode_mp3_();
             break;
-          case media_player::MediaFileType::WAV:
+          case MediaFileType::WAV:
             state = this->decode_wav_();
             break;
-          case media_player::MediaFileType::NONE:
+          case MediaFileType::NONE:
             state = FileDecoderState::IDLE;
             break;
         }

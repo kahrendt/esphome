@@ -75,8 +75,8 @@ esp_err_t AudioPipeline::start(const std::string &uri, uint32_t target_sample_ra
   return err;
 }
 
-esp_err_t AudioPipeline::start(media_player::MediaFile *media_file, uint32_t target_sample_rate,
-                               const std::string &task_name, UBaseType_t priority) {
+esp_err_t AudioPipeline::start(MediaFile *media_file, uint32_t target_sample_rate, const std::string &task_name,
+                               UBaseType_t priority) {
   esp_err_t err = this->common_start_(target_sample_rate, task_name, priority);
 
   if (err == ESP_OK) {
@@ -170,8 +170,7 @@ AudioPipelineState AudioPipeline::get_state() {
           if (event.err.has_value()) {
             ESP_LOGE(TAG, "Media reader encountered an error: %s", esp_err_to_name(event.err.value()));
           } else if (event.file_type.has_value()) {
-            ESP_LOGD(TAG, "Reading %s file type",
-                     media_player::media_player_file_type_to_string(event.file_type.value()));
+            ESP_LOGD(TAG, "Reading %s file type", media_player_file_type_to_string(event.file_type.value()));
           }
 
           break;
