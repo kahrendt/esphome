@@ -6,6 +6,7 @@
 #include "resampler.h"
 
 #include "audio.h"
+#include "audio_stage.h"
 #include "esphome/core/ring_buffer.h"
 
 namespace esphome {
@@ -23,10 +24,13 @@ struct ResampleInfo {
   bool mono_to_stereo;
 };
 
-class AudioResampler {
+class AudioResampler : public AudioOutputStage {
  public:
-  AudioResampler(std::shared_ptr<RingBuffer> input_ring_buffer, esphome::RingBuffer *output_ring_buffer,
-                 size_t internal_buffer_samples);
+  AudioResampler(std::shared_ptr<RingBuffer> &input_ring_buffer, std::shared_ptr<RingBuffer> &output_ring_buffer,
+                 size_t internal_buffer_samples)
+      : AudioOutputStage(output_ring_buffer, internal_buffer_samples * sizeof(int16_t)),
+        input_ring_buffer_(input_ring_buffer),
+        internal_buffer_samples_(internal_buffer_samples) {}
   ~AudioResampler();
 
   /// @brief Sets up the various bits necessary to resample
@@ -41,16 +45,17 @@ class AudioResampler {
   esp_err_t allocate_buffers_();
 
   std::shared_ptr<RingBuffer> input_ring_buffer_;
-  esphome::RingBuffer *output_ring_buffer_;
+  // esphome::RingBuffer *output_ring_buffer_;
   size_t internal_buffer_samples_;
 
   int16_t *input_buffer_{nullptr};
   int16_t *input_buffer_current_{nullptr};
   size_t input_buffer_length_;
 
-  int16_t *output_buffer_{nullptr};
-  int16_t *output_buffer_current_{nullptr};
-  size_t output_buffer_length_;
+  // int16_t *output_buffer_{nullptr};
+  // int16_t *output_buffer_current_{nullptr};
+  uint8_t *output_buffer_current_{nullptr};
+  // size_t output_buffer_length_;
 
   float *float_input_buffer_{nullptr};
   float *float_input_buffer_current_{nullptr};

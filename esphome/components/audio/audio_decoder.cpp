@@ -11,20 +11,10 @@ namespace audio {
 
 static const size_t READ_WRITE_TIMEOUT_MS = 20;
 
-AudioDecoder::AudioDecoder(std::shared_ptr<RingBuffer> &input_ring_buffer,
-                           std::shared_ptr<RingBuffer> &output_ring_buffer, size_t internal_buffer_size) {
-  this->input_ring_buffer_ = input_ring_buffer;
-  this->output_ring_buffer_ = output_ring_buffer;
-  this->internal_buffer_size_ = internal_buffer_size;
-}
-
 AudioDecoder::~AudioDecoder() {
   ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
   if (this->input_buffer_ != nullptr) {
     allocator.deallocate(this->input_buffer_, this->internal_buffer_size_);
-  }
-  if (this->output_buffer_ != nullptr) {
-    allocator.deallocate(this->output_buffer_, this->internal_buffer_size_);
   }
 
   if (this->flac_decoder_ != nullptr) {
@@ -105,19 +95,7 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   FileDecoderState state = FileDecoderState::MORE_TO_PROCESS;
 
   while (state == FileDecoderState::MORE_TO_PROCESS) {
-    if (this->output_buffer_length_ > 0) {
-      // Have decoded data, write it to the output ring buffer
-
-      size_t bytes_to_write = this->output_buffer_length_;
-
-      if (bytes_to_write > 0) {
-        size_t bytes_written = this->output_ring_buffer_->write_without_replacement(
-            (void *) this->output_buffer_current_, bytes_to_write, pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
-
-        this->output_buffer_length_ -= bytes_written;
-        this->output_buffer_current_ += bytes_written;
-      }
-
+    if (this->write_ring_buffer_(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS))) {
       if (this->output_buffer_length_ > 0) {
         // Output buffer still has decoded audio to write
         return AudioDecoderState::DECODING;
@@ -193,8 +171,9 @@ esp_err_t AudioDecoder::allocate_buffers_() {
   if (this->input_buffer_ == nullptr)
     this->input_buffer_ = allocator.allocate(this->internal_buffer_size_);
 
-  if (this->output_buffer_ == nullptr)
-    this->output_buffer_ = allocator.allocate(this->internal_buffer_size_);
+  // if (this->output_buffer_ == nullptr)
+  //   this->output_buffer_ = allocator.allocate(this->internal_buffer_size_);
+  this->allocate_output_buffer_();
 
   if ((this->input_buffer_ == nullptr) || (this->output_buffer_ == nullptr)) {
     return ESP_ERR_NO_MEM;

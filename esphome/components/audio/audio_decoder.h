@@ -8,6 +8,7 @@
 
 #include "audio.h"
 #include "audio_files.h"
+#include "audio_stage.h"
 
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
@@ -31,10 +32,13 @@ enum class FileDecoderState : uint8_t {
   END_OF_FILE,
 };
 
-class AudioDecoder {
+class AudioDecoder : public AudioOutputStage {
  public:
-  AudioDecoder(std::shared_ptr<RingBuffer> &input_ring_buffer, std::shared_ptr<RingBuffer> &output_ring_buffer,
-               size_t internal_buffer_size);
+  AudioDecoder(std::shared_ptr<RingBuffer> &input_ring_buffer, std::shared_ptr<esphome::RingBuffer> &output_ring_buffer,
+               size_t internal_buffer_size)
+      : AudioOutputStage(output_ring_buffer, internal_buffer_size),
+        input_ring_buffer_(input_ring_buffer),
+        internal_buffer_size_(internal_buffer_size) {}
   ~AudioDecoder();
 
   esp_err_t start(AudioFileType audio_file_type);
@@ -51,16 +55,13 @@ class AudioDecoder {
   FileDecoderState decode_wav_();
 
   std::shared_ptr<RingBuffer> input_ring_buffer_;
-  std::shared_ptr<RingBuffer> output_ring_buffer_;
   size_t internal_buffer_size_;
 
   uint8_t *input_buffer_{nullptr};
   uint8_t *input_buffer_current_{nullptr};
   size_t input_buffer_length_;
 
-  uint8_t *output_buffer_{nullptr};
   uint8_t *output_buffer_current_{nullptr};
-  size_t output_buffer_length_;
 
   std::unique_ptr<flac::FLACDecoder> flac_decoder_;
 

@@ -19,11 +19,6 @@ static const ssize_t ERROR_COUNT_NO_DATA_READ_TIMEOUT = 100;
 
 static const size_t HTTP_STREAM_BUFFER_SIZE = 2048;
 
-// AudioReader::AudioReader(std::shared_ptr<esphome::RingBuffer> &output_ring_buffer, size_t transfer_buffer_size) {
-//   this->output_ring_buffer_ = output_ring_buffer;
-//   this->transfer_buffer_size_ = transfer_buffer_size;
-// }
-
 AudioReader::~AudioReader() { this->cleanup_connection_(); }
 
 esp_err_t AudioReader::start(AudioFile *audio_file, AudioFileType &file_type) {
@@ -138,14 +133,7 @@ AudioReaderState AudioReader::file_read_() {
 }
 
 AudioReaderState AudioReader::http_read_() {
-  if (this->output_buffer_length_ > 0) {
-    size_t bytes_written = this->output_ring_buffer_->write_without_replacement(
-        (void *) this->output_buffer_, this->output_buffer_length_, pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
-    this->output_buffer_length_ -= bytes_written;
-
-    // Shift remaining data to the start of the transfer buffer
-    memmove(this->output_buffer_, this->output_buffer_ + bytes_written, this->output_buffer_length_);
-  }
+  this->write_ring_buffer_(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
   if (esp_http_client_is_complete_data_received(this->client_)) {
     if (this->output_buffer_length_ == 0) {

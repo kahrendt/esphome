@@ -18,12 +18,10 @@ static const uint8_t OUTPUT_BITS_PER_SAMPLE = 16;
 
 static const size_t READ_WRITE_TIMEOUT_MS = 20;
 
-AudioResampler::AudioResampler(std::shared_ptr<RingBuffer> input_ring_buffer, RingBuffer *output_ring_buffer,
-                               size_t internal_buffer_samples) {
-  this->input_ring_buffer_ = input_ring_buffer;
-  this->output_ring_buffer_ = output_ring_buffer;
-  this->internal_buffer_samples_ = internal_buffer_samples;
-}
+//   this->input_ring_buffer_ = input_ring_buffer;
+//   this->output_ring_buffer_ = output_ring_buffer;
+//   this->internal_buffer_samples_ = internal_buffer_samples;
+// }
 
 AudioResampler::~AudioResampler() {
   ExternalRAMAllocator<int16_t> int16_allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
@@ -32,9 +30,9 @@ AudioResampler::~AudioResampler() {
   if (this->input_buffer_ != nullptr) {
     int16_allocator.deallocate(this->input_buffer_, this->internal_buffer_samples_);
   }
-  if (this->output_buffer_ != nullptr) {
-    int16_allocator.deallocate(this->output_buffer_, this->internal_buffer_samples_);
-  }
+  // if (this->output_buffer_ != nullptr) {
+  //   int16_allocator.deallocate(this->output_buffer_, this->internal_buffer_samples_);
+  // }
   if (this->float_input_buffer_ != nullptr) {
     float_allocator.deallocate(this->float_input_buffer_, this->internal_buffer_samples_);
   }
@@ -51,10 +49,12 @@ esp_err_t AudioResampler::allocate_buffers_() {
   ExternalRAMAllocator<int16_t> int16_allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
 
+  this->allocate_output_buffer_();
+
   if (this->input_buffer_ == nullptr)
     this->input_buffer_ = int16_allocator.allocate(this->internal_buffer_samples_);
-  if (this->output_buffer_ == nullptr)
-    this->output_buffer_ = int16_allocator.allocate(this->internal_buffer_samples_);
+  // if (this->output_buffer_ == nullptr)
+  //   this->output_buffer_ = int16_allocator.allocate(this->internal_buffer_samples_);
 
   if (this->float_input_buffer_ == nullptr)
     this->float_input_buffer_ = float_allocator.allocate(this->internal_buffer_samples_);
@@ -62,7 +62,9 @@ esp_err_t AudioResampler::allocate_buffers_() {
   if (this->float_output_buffer_ == nullptr)
     this->float_output_buffer_ = float_allocator.allocate(this->internal_buffer_samples_);
 
-  if ((this->input_buffer_ == nullptr) || (this->output_buffer_ == nullptr) || (this->float_input_buffer_ == nullptr) ||
+  // if ((this->input_buffer_ == nullptr) || (this->output_buffer_ == nullptr) || (this->float_input_buffer_ == nullptr)
+  // ||
+  if ((this->input_buffer_ == nullptr) || (this->float_input_buffer_ == nullptr) ||
       (this->float_output_buffer_ == nullptr)) {
     return ESP_ERR_NO_MEM;
   }
@@ -165,17 +167,22 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
     }
   }
 
-  if (this->output_buffer_length_ > 0) {
-    size_t bytes_to_write = this->output_buffer_length_;
+  // if (this->output_buffer_length_ > 0) {
+  //   size_t bytes_to_write = this->output_buffer_length_;
 
-    if (bytes_to_write > 0) {
-      size_t bytes_written = this->output_ring_buffer_->write_without_replacement(
-          (void *) this->output_buffer_current_, bytes_to_write, pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+  //   if (bytes_to_write > 0) {
+  //     size_t bytes_written = this->output_ring_buffer_->write_without_replacement(
+  //         (void *) this->output_buffer_current_, bytes_to_write, pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
-      this->output_buffer_current_ += bytes_written / sizeof(int16_t);
-      this->output_buffer_length_ -= bytes_written;
-    }
+  //     this->output_buffer_current_ += bytes_written;
+  //     // this->output_buffer_current_ += bytes_written / sizeof(int16_t);
+  //     this->output_buffer_length_ -= bytes_written;
+  //   }
 
+  //   return AudioResamplerState::RESAMPLING;
+  // }
+
+  if (this->write_ring_buffer_(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS))) {
     return AudioResamplerState::RESAMPLING;
   }
 

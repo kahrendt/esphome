@@ -281,13 +281,18 @@ void AudioMixer::audio_mixer_task(void *params) {
 }
 
 esp_err_t AudioMixer::allocate_buffers_() {
-  if (this->media_ring_buffer_ == nullptr)
+  // if (this->media_ring_buffer_ == nullptr)
+  if (!this->media_ring_buffer_.use_count()) {
     this->media_ring_buffer_ = RingBuffer::create(INPUT_RING_BUFFER_SAMPLES * sizeof(int16_t));
+  }
 
-  if (this->announcement_ring_buffer_ == nullptr)
+  // if (this->announcement_ring_buffer_ == nullptr)
+  if (!this->announcement_ring_buffer_.use_count()) {
     this->announcement_ring_buffer_ = RingBuffer::create(INPUT_RING_BUFFER_SAMPLES * sizeof(int16_t));
+  }
 
-  if ((this->announcement_ring_buffer_ == nullptr) || (this->media_ring_buffer_ == nullptr)) {
+  // if ((this->announcement_ring_buffer_ == nullptr) || (this->media_ring_buffer_ == nullptr)) {
+  if (!this->announcement_ring_buffer_.use_count() || !this->media_ring_buffer_.use_count()) {
     return ESP_ERR_NO_MEM;
   }
 

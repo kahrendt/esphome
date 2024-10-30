@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <freertos/FreeRTOS.h>
 
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
@@ -11,6 +12,29 @@
 namespace esphome {
 namespace audio {
 
+// class AudioBuffer {
+//  protected:
+//   esp_err_t allocate_buffer_(uint8_t **buffer, size_t buffer_size) {
+//     ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
+//     if (*buffer == nullptr)
+//       *buffer = allocator.allocate(buffer_size);
+
+//     if (*buffer == nullptr)
+//       return ESP_ERR_NO_MEM;
+
+//     return ESP_OK;
+//   }
+
+//   void deallocate_buffer_(uint8_t **buffer, size_t buffer_size) {
+//     if (*buffer != nullptr) {
+//       ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
+//       allocator.deallocate(*buffer, buffer_size);
+//       *buffer = nullptr;
+//     }
+//   }
+// };
+
+/******************************************************************* */
 class AudioStage {
  protected:
   esp_err_t allocate_buffer_(uint8_t **buffer, size_t buffer_size) {
@@ -28,6 +52,7 @@ class AudioStage {
     if (*buffer != nullptr) {
       ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
       allocator.deallocate(*buffer, buffer_size);
+      *buffer = nullptr;
     }
   }
 };
@@ -49,8 +74,21 @@ class AudioOutputStage : public AudioStage {
 
  protected:
   esp_err_t allocate_output_buffer_() {
-    printf("allocating %d bytes for output buffer\n", this->output_buffer_size_);
     return this->allocate_buffer_(&this->output_buffer_, this->output_buffer_size_);
+  }
+
+  bool write_ring_buffer_(TickType_t ticks_to_wait) {
+    if (this->output_buffer_length_ > 0) {
+      size_t bytes_written = this->output_ring_buffer_->write_without_replacement(
+          (void *) this->output_buffer_, this->output_buffer_length_, ticks_to_wait);
+      this->output_buffer_length_ -= bytes_written;
+
+      // Shift remaining data to the start of the transfer buffer
+      memmove(this->output_buffer_, this->output_buffer_ + bytes_written, this->output_buffer_length_);
+
+      return true;  // Had some data to write
+    }
+    return false;  // No data to write
   }
 
   std::shared_ptr<RingBuffer> output_ring_buffer_;

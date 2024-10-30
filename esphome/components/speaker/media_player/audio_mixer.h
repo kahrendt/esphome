@@ -101,11 +101,12 @@ class AudioMixer {
 
   /// @brief Retrieves the media stream's ring buffer pointer
   /// @return pointer to media ring buffer
-  RingBuffer *get_media_ring_buffer() { return this->media_ring_buffer_.get(); }
+  // RingBuffer *get_media_ring_buffer() { return this->media_ring_buffer_.get(); }
+  std::shared_ptr<RingBuffer> &get_media_ring_buffer() { return this->media_ring_buffer_; }
 
   /// @brief Retrieves the announcement stream's ring buffer pointer
   /// @return pointer to announcement ring buffer
-  RingBuffer *get_announcement_ring_buffer() { return this->announcement_ring_buffer_.get(); }
+  std::shared_ptr<RingBuffer> &get_announcement_ring_buffer() { return this->announcement_ring_buffer_; }
 
   /// @brief Suspends the mixer task
   void suspend_task();
@@ -120,7 +121,8 @@ class AudioMixer {
   /// @brief Resets the media and anouncement ring buffers
   void reset_ring_buffers_();
 
-  /// @brief Mixes the media and announcement samples. If the resulting audio clips, the media samples are first scaled.
+  /// @brief Mixes the media and announcement samples. If the resulting audio clips, the media samples are first
+  /// scaled.
   /// @param media_buffer buffer for media samples
   /// @param announcement_buffer buffer for announcement samples
   /// @param combination_buffer buffer for the mixed samples
@@ -147,8 +149,8 @@ class AudioMixer {
 
   Speaker *speaker_{nullptr};
 
-  std::unique_ptr<RingBuffer> media_ring_buffer_;
-  std::unique_ptr<RingBuffer> announcement_ring_buffer_;
+  std::shared_ptr<RingBuffer> media_ring_buffer_;
+  std::shared_ptr<RingBuffer> announcement_ring_buffer_;
 };
 }  // namespace speaker
 }  // namespace esphome

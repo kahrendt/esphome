@@ -88,9 +88,11 @@ esp_err_t AudioPipeline::start(audio::AudioFile *audio_file, uint32_t target_sam
 }
 
 esp_err_t AudioPipeline::allocate_buffers_() {
-  if (this->raw_file_ring_buffer_ == nullptr) {
-    std::unique_ptr<esphome::RingBuffer> raw_file_ring_buffer = RingBuffer::create(FILE_RING_BUFFER_SIZE);
-    this->raw_file_ring_buffer_ = std::move(raw_file_ring_buffer);
+  // if (this->raw_file_ring_buffer_ == nullptr) {
+  if (!this->raw_file_ring_buffer_.use_count()) {
+    // std::unique_ptr<esphome::RingBuffer> raw_file_ring_buffer = RingBuffer::create(FILE_RING_BUFFER_SIZE);
+    // this->raw_file_ring_buffer_ = std::move(raw_file_ring_buffer);
+    this->raw_file_ring_buffer_ = std::move(RingBuffer::create(FILE_RING_BUFFER_SIZE));
   }
 
   if (this->decoded_ring_buffer_ == nullptr) {
@@ -273,7 +275,10 @@ esp_err_t AudioPipeline::stop() {
 }
 
 void AudioPipeline::reset_ring_buffers() {
-  this->raw_file_ring_buffer_->reset();
+  if (this->raw_file_ring_buffer_.use_count()) {
+    this->raw_file_ring_buffer_->reset();
+  }
+
   this->decoded_ring_buffer_->reset();
 }
 
@@ -401,6 +406,9 @@ void AudioPipeline::decode_task(void *params) {
                            EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
       }
 
+      // Decoding has started, so the pipeline can release ownership of the raw_file_ring_buffer
+      this_pipeline->raw_file_ring_buffer_.reset();
+
       bool has_stream_info = false;
 
       while (true) {
@@ -474,7 +482,7 @@ void AudioPipeline::resample_task(void *params) {
       InfoErrorEvent event;
       event.source = InfoErrorSource::RESAMPLER;
 
-      RingBuffer *output_ring_buffer = nullptr;
+      std::shared_ptr<RingBuffer> output_ring_buffer;
 
       if (this_pipeline->pipeline_type_ == AudioPipelineType::MEDIA) {
         output_ring_buffer = this_pipeline->mixer_->get_media_ring_buffer();
