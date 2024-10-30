@@ -11,7 +11,8 @@ namespace audio {
 
 static const size_t READ_WRITE_TIMEOUT_MS = 20;
 
-AudioDecoder::AudioDecoder(RingBuffer *input_ring_buffer, RingBuffer *output_ring_buffer, size_t internal_buffer_size) {
+AudioDecoder::AudioDecoder(std::shared_ptr<RingBuffer> &input_ring_buffer,
+                           std::shared_ptr<RingBuffer> &output_ring_buffer, size_t internal_buffer_size) {
   this->input_ring_buffer_ = input_ring_buffer;
   this->output_ring_buffer_ = output_ring_buffer;
   this->internal_buffer_size_ = internal_buffer_size;

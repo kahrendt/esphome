@@ -25,7 +25,7 @@ struct ResampleInfo {
 
 class AudioResampler {
  public:
-  AudioResampler(esphome::RingBuffer *input_ring_buffer, esphome::RingBuffer *output_ring_buffer,
+  AudioResampler(std::shared_ptr<RingBuffer> input_ring_buffer, esphome::RingBuffer *output_ring_buffer,
                  size_t internal_buffer_samples);
   ~AudioResampler();
 
@@ -40,7 +40,7 @@ class AudioResampler {
  protected:
   esp_err_t allocate_buffers_();
 
-  esphome::RingBuffer *input_ring_buffer_;
+  std::shared_ptr<RingBuffer> input_ring_buffer_;
   esphome::RingBuffer *output_ring_buffer_;
   size_t internal_buffer_samples_;
 

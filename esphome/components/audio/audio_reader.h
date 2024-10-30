@@ -18,7 +18,7 @@ enum class AudioReaderState : uint8_t {
 
 class AudioReader {
  public:
-  AudioReader(std::shared_ptr<esphome::RingBuffer> output_ring_buffer, size_t transfer_buffer_size);
+  AudioReader(std::shared_ptr<esphome::RingBuffer> &output_ring_buffer, size_t transfer_buffer_size);
   ~AudioReader();
 
   esp_err_t start(const std::string &uri, AudioFileType &file_type);

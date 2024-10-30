@@ -33,7 +33,7 @@ enum class FileDecoderState : uint8_t {
 
 class AudioDecoder {
  public:
-  AudioDecoder(esphome::RingBuffer *input_ring_buffer, esphome::RingBuffer *output_ring_buffer,
+  AudioDecoder(std::shared_ptr<RingBuffer> &input_ring_buffer, std::shared_ptr<RingBuffer> &output_ring_buffer,
                size_t internal_buffer_size);
   ~AudioDecoder();
 
@@ -50,8 +50,8 @@ class AudioDecoder {
   FileDecoderState decode_mp3_();
   FileDecoderState decode_wav_();
 
-  esphome::RingBuffer *input_ring_buffer_;
-  esphome::RingBuffer *output_ring_buffer_;
+  std::shared_ptr<RingBuffer> input_ring_buffer_;
+  std::shared_ptr<RingBuffer> output_ring_buffer_;
   size_t internal_buffer_size_;
 
   uint8_t *input_buffer_{nullptr};

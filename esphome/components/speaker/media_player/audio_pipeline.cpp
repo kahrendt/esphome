@@ -93,8 +93,10 @@ esp_err_t AudioPipeline::allocate_buffers_() {
     this->raw_file_ring_buffer_ = std::move(raw_file_ring_buffer);
   }
 
-  if (this->decoded_ring_buffer_ == nullptr)
-    this->decoded_ring_buffer_ = RingBuffer::create(BUFFER_SIZE_BYTES);
+  if (this->decoded_ring_buffer_ == nullptr) {
+    std::unique_ptr<esphome::RingBuffer> decoded_ring_buffer = RingBuffer::create(BUFFER_SIZE_BYTES);
+    this->decoded_ring_buffer_ = std::move(decoded_ring_buffer);
+  }
 
   if ((this->raw_file_ring_buffer_ == nullptr) || (this->decoded_ring_buffer_ == nullptr)) {
     return ESP_ERR_NO_MEM;
@@ -386,7 +388,7 @@ void AudioPipeline::decode_task(void *params) {
       event.source = InfoErrorSource::DECODER;
 
       std::unique_ptr<audio::AudioDecoder> decoder = make_unique<audio::AudioDecoder>(
-          this_pipeline->raw_file_ring_buffer_.get(), this_pipeline->decoded_ring_buffer_.get(), FILE_BUFFER_SIZE);
+          this_pipeline->raw_file_ring_buffer_, this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
       esp_err_t err = decoder->start(this_pipeline->current_audio_file_type_);
 
       if (err != ESP_OK) {
@@ -481,7 +483,7 @@ void AudioPipeline::resample_task(void *params) {
       }
 
       audio::AudioResampler resampler =
-          audio::AudioResampler(this_pipeline->decoded_ring_buffer_.get(), output_ring_buffer, BUFFER_SIZE_SAMPLES);
+          audio::AudioResampler(this_pipeline->decoded_ring_buffer_, output_ring_buffer, BUFFER_SIZE_SAMPLES);
 
       esp_err_t err = resampler.start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
                                       this_pipeline->current_resample_info_);

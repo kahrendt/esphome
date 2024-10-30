@@ -19,7 +19,7 @@ static const ssize_t ERROR_COUNT_NO_DATA_READ_TIMEOUT = 100;
 
 static const size_t HTTP_STREAM_BUFFER_SIZE = 2048;
 
-AudioReader::AudioReader(std::shared_ptr<esphome::RingBuffer> output_ring_buffer, size_t transfer_buffer_size) {
+AudioReader::AudioReader(std::shared_ptr<esphome::RingBuffer> &output_ring_buffer, size_t transfer_buffer_size) {
   this->output_ring_buffer_ = output_ring_buffer;
   this->transfer_buffer_size_ = transfer_buffer_size;
 }

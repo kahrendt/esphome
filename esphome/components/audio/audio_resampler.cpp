@@ -18,7 +18,7 @@ static const uint8_t OUTPUT_BITS_PER_SAMPLE = 16;
 
 static const size_t READ_WRITE_TIMEOUT_MS = 20;
 
-AudioResampler::AudioResampler(RingBuffer *input_ring_buffer, RingBuffer *output_ring_buffer,
+AudioResampler::AudioResampler(std::shared_ptr<RingBuffer> input_ring_buffer, RingBuffer *output_ring_buffer,
                                size_t internal_buffer_samples) {
   this->input_ring_buffer_ = input_ring_buffer;
   this->output_ring_buffer_ = output_ring_buffer;
