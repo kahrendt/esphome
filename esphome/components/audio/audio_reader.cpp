@@ -19,43 +19,25 @@ static const ssize_t ERROR_COUNT_NO_DATA_READ_TIMEOUT = 100;
 
 static const size_t HTTP_STREAM_BUFFER_SIZE = 2048;
 
-AudioReader::AudioReader(std::shared_ptr<esphome::RingBuffer> &output_ring_buffer, size_t transfer_buffer_size) {
-  this->output_ring_buffer_ = output_ring_buffer;
-  this->transfer_buffer_size_ = transfer_buffer_size;
-}
+// AudioReader::AudioReader(std::shared_ptr<esphome::RingBuffer> &output_ring_buffer, size_t transfer_buffer_size) {
+//   this->output_ring_buffer_ = output_ring_buffer;
+//   this->transfer_buffer_size_ = transfer_buffer_size;
+// }
 
-AudioReader::~AudioReader() {
-  if (this->transfer_buffer_ != nullptr) {
-    ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
-    allocator.deallocate(this->transfer_buffer_, this->transfer_buffer_size_);
-  }
-
-  this->cleanup_connection_();
-}
-
-esp_err_t AudioReader::allocate_buffers_() {
-  ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
-  if (this->transfer_buffer_ == nullptr)
-    this->transfer_buffer_ = allocator.allocate(this->transfer_buffer_size_);
-
-  if (this->transfer_buffer_ == nullptr)
-    return ESP_ERR_NO_MEM;
-
-  return ESP_OK;
-}
+AudioReader::~AudioReader() { this->cleanup_connection_(); }
 
 esp_err_t AudioReader::start(AudioFile *audio_file, AudioFileType &file_type) {
   file_type = AudioFileType::NONE;
 
-  esp_err_t err = this->allocate_buffers_();
+  esp_err_t err = this->allocate_output_buffer_();
   if (err != ESP_OK) {
     return err;
   }
 
   this->current_audio_file_ = audio_file;
 
-  this->transfer_buffer_current_ = audio_file->data;
-  this->transfer_buffer_length_ = audio_file->length;
+  this->output_buffer_current_ = audio_file->data;
+  this->output_buffer_length_ = audio_file->length;
   file_type = audio_file->file_type;
 
   return ESP_OK;
@@ -64,7 +46,7 @@ esp_err_t AudioReader::start(AudioFile *audio_file, AudioFileType &file_type) {
 esp_err_t AudioReader::start(const std::string &uri, AudioFileType &file_type) {
   file_type = AudioFileType::NONE;
 
-  esp_err_t err = this->allocate_buffers_();
+  esp_err_t err = this->allocate_output_buffer_();
   if (err != ESP_OK) {
     return err;
   }
@@ -126,8 +108,8 @@ esp_err_t AudioReader::start(const std::string &uri, AudioFileType &file_type) {
     return ESP_ERR_NOT_SUPPORTED;
   }
 
-  this->transfer_buffer_current_ = this->transfer_buffer_;
-  this->transfer_buffer_length_ = 0;
+  this->output_buffer_current_ = this->output_buffer_;
+  this->output_buffer_length_ = 0;
   this->no_data_read_count_ = 0;
 
   return ESP_OK;
@@ -144,11 +126,11 @@ AudioReaderState AudioReader::read() {
 }
 
 AudioReaderState AudioReader::file_read_() {
-  if (this->transfer_buffer_length_ > 0) {
+  if (this->output_buffer_length_ > 0) {
     size_t bytes_written = this->output_ring_buffer_->write_without_replacement(
-        (void *) this->transfer_buffer_current_, this->transfer_buffer_length_, pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
-    this->transfer_buffer_length_ -= bytes_written;
-    this->transfer_buffer_current_ += bytes_written;
+        (void *) this->output_buffer_current_, this->output_buffer_length_, pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+    this->output_buffer_length_ -= bytes_written;
+    this->output_buffer_current_ += bytes_written;
 
     return AudioReaderState::READING;
   }
@@ -156,27 +138,27 @@ AudioReaderState AudioReader::file_read_() {
 }
 
 AudioReaderState AudioReader::http_read_() {
-  if (this->transfer_buffer_length_ > 0) {
+  if (this->output_buffer_length_ > 0) {
     size_t bytes_written = this->output_ring_buffer_->write_without_replacement(
-        (void *) this->transfer_buffer_, this->transfer_buffer_length_, pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
-    this->transfer_buffer_length_ -= bytes_written;
+        (void *) this->output_buffer_, this->output_buffer_length_, pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+    this->output_buffer_length_ -= bytes_written;
 
     // Shift remaining data to the start of the transfer buffer
-    memmove(this->transfer_buffer_, this->transfer_buffer_ + bytes_written, this->transfer_buffer_length_);
+    memmove(this->output_buffer_, this->output_buffer_ + bytes_written, this->output_buffer_length_);
   }
 
   if (esp_http_client_is_complete_data_received(this->client_)) {
-    if (this->transfer_buffer_length_ == 0) {
+    if (this->output_buffer_length_ == 0) {
       this->cleanup_connection_();
       return AudioReaderState::FINISHED;
     }
   } else {
-    size_t bytes_to_read = this->transfer_buffer_size_ - this->transfer_buffer_length_;
-    int received_len = esp_http_client_read(
-        this->client_, (char *) this->transfer_buffer_ + this->transfer_buffer_length_, bytes_to_read);
+    size_t bytes_to_read = this->output_buffer_size_ - this->output_buffer_length_;
+    int received_len =
+        esp_http_client_read(this->client_, (char *) this->output_buffer_ + this->output_buffer_length_, bytes_to_read);
 
     if (received_len > 0) {
-      this->transfer_buffer_length_ += received_len;
+      this->output_buffer_length_ += received_len;
       this->no_data_read_count_ = 0;
     } else if (received_len < 0) {
       // HTTP read error
