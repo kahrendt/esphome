@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef USE_ESP_IDF
-
 #include <cstdint>
 #include <cstddef>
 
@@ -24,5 +22,3 @@ struct MediaFile {
 
 }  // namespace audio
 }  // namespace esphome
-
-#endif

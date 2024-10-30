@@ -2,7 +2,7 @@
 
 #ifdef USE_ESP_IDF
 
-#include "audio_media_helpers.h"
+#include "audio_files.h"
 #include "esphome/core/ring_buffer.h"
 
 #include <esp_http_client.h>
