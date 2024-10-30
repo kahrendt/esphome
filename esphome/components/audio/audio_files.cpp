@@ -3,13 +3,13 @@
 namespace esphome {
 namespace audio {
 
-const char *media_player_file_type_to_string(MediaFileType file_type) {
+const char *media_player_file_type_to_string(AudioFileType file_type) {
   switch (file_type) {
-    case MediaFileType::FLAC:
+    case AudioFileType::FLAC:
       return "FLAC";
-    case MediaFileType::MP3:
+    case AudioFileType::MP3:
       return "MP3";
-    case MediaFileType::WAV:
+    case AudioFileType::WAV:
       return "WAV";
     default:
       return "unknown";

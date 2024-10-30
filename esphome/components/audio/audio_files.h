@@ -6,18 +6,18 @@
 namespace esphome {
 namespace audio {
 
-enum class MediaFileType : uint8_t {
+enum class AudioFileType : uint8_t {
   NONE = 0,
   WAV,
   MP3,
   FLAC,
 };
-const char *media_player_file_type_to_string(MediaFileType file_type);
+const char *audio_file_type_to_string(AudioFileType file_type);
 
-struct MediaFile {
+struct AudioFile {
   const uint8_t *data;
   size_t length;
-  MediaFileType file_type;
+  AudioFileType file_type;
 };
 
 }  // namespace audio

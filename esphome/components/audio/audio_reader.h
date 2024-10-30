@@ -21,8 +21,8 @@ class AudioReader {
   AudioReader(esphome::RingBuffer *output_ring_buffer, size_t transfer_buffer_size);
   ~AudioReader();
 
-  esp_err_t start(const std::string &uri, MediaFileType &file_type);
-  esp_err_t start(MediaFile *media_file, MediaFileType &file_type);
+  esp_err_t start(const std::string &uri, AudioFileType &file_type);
+  esp_err_t start(AudioFile *media_file, AudioFileType &file_type);
 
   AudioReaderState read();
 
@@ -46,7 +46,7 @@ class AudioReader {
 
   esp_http_client_handle_t client_{nullptr};
 
-  MediaFile *current_media_file_{nullptr};
+  AudioFile *current_media_file_{nullptr};
 };
 }  // namespace audio
 }  // namespace esphome
