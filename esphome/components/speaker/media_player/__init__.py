@@ -7,6 +7,7 @@ from pathlib import Path
 from esphome import automation, external_files
 import esphome.codegen as cg
 from esphome.components import esp32, media_player, speaker
+from esphome.components.audio import AUDIO_FILE_TYPE_ENUM, AudioFile
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_DURATION,
@@ -54,14 +55,14 @@ SpeakerMediaPlayer = speaker_ns.class_(
     cg.Component,
 )
 
-MediaFile = speaker_ns.struct("MediaFile")
-MediaFileType = speaker_ns.enum("MediaFileType", is_class=True)
-MEDIA_FILE_TYPE_ENUM = {
-    "NONE": MediaFileType.NONE,
-    "WAV": MediaFileType.WAV,
-    "MP3": MediaFileType.MP3,
-    "FLAC": MediaFileType.FLAC,
-}
+# MediaFile = speaker_ns.struct("MediaFile")
+# MediaFileType = speaker_ns.enum("MediaFileType", is_class=True)
+# MEDIA_FILE_TYPE_ENUM = {
+#     "NONE": MediaFileType.NONE,
+#     "WAV": MediaFileType.WAV,
+#     "MP3": MediaFileType.MP3,
+#     "FLAC": MediaFileType.FLAC,
+# }
 
 PipelineType = speaker_ns.enum("AudioPipelineType", is_class=True)
 PIPELINE_TYPE_ENUM = {
@@ -150,13 +151,13 @@ def _read_audio_file_and_type(file_config):
     if file_type.startswith("."):
         file_type = file_type[1:]
 
-    media_file_type = MEDIA_FILE_TYPE_ENUM["NONE"]
+    media_file_type = AUDIO_FILE_TYPE_ENUM["NONE"]
     if file_type in ("wav"):
-        media_file_type = MEDIA_FILE_TYPE_ENUM["WAV"]
+        media_file_type = AUDIO_FILE_TYPE_ENUM["WAV"]
     elif file_type in ("mp3", "mpeg", "mpga"):
-        media_file_type = MEDIA_FILE_TYPE_ENUM["MP3"]
+        media_file_type = AUDIO_FILE_TYPE_ENUM["MP3"]
     elif file_type in ("flac"):
-        media_file_type = MEDIA_FILE_TYPE_ENUM["FLAC"]
+        media_file_type = AUDIO_FILE_TYPE_ENUM["FLAC"]
 
     return data, media_file_type
 
@@ -165,7 +166,7 @@ def _supported_local_file_validate(config):
     if files_list := config.get(CONF_FILES):
         for file_config in files_list:
             _, media_file_type = _read_audio_file_and_type(file_config)
-            if str(media_file_type) == str(MEDIA_FILE_TYPE_ENUM["NONE"]):
+            if str(media_file_type) == str(AUDIO_FILE_TYPE_ENUM["NONE"]):
                 raise cv.Invalid("Unsupported local media file.")
 
 
@@ -193,7 +194,7 @@ TYPED_FILE_SCHEMA = cv.typed_schema(
 
 MEDIA_FILE_TYPE_SCHEMA = cv.Schema(
     {
-        cv.Required(CONF_ID): cv.declare_id(MediaFile),
+        cv.Required(CONF_ID): cv.declare_id(AudioFile),
         cv.Required(CONF_FILE): _file_schema,
         cv.GenerateID(CONF_RAW_DATA_ID): cv.declare_id(cg.uint8),
     }
@@ -296,7 +297,7 @@ async def to_code(config):
             prog_arr = cg.progmem_array(file_config[CONF_RAW_DATA_ID], rhs)
 
             media_files_struct = cg.StructInitializer(
-                MediaFile,
+                AudioFile,
                 (
                     "data",
                     prog_arr,
@@ -323,7 +324,7 @@ async def to_code(config):
     cv.maybe_simple_value(
         {
             cv.GenerateID(): cv.use_id(SpeakerMediaPlayer),
-            cv.Required(CONF_MEDIA_FILE): cv.use_id(MediaFile),
+            cv.Required(CONF_MEDIA_FILE): cv.use_id(AudioFile),
             cv.Optional(CONF_ANNOUNCEMENT, default=False): cv.boolean,
         },
         key=CONF_MEDIA_FILE,

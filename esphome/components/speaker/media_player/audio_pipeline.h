@@ -52,7 +52,7 @@ struct InfoErrorEvent {
   optional<esp_err_t> err;
   optional<audio::AudioFileType> file_type;
   optional<audio::AudioStreamInfo> audio_stream_info;
-  optional<ResampleInfo> resample_info;
+  optional<audio::ResampleInfo> resample_info;
   optional<DecodingError> decoding_err;
 };
 
@@ -114,12 +114,12 @@ class AudioPipeline {
 
   audio::AudioFileType current_audio_file_type_;
   audio::AudioStreamInfo current_audio_stream_info_;
-  ResampleInfo current_resample_info_;
+  audio::ResampleInfo current_resample_info_;
   uint32_t target_sample_rate_;
 
   AudioPipelineType pipeline_type_;
 
-  std::unique_ptr<RingBuffer> raw_file_ring_buffer_;
+  std::shared_ptr<RingBuffer> raw_file_ring_buffer_;
   std::unique_ptr<RingBuffer> decoded_ring_buffer_;
 
   // Handles basic control/state of the three tasks

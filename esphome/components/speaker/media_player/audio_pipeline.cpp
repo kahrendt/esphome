@@ -88,8 +88,10 @@ esp_err_t AudioPipeline::start(audio::AudioFile *audio_file, uint32_t target_sam
 }
 
 esp_err_t AudioPipeline::allocate_buffers_() {
-  if (this->raw_file_ring_buffer_ == nullptr)
-    this->raw_file_ring_buffer_ = RingBuffer::create(FILE_RING_BUFFER_SIZE);
+  if (this->raw_file_ring_buffer_ == nullptr) {
+    std::unique_ptr<esphome::RingBuffer> raw_file_ring_buffer = RingBuffer::create(FILE_RING_BUFFER_SIZE);
+    this->raw_file_ring_buffer_ = std::move(raw_file_ring_buffer);
+  }
 
   if (this->decoded_ring_buffer_ == nullptr)
     this->decoded_ring_buffer_ = RingBuffer::create(BUFFER_SIZE_BYTES);
@@ -153,7 +155,7 @@ AudioPipelineState AudioPipeline::get_state() {
           if (event.err.has_value()) {
             ESP_LOGE(TAG, "Media reader encountered an error: %s", esp_err_to_name(event.err.value()));
           } else if (event.file_type.has_value()) {
-            ESP_LOGD(TAG, "Reading %s file type", media_player_file_type_to_string(event.file_type.value()));
+            ESP_LOGD(TAG, "Reading %s file type", audio_file_type_to_string(event.file_type.value()));
           }
 
           break;
@@ -318,7 +320,8 @@ void AudioPipeline::read_task(void *params) {
       event.source = InfoErrorSource::READER;
       esp_err_t err = ESP_OK;
 
-      audio::AudioReader reader = audio::AudioReader(this_pipeline->raw_file_ring_buffer_.get(), FILE_BUFFER_SIZE);
+      // audio::AudioReader reader = audio::AudioReader(this_pipeline->raw_file_ring_buffer_.get(), FILE_BUFFER_SIZE);
+      audio::AudioReader reader = audio::AudioReader(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
 
       if (event_bits & READER_COMMAND_INIT_FILE) {
         err = reader.start(this_pipeline->current_audio_file_, this_pipeline->current_audio_file_type_);
@@ -504,7 +507,7 @@ void AudioPipeline::resample_task(void *params) {
         }
 
         // Stop gracefully if the decoder is done
-        AudioResamplerState resampler_state = resampler.resample(event_bits & DECODER_MESSAGE_FINISHED);
+        audio::AudioResamplerState resampler_state = resampler.resample(event_bits & DECODER_MESSAGE_FINISHED);
 
         if (resampler_state == audio::AudioResamplerState::FINISHED) {
           break;

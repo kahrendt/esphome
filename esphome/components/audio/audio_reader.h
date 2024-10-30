@@ -18,11 +18,11 @@ enum class AudioReaderState : uint8_t {
 
 class AudioReader {
  public:
-  AudioReader(esphome::RingBuffer *output_ring_buffer, size_t transfer_buffer_size);
+  AudioReader(std::shared_ptr<esphome::RingBuffer> output_ring_buffer, size_t transfer_buffer_size);
   ~AudioReader();
 
   esp_err_t start(const std::string &uri, AudioFileType &file_type);
-  esp_err_t start(AudioFile *media_file, AudioFileType &file_type);
+  esp_err_t start(AudioFile *audio_file, AudioFileType &file_type);
 
   AudioReaderState read();
 
@@ -34,7 +34,7 @@ class AudioReader {
 
   void cleanup_connection_();
 
-  esphome::RingBuffer *output_ring_buffer_;
+  std::shared_ptr<esphome::RingBuffer> output_ring_buffer_;
 
   size_t transfer_buffer_length_;  // Amount of data currently stored in transfer buffer (in bytes)
   size_t transfer_buffer_size_;    // Capacity of transfer buffer (in bytes)
@@ -46,7 +46,7 @@ class AudioReader {
 
   esp_http_client_handle_t client_{nullptr};
 
-  AudioFile *current_media_file_{nullptr};
+  AudioFile *current_audio_file_{nullptr};
 };
 }  // namespace audio
 }  // namespace esphome

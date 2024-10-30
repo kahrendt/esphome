@@ -60,17 +60,17 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
   this->end_of_file_ = false;
 
   switch (this->audio_file_type_) {
-    case MediaFileType::FLAC:
+    case AudioFileType::FLAC:
       this->flac_decoder_ = make_unique<flac::FLACDecoder>(this->input_buffer_);
       break;
-    case MediaFileType::MP3:
+    case AudioFileType::MP3:
       this->mp3_decoder_ = MP3InitDecoder();
       break;
-    case MediaFileType::WAV:
+    case AudioFileType::WAV:
       this->wav_decoder_ = make_unique<wav_decoder::WAVDecoder>(&this->input_buffer_current_);
       this->wav_decoder_->reset();
       break;
-    case MediaFileType::NONE:
+    case AudioFileType::NONE:
       return ESP_ERR_NOT_SUPPORTED;
       break;
   }
@@ -158,16 +158,16 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
         state = FileDecoderState::IDLE;
       } else {
         switch (this->audio_file_type_) {
-          case MediaFileType::FLAC:
+          case AudioFileType::FLAC:
             state = this->decode_flac_();
             break;
-          case MediaFileType::MP3:
+          case AudioFileType::MP3:
             state = this->decode_mp3_();
             break;
-          case MediaFileType::WAV:
+          case AudioFileType::WAV:
             state = this->decode_wav_();
             break;
-          case MediaFileType::NONE:
+          case AudioFileType::NONE:
             state = FileDecoderState::IDLE;
             break;
         }

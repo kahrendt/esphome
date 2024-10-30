@@ -15,7 +15,7 @@ class AudioInputStage {
 
 class AudioOutputStage {
  public:
-  AudioOutputStage(esphome::RingBuffer *output_ring_buffer) : input_ring_buffer_(output_ring_buffer) {}
+  AudioOutputStage(esphome::RingBuffer *output_ring_buffer) : output_ring_buffer_(output_ring_buffer) {}
 
  protected:
   esphome::RingBuffer *output_ring_buffer_;

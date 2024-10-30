@@ -3,7 +3,7 @@
 namespace esphome {
 namespace audio {
 
-const char *media_player_file_type_to_string(AudioFileType file_type) {
+const char *audio_file_type_to_string(AudioFileType file_type) {
   switch (file_type) {
     case AudioFileType::FLAC:
       return "FLAC";

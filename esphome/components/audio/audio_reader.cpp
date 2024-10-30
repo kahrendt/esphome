@@ -19,7 +19,7 @@ static const ssize_t ERROR_COUNT_NO_DATA_READ_TIMEOUT = 100;
 
 static const size_t HTTP_STREAM_BUFFER_SIZE = 2048;
 
-AudioReader::AudioReader(esphome::RingBuffer *output_ring_buffer, size_t transfer_buffer_size) {
+AudioReader::AudioReader(std::shared_ptr<esphome::RingBuffer> output_ring_buffer, size_t transfer_buffer_size) {
   this->output_ring_buffer_ = output_ring_buffer;
   this->transfer_buffer_size_ = transfer_buffer_size;
 }
@@ -44,25 +44,25 @@ esp_err_t AudioReader::allocate_buffers_() {
   return ESP_OK;
 }
 
-esp_err_t AudioReader::start(MediaFile *media_file, MediaFileType &file_type) {
-  file_type = MediaFileType::NONE;
+esp_err_t AudioReader::start(AudioFile *audio_file, AudioFileType &file_type) {
+  file_type = AudioFileType::NONE;
 
   esp_err_t err = this->allocate_buffers_();
   if (err != ESP_OK) {
     return err;
   }
 
-  this->current_media_file_ = media_file;
+  this->current_audio_file_ = audio_file;
 
-  this->transfer_buffer_current_ = media_file->data;
-  this->transfer_buffer_length_ = media_file->length;
-  file_type = media_file->file_type;
+  this->transfer_buffer_current_ = audio_file->data;
+  this->transfer_buffer_length_ = audio_file->length;
+  file_type = audio_file->file_type;
 
   return ESP_OK;
 }
 
-esp_err_t AudioReader::start(const std::string &uri, MediaFileType &file_type) {
-  file_type = MediaFileType::NONE;
+esp_err_t AudioReader::start(const std::string &uri, AudioFileType &file_type) {
+  file_type = AudioFileType::NONE;
 
   esp_err_t err = this->allocate_buffers_();
   if (err != ESP_OK) {
@@ -115,13 +115,13 @@ esp_err_t AudioReader::start(const std::string &uri, MediaFileType &file_type) {
   std::string url_string = url;
 
   if (str_endswith(url_string, ".wav")) {
-    file_type = MediaFileType::WAV;
+    file_type = AudioFileType::WAV;
   } else if (str_endswith(url_string, ".mp3")) {
-    file_type = MediaFileType::MP3;
+    file_type = AudioFileType::MP3;
   } else if (str_endswith(url_string, ".flac")) {
-    file_type = MediaFileType::FLAC;
+    file_type = AudioFileType::FLAC;
   } else {
-    file_type = MediaFileType::NONE;
+    file_type = AudioFileType::NONE;
     this->cleanup_connection_();
     return ESP_ERR_NOT_SUPPORTED;
   }
@@ -136,7 +136,7 @@ esp_err_t AudioReader::start(const std::string &uri, MediaFileType &file_type) {
 AudioReaderState AudioReader::read() {
   if (this->client_ != nullptr) {
     return this->http_read_();
-  } else if (this->current_media_file_ != nullptr) {
+  } else if (this->current_audio_file_ != nullptr) {
     return this->file_read_();
   }
 
