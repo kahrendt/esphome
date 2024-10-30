@@ -69,7 +69,7 @@ class AudioDecoder {
   std::unique_ptr<wav_decoder::WAVDecoder> wav_decoder_;
   size_t wav_bytes_left_;
 
-  AudioFileType audio_file_type_{MediaFileType::NONE};
+  AudioFileType audio_file_type_{AudioFileType::NONE};
   optional<AudioStreamInfo> audio_stream_info_{};
 
   size_t potentially_failed_count_{0};
