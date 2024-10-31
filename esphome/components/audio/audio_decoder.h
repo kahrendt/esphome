@@ -9,7 +9,6 @@
 #include "audio.h"
 #include "audio_files.h"
 #include "audio_buffer.h"
-#include "audio_stage.h"
 
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
@@ -50,22 +49,12 @@ class AudioDecoder {
   const optional<audio::AudioStreamInfo> &get_audio_stream_info() const { return this->audio_stream_info_; }
 
  protected:
-  esp_err_t allocate_buffers_();
-
   FileDecoderState decode_flac_();
   FileDecoderState decode_mp3_();
   FileDecoderState decode_wav_();
 
   std::unique_ptr<AudioBuffer> input_transfer_buffer_;
   std::unique_ptr<AudioBuffer> output_transfer_buffer_;
-  // std::shared_ptr<RingBuffer> input_ring_buffer_;
-  // size_t internal_buffer_size_;
-
-  // uint8_t *input_buffer_{nullptr};
-  // uint8_t *input_buffer_current_{nullptr};
-  // size_t input_buffer_length_;
-
-  // uint8_t *output_buffer_current_{nullptr};
 
   std::unique_ptr<flac::FLACDecoder> flac_decoder_;
 

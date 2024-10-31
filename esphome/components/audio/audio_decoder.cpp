@@ -35,17 +35,12 @@ AudioDecoder::~AudioDecoder() {
 }
 
 esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
-  esp_err_t err = this->allocate_buffers_();
-
-  if (err != ESP_OK) {
-    return err;
+  if (!this->input_transfer_buffer_->allocated_successfully() ||
+      !this->output_transfer_buffer_->allocated_successfully()) {
+    return ESP_ERR_NO_MEM;
   }
 
   this->audio_file_type_ = audio_file_type;
-
-  // this->input_buffer_current_ = this->input_buffer_;
-  // this->input_buffer_length_ = 0;
-  // this->output_buffer_length_ = 0;
 
   this->potentially_failed_count_ = 0;
   this->end_of_file_ = false;
@@ -77,9 +72,6 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
         return AudioDecoderState::FINISHED;
       }
       // If all the internal buffers are empty, the decoding is done
-      // if ((this->input_ring_buffer_->available() == 0) && (this->input_buffer_length_ == 0)) {
-      //   return AudioDecoderState::FINISHED;
-      // }
       if ((this->input_transfer_buffer_->get_ring_buffer()->available() == 0) &&
           (this->input_transfer_buffer_->available() == 0)) {
         return AudioDecoderState::FINISHED;
@@ -100,36 +92,12 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   FileDecoderState state = FileDecoderState::MORE_TO_PROCESS;
 
   while (state == FileDecoderState::MORE_TO_PROCESS) {
-    // if (this->output_buffer_length_ > 0) {
-    //   this->write_ring_buffer_(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
-    //   // Output buffer still has decoded audio to write
-    //   return AudioDecoderState::DECODING;
     if (this->output_transfer_buffer_->available() > 0) {
       this->output_transfer_buffer_->write_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
       return AudioDecoderState::DECODING;
     } else {
       // Decode more data
-
       size_t bytes_read = this->input_transfer_buffer_->read_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
-
-      // // Shift unread data in input buffer to start
-      // if (this->input_buffer_length_ > 0) {
-      //   memmove(this->input_buffer_, this->input_buffer_current_, this->input_buffer_length_);
-      // }
-      // this->input_buffer_current_ = this->input_buffer_;
-
-      // // read in new ring buffer data to fill the remaining input buffer
-      // size_t bytes_read = 0;
-
-      // size_t bytes_to_read = this->internal_buffer_size_ - this->input_buffer_length_;
-
-      // if (bytes_to_read > 0) {
-      //   uint8_t *new_audio_data = this->input_buffer_ + this->input_buffer_length_;
-      //   bytes_read = this->input_ring_buffer_->read((void *) new_audio_data, bytes_to_read,
-      //                                               pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
-
-      //   this->input_buffer_length_ += bytes_read;
-      // }
 
       if ((this->potentially_failed_count_ > 0) && (bytes_read == 0)) {
         // Failed to decode in last attempt and there is no new data
@@ -174,28 +142,6 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   return AudioDecoderState::DECODING;
 }
 
-esp_err_t AudioDecoder::allocate_buffers_() {
-  // ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
-
-  // if (this->input_buffer_ == nullptr)
-  //   this->input_buffer_ = allocator.allocate(this->internal_buffer_size_);
-
-  // if (this->output_buffer_ == nullptr)
-  //   this->output_buffer_ = allocator.allocate(this->internal_buffer_size_);
-  if (!this->input_transfer_buffer_->allocated_successfully() ||
-      !this->output_transfer_buffer_->allocated_successfully()) {
-    return ESP_ERR_NO_MEM;
-  }
-  // this->allocate_input_buffer_();
-  // this->allocate_output_buffer_();
-
-  // if (this->output_buffer_ == nullptr) {
-  //   return ESP_ERR_NO_MEM;
-  // }
-
-  return ESP_OK;
-}
-
 FileDecoderState AudioDecoder::decode_flac_() {
   if (!this->audio_stream_info_.has_value()) {
     // Header hasn't been read
@@ -212,8 +158,6 @@ FileDecoderState AudioDecoder::decode_flac_() {
 
     size_t bytes_consumed = this->flac_decoder_->get_bytes_index();
     this->input_transfer_buffer_->decrease_buffer_length(bytes_consumed);
-    // this->input_buffer_current_ += bytes_consumed;
-    // this->input_buffer_length_ = this->flac_decoder_->get_bytes_left();
 
     size_t flac_decoder_output_buffer_min_size = flac_decoder_->get_output_buffer_size();
     if (this->output_transfer_buffer_->capacity() < flac_decoder_output_buffer_min_size * sizeof(int16_t)) {
@@ -243,7 +187,6 @@ FileDecoderState AudioDecoder::decode_flac_() {
     // Corrupted frame, don't retry with current buffer content, wait for new sync
     size_t bytes_consumed = this->flac_decoder_->get_bytes_index();
     this->input_transfer_buffer_->decrease_buffer_length(bytes_consumed);
-    // this->input_buffer_length_ = this->flac_decoder_->get_bytes_left();
 
     return FileDecoderState::POTENTIALLY_FAILED;
   }
@@ -251,10 +194,6 @@ FileDecoderState AudioDecoder::decode_flac_() {
   // We have successfully decoded some input data and have new output data
   size_t bytes_consumed = this->flac_decoder_->get_bytes_index();
   this->input_transfer_buffer_->decrease_buffer_length(bytes_consumed);
-  // this->input_buffer_length_ = this->flac_decoder_->get_bytes_left();
-
-  // this->output_buffer_current_ = this->output_buffer_;
-  // this->output_buffer_length_ = output_samples * sizeof(int16_t);
   this->output_transfer_buffer_->increase_buffer_length(output_samples * sizeof(int16_t));
 
   if (result == flac::FLAC_DECODER_NO_MORE_FRAMES) {
