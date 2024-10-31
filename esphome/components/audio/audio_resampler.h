@@ -6,7 +6,8 @@
 #include "resampler.h"
 
 #include "audio.h"
-#include "audio_buffer.h"
+#include "audio_transfer_buffer.h"
+
 #include "esphome/core/ring_buffer.h"
 
 namespace esphome {
@@ -29,8 +30,8 @@ class AudioResampler {
   AudioResampler(std::shared_ptr<RingBuffer> &input_ring_buffer, std::shared_ptr<RingBuffer> &output_ring_buffer,
                  size_t internal_buffer_samples)
       : internal_buffer_samples_(internal_buffer_samples) {
-    this->input_transfer_buffer_ = make_unique<AudioBuffer>(input_ring_buffer, internal_buffer_samples);
-    this->output_transfer_buffer_ = make_unique<AudioBuffer>(output_ring_buffer, internal_buffer_samples);
+    this->input_transfer_buffer_ = make_unique<AudioTransferBuffer>(input_ring_buffer, internal_buffer_samples);
+    this->output_transfer_buffer_ = make_unique<AudioTransferBuffer>(output_ring_buffer, internal_buffer_samples);
   }
   ~AudioResampler();
 
@@ -47,8 +48,8 @@ class AudioResampler {
 
   size_t internal_buffer_samples_;
 
-  std::unique_ptr<AudioBuffer> input_transfer_buffer_;
-  std::unique_ptr<AudioBuffer> output_transfer_buffer_;
+  std::unique_ptr<AudioTransferBuffer> input_transfer_buffer_;
+  std::unique_ptr<AudioTransferBuffer> output_transfer_buffer_;
 
   uint8_t *output_buffer_current_{nullptr};
 

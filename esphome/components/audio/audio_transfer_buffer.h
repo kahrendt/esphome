@@ -11,13 +11,13 @@
 namespace esphome {
 namespace audio {
 
-class AudioBuffer {
+class AudioTransferBuffer {
  public:
-  AudioBuffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size)
+  AudioTransferBuffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size)
       : ring_buffer_(ring_buffer), buffer_size_(buffer_size) {
     this->allocate_buffer_();
   }
-  ~AudioBuffer();
+  ~AudioTransferBuffer();
 
   size_t read_ring_buffer(TickType_t ticks_to_wait);
 

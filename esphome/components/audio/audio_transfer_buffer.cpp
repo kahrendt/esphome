@@ -1,15 +1,15 @@
-#include "audio_buffer.h"
+#include "audio_transfer_buffer.h"
 
 namespace esphome {
 namespace audio {
-AudioBuffer::~AudioBuffer() {
+AudioTransferBuffer::~AudioTransferBuffer() {
   if (this->buffer_ != nullptr) {
     ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
     allocator.deallocate(this->buffer_, this->buffer_size_);
   }
 }
 
-size_t AudioBuffer::read_ring_buffer(TickType_t ticks_to_wait) {
+size_t AudioTransferBuffer::read_ring_buffer(TickType_t ticks_to_wait) {
   if (!this->allocated_successfully()) {
     return 0;
   }
@@ -29,7 +29,7 @@ size_t AudioBuffer::read_ring_buffer(TickType_t ticks_to_wait) {
   return bytes_read;
 }
 
-size_t AudioBuffer::write_ring_buffer(TickType_t ticks_to_wait) {
+size_t AudioTransferBuffer::write_ring_buffer(TickType_t ticks_to_wait) {
   if (!this->allocated_successfully()) {
     return 0;
   }
@@ -47,14 +47,14 @@ size_t AudioBuffer::write_ring_buffer(TickType_t ticks_to_wait) {
   return bytes_written;
 }
 
-bool AudioBuffer::allocated_successfully() {
+bool AudioTransferBuffer::allocated_successfully() {
   if (this->ring_buffer_.use_count() && (this->buffer_ != nullptr)) {
     return true;
   }
   return false;
 }
 
-void AudioBuffer::decrease_buffer_length(size_t bytes) {
+void AudioTransferBuffer::decrease_buffer_length(size_t bytes) {
   this->buffer_length_ -= bytes;
   this->data_start_ += bytes;
 }
