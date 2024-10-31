@@ -45,7 +45,7 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
 
   // this->input_buffer_current_ = this->input_buffer_;
   // this->input_buffer_length_ = 0;
-  this->output_buffer_length_ = 0;
+  // this->output_buffer_length_ = 0;
 
   this->potentially_failed_count_ = 0;
   this->end_of_file_ = false;
@@ -71,7 +71,7 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
 
 AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   if (stop_gracefully) {
-    if (this->output_buffer_length_ == 0) {
+    if (this->output_transfer_buffer_->available() == 0) {
       // If the file decoder believes it the end of file
       if (this->end_of_file_) {
         return AudioDecoderState::FINISHED;
@@ -100,11 +100,13 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   FileDecoderState state = FileDecoderState::MORE_TO_PROCESS;
 
   while (state == FileDecoderState::MORE_TO_PROCESS) {
-    if (this->output_buffer_length_ > 0) {
-      this->write_ring_buffer_(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
-      // Output buffer still has decoded audio to write
+    // if (this->output_buffer_length_ > 0) {
+    //   this->write_ring_buffer_(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+    //   // Output buffer still has decoded audio to write
+    //   return AudioDecoderState::DECODING;
+    if (this->output_transfer_buffer_->available() > 0) {
+      this->output_transfer_buffer_->write_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
       return AudioDecoderState::DECODING;
-
     } else {
       // Decode more data
 
@@ -180,15 +182,16 @@ esp_err_t AudioDecoder::allocate_buffers_() {
 
   // if (this->output_buffer_ == nullptr)
   //   this->output_buffer_ = allocator.allocate(this->internal_buffer_size_);
-  if (!this->input_transfer_buffer_->allocated_successfully()) {
+  if (!this->input_transfer_buffer_->allocated_successfully() ||
+      !this->output_transfer_buffer_->allocated_successfully()) {
     return ESP_ERR_NO_MEM;
   }
   // this->allocate_input_buffer_();
-  this->allocate_output_buffer_();
+  // this->allocate_output_buffer_();
 
-  if (this->output_buffer_ == nullptr) {
-    return ESP_ERR_NO_MEM;
-  }
+  // if (this->output_buffer_ == nullptr) {
+  //   return ESP_ERR_NO_MEM;
+  // }
 
   return ESP_OK;
 }
@@ -213,7 +216,7 @@ FileDecoderState AudioDecoder::decode_flac_() {
     // this->input_buffer_length_ = this->flac_decoder_->get_bytes_left();
 
     size_t flac_decoder_output_buffer_min_size = flac_decoder_->get_output_buffer_size();
-    if (this->output_buffer_size_ < flac_decoder_output_buffer_min_size * sizeof(int16_t)) {
+    if (this->output_transfer_buffer_->capacity() < flac_decoder_output_buffer_min_size * sizeof(int16_t)) {
       // Output buffer is not big enough
       return FileDecoderState::FAILED;
     }
@@ -229,8 +232,9 @@ FileDecoderState AudioDecoder::decode_flac_() {
   }
 
   uint32_t output_samples = 0;
-  auto result = this->flac_decoder_->decode_frame(this->input_transfer_buffer_->available(),
-                                                  (int16_t *) this->output_buffer_, &output_samples);
+  auto result =
+      this->flac_decoder_->decode_frame(this->input_transfer_buffer_->available(),
+                                        (int16_t *) this->output_transfer_buffer_->get_buffer_end(), &output_samples);
 
   if (result == flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
     // Not an issue, just needs more data that we'll get next time.
@@ -250,7 +254,8 @@ FileDecoderState AudioDecoder::decode_flac_() {
   // this->input_buffer_length_ = this->flac_decoder_->get_bytes_left();
 
   // this->output_buffer_current_ = this->output_buffer_;
-  this->output_buffer_length_ = output_samples * sizeof(int16_t);
+  // this->output_buffer_length_ = output_samples * sizeof(int16_t);
+  this->output_transfer_buffer_->increase_buffer_length(output_samples * sizeof(int16_t));
 
   if (result == flac::FLAC_DECODER_NO_MORE_FRAMES) {
     return FileDecoderState::END_OF_FILE;
@@ -275,7 +280,8 @@ FileDecoderState AudioDecoder::decode_mp3_() {
 
   uint8_t *buffer_start = this->input_transfer_buffer_->get_buffer_start();
   int buffer_length = (int) this->input_transfer_buffer_->available();
-  int err = MP3Decode(this->mp3_decoder_, &buffer_start, &buffer_length, (int16_t *) this->output_buffer_, 0);
+  int err = MP3Decode(this->mp3_decoder_, &buffer_start, &buffer_length,
+                      (int16_t *) this->output_transfer_buffer_->get_buffer_end(), 0);
   if (err) {
     switch (err) {
       case ERR_MP3_MAINDATA_UNDERFLOW:
@@ -294,8 +300,9 @@ FileDecoderState AudioDecoder::decode_mp3_() {
     MP3GetLastFrameInfo(this->mp3_decoder_, &mp3_frame_info);
     if (mp3_frame_info.outputSamps > 0) {
       int bytes_per_sample = (mp3_frame_info.bitsPerSample / 8);
-      this->output_buffer_length_ = mp3_frame_info.outputSamps * bytes_per_sample;
+      // this->output_buffer_length_ = mp3_frame_info.outputSamps * bytes_per_sample;
       // this->output_buffer_current_ = this->output_buffer_;
+      this->output_transfer_buffer_->increase_buffer_length(mp3_frame_info.outputSamps * bytes_per_sample);
 
       audio::AudioStreamInfo stream_info;
       stream_info.channels = mp3_frame_info.nChans;

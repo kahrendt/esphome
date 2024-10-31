@@ -79,6 +79,8 @@ class AudioBuffer {
   size_t available() { return this->buffer_length_; }
   size_t free() { return this->buffer_size_ - (this->buffer_length_ - (this->data_start_ - this->buffer_)); }
 
+  size_t capacity() { return this->buffer_size_; }
+
   std::shared_ptr<RingBuffer> &get_ring_buffer() { return this->ring_buffer_; }
 
  protected:
