@@ -151,138 +151,113 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
     return AudioResamplerState::RESAMPLING;
   }
 
-  // Copy audio data directly to output_buffer if resampling isn't required
-  if (!this->resample_info_.resample && !this->resample_info_.mono_to_stereo) {
-    this->input_transfer_buffer_->read_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
-    size_t bytes_available = this->input_transfer_buffer_->available();
-    memcpy(this->output_transfer_buffer_->get_buffer_end(), this->input_transfer_buffer_->get_buffer_start(),
-           bytes_available);
+  // Refill the input buffer
+  this->input_transfer_buffer_->read_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
-    this->input_transfer_buffer_->decrease_buffer_length(bytes_available);
-    this->output_transfer_buffer_->increase_buffer_length(bytes_available);
+  if (this->input_transfer_buffer_->available() == 0) {
     return AudioResamplerState::RESAMPLING;
   }
 
-  // //////
-  // // Refill input buffer
-  // //////
+  // Depending on if we are converting mono to stereo or if we are upsampling, we may need to restrict how many samples
+  // we process
+  size_t max_samples_to_process = this->input_transfer_buffer_->available() / sizeof(int16_t);
 
-  // // Depending on if we are converting mono to stereo or if we are upsampling, we may need to restrict how many input
-  // // samples we transfer
-  // size_t max_input_samples = this->internal_buffer_samples_;
+  // Mono to stereo -> cut in half
+  max_samples_to_process /= (2 / this->stream_info_.channels);
 
-  // // Mono to stereo -> cut in half
-  // max_input_samples /= (2 / this->stream_info_.channels);
+  if (this->sample_ratio_ > 1.0) {
+    // Upsampling -> reduce by a factor of the ceiling of sample_ratio_
+    uint32_t upsampling_factor = std::ceil(this->sample_ratio_);
+    max_samples_to_process /= upsampling_factor;
+  }
 
-  // if (this->sample_ratio_ > 1.0) {
-  //   // Upsampling -> reduce by a factor of the ceiling of sample_ratio_
-  //   uint32_t upsampling_factor = std::ceil(this->sample_ratio_);
-  //   max_input_samples /= upsampling_factor;
-  // }
+  // We can't process more samples than we can store
+  max_samples_to_process = std::min(max_samples_to_process, this->output_transfer_buffer_->free() / sizeof(int16_t));
 
-  // // Move old data to the start of the buffer
-  // if (this->input_buffer_length_ > 0) {
-  //   memmove((void *) this->input_buffer_, (void *) this->input_buffer_current_, this->input_buffer_length_);
-  // }
-  // this->input_buffer_current_ = this->input_buffer_;
+  size_t bytes_to_transfer = max_samples_to_process * sizeof(int16_t);
 
-  // // Copy new data to the end of the of the buffer
-  // size_t bytes_to_read = max_input_samples * sizeof(int16_t) - this->input_buffer_length_;
+  // Pointer to where new output data is going to be written
+  uint8_t *new_output_data = this->output_transfer_buffer_->get_buffer_end();
 
-  // if (bytes_to_read > 0) {
-  //   int16_t *new_input_buffer_data = this->input_buffer_ + this->input_buffer_length_ / sizeof(int16_t);
-  //   size_t bytes_read = this->input_ring_buffer_->read((void *) new_input_buffer_data, bytes_to_read,
-  //                                                      pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+  if (this->resample_info_.resample) {
+    //   if (this->input_buffer_length_ > 0) {
+    //     // Samples are indiviudal int16 values. Frames include 1 sample for mono and 2 samples for stereo
+    //     // Be careful converting between bytes, samples, and frames!
+    //     // 1 sample = 2 bytes = sizeof(int16_t)
+    //     // if mono:
+    //     //    1 frame = 1 sample
+    //     // if stereo:
+    //     //    1 frame = 2 samples (left and right)
 
-  //   this->input_buffer_length_ += bytes_read;
-  // }
+    //     size_t samples_read = this->input_buffer_length_ / sizeof(int16_t);
 
-  // if (this->input_buffer_length_ == 0) {
-  //   return AudioResamplerState::RESAMPLING;
-  // }
+    //     for (size_t i = 0; i < samples_read; ++i) {
+    //       this->float_input_buffer_[i] = static_cast<float>(this->input_buffer_[i]) / 32768.0f;
+    //     }
 
-  // if (this->resample_info_.resample) {
-  //   if (this->input_buffer_length_ > 0) {
-  //     // Samples are indiviudal int16 values. Frames include 1 sample for mono and 2 samples for stereo
-  //     // Be careful converting between bytes, samples, and frames!
-  //     // 1 sample = 2 bytes = sizeof(int16_t)
-  //     // if mono:
-  //     //    1 frame = 1 sample
-  //     // if stereo:
-  //     //    1 frame = 2 samples (left and right)
+    //     size_t frames_read = samples_read / this->stream_info_.channels;
 
-  //     size_t samples_read = this->input_buffer_length_ / sizeof(int16_t);
+    //     if (this->pre_filter_) {
+    //       for (int i = 0; i < this->stream_info_.channels; ++i) {
+    //         biquad_apply_buffer(&this->lowpass_[i][0], this->float_input_buffer_ + i, frames_read,
+    //                             this->stream_info_.channels);
+    //         biquad_apply_buffer(&this->lowpass_[i][1], this->float_input_buffer_ + i, frames_read,
+    //                             this->stream_info_.channels);
+    //       }
+    //     }
 
-  //     for (size_t i = 0; i < samples_read; ++i) {
-  //       this->float_input_buffer_[i] = static_cast<float>(this->input_buffer_[i]) / 32768.0f;
-  //     }
+    //     ResampleResult res;
 
-  //     size_t frames_read = samples_read / this->stream_info_.channels;
+    //     res = resampleProcessInterleaved(this->resampler_, this->float_input_buffer_, frames_read,
+    //                                      this->float_output_buffer_,
+    //                                      this->internal_buffer_samples_ / this->channel_factor_,
+    //                                      this->sample_ratio_);
 
-  //     if (this->pre_filter_) {
-  //       for (int i = 0; i < this->stream_info_.channels; ++i) {
-  //         biquad_apply_buffer(&this->lowpass_[i][0], this->float_input_buffer_ + i, frames_read,
-  //                             this->stream_info_.channels);
-  //         biquad_apply_buffer(&this->lowpass_[i][1], this->float_input_buffer_ + i, frames_read,
-  //                             this->stream_info_.channels);
-  //       }
-  //     }
+    //     size_t frames_used = res.input_used;
+    //     size_t samples_used = frames_used * this->stream_info_.channels;
 
-  //     ResampleResult res;
+    //     size_t frames_generated = res.output_generated;
+    //     if (this->post_filter_) {
+    //       for (int i = 0; i < this->stream_info_.channels; ++i) {
+    //         biquad_apply_buffer(&this->lowpass_[i][0], this->float_output_buffer_ + i, frames_generated,
+    //                             this->stream_info_.channels);
+    //         biquad_apply_buffer(&this->lowpass_[i][1], this->float_output_buffer_ + i, frames_generated,
+    //                             this->stream_info_.channels);
+    //       }
+    //     }
 
-  //     res = resampleProcessInterleaved(this->resampler_, this->float_input_buffer_, frames_read,
-  //                                      this->float_output_buffer_,
-  //                                      this->internal_buffer_samples_ / this->channel_factor_,
-  //                                      this->sample_ratio_);
+    //     size_t samples_generated = frames_generated * this->stream_info_.channels;
 
-  //     size_t frames_used = res.input_used;
-  //     size_t samples_used = frames_used * this->stream_info_.channels;
+    // for (size_t i = 0; i < samples_generated; ++i) {
+    //   this->output_buffer_[i] = static_cast<int16_t>(this->float_output_buffer_[i] * 32767);
+    // }
 
-  //     size_t frames_generated = res.output_generated;
-  //     if (this->post_filter_) {
-  //       for (int i = 0; i < this->stream_info_.channels; ++i) {
-  //         biquad_apply_buffer(&this->lowpass_[i][0], this->float_output_buffer_ + i, frames_generated,
-  //                             this->stream_info_.channels);
-  //         biquad_apply_buffer(&this->lowpass_[i][1], this->float_output_buffer_ + i, frames_generated,
-  //                             this->stream_info_.channels);
-  //       }
-  //     }
+    // this->input_buffer_current_ += samples_used;
+    // this->input_buffer_length_ -= samples_used * sizeof(int16_t);
 
-  //     size_t samples_generated = frames_generated * this->stream_info_.channels;
+    // this->output_buffer_current_ = this->output_buffer_;
+    // this->output_buffer_length_ += samples_generated * sizeof(int16_t);
+    // }
+  } else {
+    // No resampling required, direclty copy to output transfer buffer
+    std::memcpy((void *) new_output_data, (void *) this->input_transfer_buffer_->get_buffer_start(), bytes_to_transfer);
+    this->input_transfer_buffer_->decrease_buffer_length(bytes_to_transfer);
+  }
 
-  // for (size_t i = 0; i < samples_generated; ++i) {
-  //   this->output_buffer_[i] = static_cast<int16_t>(this->float_output_buffer_[i] * 32767);
-  // }
+  if (this->resample_info_.mono_to_stereo) {
+    // Convert mono to stereo
+    size_t samples_to_duplicate = bytes_to_transfer / sizeof(int16_t);
+    for (int i = (int) samples_to_duplicate - 1; i >= 0; --i) {
+      reinterpret_cast<int16_t *>(new_output_data)[2 * i] = reinterpret_cast<int16_t *>(new_output_data)[i];
+      reinterpret_cast<int16_t *>(new_output_data)[2 * i + 1] = reinterpret_cast<int16_t *>(new_output_data)[i];
+    }
 
-  // this->input_buffer_current_ += samples_used;
-  // this->input_buffer_length_ -= samples_used * sizeof(int16_t);
+    this->output_transfer_buffer_->increase_buffer_length(2 *
+                                                          bytes_to_transfer);  // double the bytes for stereo samples
+  } else {
+    this->output_transfer_buffer_->increase_buffer_length(bytes_to_transfer);
+  }
 
-  // this->output_buffer_current_ = this->output_buffer_;
-  // this->output_buffer_length_ += samples_generated * sizeof(int16_t);
-  // }
-  // }
-  // else {
-  //   // size_t bytes_to_transfer =
-  //   //     std::min(this->internal_buffer_samples_ / this->channel_factor_ * sizeof(int16_t),
-  //   //     this->input_buffer_length_);
-  //   // std::memcpy((void *) this->output_buffer_, (void *) this->input_buffer_current_, bytes_to_transfer);
-
-  //   // this->input_buffer_current_ += bytes_to_transfer / sizeof(int16_t);
-  //   // this->input_buffer_length_ -= bytes_to_transfer;
-
-  //   // this->output_buffer_current_ = this->output_buffer_;
-  //   // this->output_buffer_length_ += bytes_to_transfer;
-  // }
-
-  // if (this->resample_info_.mono_to_stereo) {
-  //   // Convert mono to stereo
-  //   // for (int i = this->output_buffer_length_ / (sizeof(int16_t)) - 1; i >= 0; --i) {
-  //   //   this->output_buffer_[2 * i] = this->output_buffer_[i];
-  //   //   this->output_buffer_[2 * i + 1] = this->output_buffer_[i];
-  //   // }
-
-  //   // this->output_buffer_length_ *= 2;  // double the bytes for stereo samples
-  // }
   return AudioResamplerState::RESAMPLING;
 }
 
