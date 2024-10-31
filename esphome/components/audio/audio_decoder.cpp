@@ -214,8 +214,6 @@ FileDecoderState AudioDecoder::decode_mp3_() {
 
   // Advance read pointer
   this->input_transfer_buffer_->increase_buffer_length(offset);
-  // this->input_buffer_current_ += offset;
-  // this->input_buffer_length_ -= offset;
 
   uint8_t *buffer_start = this->input_transfer_buffer_->get_buffer_start();
   int buffer_length = (int) this->input_transfer_buffer_->available();
