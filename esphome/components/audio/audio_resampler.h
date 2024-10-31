@@ -7,7 +7,6 @@
 
 #include "audio.h"
 #include "audio_buffer.h"
-// #include "audio_stage.h"
 #include "esphome/core/ring_buffer.h"
 
 namespace esphome {
