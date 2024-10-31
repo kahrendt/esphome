@@ -29,7 +29,8 @@ class AudioResampler {
  public:
   AudioResampler(std::shared_ptr<RingBuffer> &input_ring_buffer, std::shared_ptr<RingBuffer> &output_ring_buffer,
                  size_t internal_buffer_samples)
-      : input_ring_buffer_(input_ring_buffer), internal_buffer_samples_(internal_buffer_samples) {
+      : internal_buffer_samples_(internal_buffer_samples) {
+    this->input_transfer_buffer_ = make_unique<AudioBuffer>(input_ring_buffer, internal_buffer_samples);
     this->output_transfer_buffer_ = make_unique<AudioBuffer>(output_ring_buffer, internal_buffer_samples);
   }
   ~AudioResampler();
@@ -45,20 +46,12 @@ class AudioResampler {
  protected:
   esp_err_t allocate_buffers_();
 
-  std::shared_ptr<RingBuffer> input_ring_buffer_;
-  // esphome::RingBuffer *output_ring_buffer_;
   size_t internal_buffer_samples_;
 
+  std::unique_ptr<AudioBuffer> input_transfer_buffer_;
   std::unique_ptr<AudioBuffer> output_transfer_buffer_;
 
-  int16_t *input_buffer_{nullptr};
-  int16_t *input_buffer_current_{nullptr};
-  size_t input_buffer_length_;
-
-  // int16_t *output_buffer_{nullptr};
-  // int16_t *output_buffer_current_{nullptr};
   uint8_t *output_buffer_current_{nullptr};
-  // size_t output_buffer_length_;
 
   float *float_input_buffer_{nullptr};
   float *float_input_buffer_current_{nullptr};
