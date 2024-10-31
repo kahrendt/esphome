@@ -88,21 +88,13 @@ esp_err_t AudioPipeline::start(audio::AudioFile *audio_file, uint32_t target_sam
 }
 
 esp_err_t AudioPipeline::allocate_buffers_() {
-  // if (this->raw_file_ring_buffer_ == nullptr) {
   if (!this->raw_file_ring_buffer_.use_count()) {
-    std::unique_ptr<esphome::RingBuffer> raw_file_ring_buffer = RingBuffer::create(FILE_RING_BUFFER_SIZE);
-    this->raw_file_ring_buffer_ = std::move(raw_file_ring_buffer);
-    // this->raw_file_ring_buffer_ = std::move(RingBuffer::create(FILE_RING_BUFFER_SIZE));
+    this->raw_file_ring_buffer_ = std::move(RingBuffer::create(FILE_RING_BUFFER_SIZE));
   }
 
-  if (this->decoded_ring_buffer_ == nullptr) {
-    std::unique_ptr<esphome::RingBuffer> decoded_ring_buffer = RingBuffer::create(BUFFER_SIZE_BYTES);
-    this->decoded_ring_buffer_ = std::move(decoded_ring_buffer);
+  if (!this->decoded_ring_buffer_.use_count()) {
+    this->decoded_ring_buffer_ = std::move(RingBuffer::create(BUFFER_SIZE_BYTES));
   }
-
-  // if ((this->raw_file_ring_buffer_ == nullptr) || (this->decoded_ring_buffer_ == nullptr)) {
-  //   return ESP_ERR_NO_MEM;
-  // }
 
   if (this->event_group_ == nullptr)
     this->event_group_ = xEventGroupCreate();
@@ -275,11 +267,13 @@ esp_err_t AudioPipeline::stop() {
 }
 
 void AudioPipeline::reset_ring_buffers() {
-  // if (this->raw_file_ring_buffer_.use_count()) {
-  //   this->raw_file_ring_buffer_->reset();
-  // }
+  if (this->raw_file_ring_buffer_.use_count()) {
+    this->raw_file_ring_buffer_->reset();
+  }
 
-  this->decoded_ring_buffer_->reset();
+  if (this->decoded_ring_buffer_.use_count()) {
+    this->decoded_ring_buffer_->reset();
+  }
 }
 
 void AudioPipeline::suspend_tasks() {
@@ -327,11 +321,8 @@ void AudioPipeline::read_task(void *params) {
       event.source = InfoErrorSource::READER;
       esp_err_t err = ESP_OK;
 
-      // audio::AudioReader reader = audio::AudioReader(this_pipeline->raw_file_ring_buffer_.get(), FILE_BUFFER_SIZE);
       std::unique_ptr<audio::AudioReader> reader =
           make_unique<audio::AudioReader>(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
-      // audio::AudioReader reader = audio::AudioReader(FILE_RING_BUFFER_SIZE, FILE_BUFFER_SIZE);
-      // this_pipeline->raw_file_ring_buffer_ = &reader.get_ring_buffer();
 
       if (event_bits & READER_COMMAND_INIT_FILE) {
         err = reader->start(this_pipeline->current_audio_file_, this_pipeline->current_audio_file_type_);
