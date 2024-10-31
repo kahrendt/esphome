@@ -8,6 +8,7 @@
 
 #include "audio.h"
 #include "audio_files.h"
+#include "audio_buffer.h"
 #include "audio_stage.h"
 
 #include "esphome/core/helpers.h"
@@ -32,14 +33,14 @@ enum class FileDecoderState : uint8_t {
   END_OF_FILE,
 };
 
-class AudioDecoder : public AudioInputStage, public AudioOutputStage {
+class AudioDecoder : public AudioOutputStage {
  public:
   AudioDecoder(std::shared_ptr<RingBuffer> &input_ring_buffer, std::shared_ptr<esphome::RingBuffer> output_ring_buffer,
                size_t internal_buffer_size)
-      : AudioInputStage(input_ring_buffer, internal_buffer_size),
-        AudioOutputStage(output_ring_buffer, internal_buffer_size) {}
-  // input_ring_buffer_(input_ring_buffer),
-  // internal_buffer_size_(internal_buffer_size) {}
+      : AudioOutputStage(output_ring_buffer, internal_buffer_size) {
+    this->input_transfer_buffer_ = make_unique<AudioBuffer>(input_ring_buffer, internal_buffer_size);
+  }
+
   ~AudioDecoder();
 
   esp_err_t start(AudioFileType audio_file_type);
@@ -55,6 +56,7 @@ class AudioDecoder : public AudioInputStage, public AudioOutputStage {
   FileDecoderState decode_mp3_();
   FileDecoderState decode_wav_();
 
+  std::unique_ptr<AudioBuffer> input_transfer_buffer_;
   // std::shared_ptr<RingBuffer> input_ring_buffer_;
   // size_t internal_buffer_size_;
 

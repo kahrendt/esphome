@@ -27,23 +27,18 @@ class AudioBuffer {
       return 0;
     }
 
-    // // Shift data in buffer to start
-    // if (this->buffer_length_ > 0) {
-    //   memmove(this->buffer_, this->data_start_, this->buffer_length_);
-    // }
+    // Shift data in buffer to start
+    if (this->buffer_length_ > 0) {
+      memmove(this->buffer_, this->data_start_, this->buffer_length_);
+    }
+    this->data_start_ = this->buffer_;
 
-    // this->data_start_ = this->buffer_;
-
+    size_t bytes_to_read = this->free();
     size_t bytes_read = 0;
-
-    // size_t bytes_to_read = this->buffer_size_ - this->buffer_length_;
-
-    // if (bytes_to_read > 0) {
-    //   uint8_t *new_data_start = this->buffer_ + this->buffer_length_;
-    //   bytes_read = this->ring_buffer_->read((void *) new_data_start, bytes_to_read, ticks_to_wait);
-
-    //   this->buffer_length_ += bytes_read;
-    // }
+    if (bytes_to_read > 0) {
+      bytes_read = this->ring_buffer_->read((void *) this->get_buffer_end(), bytes_to_read, ticks_to_wait);
+      this->increase_buffer_length(bytes_read);
+    }
     return bytes_read;
   }
 
@@ -83,6 +78,8 @@ class AudioBuffer {
 
   size_t available() { return this->buffer_length_; }
   size_t free() { return this->buffer_size_ - (this->buffer_length_ - (this->data_start_ - this->buffer_)); }
+
+  std::shared_ptr<RingBuffer> &get_ring_buffer() { return this->ring_buffer_; }
 
  protected:
   void allocate_buffer_() {
