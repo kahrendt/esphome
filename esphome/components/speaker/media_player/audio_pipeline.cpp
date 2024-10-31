@@ -72,6 +72,8 @@ esp_err_t AudioPipeline::start(const std::string &uri, uint32_t target_sample_ra
     xEventGroupSetBits(this->event_group_, READER_COMMAND_INIT_HTTP);
   }
 
+  printf("started a url pipeline\n");
+
   return err;
 }
 
@@ -90,9 +92,9 @@ esp_err_t AudioPipeline::start(audio::AudioFile *audio_file, uint32_t target_sam
 esp_err_t AudioPipeline::allocate_buffers_() {
   // if (this->raw_file_ring_buffer_ == nullptr) {
   if (!this->raw_file_ring_buffer_.use_count()) {
-    // std::unique_ptr<esphome::RingBuffer> raw_file_ring_buffer = RingBuffer::create(FILE_RING_BUFFER_SIZE);
-    // this->raw_file_ring_buffer_ = std::move(raw_file_ring_buffer);
-    this->raw_file_ring_buffer_ = std::move(RingBuffer::create(FILE_RING_BUFFER_SIZE));
+    std::unique_ptr<esphome::RingBuffer> raw_file_ring_buffer = RingBuffer::create(FILE_RING_BUFFER_SIZE);
+    this->raw_file_ring_buffer_ = std::move(raw_file_ring_buffer);
+    // this->raw_file_ring_buffer_ = std::move(RingBuffer::create(FILE_RING_BUFFER_SIZE));
   }
 
   if (this->decoded_ring_buffer_ == nullptr) {
@@ -100,9 +102,9 @@ esp_err_t AudioPipeline::allocate_buffers_() {
     this->decoded_ring_buffer_ = std::move(decoded_ring_buffer);
   }
 
-  if ((this->raw_file_ring_buffer_ == nullptr) || (this->decoded_ring_buffer_ == nullptr)) {
-    return ESP_ERR_NO_MEM;
-  }
+  // if ((this->raw_file_ring_buffer_ == nullptr) || (this->decoded_ring_buffer_ == nullptr)) {
+  //   return ESP_ERR_NO_MEM;
+  // }
 
   if (this->event_group_ == nullptr)
     this->event_group_ = xEventGroupCreate();
@@ -246,7 +248,7 @@ esp_err_t AudioPipeline::stop() {
     xEventGroupSetBits(this->event_group_, EventGroupBits::READER_MESSAGE_ERROR);
   }
   if (!(event_group_bits & DECODER_MESSAGE_FINISHED)) {
-    // Ddecoder failed to stop
+    // Decoder failed to stop
     xEventGroupSetBits(this->event_group_, EventGroupBits::DECODER_MESSAGE_ERROR);
   }
   if (!(event_group_bits & RESAMPLER_MESSAGE_FINISHED)) {
@@ -275,9 +277,9 @@ esp_err_t AudioPipeline::stop() {
 }
 
 void AudioPipeline::reset_ring_buffers() {
-  if (this->raw_file_ring_buffer_.use_count()) {
-    this->raw_file_ring_buffer_->reset();
-  }
+  // if (this->raw_file_ring_buffer_.use_count()) {
+  //   this->raw_file_ring_buffer_->reset();
+  // }
 
   this->decoded_ring_buffer_->reset();
 }
@@ -312,6 +314,8 @@ void AudioPipeline::read_task(void *params) {
   while (true) {
     xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_FINISHED);
 
+    printf("read task - raw file ring buffer owners %ld\n", this_pipeline->raw_file_ring_buffer_.use_count());
+
     // Wait until the pipeline notifies us the source of the media file
     EventBits_t event_bits =
         xEventGroupWaitBits(this_pipeline->event_group_,
@@ -328,12 +332,15 @@ void AudioPipeline::read_task(void *params) {
       esp_err_t err = ESP_OK;
 
       // audio::AudioReader reader = audio::AudioReader(this_pipeline->raw_file_ring_buffer_.get(), FILE_BUFFER_SIZE);
-      audio::AudioReader reader = audio::AudioReader(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
+      std::unique_ptr<audio::AudioReader> reader =
+          make_unique<audio::AudioReader>(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
+      // audio::AudioReader reader = audio::AudioReader(FILE_RING_BUFFER_SIZE, FILE_BUFFER_SIZE);
+      // this_pipeline->raw_file_ring_buffer_ = &reader.get_ring_buffer();
 
       if (event_bits & READER_COMMAND_INIT_FILE) {
-        err = reader.start(this_pipeline->current_audio_file_, this_pipeline->current_audio_file_type_);
+        err = reader->start(this_pipeline->current_audio_file_, this_pipeline->current_audio_file_type_);
       } else {
-        err = reader.start(this_pipeline->current_uri_, this_pipeline->current_audio_file_type_);
+        err = reader->start(this_pipeline->current_uri_, this_pipeline->current_audio_file_type_);
       }
       if (err != ESP_OK) {
         // Send specific error message
@@ -359,7 +366,7 @@ void AudioPipeline::read_task(void *params) {
           break;
         }
 
-        audio::AudioReaderState reader_state = reader.read();
+        audio::AudioReaderState reader_state = reader->read();
 
         if (reader_state == audio::AudioReaderState::FINISHED) {
           break;
@@ -407,7 +414,7 @@ void AudioPipeline::decode_task(void *params) {
       }
 
       // Decoding has started, so the pipeline can release ownership of the raw_file_ring_buffer
-      this_pipeline->raw_file_ring_buffer_.reset();
+      // this_pipeline->raw_file_ring_buffer_.reset();
 
       bool has_stream_info = false;
 
@@ -419,9 +426,14 @@ void AudioPipeline::decode_task(void *params) {
         }
 
         // Stop gracefully if the reader has finished
+        if (event_bits & READER_MESSAGE_FINISHED) {
+          printf("decoder task - reader is done, current input ring buffer owners %ld\n",
+                 this_pipeline->raw_file_ring_buffer_.use_count());
+        }
         audio::AudioDecoderState decoder_state = decoder->decode(event_bits & READER_MESSAGE_FINISHED);
 
         if (decoder_state == audio::AudioDecoderState::FINISHED) {
+          printf("finished decoding\n");
           break;
         } else if (decoder_state == audio::AudioDecoderState::FAILED) {
           if (!has_stream_info) {

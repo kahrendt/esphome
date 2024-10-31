@@ -138,6 +138,8 @@ AudioReaderState AudioReader::http_read_() {
   if (esp_http_client_is_complete_data_received(this->client_)) {
     if (this->output_buffer_length_ == 0) {
       this->cleanup_connection_();
+      printf("reader - ouput ring buffer owners: %ld\n", this->output_ring_buffer_.use_count());
+      vTaskDelay(pdMS_TO_TICKS(50));
       return AudioReaderState::FINISHED;
     }
   } else {

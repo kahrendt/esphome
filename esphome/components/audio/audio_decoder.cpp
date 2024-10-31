@@ -5,6 +5,7 @@
 #include "mp3_decoder.h"
 
 #include "esphome/core/ring_buffer.h"
+#include "esphome/core/helpers.h"
 
 namespace esphome {
 namespace audio {
@@ -12,10 +13,10 @@ namespace audio {
 static const size_t READ_WRITE_TIMEOUT_MS = 20;
 
 AudioDecoder::~AudioDecoder() {
-  ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
-  if (this->input_buffer_ != nullptr) {
-    allocator.deallocate(this->input_buffer_, this->internal_buffer_size_);
-  }
+  // ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
+  // if (this->input_buffer_ != nullptr) {
+  //   allocator.deallocate(this->input_buffer_, this->internal_buffer_size_);
+  // }
 
   if (this->flac_decoder_ != nullptr) {
     this->flac_decoder_->free_buffers();
@@ -44,7 +45,6 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
 
   this->input_buffer_current_ = this->input_buffer_;
   this->input_buffer_length_ = 0;
-  this->output_buffer_current_ = this->output_buffer_;
   this->output_buffer_length_ = 0;
 
   this->potentially_failed_count_ = 0;
@@ -71,12 +71,15 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
 
 AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   if (stop_gracefully) {
+    printf("in the decode function with stop gracefully, use count =%ld\n", this->input_ring_buffer_.use_count());
     if (this->output_buffer_length_ == 0) {
       // If the file decoder believes it the end of file
       if (this->end_of_file_) {
         return AudioDecoderState::FINISHED;
       }
       // If all the internal buffers are empty, the decoding is done
+      printf("about to crash... how many owners? %ld\n", this->input_ring_buffer_.use_count());
+      vTaskDelay(pdMS_TO_TICKS(50));
       if ((this->input_ring_buffer_->available() == 0) && (this->input_buffer_length_ == 0)) {
         return AudioDecoderState::FINISHED;
       }
@@ -95,37 +98,39 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   FileDecoderState state = FileDecoderState::MORE_TO_PROCESS;
 
   while (state == FileDecoderState::MORE_TO_PROCESS) {
-    if (this->write_ring_buffer_(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS))) {
-      if (this->output_buffer_length_ > 0) {
-        // Output buffer still has decoded audio to write
-        return AudioDecoderState::DECODING;
-      }
+    if (this->output_buffer_length_ > 0) {
+      this->write_ring_buffer_(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+      // Output buffer still has decoded audio to write
+      return AudioDecoderState::DECODING;
+
     } else {
       // Decode more data
 
-      // Shift unread data in input buffer to start
-      if (this->input_buffer_length_ > 0) {
-        memmove(this->input_buffer_, this->input_buffer_current_, this->input_buffer_length_);
-      }
-      this->input_buffer_current_ = this->input_buffer_;
+      size_t bytes_read = this->read_ring_buffer_(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
-      // read in new ring buffer data to fill the remaining input buffer
-      size_t bytes_read = 0;
+      // // Shift unread data in input buffer to start
+      // if (this->input_buffer_length_ > 0) {
+      //   memmove(this->input_buffer_, this->input_buffer_current_, this->input_buffer_length_);
+      // }
+      // this->input_buffer_current_ = this->input_buffer_;
 
-      size_t bytes_to_read = this->internal_buffer_size_ - this->input_buffer_length_;
+      // // read in new ring buffer data to fill the remaining input buffer
+      // size_t bytes_read = 0;
 
-      if (bytes_to_read > 0) {
-        uint8_t *new_audio_data = this->input_buffer_ + this->input_buffer_length_;
-        bytes_read = this->input_ring_buffer_->read((void *) new_audio_data, bytes_to_read,
-                                                    pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+      // size_t bytes_to_read = this->internal_buffer_size_ - this->input_buffer_length_;
 
-        this->input_buffer_length_ += bytes_read;
-      }
+      // if (bytes_to_read > 0) {
+      //   uint8_t *new_audio_data = this->input_buffer_ + this->input_buffer_length_;
+      //   bytes_read = this->input_ring_buffer_->read((void *) new_audio_data, bytes_to_read,
+      //                                               pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+
+      //   this->input_buffer_length_ += bytes_read;
+      // }
 
       if ((this->potentially_failed_count_ > 0) && (bytes_read == 0)) {
         // Failed to decode in last attempt and there is no new data
 
-        if (bytes_to_read == 0) {
+        if (this->input_buffer_length_ == this->input_buffer_size_) {
           // The input buffer is full. Since it previously failed on the exact same data, we can never recover
           state = FileDecoderState::FAILED;
         } else {
@@ -166,13 +171,14 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
 }
 
 esp_err_t AudioDecoder::allocate_buffers_() {
-  ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
+  // ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
 
-  if (this->input_buffer_ == nullptr)
-    this->input_buffer_ = allocator.allocate(this->internal_buffer_size_);
+  // if (this->input_buffer_ == nullptr)
+  //   this->input_buffer_ = allocator.allocate(this->internal_buffer_size_);
 
   // if (this->output_buffer_ == nullptr)
   //   this->output_buffer_ = allocator.allocate(this->internal_buffer_size_);
+  this->allocate_input_buffer_();
   this->allocate_output_buffer_();
 
   if ((this->input_buffer_ == nullptr) || (this->output_buffer_ == nullptr)) {
@@ -201,7 +207,7 @@ FileDecoderState AudioDecoder::decode_flac_() {
     this->input_buffer_length_ = this->flac_decoder_->get_bytes_left();
 
     size_t flac_decoder_output_buffer_min_size = flac_decoder_->get_output_buffer_size();
-    if (this->internal_buffer_size_ < flac_decoder_output_buffer_min_size * sizeof(int16_t)) {
+    if (this->output_buffer_size_ < flac_decoder_output_buffer_min_size * sizeof(int16_t)) {
       // Output buffer is not big enough
       return FileDecoderState::FAILED;
     }
@@ -213,6 +219,7 @@ FileDecoderState AudioDecoder::decode_flac_() {
 
     this->audio_stream_info_ = audio_stream_info;
 
+    printf("flac header decode, input use count %ld\n", this->input_ring_buffer_.use_count());
     return FileDecoderState::MORE_TO_PROCESS;
   }
 
@@ -237,7 +244,7 @@ FileDecoderState AudioDecoder::decode_flac_() {
   this->input_buffer_current_ += bytes_consumed;
   this->input_buffer_length_ = this->flac_decoder_->get_bytes_left();
 
-  this->output_buffer_current_ = this->output_buffer_;
+  // this->output_buffer_current_ = this->output_buffer_;
   this->output_buffer_length_ = output_samples * sizeof(int16_t);
 
   if (result == flac::FLAC_DECODER_NO_MORE_FRAMES) {
@@ -277,7 +284,7 @@ FileDecoderState AudioDecoder::decode_mp3_() {
     if (mp3_frame_info.outputSamps > 0) {
       int bytes_per_sample = (mp3_frame_info.bitsPerSample / 8);
       this->output_buffer_length_ = mp3_frame_info.outputSamps * bytes_per_sample;
-      this->output_buffer_current_ = this->output_buffer_;
+      // this->output_buffer_current_ = this->output_buffer_;
 
       audio::AudioStreamInfo stream_info;
       stream_info.channels = mp3_frame_info.nChans;
@@ -342,12 +349,12 @@ FileDecoderState AudioDecoder::decode_wav_() {
 
   if (this->wav_bytes_left_ > 0) {
     size_t bytes_to_write = std::min(this->wav_bytes_left_, this->input_buffer_length_);
-    bytes_to_write = std::min(bytes_to_write, this->internal_buffer_size_);
+    bytes_to_write = std::min(bytes_to_write, this->output_buffer_size_);
     if (bytes_to_write > 0) {
       std::memcpy(this->output_buffer_, this->input_buffer_current_, bytes_to_write);
       this->input_buffer_current_ += bytes_to_write;
       this->input_buffer_length_ -= bytes_to_write;
-      this->output_buffer_current_ = this->output_buffer_;
+      // this->output_buffer_current_ = this->output_buffer_;
       this->output_buffer_length_ = bytes_to_write;
       this->wav_bytes_left_ -= bytes_to_write;
     }

@@ -182,7 +182,8 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
   //   return AudioResamplerState::RESAMPLING;
   // }
 
-  if (this->write_ring_buffer_(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS))) {
+  if (this->output_buffer_length_ > 0) {
+    this->write_ring_buffer_(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
     return AudioResamplerState::RESAMPLING;
   }
 

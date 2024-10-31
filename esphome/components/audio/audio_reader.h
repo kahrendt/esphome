@@ -20,7 +20,7 @@ enum class AudioReaderState : uint8_t {
 
 class AudioReader : public AudioOutputStage {
  public:
-  AudioReader(std::shared_ptr<esphome::RingBuffer> &output_ring_buffer, size_t output_buffer_size)
+  AudioReader(std::shared_ptr<esphome::RingBuffer> output_ring_buffer, size_t output_buffer_size)
       : AudioOutputStage(output_ring_buffer, output_buffer_size) {}
   ~AudioReader();
 
