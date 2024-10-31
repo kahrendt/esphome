@@ -39,11 +39,10 @@ class AudioReader {
 
   ssize_t no_data_read_count_;
 
-  // const uint8_t *output_buffer_current_{nullptr};
-
   esp_http_client_handle_t client_{nullptr};
 
   AudioFile *current_audio_file_{nullptr};
+  const uint8_t *file_current_{nullptr};
 };
 }  // namespace audio
 }  // namespace esphome

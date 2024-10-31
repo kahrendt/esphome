@@ -27,15 +27,10 @@ esp_err_t AudioReader::start(AudioFile *audio_file, AudioFileType &file_type) {
   if (!this->output_transfer_buffer_->allocated_successfully()) {
     return ESP_ERR_NO_MEM;
   }
-  // esp_err_t err = this->allocate_output_buffer_();
-  // if (err != ESP_OK) {
-  //   return err;
-  // }
 
   this->current_audio_file_ = audio_file;
 
-  // this->output_buffer_current_ = audio_file->data;
-  // this->output_buffer_length_ = audio_file->length;
+  this->file_current_ = audio_file->data;
   file_type = audio_file->file_type;
 
   return ESP_OK;
@@ -43,8 +38,6 @@ esp_err_t AudioReader::start(AudioFile *audio_file, AudioFileType &file_type) {
 
 esp_err_t AudioReader::start(const std::string &uri, AudioFileType &file_type) {
   file_type = AudioFileType::NONE;
-
-  esp_err_t err = ESP_OK;
 
   if (!this->output_transfer_buffer_->allocated_successfully()) {
     return ESP_ERR_NO_MEM;
@@ -78,6 +71,8 @@ esp_err_t AudioReader::start(const std::string &uri, AudioFileType &file_type) {
   if (this->client_ == nullptr) {
     return ESP_FAIL;
   }
+
+  esp_err_t err = ESP_OK;
 
   if ((err = esp_http_client_open(this->client_, 0)) != ESP_OK) {
     this->cleanup_connection_();
@@ -123,14 +118,14 @@ AudioReaderState AudioReader::read() {
 }
 
 AudioReaderState AudioReader::file_read_() {
-  // if (this->output_buffer_length_ > 0) {
-  //   size_t bytes_written = this->output_ring_buffer_->write_without_replacement(
-  //       (void *) this->output_buffer_current_, this->output_buffer_length_, pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
-  //   this->output_buffer_length_ -= bytes_written;
-  //   this->output_buffer_current_ += bytes_written;
+  size_t remaining_bytes = this->current_audio_file_->length - (this->file_current_ - this->current_audio_file_->data);
+  if (remaining_bytes > 0) {
+    size_t bytes_written = this->output_transfer_buffer_->get_ring_buffer()->write_without_replacement(
+        (void *) this->file_current_, remaining_bytes, pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+    this->file_current_ += bytes_written;
 
-  //   return AudioReaderState::READING;
-  // }
+    return AudioReaderState::READING;
+  }
   return AudioReaderState::FINISHED;
 }
 
