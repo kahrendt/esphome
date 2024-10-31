@@ -49,7 +49,10 @@ esp_err_t AudioResampler::allocate_buffers_() {
   ExternalRAMAllocator<int16_t> int16_allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
   ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
 
-  this->allocate_output_buffer_();
+  // this->allocate_output_buffer_();
+  if (!this->output_transfer_buffer_->allocated_successfully()) {
+    return ESP_ERR_NO_MEM;
+  }
 
   if (this->input_buffer_ == nullptr)
     this->input_buffer_ = int16_allocator.allocate(this->internal_buffer_samples_);
@@ -86,8 +89,8 @@ esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sa
   this->float_input_buffer_current_ = this->float_input_buffer_;
   this->float_input_buffer_length_ = 0;
 
-  this->output_buffer_current_ = this->output_buffer_;
-  this->output_buffer_length_ = 0;
+  // this->output_buffer_current_ = this->output_buffer_;
+  // this->output_buffer_length_ = 0;
   this->float_output_buffer_current_ = this->float_output_buffer_;
   this->float_output_buffer_length_ = 0;
 
@@ -161,8 +164,9 @@ esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sa
 
 AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
   if (stop_gracefully) {
-    if ((this->input_ring_buffer_->available() == 0) && (this->output_ring_buffer_->available() == 0) &&
-        (this->input_buffer_length_ == 0) && (this->output_buffer_length_ == 0)) {
+    if ((this->input_ring_buffer_->available() == 0) &&
+        (this->output_transfer_buffer_->get_ring_buffer()->available() == 0) && (this->input_buffer_length_ == 0) &&
+        (this->output_transfer_buffer_->available() == 0)) {
       return AudioResamplerState::FINISHED;
     }
   }
@@ -182,19 +186,25 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
   //   return AudioResamplerState::RESAMPLING;
   // }
 
-  if (this->output_buffer_length_ > 0) {
-    this->write_ring_buffer_(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+  // if (this->output_buffer_length_ > 0) {
+  //   this->write_ring_buffer_(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+  //   return AudioResamplerState::RESAMPLING;
+  // }
+
+  if (this->output_transfer_buffer_->available() > 0) {
+    this->output_transfer_buffer_->write_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
     return AudioResamplerState::RESAMPLING;
   }
 
   // Copy audio data directly to output_buffer if resampling isn't required
   if (!this->resample_info_.resample && !this->resample_info_.mono_to_stereo) {
-    size_t bytes_read =
-        this->input_ring_buffer_->read((void *) this->output_buffer_, this->internal_buffer_samples_ * sizeof(int16_t),
-                                       pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+    size_t bytes_read = this->input_ring_buffer_->read((void *) this->output_transfer_buffer_->get_buffer_end(),
+                                                       this->internal_buffer_samples_ * sizeof(int16_t),
+                                                       pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
-    this->output_buffer_current_ = this->output_buffer_;
-    this->output_buffer_length_ += bytes_read;
+    this->output_transfer_buffer_->increase_buffer_length(bytes_read);
+    // this->output_buffer_current_ = this->output_buffer_;
+    // this->output_buffer_length_ += bytes_read;
 
     return AudioResamplerState::RESAMPLING;
   }
@@ -285,36 +295,37 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
 
       size_t samples_generated = frames_generated * this->stream_info_.channels;
 
-      for (size_t i = 0; i < samples_generated; ++i) {
-        this->output_buffer_[i] = static_cast<int16_t>(this->float_output_buffer_[i] * 32767);
-      }
+      // for (size_t i = 0; i < samples_generated; ++i) {
+      //   this->output_buffer_[i] = static_cast<int16_t>(this->float_output_buffer_[i] * 32767);
+      // }
 
-      this->input_buffer_current_ += samples_used;
-      this->input_buffer_length_ -= samples_used * sizeof(int16_t);
+      // this->input_buffer_current_ += samples_used;
+      // this->input_buffer_length_ -= samples_used * sizeof(int16_t);
 
-      this->output_buffer_current_ = this->output_buffer_;
-      this->output_buffer_length_ += samples_generated * sizeof(int16_t);
+      // this->output_buffer_current_ = this->output_buffer_;
+      // this->output_buffer_length_ += samples_generated * sizeof(int16_t);
     }
   } else {
-    size_t bytes_to_transfer =
-        std::min(this->internal_buffer_samples_ / this->channel_factor_ * sizeof(int16_t), this->input_buffer_length_);
-    std::memcpy((void *) this->output_buffer_, (void *) this->input_buffer_current_, bytes_to_transfer);
+    // size_t bytes_to_transfer =
+    //     std::min(this->internal_buffer_samples_ / this->channel_factor_ * sizeof(int16_t),
+    //     this->input_buffer_length_);
+    // std::memcpy((void *) this->output_buffer_, (void *) this->input_buffer_current_, bytes_to_transfer);
 
-    this->input_buffer_current_ += bytes_to_transfer / sizeof(int16_t);
-    this->input_buffer_length_ -= bytes_to_transfer;
+    // this->input_buffer_current_ += bytes_to_transfer / sizeof(int16_t);
+    // this->input_buffer_length_ -= bytes_to_transfer;
 
-    this->output_buffer_current_ = this->output_buffer_;
-    this->output_buffer_length_ += bytes_to_transfer;
+    // this->output_buffer_current_ = this->output_buffer_;
+    // this->output_buffer_length_ += bytes_to_transfer;
   }
 
   if (this->resample_info_.mono_to_stereo) {
     // Convert mono to stereo
-    for (int i = this->output_buffer_length_ / (sizeof(int16_t)) - 1; i >= 0; --i) {
-      this->output_buffer_[2 * i] = this->output_buffer_[i];
-      this->output_buffer_[2 * i + 1] = this->output_buffer_[i];
-    }
+    // for (int i = this->output_buffer_length_ / (sizeof(int16_t)) - 1; i >= 0; --i) {
+    //   this->output_buffer_[2 * i] = this->output_buffer_[i];
+    //   this->output_buffer_[2 * i + 1] = this->output_buffer_[i];
+    // }
 
-    this->output_buffer_length_ *= 2;  // double the bytes for stereo samples
+    // this->output_buffer_length_ *= 2;  // double the bytes for stereo samples
   }
   return AudioResamplerState::RESAMPLING;
 }

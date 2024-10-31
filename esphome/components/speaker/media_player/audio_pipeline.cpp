@@ -502,11 +502,11 @@ void AudioPipeline::resample_task(void *params) {
         output_ring_buffer = this_pipeline->mixer_->get_announcement_ring_buffer();
       }
 
-      audio::AudioResampler resampler =
-          audio::AudioResampler(this_pipeline->decoded_ring_buffer_, output_ring_buffer, BUFFER_SIZE_SAMPLES);
+      std::unique_ptr<audio::AudioResampler> resampler = make_unique<audio::AudioResampler>(
+          this_pipeline->decoded_ring_buffer_, output_ring_buffer, BUFFER_SIZE_SAMPLES);
 
-      esp_err_t err = resampler.start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
-                                      this_pipeline->current_resample_info_);
+      esp_err_t err = resampler->start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
+                                       this_pipeline->current_resample_info_);
 
       if (err != ESP_OK) {
         // Send specific error message
@@ -529,7 +529,7 @@ void AudioPipeline::resample_task(void *params) {
         }
 
         // Stop gracefully if the decoder is done
-        audio::AudioResamplerState resampler_state = resampler.resample(event_bits & DECODER_MESSAGE_FINISHED);
+        audio::AudioResamplerState resampler_state = resampler->resample(event_bits & DECODER_MESSAGE_FINISHED);
 
         if (resampler_state == audio::AudioResamplerState::FINISHED) {
           break;
