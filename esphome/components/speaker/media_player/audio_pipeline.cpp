@@ -72,8 +72,6 @@ esp_err_t AudioPipeline::start(const std::string &uri, uint32_t target_sample_ra
     xEventGroupSetBits(this->event_group_, READER_COMMAND_INIT_HTTP);
   }
 
-  printf("started a url pipeline\n");
-
   return err;
 }
 
@@ -314,8 +312,6 @@ void AudioPipeline::read_task(void *params) {
   while (true) {
     xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_FINISHED);
 
-    printf("read task - raw file ring buffer owners %ld\n", this_pipeline->raw_file_ring_buffer_.use_count());
-
     // Wait until the pipeline notifies us the source of the media file
     EventBits_t event_bits =
         xEventGroupWaitBits(this_pipeline->event_group_,
@@ -403,6 +399,9 @@ void AudioPipeline::decode_task(void *params) {
           this_pipeline->raw_file_ring_buffer_, this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
       esp_err_t err = decoder->start(this_pipeline->current_audio_file_type_);
 
+      // Decoding has started, so the pipeline can release ownership of the raw_file_ring_buffer
+      this_pipeline->raw_file_ring_buffer_.reset();
+
       if (err != ESP_OK) {
         // Send specific error message
         event.err = err;
@@ -412,9 +411,6 @@ void AudioPipeline::decode_task(void *params) {
         xEventGroupSetBits(this_pipeline->event_group_,
                            EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
       }
-
-      // Decoding has started, so the pipeline can release ownership of the raw_file_ring_buffer
-      // this_pipeline->raw_file_ring_buffer_.reset();
 
       bool has_stream_info = false;
 
@@ -426,14 +422,9 @@ void AudioPipeline::decode_task(void *params) {
         }
 
         // Stop gracefully if the reader has finished
-        if (event_bits & READER_MESSAGE_FINISHED) {
-          printf("decoder task - reader is done, current input ring buffer owners %ld\n",
-                 this_pipeline->raw_file_ring_buffer_.use_count());
-        }
         audio::AudioDecoderState decoder_state = decoder->decode(event_bits & READER_MESSAGE_FINISHED);
 
         if (decoder_state == audio::AudioDecoderState::FINISHED) {
-          printf("finished decoding\n");
           break;
         } else if (decoder_state == audio::AudioDecoderState::FAILED) {
           if (!has_stream_info) {
@@ -507,6 +498,9 @@ void AudioPipeline::resample_task(void *params) {
 
       esp_err_t err = resampler->start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
                                        this_pipeline->current_resample_info_);
+
+      // Resampling has started, so the pipeline can release ownership of the decoded_ring_buffer
+      this_pipeline->decoded_ring_buffer_.reset();
 
       if (err != ESP_OK) {
         // Send specific error message
