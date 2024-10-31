@@ -334,7 +334,7 @@ async def play_local_media_media_action(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
     media_file = await cg.get_variable(config[CONF_MEDIA_FILE])
-    cg.add(var.set_media_file(media_file))
+    cg.add(var.set_audio_file(media_file))
     cg.add(var.set_announcement(config[CONF_ANNOUNCEMENT]))
     return var
 
