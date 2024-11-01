@@ -14,7 +14,8 @@ static const bool USE_PRE_POST_FILTER = true;
 
 // These output parameters are currently hardcoded in the elements further down the pipeline (mixer and speaker)
 static const uint8_t OUTPUT_CHANNELS = 2;
-static const uint8_t OUTPUT_BITS_PER_SAMPLE = 16;
+static const uint8_t OUTPUT_BYTES_PER_SAMPLE = sizeof(int16_t);
+static const uint8_t OUTPUT_BITS_PER_SAMPLE = 8 * OUTPUT_BYTES_PER_SAMPLE;
 
 static const size_t READ_WRITE_TIMEOUT_MS = 20;
 
@@ -158,43 +159,40 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
     return AudioResamplerState::RESAMPLING;
   }
 
-  // Depending on if we are converting mono to stereo or if we are upsampling, we may need to restrict how many samples
-  // we process
-  size_t samples_to_process = this->input_transfer_buffer_->available() / sizeof(int16_t);
+  // Samples are indiviudal int16 values. Frames include 1 sample for mono and 2 samples for stereo
+  // Be careful converting between bytes, samples, and frames!
+  // 1 sample = 2 bytes = sizeof(int16_t) = OUTPUT_BYTES_PER_SAMPLE
+  // if mono:
+  //    1 frame = 1 sample
+  // if stereo:
+  //    1 frame = 2 samples (left and right)
 
-  // Mono to stereo -> cut in half
-  samples_to_process /= (2 / this->stream_info_.channels);
+  const size_t samples_free_to_write = this->output_transfer_buffer_->free() / OUTPUT_BYTES_PER_SAMPLE;
+  const size_t frames_free_to_write = samples_free_to_write / OUTPUT_CHANNELS;
 
+  size_t frames_to_read = frames_free_to_write;
   if (this->sample_ratio_ > 1.0) {
-    // Upsampling -> reduce by a factor of the ceiling of sample_ratio_
+    // Upsampling, so we have to read less frames
     uint32_t upsampling_factor = std::ceil(this->sample_ratio_);
-    samples_to_process /= upsampling_factor;
+    frames_to_read /= upsampling_factor;
   }
 
-  // We can't process more samples than we can store
-  samples_to_process = std::min(samples_to_process, this->output_transfer_buffer_->free() / sizeof(int16_t));
+  const size_t samples_to_read = frames_to_read * this->stream_info_.channels;
 
-  size_t bytes_to_transfer = samples_to_process * sizeof(int16_t);
+  size_t samples_to_process =
+      std::min(samples_to_read, this->input_transfer_buffer_->available() / OUTPUT_BYTES_PER_SAMPLE);
+
+  size_t bytes_to_transfer = samples_to_process * OUTPUT_BYTES_PER_SAMPLE;
 
   // Pointer to where new output data is going to be written
   uint8_t *new_output_data = this->output_transfer_buffer_->get_buffer_end();
 
   if (this->resample_info_.resample) {
-    // Samples are indiviudal int16 values. Frames include 1 sample for mono and 2 samples for stereo
-    // Be careful converting between bytes, samples, and frames!
-    // 1 sample = 2 bytes = sizeof(int16_t)
-    // if mono:
-    //    1 frame = 1 sample
-    // if stereo:
-    //    1 frame = 2 samples (left and right)
-
     for (size_t i = 0; i < samples_to_process; ++i) {
       this->float_input_buffer_[i] =
           static_cast<float>(reinterpret_cast<int16_t *>(this->input_transfer_buffer_->get_buffer_start())[i]) /
           32768.0f;
     }
-    this->input_transfer_buffer_->decrease_buffer_length(bytes_to_transfer);
-
     size_t frames_read = samples_to_process / this->stream_info_.channels;
 
     if (this->pre_filter_) {
@@ -231,7 +229,8 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
       reinterpret_cast<int16_t *>(new_output_data)[i] = static_cast<int16_t>(this->float_output_buffer_[i] * 32767);
     }
 
-    bytes_to_transfer = samples_generated * sizeof(int16_t);
+    this->input_transfer_buffer_->decrease_buffer_length(samples_used * OUTPUT_BYTES_PER_SAMPLE);
+    bytes_to_transfer = samples_generated * OUTPUT_BYTES_PER_SAMPLE;
   } else {
     // No resampling required, copy int16 samples to output transfer buffer
     std::memcpy((void *) new_output_data, (void *) this->input_transfer_buffer_->get_buffer_start(), bytes_to_transfer);
@@ -240,7 +239,7 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
 
   if (this->resample_info_.mono_to_stereo) {
     // Convert mono to stereo in place
-    size_t samples_to_duplicate = bytes_to_transfer / sizeof(int16_t);
+    size_t samples_to_duplicate = bytes_to_transfer / OUTPUT_BYTES_PER_SAMPLE;
     for (int i = (int) samples_to_duplicate - 1; i >= 0; --i) {
       reinterpret_cast<int16_t *>(new_output_data)[2 * i] = reinterpret_cast<int16_t *>(new_output_data)[i];
       reinterpret_cast<int16_t *>(new_output_data)[2 * i + 1] = reinterpret_cast<int16_t *>(new_output_data)[i];
