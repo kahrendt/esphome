@@ -9,7 +9,7 @@ AudioTransferBuffer::~AudioTransferBuffer() {
   }
 }
 
-size_t AudioTransferBuffer::read_ring_buffer(TickType_t ticks_to_wait) {
+size_t AudioInTransferBuffer::read_ring_buffer(TickType_t ticks_to_wait) {
   if (!this->allocated_successfully()) {
     return 0;
   }
@@ -29,7 +29,7 @@ size_t AudioTransferBuffer::read_ring_buffer(TickType_t ticks_to_wait) {
   return bytes_read;
 }
 
-size_t AudioTransferBuffer::write_ring_buffer(TickType_t ticks_to_wait) {
+size_t AudioOutTransferBuffer::write_ring_buffer(TickType_t ticks_to_wait) {
   if (!this->allocated_successfully()) {
     return 0;
   }

@@ -19,20 +19,16 @@ class AudioTransferBuffer {
   }
   ~AudioTransferBuffer();
 
-  size_t read_ring_buffer(TickType_t ticks_to_wait);
-
-  size_t write_ring_buffer(TickType_t ticks_to_wait);
-
   bool allocated_successfully();
 
   uint8_t *get_buffer_start() { return this->data_start_; }
   uint8_t *get_buffer_end() { return this->data_start_ + this->buffer_length_; }
 
-  void increase_buffer_length(size_t bytes) { this->buffer_length_ += bytes; }
   void decrease_buffer_length(size_t bytes);
+  void increase_buffer_length(size_t bytes) { this->buffer_length_ += bytes; }
 
-  size_t available() { return this->buffer_length_; }
   size_t free() { return this->buffer_size_ - (this->buffer_length_ - (this->data_start_ - this->buffer_)); }
+  size_t available() { return this->buffer_length_; }
 
   size_t capacity() { return this->buffer_size_; }
 
@@ -53,6 +49,20 @@ class AudioTransferBuffer {
 
   size_t buffer_size_;
   size_t buffer_length_;
+};
+
+class AudioOutTransferBuffer : public AudioTransferBuffer {
+ public:
+  AudioOutTransferBuffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size)
+      : AudioTransferBuffer(ring_buffer, buffer_size) {}
+  size_t write_ring_buffer(TickType_t ticks_to_wait);
+};
+
+class AudioInTransferBuffer : public AudioTransferBuffer {
+ public:
+  AudioInTransferBuffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size)
+      : AudioTransferBuffer(ring_buffer, buffer_size) {}
+  size_t read_ring_buffer(TickType_t ticks_to_wait);
 };
 
 }  // namespace audio
