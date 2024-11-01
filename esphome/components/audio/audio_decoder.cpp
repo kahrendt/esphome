@@ -53,8 +53,8 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
       this->mp3_decoder_ = MP3InitDecoder();
       break;
     case AudioFileType::WAV:
-      // this->wav_decoder_ = make_unique<wav_decoder::WAVDecoder>(&this->input_transfer_buffer_->get_buffer_start());
-      // this->wav_decoder_->reset();
+      this->wav_decoder_ = make_unique<wav_decoder::WAVDecoder>();
+      this->wav_decoder_->reset();
       break;
     case AudioFileType::NONE:
       return ESP_ERR_NOT_SUPPORTED;
@@ -253,69 +253,42 @@ FileDecoderState AudioDecoder::decode_mp3_() {
 }
 
 FileDecoderState AudioDecoder::decode_wav_() {
-  // if (!this->audio_stream_info_.has_value() && (this->input_buffer_length_ > 44)) {
-  //   // Header hasn't been processed
+  if (!this->audio_stream_info_.has_value()) {
+    // Header hasn't been processed
 
-  //   size_t original_buffer_length = this->input_buffer_length_;
+    wav_decoder::WAVDecoderResult result = this->wav_decoder_->decode_header(
+        this->input_transfer_buffer_->get_buffer_start(), this->input_transfer_buffer_->available());
 
-  //   size_t wav_bytes_to_skip = this->wav_decoder_->bytes_to_skip();
-  //   size_t wav_bytes_to_read = this->wav_decoder_->bytes_needed();
+    if (result == wav_decoder::WAV_DECODER_SUCCESS_IN_DATA) {
+      this->input_transfer_buffer_->decrease_buffer_length(this->wav_decoder_->bytes_processed());
 
-  //   bool header_finished = false;
-  //   while (!header_finished) {
-  //     if (wav_bytes_to_skip > 0) {
-  //       // Adjust pointer to skip the appropriate bytes
-  //       this->input_buffer_current_ += wav_bytes_to_skip;
-  //       this->input_buffer_length_ -= wav_bytes_to_skip;
-  //       wav_bytes_to_skip = 0;
-  //     } else if (wav_bytes_to_read > 0) {
-  //       wav_decoder::WAVDecoderResult result = this->wav_decoder_->next();
-  //       this->input_buffer_current_ += wav_bytes_to_read;
-  //       this->input_buffer_length_ -= wav_bytes_to_read;
+      audio::AudioStreamInfo audio_stream_info;
+      audio_stream_info.channels = this->wav_decoder_->num_channels();
+      audio_stream_info.sample_rate = this->wav_decoder_->sample_rate();
+      audio_stream_info.bits_per_sample = this->wav_decoder_->bits_per_sample();
+      this->audio_stream_info_ = audio_stream_info;
+      this->wav_bytes_left_ = this->wav_decoder_->chunk_bytes_left();
+    } else if (result == wav_decoder::WAV_DECODER_WARNING_INCOMPLETE_DATA) {
+      // Available data didn't have the full header
+      return FileDecoderState::POTENTIALLY_FAILED;
+    } else {
+      return FileDecoderState::FAILED;
+    }
+  }
 
-  //       if (result == wav_decoder::WAV_DECODER_SUCCESS_IN_DATA) {
-  //         // Header parsing is complete
+  if (this->wav_bytes_left_ > 0) {
+    size_t bytes_to_copy = std::min(this->wav_bytes_left_, this->input_transfer_buffer_->available());
+    bytes_to_copy = std::min(bytes_to_copy, this->output_transfer_buffer_->free());
 
-  //         // Assume PCM
-  //         audio::AudioStreamInfo audio_stream_info;
-  //         audio_stream_info.channels = this->wav_decoder_->num_channels();
-  //         audio_stream_info.sample_rate = this->wav_decoder_->sample_rate();
-  //         audio_stream_info.bits_per_sample = this->wav_decoder_->bits_per_sample();
-  //         this->audio_stream_info_ = audio_stream_info;
-  //         this->wav_bytes_left_ = this->wav_decoder_->chunk_bytes_left();
-  //         header_finished = true;
-  //       } else if (result == wav_decoder::WAV_DECODER_SUCCESS_NEXT) {
-  //         // Continue parsing header
-  //         wav_bytes_to_skip = this->wav_decoder_->bytes_to_skip();
-  //         wav_bytes_to_read = this->wav_decoder_->bytes_needed();
-  //       } else {
-  //         // Unexpected error parsing the wav header
-  //         return FileDecoderState::FAILED;
-  //       }
-  //     } else {
-  //       // Something unexpected has happened
-  //       // Reset state and hope we have enough info next time
-  //       this->input_buffer_length_ = original_buffer_length;
-  //       this->input_buffer_current_ = this->input_buffer_;
-  //       return FileDecoderState::POTENTIALLY_FAILED;
-  //     }
-  //   }
-  // }
-
-  // if (this->wav_bytes_left_ > 0) {
-  //   size_t bytes_to_write = std::min(this->wav_bytes_left_, this->input_buffer_length_);
-  //   bytes_to_write = std::min(bytes_to_write, this->output_buffer_size_);
-  //   if (bytes_to_write > 0) {
-  //     std::memcpy(this->output_buffer_, this->input_buffer_current_, bytes_to_write);
-  //     this->input_buffer_current_ += bytes_to_write;
-  //     this->input_buffer_length_ -= bytes_to_write;
-  //     // this->output_buffer_current_ = this->output_buffer_;
-  //     this->output_buffer_length_ = bytes_to_write;
-  //     this->wav_bytes_left_ -= bytes_to_write;
-  //   }
-
-  //   return FileDecoderState::IDLE;
-  // }
+    if (bytes_to_copy > 0) {
+      std::memcpy(this->output_transfer_buffer_->get_buffer_end(), this->input_transfer_buffer_->get_buffer_start(),
+                  bytes_to_copy);
+      this->input_transfer_buffer_->decrease_buffer_length(bytes_to_copy);
+      this->output_transfer_buffer_->increase_buffer_length(bytes_to_copy);
+      this->wav_bytes_left_ -= bytes_to_copy;
+    }
+    return FileDecoderState::IDLE;
+  }
 
   return FileDecoderState::END_OF_FILE;
 }

@@ -61,7 +61,7 @@ class AudioDecoder {
   HMP3Decoder mp3_decoder_;
 
   std::unique_ptr<wav_decoder::WAVDecoder> wav_decoder_;
-  size_t wav_bytes_left_;
+  size_t wav_bytes_left_{0};
 
   AudioFileType audio_file_type_{AudioFileType::NONE};
   optional<AudioStreamInfo> audio_stream_info_{};
