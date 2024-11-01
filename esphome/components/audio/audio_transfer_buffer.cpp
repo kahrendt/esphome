@@ -29,15 +29,20 @@ size_t AudioInTransferBuffer::read_ring_buffer(TickType_t ticks_to_wait) {
   return bytes_read;
 }
 
-size_t AudioOutTransferBuffer::write_ring_buffer(TickType_t ticks_to_wait) {
+size_t AudioOutTransferBuffer::transfer_audio_out(TickType_t ticks_to_wait) {
   if (!this->allocated_successfully()) {
     return 0;
   }
 
   size_t bytes_written = 0;
   if ((this->buffer_length_ > 0) && (this->available())) {
-    bytes_written =
-        this->ring_buffer_->write_without_replacement((void *) this->data_start_, this->available(), ticks_to_wait);
+    if (this->speaker_ != nullptr) {
+      bytes_written = this->speaker_->play(this->data_start_, this->available(), ticks_to_wait);
+    } else if (this->ring_buffer_.use_count() > 0) {
+      bytes_written =
+          this->ring_buffer_->write_without_replacement((void *) this->data_start_, this->available(), ticks_to_wait);
+    }
+
     this->decrease_buffer_length(bytes_written);
 
     // Shift unwritten data to the start of the buffer
@@ -49,6 +54,15 @@ size_t AudioOutTransferBuffer::write_ring_buffer(TickType_t ticks_to_wait) {
 
 bool AudioTransferBuffer::allocated_successfully() {
   if (this->ring_buffer_.use_count() && (this->buffer_ != nullptr)) {
+    return true;
+  }
+  return false;
+}
+
+bool AudioOutTransferBuffer::allocated_successfully() {
+  if (this->ring_buffer_.use_count() && (this->buffer_ != nullptr)) {
+    return true;
+  } else if ((this->speaker_ != nullptr) && (this->buffer_ != nullptr)) {
     return true;
   }
   return false;

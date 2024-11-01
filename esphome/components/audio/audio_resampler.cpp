@@ -141,14 +141,14 @@ esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sa
 AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
   if (stop_gracefully) {
     if ((this->input_transfer_buffer_->get_ring_buffer()->available() == 0) &&
-        (this->output_transfer_buffer_->get_ring_buffer()->available() == 0) &&
         (this->input_transfer_buffer_->available() == 0) && (this->output_transfer_buffer_->available() == 0)) {
       return AudioResamplerState::FINISHED;
     }
   }
 
   if (this->output_transfer_buffer_->available() > 0) {
-    this->output_transfer_buffer_->write_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+    // this->output_transfer_buffer_->write_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+    this->output_transfer_buffer_->transfer_audio_out(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
     return AudioResamplerState::RESAMPLING;
   }
 

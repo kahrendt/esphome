@@ -2,6 +2,7 @@
 
 #ifdef USE_ESP_IDF
 
+#include "esphome/components/audio/audio_transfer_buffer.h"
 #include "esphome/components/speaker/speaker.h"
 
 #include "esphome/core/hal.h"
@@ -151,6 +152,8 @@ class AudioMixer {
 
   std::shared_ptr<RingBuffer> media_ring_buffer_;
   std::shared_ptr<RingBuffer> announcement_ring_buffer_;
+
+  std::unique_ptr<audio::AudioOutTransferBuffer> output_transfer_buffer_;
 };
 }  // namespace speaker
 }  // namespace esphome

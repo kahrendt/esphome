@@ -4,6 +4,8 @@
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
 
+#include "esphome/components/speaker/speaker.h"
+
 #include "esp_err.h"
 
 #include <freertos/FreeRTOS.h>
@@ -13,13 +15,14 @@ namespace audio {
 
 class AudioTransferBuffer {
  public:
+  AudioTransferBuffer(size_t buffer_size) : buffer_size_(buffer_size) { this->allocate_buffer_(); }
   AudioTransferBuffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size)
       : ring_buffer_(ring_buffer), buffer_size_(buffer_size) {
     this->allocate_buffer_();
   }
   ~AudioTransferBuffer();
 
-  bool allocated_successfully();
+  virtual bool allocated_successfully();
 
   uint8_t *get_buffer_start() { return this->data_start_; }
   uint8_t *get_buffer_end() { return this->data_start_ + this->buffer_length_; }
@@ -55,7 +58,25 @@ class AudioOutTransferBuffer : public AudioTransferBuffer {
  public:
   AudioOutTransferBuffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size)
       : AudioTransferBuffer(ring_buffer, buffer_size) {}
-  size_t write_ring_buffer(TickType_t ticks_to_wait);
+  AudioOutTransferBuffer(speaker::Speaker *speaker, size_t buffer_size)
+      : AudioTransferBuffer(buffer_size), speaker_(speaker) {}
+  // size_t write_ring_buffer(TickType_t ticks_to_wait);
+
+  size_t transfer_audio_out(TickType_t ticks_to_wait);
+
+  bool has_buffered_data() {
+    if (this->speaker_ != nullptr) {
+      return this->speaker_->has_buffered_data();
+    } else if (this->ring_buffer_.use_count() > 0) {
+      return this->ring_buffer_->available() > 0;
+    }
+    return false;
+  }
+
+  bool allocated_successfully() override;
+
+ protected:
+  speaker::Speaker *speaker_{nullptr};
 };
 
 class AudioInTransferBuffer : public AudioTransferBuffer {
