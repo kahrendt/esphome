@@ -13,11 +13,6 @@ namespace audio {
 static const size_t READ_WRITE_TIMEOUT_MS = 20;
 
 AudioDecoder::~AudioDecoder() {
-  // ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
-  // if (this->input_buffer_ != nullptr) {
-  //   allocator.deallocate(this->input_buffer_, this->internal_buffer_size_);
-  // }
-
   if (this->flac_decoder_ != nullptr) {
     this->flac_decoder_->free_buffers();
     this->flac_decoder_.reset();  // Free the unique_ptr
@@ -93,7 +88,6 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
 
   while (state == FileDecoderState::MORE_TO_PROCESS) {
     if (this->output_transfer_buffer_->available() > 0) {
-      // this->output_transfer_buffer_->write_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
       this->output_transfer_buffer_->transfer_audio_out(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
       return AudioDecoderState::DECODING;
     } else {
