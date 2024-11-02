@@ -15,14 +15,21 @@ namespace audio {
 
 class AudioTransferBuffer {
  public:
-  AudioTransferBuffer(size_t buffer_size) : buffer_size_(buffer_size) { this->allocate_buffer_(); }
-  AudioTransferBuffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size)
-      : ring_buffer_(ring_buffer), buffer_size_(buffer_size) {
-    this->allocate_buffer_();
-  }
+  // AudioTransferBuffer(size_t buffer_size) : buffer_size_(buffer_size) { this->allocate_buffer_(); }
+  // AudioTransferBuffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size)
+  //     : ring_buffer_(ring_buffer), buffer_size_(buffer_size) {
+  //   this->allocate_buffer_();
+  // }
   ~AudioTransferBuffer();
 
   virtual bool allocated_successfully();
+
+  bool add_ring_buffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size) {
+    this->buffer_size_ = buffer_size;
+    this->allocate_buffer_();
+    this->ring_buffer_ = ring_buffer;
+    return this->allocated_successfully();
+  }
 
   uint8_t *get_buffer_start() { return this->data_start_; }
   uint8_t *get_buffer_end() { return this->data_start_ + this->buffer_length_; }
@@ -56,13 +63,20 @@ class AudioTransferBuffer {
 
 class AudioOutTransferBuffer : public AudioTransferBuffer {
  public:
-  AudioOutTransferBuffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size)
-      : AudioTransferBuffer(ring_buffer, buffer_size) {}
-  AudioOutTransferBuffer(speaker::Speaker *speaker, size_t buffer_size)
-      : AudioTransferBuffer(buffer_size), speaker_(speaker) {}
+  // AudioOutTransferBuffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size)
+  //     : AudioTransferBuffer(ring_buffer, buffer_size) {}
+  // AudioOutTransferBuffer(speaker::Speaker *speaker, size_t buffer_size)
+  //     : AudioTransferBuffer(buffer_size), speaker_(speaker) {}
 
   size_t transfer_audio_out(TickType_t ticks_to_wait);
   size_t transfer_audio_out(const uint8_t *data, size_t length, TickType_t ticks_to_wait);
+
+  bool add_speaker(speaker::Speaker *speaker, size_t buffer_size) {
+    this->buffer_size_ = buffer_size;
+    this->allocate_buffer_();
+    this->speaker_ = speaker;
+    return allocated_successfully();
+  }
 
   bool has_buffered_data() {
     if (this->speaker_ != nullptr) {
@@ -81,8 +95,8 @@ class AudioOutTransferBuffer : public AudioTransferBuffer {
 
 class AudioInTransferBuffer : public AudioTransferBuffer {
  public:
-  AudioInTransferBuffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size)
-      : AudioTransferBuffer(ring_buffer, buffer_size) {}
+  // AudioInTransferBuffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size)
+  //     : AudioTransferBuffer(ring_buffer, buffer_size) {}
   size_t read_ring_buffer(TickType_t ticks_to_wait);
 };
 

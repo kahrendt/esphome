@@ -321,12 +321,14 @@ void AudioPipeline::read_task(void *params) {
       event.source = InfoErrorSource::READER;
       esp_err_t err = ESP_OK;
 
-      std::unique_ptr<audio::AudioReader> reader =
-          make_unique<audio::AudioReader>(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
+      std::unique_ptr<audio::AudioReader> reader = make_unique<audio::AudioReader>();
+      // make_unique<audio::AudioReader>(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
 
       if (event_bits & READER_COMMAND_INIT_FILE) {
+        reader->add_ring_buffer(this_pipeline->raw_file_ring_buffer_, 0);
         err = reader->start(this_pipeline->current_audio_file_, this_pipeline->current_audio_file_type_);
       } else {
+        reader->add_ring_buffer(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
         err = reader->start(this_pipeline->current_uri_, this_pipeline->current_audio_file_type_);
       }
       if (err != ESP_OK) {
@@ -386,8 +388,10 @@ void AudioPipeline::decode_task(void *params) {
       InfoErrorEvent event;
       event.source = InfoErrorSource::DECODER;
 
-      std::unique_ptr<audio::AudioDecoder> decoder = make_unique<audio::AudioDecoder>(
-          this_pipeline->raw_file_ring_buffer_, this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
+      std::unique_ptr<audio::AudioDecoder> decoder = make_unique<audio::AudioDecoder>();
+      // this_pipeline->raw_file_ring_buffer_, this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
+      decoder->add_input_ring_buffer(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
+      decoder->add_output_ring_buffer(this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
       esp_err_t err = decoder->start(this_pipeline->current_audio_file_type_);
 
       // Decoding has started, so the pipeline can release ownership of the raw_file_ring_buffer
@@ -484,9 +488,11 @@ void AudioPipeline::resample_task(void *params) {
         output_ring_buffer = this_pipeline->mixer_->get_announcement_ring_buffer();
       }
 
-      std::unique_ptr<audio::AudioResampler> resampler = make_unique<audio::AudioResampler>(
-          this_pipeline->decoded_ring_buffer_, output_ring_buffer, BUFFER_SIZE_SAMPLES);
+      std::unique_ptr<audio::AudioResampler> resampler = make_unique<audio::AudioResampler>();
+      // this_pipeline->decoded_ring_buffer_, output_ring_buffer, BUFFER_SIZE_SAMPLES);
 
+      resampler->add_input_ring_buffer(this_pipeline->decoded_ring_buffer_, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
+      resampler->add_output_ring_buffer(output_ring_buffer, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
       esp_err_t err = resampler->start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
                                        this_pipeline->current_resample_info_);
 

@@ -67,13 +67,18 @@ void AudioMixer::audio_mixer_task(void *params) {
   TaskEvent event;
   CommandEvent command_event;
 
-  std::unique_ptr<audio::AudioInTransferBuffer> media_transfer_buffer = make_unique<audio::AudioInTransferBuffer>(
-      this_mixer->media_ring_buffer_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+  std::unique_ptr<audio::AudioInTransferBuffer> media_transfer_buffer = make_unique<audio::AudioInTransferBuffer>();
+  // this_mixer->media_ring_buffer_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+  media_transfer_buffer->add_ring_buffer(this_mixer->media_ring_buffer_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
   std::unique_ptr<audio::AudioInTransferBuffer> announcement_transfer_buffer =
-      make_unique<audio::AudioInTransferBuffer>(this_mixer->announcement_ring_buffer_,
+      make_unique<audio::AudioInTransferBuffer>();
+  announcement_transfer_buffer->add_ring_buffer(this_mixer->announcement_ring_buffer_,
                                                 OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
-  std::unique_ptr<audio::AudioOutTransferBuffer> output_transfer_buffer =
-      make_unique<audio::AudioOutTransferBuffer>(this_mixer->speaker_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+  // make_unique<audio::AudioInTransferBuffer>(this_mixer->announcement_ring_buffer_,
+  //                                           OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+  std::unique_ptr<audio::AudioOutTransferBuffer> output_transfer_buffer = make_unique<audio::AudioOutTransferBuffer>();
+  output_transfer_buffer->add_speaker(this_mixer->speaker_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+  // make_unique<audio::AudioOutTransferBuffer>(this_mixer->speaker_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
 
   if (!media_transfer_buffer->allocated_successfully() || (!announcement_transfer_buffer->allocated_successfully()) ||
       (!output_transfer_buffer->allocated_successfully())) {
