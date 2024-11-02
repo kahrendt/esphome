@@ -43,13 +43,17 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
   switch (this->audio_file_type_) {
     case AudioFileType::FLAC:
       this->flac_decoder_ = make_unique<flac::FLACDecoder>(this->input_transfer_buffer_->get_buffer_start());
+      this->free_buffer_required_ =
+          this->output_transfer_buffer_->capacity();  // We'll revise this after reading the header
       break;
     case AudioFileType::MP3:
       this->mp3_decoder_ = MP3InitDecoder();
+      this->free_buffer_required_ = 1152;
       break;
     case AudioFileType::WAV:
       this->wav_decoder_ = make_unique<wav_decoder::WAVDecoder>();
       this->wav_decoder_->reset();
+      this->free_buffer_required_ = 1024;
       break;
     case AudioFileType::NONE:
       return ESP_ERR_NOT_SUPPORTED;
@@ -89,8 +93,12 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   while (state == FileDecoderState::MORE_TO_PROCESS) {
     if (this->output_transfer_buffer_->available() > 0) {
       this->output_transfer_buffer_->transfer_audio_out(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+      // return AudioDecoderState::DECODING;
+    }
+    // TODO: this is a stupid if else if
+    if (this->output_transfer_buffer_->free() < this->free_buffer_required_) {
       return AudioDecoderState::DECODING;
-    } else {
+    } else if (this->output_transfer_buffer_->free() >= this->free_buffer_required_) {
       // Decode more data
       size_t bytes_read = this->input_transfer_buffer_->read_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
@@ -159,6 +167,7 @@ FileDecoderState AudioDecoder::decode_flac_() {
       // Output buffer is not big enough
       return FileDecoderState::FAILED;
     }
+    this->free_buffer_required_ = flac_decoder_output_buffer_min_size * sizeof(int16_t);
 
     audio::AudioStreamInfo audio_stream_info;
     audio_stream_info.channels = this->flac_decoder_->get_num_channels();

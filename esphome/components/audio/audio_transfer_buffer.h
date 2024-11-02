@@ -20,6 +20,9 @@ class AudioTransferBuffer {
   //     : ring_buffer_(ring_buffer), buffer_size_(buffer_size) {
   //   this->allocate_buffer_();
   // }
+  AudioTransferBuffer() {}
+  AudioTransferBuffer(size_t buffer_size) : buffer_size_(buffer_size) {}
+
   ~AudioTransferBuffer();
 
   virtual bool allocated_successfully();
@@ -47,6 +50,10 @@ class AudioTransferBuffer {
  protected:
   void allocate_buffer_() {
     ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
+    if (this->buffer_ != nullptr) {
+      allocator.deallocate(this->buffer_, this->buffer_size_);
+    }
+
     this->buffer_ = allocator.allocate(this->buffer_size_);
     this->data_start_ = this->buffer_;
     this->buffer_length_ = 0;
@@ -57,7 +64,7 @@ class AudioTransferBuffer {
   uint8_t *buffer_{nullptr};
   uint8_t *data_start_{nullptr};
 
-  size_t buffer_size_;
+  size_t buffer_size_{0};
   size_t buffer_length_;
 };
 
@@ -67,6 +74,8 @@ class AudioOutTransferBuffer : public AudioTransferBuffer {
   //     : AudioTransferBuffer(ring_buffer, buffer_size) {}
   // AudioOutTransferBuffer(speaker::Speaker *speaker, size_t buffer_size)
   //     : AudioTransferBuffer(buffer_size), speaker_(speaker) {}
+  AudioOutTransferBuffer() {}
+  AudioOutTransferBuffer(size_t buffer_size) : AudioTransferBuffer(buffer_size) { this->allocate_buffer_(); }
 
   size_t transfer_audio_out(TickType_t ticks_to_wait);
   size_t transfer_audio_out(const uint8_t *data, size_t length, TickType_t ticks_to_wait);

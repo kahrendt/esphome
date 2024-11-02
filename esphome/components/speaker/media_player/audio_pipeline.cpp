@@ -388,10 +388,10 @@ void AudioPipeline::decode_task(void *params) {
       InfoErrorEvent event;
       event.source = InfoErrorSource::DECODER;
 
-      std::unique_ptr<audio::AudioDecoder> decoder = make_unique<audio::AudioDecoder>();
+      std::unique_ptr<audio::AudioDecoder> decoder = make_unique<audio::AudioDecoder>(FILE_BUFFER_SIZE);
       // this_pipeline->raw_file_ring_buffer_, this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
       decoder->add_input_ring_buffer(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
-      decoder->add_output_ring_buffer(this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
+
       esp_err_t err = decoder->start(this_pipeline->current_audio_file_type_);
 
       // Decoding has started, so the pipeline can release ownership of the raw_file_ring_buffer
@@ -450,8 +450,25 @@ void AudioPipeline::decode_task(void *params) {
             xEventGroupSetBits(this_pipeline->event_group_,
                                EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
           } else {
-            // Inform the resampler that the stream information is available
-            xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_LOADED_STREAM_INFO);
+            if ((this_pipeline->current_audio_stream_info_.channels < 2) ||
+                (this_pipeline->current_audio_stream_info_.sample_rate != this_pipeline->target_sample_rate_)) {
+              // Inform the resampler that the stream information is available
+              decoder->add_output_ring_buffer(this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
+              xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_LOADED_STREAM_INFO);
+            } else {
+              // Perfect match already, send it directly to the mixer
+
+              std::shared_ptr<RingBuffer> output_ring_buffer;
+
+              if (this_pipeline->pipeline_type_ == AudioPipelineType::MEDIA) {
+                output_ring_buffer = this_pipeline->mixer_->get_media_ring_buffer();
+              } else {
+                output_ring_buffer = this_pipeline->mixer_->get_announcement_ring_buffer();
+              }
+              decoder->add_output_ring_buffer(output_ring_buffer, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
+              // No need to use the decoded ring buffer at all
+              this_pipeline->decoded_ring_buffer_.reset();
+            }
           }
 
           xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);

@@ -68,7 +68,8 @@ bool AudioTransferBuffer::allocated_successfully() {
   // if (this->ring_buffer_.use_count() && (this->buffer_ != nullptr)) {
   //   return true;
   // }
-  if (this->buffer_ != nullptr) {
+
+  if ((this->buffer_ != nullptr) || (this->buffer_size_ == 0)) {
     return true;
   }
 
@@ -81,7 +82,7 @@ bool AudioOutTransferBuffer::allocated_successfully() {
   // } else if ((this->speaker_ != nullptr) && (this->buffer_ != nullptr)) {
   //   return true;
   // }
-  if (this->buffer_ != nullptr) {
+  if ((this->buffer_ != nullptr) || (this->buffer_size_ == 0)) {
     return true;
   }
   return false;
