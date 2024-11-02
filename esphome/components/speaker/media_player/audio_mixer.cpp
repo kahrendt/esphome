@@ -67,16 +67,11 @@ void AudioMixer::audio_mixer_task(void *params) {
   TaskEvent event;
   CommandEvent command_event;
 
-  // ExternalRAMAllocator<int16_t> allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
-  // int16_t *media_buffer = allocator.allocate(OUTPUT_BUFFER_SAMPLES);
-  // int16_t *announcement_buffer = allocator.allocate(OUTPUT_BUFFER_SAMPLES);
-
   std::unique_ptr<audio::AudioInTransferBuffer> media_transfer_buffer = make_unique<audio::AudioInTransferBuffer>(
       this_mixer->media_ring_buffer_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
   std::unique_ptr<audio::AudioInTransferBuffer> announcement_transfer_buffer =
       make_unique<audio::AudioInTransferBuffer>(this_mixer->announcement_ring_buffer_,
                                                 OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
-
   std::unique_ptr<audio::AudioOutTransferBuffer> output_transfer_buffer =
       make_unique<audio::AudioOutTransferBuffer>(this_mixer->speaker_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
 
@@ -139,8 +134,13 @@ void AudioMixer::audio_mixer_task(void *params) {
             ducking_transition_samples_remaining = command_event.transition_samples;
 
             samples_per_ducking_step = ducking_transition_samples_remaining / total_ducking_steps;
+            ducking_transition_samples_remaining =
+                samples_per_ducking_step * total_ducking_steps;  // Adjust for integer division rounding
+
+            current_ducking_db_reduction += db_change_per_ducking_step;
           } else {
             ducking_transition_samples_remaining = 0;
+            current_ducking_db_reduction = target_ducking_db_reduction;
           }
         }
       } else if (command_event.command == CommandEventType::PAUSE_MEDIA) {
@@ -154,9 +154,8 @@ void AudioMixer::audio_mixer_task(void *params) {
       }
     }
 
-    // if (output_transfer_buffer->available() > 0) {
     output_transfer_buffer->transfer_audio_out(pdMS_TO_TICKS(TASK_DELAY_MS));
-    // } else {
+
     media_transfer_buffer->read_ring_buffer(0);
     announcement_transfer_buffer->read_ring_buffer(0);
 
@@ -167,151 +166,103 @@ void AudioMixer::audio_mixer_task(void *params) {
     if (media_available + announcement_available > 0) {
       if (media_available > 0) {
         // Duck here
+        size_t samples_read = media_available / sizeof(int16_t);
+        if (announcement_available > 0) {
+          // We'll mix in announcement audio as well, so that limits the number of samples we proccess
+          samples_read = std::min(samples_read, announcement_available / sizeof(int16_t));
+        }
+
+        // There may be more than one step worth of samples to duck in the buffers, so manage positions
+        int16_t *current_media_buffer = reinterpret_cast<int16_t *>(media_transfer_buffer->get_buffer_start());
+
+        if (ducking_transition_samples_remaining > 0) {
+          // Ducking level is still transitioning
+
+          size_t current_ducking_transition_samples_remaining = ducking_transition_samples_remaining;
+
+          // Take the ceiling of samples_read/samples_per_ducking_step
+          size_t ducking_steps_in_batch =
+              samples_read / samples_per_ducking_step + (samples_read % samples_per_ducking_step != 0);
+
+          for (size_t i = 0; i < ducking_steps_in_batch; ++i) {
+            size_t samples_left_in_step = current_ducking_transition_samples_remaining % samples_per_ducking_step;
+
+            if (samples_left_in_step == 0) {
+              samples_left_in_step = samples_per_ducking_step;
+            }
+
+            size_t samples_to_duck = std::min(samples_read, samples_left_in_step);
+            samples_to_duck = std::min(samples_to_duck, current_ducking_transition_samples_remaining);
+
+            // Ensure we only point to valid index in the Q15 scaling factor table
+            uint8_t safe_db_reduction_index =
+                clamp<uint8_t>(current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
+            int16_t q15_scale_factor = DECIBEL_REDUCTION_TABLE[safe_db_reduction_index];
+
+            this_mixer->scale_audio_samples_(current_media_buffer, current_media_buffer, q15_scale_factor,
+                                             samples_to_duck);
+
+            if (samples_left_in_step - samples_to_duck == 0) {
+              // After scaling the current samples, we are ready to transition to the next step
+              current_ducking_db_reduction += db_change_per_ducking_step;
+            }
+
+            current_media_buffer += samples_to_duck;
+            current_ducking_transition_samples_remaining -= samples_to_duck;
+            samples_read -= samples_to_duck;
+          }
+        }
+
+        if ((current_ducking_db_reduction > 0) && (samples_read > 0)) {
+          // We still need to apply ducking, but we are not in the middle of a transition step
+
+          uint8_t safe_db_reduction_index =
+              clamp<uint8_t>(current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
+          int16_t q15_scale_factor = DECIBEL_REDUCTION_TABLE[safe_db_reduction_index];
+
+          this_mixer->scale_audio_samples_(current_media_buffer, current_media_buffer, q15_scale_factor, samples_read);
+        }
       }
 
+      // Copy based on samples written instead of bytes to avoid ever transferring half a sample
+      size_t samples_written = 0;
       if ((media_available > 0) && (announcement_available > 0)) {
-        size_t bytes_to_read = std::min(media_available, announcement_available);
-        size_t samples_read = bytes_to_read / sizeof(int16_t);
-
+        samples_written = std::min(media_available / sizeof(int16_t), announcement_available / sizeof(int16_t));
         this_mixer->mix_audio_samples_without_clipping_(
             reinterpret_cast<int16_t *>(media_transfer_buffer->get_buffer_start()),
             reinterpret_cast<int16_t *>(announcement_transfer_buffer->get_buffer_start()),
-            reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()), samples_read);
+            reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()), samples_written);
 
-        media_transfer_buffer->decrease_buffer_length(bytes_to_read);
-        announcement_transfer_buffer->decrease_buffer_length(bytes_to_read);
-        output_transfer_buffer->increase_buffer_length(bytes_to_read);
+        media_transfer_buffer->decrease_buffer_length(samples_written * sizeof(int16_t));
+        announcement_transfer_buffer->decrease_buffer_length(samples_written * sizeof(int16_t));
       } else if (media_available > 0) {
-        memcpy(output_transfer_buffer->get_buffer_end(), media_transfer_buffer->get_buffer_start(), media_available);
-        media_transfer_buffer->decrease_buffer_length(media_available);
-        output_transfer_buffer->increase_buffer_length(media_available);
+        samples_written = media_available / sizeof(int16_t);
+        memcpy(output_transfer_buffer->get_buffer_end(), media_transfer_buffer->get_buffer_start(),
+               samples_written * sizeof(int16_t));
+        media_transfer_buffer->decrease_buffer_length(samples_written * sizeof(int16_t));
       } else if (announcement_available > 0) {
+        samples_written = announcement_available / sizeof(int16_t);
         memcpy(output_transfer_buffer->get_buffer_end(), announcement_transfer_buffer->get_buffer_start(),
-               announcement_available);
-        announcement_transfer_buffer->decrease_buffer_length(announcement_available);
-        output_transfer_buffer->increase_buffer_length(announcement_available);
+               samples_written * sizeof(int16_t));
+        announcement_transfer_buffer->decrease_buffer_length(samples_written * sizeof(int16_t));
       }
 
-      // // size_t media_available = this_mixer->media_ring_buffer_->available();
-      // // size_t announcement_available = this_mixer->announcement_ring_buffer_->available();
-
-      // if (media_available * transfer_media + announcement_available > 0) {
-      //   size_t bytes_to_read = output_transfer_buffer->free();
-
-      //   if (media_available * transfer_media > 0) {
-      //     bytes_to_read = std::min(bytes_to_read, media_available);
-      //   }
-
-      //   if (announcement_available > 0) {
-      //     bytes_to_read = std::min(bytes_to_read, announcement_available);
-      //   }
-
-      //   if (bytes_to_read > 0) {
-      //     size_t media_bytes_read = 0;
-      //     if (media_available * transfer_media > 0) {
-      //       media_bytes_read = this_mixer->media_ring_buffer_->read((void *) media_buffer, bytes_to_read, 0);
-      //       if (media_bytes_read > 0) {
-      //         size_t samples_read = media_bytes_read / sizeof(int16_t);
-      //         if (ducking_transition_samples_remaining > 0) {
-      //           // Ducking level is still transitioning
-
-      //           size_t samples_left = ducking_transition_samples_remaining;
-
-      //           // There may be more than one step worth of samples to duck in the buffers, so manage positions
-      //           int16_t *current_media_buffer = media_buffer;
-
-      //           size_t samples_left_in_step = samples_left % samples_per_ducking_step;
-      //           if (samples_left_in_step == 0) {
-      //             // Start of a new ducking step
-
-      //             current_ducking_db_reduction += db_change_per_ducking_step;
-      //             samples_left_in_step = samples_per_ducking_step;
-      //           }
-      //           size_t samples_left_to_duck = std::min(samples_left_in_step, samples_read);
-
-      //           while (samples_left_to_duck > 0) {
-      //             // Ensure we only point to valid index in the Q15 scaling factor table
-      //             uint8_t safe_db_reduction_index =
-      //                 clamp<uint8_t>(current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
-
-      //             int16_t q15_scale_factor = DECIBEL_REDUCTION_TABLE[safe_db_reduction_index];
-      //             this_mixer->scale_audio_samples_(current_media_buffer, current_media_buffer, q15_scale_factor,
-      //                                              samples_left_to_duck);
-
-      //             current_media_buffer += samples_left_to_duck;
-
-      //             samples_read -= samples_left_to_duck;
-      //             samples_left -= samples_left_to_duck;
-
-      //             samples_left_in_step = samples_left % samples_per_ducking_step;
-      //             if (samples_left_in_step == 0) {
-      //               // Start of a new step
-
-      //               current_ducking_db_reduction += db_change_per_ducking_step;
-      //               samples_left_in_step = samples_per_ducking_step;
-      //             }
-      //             samples_left_to_duck = std::min(samples_left_in_step, samples_read);
-      //           }
-      //         } else if (target_ducking_db_reduction > 0) {
-      //           // We still need to apply a ducking scaling, but we are done transitioning
-
-      //           uint8_t safe_db_reduction_index =
-      //               clamp<uint8_t>(target_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
-
-      //           int16_t q15_scale_factor = DECIBEL_REDUCTION_TABLE[safe_db_reduction_index];
-      //           this_mixer->scale_audio_samples_(media_buffer, media_buffer, q15_scale_factor, samples_read);
-      //         }
-      //       }
-      //     }
-
-      //     size_t announcement_bytes_read = 0;
-      //     if (announcement_available > 0) {
-      //       announcement_bytes_read =
-      //           this_mixer->announcement_ring_buffer_->read((void *) announcement_buffer, bytes_to_read, 0);
-      //     }
-
-      //     size_t samples_written = 0;
-      //     if ((media_bytes_read > 0) && (announcement_bytes_read > 0)) {
-      //       // We have both a media and an announcement stream, so mix them together
-
-      //       size_t samples_read = bytes_to_read / sizeof(int16_t);
-
-      //       this_mixer->mix_audio_samples_without_clipping_(
-      //           media_buffer, announcement_buffer,
-      //           reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()), samples_read);
-
-      //       output_transfer_buffer->increase_buffer_length(samples_read * sizeof(int16_t));
-      //       samples_written = samples_read;
-
-      //     } else if (media_bytes_read > 0) {
-      //       memcpy(output_transfer_buffer->get_buffer_end(), media_buffer, media_bytes_read);
-      //       output_transfer_buffer->increase_buffer_length(media_bytes_read);
-      //       samples_written = media_bytes_read * sizeof(int16_t);
-      //     } else if (announcement_bytes_read > 0) {
-      //       memcpy(output_transfer_buffer->get_buffer_end(), announcement_buffer, announcement_bytes_read);
-      //       output_transfer_buffer->increase_buffer_length(announcement_bytes_read);
-      //       samples_written = announcement_bytes_read * sizeof(int16_t);
-      //     }
-
-      //     if (ducking_transition_samples_remaining > 0) {
-      //       ducking_transition_samples_remaining -= std::min(samples_written,
-      //       ducking_transition_samples_remaining);
-      //     }
-      //   }
+      output_transfer_buffer->increase_buffer_length(samples_written * sizeof(int16_t));
+      if (ducking_transition_samples_remaining > 0) {
+        // Advance ducking transition samples whenever any audio is sent
+        ducking_transition_samples_remaining -= std::min(samples_written, ducking_transition_samples_remaining);
+      }
     } else {
       // No audio data available in either buffer
-
       delay(TASK_DELAY_MS);
     }
-    // }
   }
 
   event.type = EventType::STOPPING;
   xQueueSend(this_mixer->event_queue_, &event, portMAX_DELAY);
 
   this_mixer->reset_ring_buffers_();
-  // allocator.deallocate(media_buffer, OUTPUT_BUFFER_SAMPLES);
-  // allocator.deallocate(announcement_buffer, OUTPUT_BUFFER_SAMPLES);
+
   media_transfer_buffer.reset();
   announcement_transfer_buffer.reset();
   output_transfer_buffer.reset();
@@ -333,7 +284,6 @@ esp_err_t AudioMixer::allocate_buffers_() {
     this->announcement_ring_buffer_ = std::move(RingBuffer::create(INPUT_RING_BUFFER_SAMPLES * sizeof(int16_t)));
   }
 
-  // if ((this->announcement_ring_buffer_ == nullptr) || (this->media_ring_buffer_ == nullptr)) {
   if (!this->announcement_ring_buffer_.use_count() || !this->media_ring_buffer_.use_count()) {
     return ESP_ERR_NO_MEM;
   }
@@ -395,7 +345,6 @@ void AudioMixer::mix_audio_samples_without_clipping_(int16_t *media_buffer, int1
 
   if (q15_scaling_factor < MAX_AUDIO_SAMPLE_VALUE) {
     // Need to scale to avoid clipping
-
     this->scale_audio_samples_(media_buffer, media_buffer, q15_scaling_factor, samples_to_mix);
 
     // Mix both stream by adding them together with no bitshift
@@ -408,8 +357,11 @@ void AudioMixer::mix_audio_samples_without_clipping_(int16_t *media_buffer, int1
 
 void AudioMixer::scale_audio_samples_(int16_t *audio_samples, int16_t *output_buffer, int16_t scale_factor,
                                       size_t samples_to_scale) {
-  // Scale the audio samples and store them in the output buffer
-  dsps_mulc_s16(audio_samples, output_buffer, samples_to_scale, scale_factor, 1, 1);
+  // Note the assembly dsps_mulc function has glitches if the input and output buffers are the same.
+  for (int i = 0; i < samples_to_scale; i++) {
+    int32_t acc = (int32_t) audio_samples[i] * (int32_t) scale_factor;
+    output_buffer[i] = (int16_t) (acc >> 15);
+  }
 }
 
 }  // namespace speaker
