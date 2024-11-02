@@ -60,7 +60,6 @@ class AudioOutTransferBuffer : public AudioTransferBuffer {
       : AudioTransferBuffer(ring_buffer, buffer_size) {}
   AudioOutTransferBuffer(speaker::Speaker *speaker, size_t buffer_size)
       : AudioTransferBuffer(buffer_size), speaker_(speaker) {}
-  // size_t write_ring_buffer(TickType_t ticks_to_wait);
 
   size_t transfer_audio_out(TickType_t ticks_to_wait);
 

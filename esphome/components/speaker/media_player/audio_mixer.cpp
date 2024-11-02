@@ -23,11 +23,6 @@ static const int16_t MIN_AUDIO_SAMPLE_VALUE = INT16_MIN;
 esp_err_t AudioMixer::start(Speaker *speaker, const std::string &task_name, UBaseType_t priority) {
   esp_err_t err = this->allocate_buffers_();
 
-  this->output_transfer_buffer_ =
-      make_unique<audio::AudioOutTransferBuffer>(speaker, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
-
-  // TODO: verify the transfer buffer was allocated, need to add case for speaker
-
   if (err != ESP_OK) {
     return err;
   }
@@ -75,11 +70,12 @@ void AudioMixer::audio_mixer_task(void *params) {
   ExternalRAMAllocator<int16_t> allocator(ExternalRAMAllocator<int16_t>::ALLOW_FAILURE);
   int16_t *media_buffer = allocator.allocate(OUTPUT_BUFFER_SAMPLES);
   int16_t *announcement_buffer = allocator.allocate(OUTPUT_BUFFER_SAMPLES);
-  // int16_t *combination_buffer = allocator.allocate(OUTPUT_BUFFER_SAMPLES);
 
-  size_t combination_buffer_length = 0;
+  std::unique_ptr<audio::AudioOutTransferBuffer> output_transfer_buffer =
+      make_unique<audio::AudioOutTransferBuffer>(this_mixer->speaker_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
 
-  if ((media_buffer == nullptr) || (announcement_buffer == nullptr)) {
+  if ((media_buffer == nullptr) || (announcement_buffer == nullptr) ||
+      (!output_transfer_buffer->allocated_successfully())) {
     event.type = EventType::WARNING;
     event.err = ESP_ERR_NO_MEM;
     xQueueSend(this_mixer->event_queue_, &event, portMAX_DELAY);
@@ -152,23 +148,14 @@ void AudioMixer::audio_mixer_task(void *params) {
       }
     }
 
-    // if (combination_buffer_length > 0) {
-    if (this_mixer->output_transfer_buffer_->available() > 0) {
-      this_mixer->output_transfer_buffer_->transfer_audio_out(pdMS_TO_TICKS(TASK_DELAY_MS));
-      // size_t output_bytes_written = this_mixer->speaker_->play((uint8_t *) combination_buffer,
-      //                                                          combination_buffer_length,
-      //                                                          pdMS_TO_TICKS(TASK_DELAY_MS));
-      // combination_buffer_length -= output_bytes_written;
-      // if ((combination_buffer_length > 0) && (output_bytes_written > 0)) {
-      //   memmove(combination_buffer, combination_buffer + output_bytes_written / sizeof(int16_t),
-      //           combination_buffer_length);
+    if (output_transfer_buffer->available() > 0) {
+      output_transfer_buffer->transfer_audio_out(pdMS_TO_TICKS(TASK_DELAY_MS));
     } else {
       size_t media_available = this_mixer->media_ring_buffer_->available();
       size_t announcement_available = this_mixer->announcement_ring_buffer_->available();
 
       if (media_available * transfer_media + announcement_available > 0) {
-        // size_t bytes_to_read = OUTPUT_BUFFER_SAMPLES * sizeof(int16_t);
-        size_t bytes_to_read = this_mixer->output_transfer_buffer_->free();
+        size_t bytes_to_read = output_transfer_buffer->free();
 
         if (media_available * transfer_media > 0) {
           bytes_to_read = std::min(bytes_to_read, media_available);
@@ -248,30 +235,23 @@ void AudioMixer::audio_mixer_task(void *params) {
 
             size_t samples_read = bytes_to_read / sizeof(int16_t);
 
-            // this_mixer->mix_audio_samples_without_clipping_(media_buffer, announcement_buffer, combination_buffer,
-            //                                                 samples_read);
             this_mixer->mix_audio_samples_without_clipping_(
                 media_buffer, announcement_buffer,
-                reinterpret_cast<int16_t *>(this_mixer->output_transfer_buffer_->get_buffer_end()), samples_read);
+                reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()), samples_read);
 
-            this_mixer->output_transfer_buffer_->increase_buffer_length(samples_read * sizeof(int16_t));
+            output_transfer_buffer->increase_buffer_length(samples_read * sizeof(int16_t));
             samples_written = samples_read;
-            // combination_buffer_length = samples_read * sizeof(int16_t);
+
           } else if (media_bytes_read > 0) {
-            // memcpy(combination_buffer, media_buffer, media_bytes_read);
-            // combination_buffer_length = media_bytes_read;
-            memcpy(this_mixer->output_transfer_buffer_->get_buffer_end(), media_buffer, media_bytes_read);
-            this_mixer->output_transfer_buffer_->increase_buffer_length(media_bytes_read);
+            memcpy(output_transfer_buffer->get_buffer_end(), media_buffer, media_bytes_read);
+            output_transfer_buffer->increase_buffer_length(media_bytes_read);
             samples_written = media_bytes_read * sizeof(int16_t);
           } else if (announcement_bytes_read > 0) {
-            // memcpy(combination_buffer, announcement_buffer, announcement_bytes_read);
-            // combination_buffer_length = announcement_bytes_read;
-            memcpy(this_mixer->output_transfer_buffer_->get_buffer_end(), announcement_buffer, announcement_bytes_read);
-            this_mixer->output_transfer_buffer_->increase_buffer_length(announcement_bytes_read);
+            memcpy(output_transfer_buffer->get_buffer_end(), announcement_buffer, announcement_bytes_read);
+            output_transfer_buffer->increase_buffer_length(announcement_bytes_read);
             samples_written = announcement_bytes_read * sizeof(int16_t);
           }
 
-          // size_t samples_written = combination_buffer_length / sizeof(int16_t);
           if (ducking_transition_samples_remaining > 0) {
             ducking_transition_samples_remaining -= std::min(samples_written, ducking_transition_samples_remaining);
           }
@@ -290,7 +270,7 @@ void AudioMixer::audio_mixer_task(void *params) {
   this_mixer->reset_ring_buffers_();
   allocator.deallocate(media_buffer, OUTPUT_BUFFER_SAMPLES);
   allocator.deallocate(announcement_buffer, OUTPUT_BUFFER_SAMPLES);
-  // allocator.deallocate(combination_buffer, OUTPUT_BUFFER_SAMPLES);
+  output_transfer_buffer.reset();
 
   event.type = EventType::STOPPED;
   xQueueSend(this_mixer->event_queue_, &event, portMAX_DELAY);
@@ -301,12 +281,10 @@ void AudioMixer::audio_mixer_task(void *params) {
 }
 
 esp_err_t AudioMixer::allocate_buffers_() {
-  // if (this->media_ring_buffer_ == nullptr)
   if (!this->media_ring_buffer_.use_count()) {
     this->media_ring_buffer_ = RingBuffer::create(INPUT_RING_BUFFER_SAMPLES * sizeof(int16_t));
   }
 
-  // if (this->announcement_ring_buffer_ == nullptr)
   if (!this->announcement_ring_buffer_.use_count()) {
     this->announcement_ring_buffer_ = RingBuffer::create(INPUT_RING_BUFFER_SAMPLES * sizeof(int16_t));
   }
@@ -335,7 +313,7 @@ void AudioMixer::reset_ring_buffers_() {
 }
 
 void AudioMixer::mix_audio_samples_without_clipping_(int16_t *media_buffer, int16_t *announcement_buffer,
-                                                     int16_t *combination_buffer, size_t samples_to_mix) {
+                                                     int16_t *output_buffer, size_t samples_to_mix) {
   // We first test adding the two clips samples together and check for any clipping
   // We want the announcement volume to be consistent, regardless if media is playing or not
   // If there is clipping, we determine what factor we need to multiply that media sample by to avoid it
@@ -365,9 +343,9 @@ void AudioMixer::mix_audio_samples_without_clipping_(int16_t *media_buffer, int1
       // Take the minimum scaling factor (the smaller the factor, the more it needs to be scaled down)
       q15_scaling_factor = std::min(necessary_q15_factor, q15_scaling_factor);
     } else {
-      // Store the combined samples in the combination buffer. If we do not need to scale, then the samples are already
+      // Store the combined samples in the output buffer. If we do not need to scale, then the samples are already
       // mixed.
-      combination_buffer[i] = added_sample;
+      output_buffer[i] = added_sample;
     }
   }
 
@@ -380,7 +358,7 @@ void AudioMixer::mix_audio_samples_without_clipping_(int16_t *media_buffer, int1
     // The dsps_add functions have the following inputs:
     // (buffer 1, buffer 2, output buffer, number of samples, buffer 1 step, buffer 2 step, output, buffer step,
     // bitshift)
-    dsps_add_s16(media_buffer, announcement_buffer, combination_buffer, samples_to_mix, 1, 1, 1, 0);
+    dsps_add_s16(media_buffer, announcement_buffer, output_buffer, samples_to_mix, 1, 1, 1, 0);
   }
 }
 
