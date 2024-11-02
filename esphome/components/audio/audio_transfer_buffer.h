@@ -62,6 +62,7 @@ class AudioOutTransferBuffer : public AudioTransferBuffer {
       : AudioTransferBuffer(buffer_size), speaker_(speaker) {}
 
   size_t transfer_audio_out(TickType_t ticks_to_wait);
+  size_t transfer_audio_out(const uint8_t *data, size_t length, TickType_t ticks_to_wait);
 
   bool has_buffered_data() {
     if (this->speaker_ != nullptr) {

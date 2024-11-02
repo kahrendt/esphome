@@ -118,19 +118,18 @@ AudioReaderState AudioReader::read() {
 }
 
 AudioReaderState AudioReader::file_read_() {
-  // size_t remaining_bytes = this->current_audio_file_->length - (this->file_current_ -
-  // this->current_audio_file_->data); if (remaining_bytes > 0) {
-  //   size_t bytes_written = this->output_transfer_buffer_->get_ring_buffer()->write_without_replacement(
-  //       (void *) this->file_current_, remaining_bytes, pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
-  //   this->file_current_ += bytes_written;
+  size_t remaining_bytes = this->current_audio_file_->length - (this->file_current_ - this->current_audio_file_->data);
+  if (remaining_bytes > 0) {
+    size_t bytes_written = this->output_transfer_buffer_->transfer_audio_out(this->file_current_, remaining_bytes,
+                                                                             pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+    this->file_current_ += bytes_written;
 
-  //   return AudioReaderState::READING;
-  // }
+    return AudioReaderState::READING;
+  }
   return AudioReaderState::FINISHED;
 }
 
 AudioReaderState AudioReader::http_read_() {
-  // this->output_transfer_buffer_->write_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
   this->output_transfer_buffer_->transfer_audio_out(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
   if (esp_http_client_is_complete_data_received(this->client_)) {
