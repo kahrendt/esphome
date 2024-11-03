@@ -88,10 +88,6 @@ esp_err_t AudioPipeline::start(audio::AudioFile *audio_file, uint32_t target_sam
 }
 
 esp_err_t AudioPipeline::allocate_buffers_() {
-  if (!this->decoded_ring_buffer_.use_count()) {
-    this->decoded_ring_buffer_ = std::move(RingBuffer::create(BUFFER_SIZE_BYTES));
-  }
-
   if (this->event_group_ == nullptr)
     this->event_group_ = xEventGroupCreate();
 
@@ -396,7 +392,6 @@ void AudioPipeline::decode_task(void *params) {
       event.source = InfoErrorSource::DECODER;
 
       std::unique_ptr<audio::AudioDecoder> decoder = make_unique<audio::AudioDecoder>(FILE_BUFFER_SIZE);
-      // this_pipeline->raw_file_ring_buffer_, this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
       decoder->add_input_ring_buffer(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
 
       esp_err_t err = decoder->start(this_pipeline->current_audio_file_type_);
@@ -459,11 +454,24 @@ void AudioPipeline::decode_task(void *params) {
           } else {
             if ((this_pipeline->current_audio_stream_info_.channels < 2) ||
                 (this_pipeline->current_audio_stream_info_.sample_rate != this_pipeline->target_sample_rate_)) {
-              // Inform the resampler that the stream information is available
-              decoder->add_output_ring_buffer(this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
-              xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_LOADED_STREAM_INFO);
+              // Audio format requires resampling, allocate the decoded ring buffer and inform the resampler that the
+              // stream information is available
+
+              if (!this_pipeline->decoded_ring_buffer_.use_count()) {
+                this_pipeline->decoded_ring_buffer_ = std::move(RingBuffer::create(BUFFER_SIZE_BYTES));
+              }
+
+              if (!this_pipeline->decoded_ring_buffer_.use_count()) {
+                // TODO: verify this check actually works to test if the ring buffer was allocated
+                // Setting up the decoder failed, stop the pipeline
+                xEventGroupSetBits(this_pipeline->event_group_,
+                                   EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
+              } else {
+                decoder->add_output_ring_buffer(this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
+                xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_LOADED_STREAM_INFO);
+              }
             } else {
-              // Perfect match already, send it directly to the mixer
+              // Audio format doesn't require resampling, send it directly to the mixer
 
               std::shared_ptr<RingBuffer> output_ring_buffer;
 
@@ -473,8 +481,6 @@ void AudioPipeline::decode_task(void *params) {
                 output_ring_buffer = this_pipeline->mixer_->get_announcement_ring_buffer();
               }
               decoder->add_output_ring_buffer(output_ring_buffer, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
-              // No need to use the decoded ring buffer at all
-              this_pipeline->decoded_ring_buffer_.reset();
             }
           }
 
