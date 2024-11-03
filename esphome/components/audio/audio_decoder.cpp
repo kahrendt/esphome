@@ -11,6 +11,7 @@ namespace esphome {
 namespace audio {
 
 static const size_t READ_WRITE_TIMEOUT_MS = 20;
+static const size_t DECODING_TIMEOUT_MS = 50;
 
 AudioDecoder::~AudioDecoder() {
   if (this->flac_decoder_ != nullptr) {
@@ -65,73 +66,76 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
 
 AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   if (stop_gracefully) {
-    if (this->output_transfer_buffer_->available() == 0) {
-      // If the file decoder believes it the end of file
+    if (!this->output_transfer_buffer_->has_buffered_data()) {
       if (this->end_of_file_) {
-        return AudioDecoderState::FINISHED;
-      }
-      // If all the internal buffers are empty, the decoding is done
-      if ((this->input_transfer_buffer_->get_ring_buffer()->available() == 0) &&
-          (this->input_transfer_buffer_->available() == 0)) {
+        // the file decoder indicates it reached the end of file
         return AudioDecoderState::FINISHED;
       }
 
-      // If the ring buffer has no new data and the decoding failed last time, mark done
-      if ((this->input_transfer_buffer_->get_ring_buffer()->available() == 0) &&
-          (this->potentially_failed_count_ > 0)) {
+      if (!this->input_transfer_buffer_->has_buffered_data()) {
+        // If all the internal buffers are empty, the decoding is done
         return AudioDecoderState::FINISHED;
       }
     }
   }
 
   if (this->potentially_failed_count_ > 10) {
+    if (stop_gracefully) {
+      // No more new data is going to come in, so decoding is done
+      return AudioDecoderState::FINISHED;
+    }
     return AudioDecoderState::FAILED;
   }
 
   FileDecoderState state = FileDecoderState::MORE_TO_PROCESS;
 
+  uint32_t decoding_start = millis();
+
   while (state == FileDecoderState::MORE_TO_PROCESS) {
+    // Transfer decoded out
     if (this->output_transfer_buffer_->available() > 0) {
       this->output_transfer_buffer_->transfer_audio_out(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
-      // return AudioDecoderState::DECODING;
     }
-    // TODO: this is a stupid if else if
-    if (this->output_transfer_buffer_->free() < this->free_buffer_required_) {
+
+    // Verify there is enough space to store more decoded audio and that the function hasn't been running too long
+    if ((this->output_transfer_buffer_->free() < this->free_buffer_required_) ||
+        (millis() - decoding_start > DECODING_TIMEOUT_MS)) {
       return AudioDecoderState::DECODING;
-    } else if (this->output_transfer_buffer_->free() >= this->free_buffer_required_) {
-      // Decode more data
-      size_t bytes_read = this->input_transfer_buffer_->read_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+    }
 
-      if ((this->potentially_failed_count_ > 0) && (bytes_read == 0)) {
-        // Failed to decode in last attempt and there is no new data
+    // Decode more data
+    size_t bytes_read = this->input_transfer_buffer_->read_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
-        if (this->input_transfer_buffer_->free() == 0) {
-          // The input buffer is full. Since it previously failed on the exact same data, we can never recover
-          state = FileDecoderState::FAILED;
-        } else {
-          // Attempt to get more data next time
-          state = FileDecoderState::IDLE;
-        }
-      } else if (this->input_transfer_buffer_->available() == 0) {
-        // No data to decode, attempt to get more data next time
-        state = FileDecoderState::IDLE;
+    if ((this->potentially_failed_count_ > 0) && (bytes_read == 0)) {
+      // Failed to decode in last attempt and there is no new data
+
+      if (this->input_transfer_buffer_->free() == 0) {
+        // The input buffer is full. Since it previously failed on the exact same data, we can never recover
+        state = FileDecoderState::FAILED;
       } else {
-        switch (this->audio_file_type_) {
-          case AudioFileType::FLAC:
-            state = this->decode_flac_();
-            break;
-          case AudioFileType::MP3:
-            state = this->decode_mp3_();
-            break;
-          case AudioFileType::WAV:
-            state = this->decode_wav_();
-            break;
-          case AudioFileType::NONE:
-            state = FileDecoderState::IDLE;
-            break;
-        }
+        // Attempt to get more data next time
+        state = FileDecoderState::IDLE;
+      }
+    } else if (this->input_transfer_buffer_->available() == 0) {
+      // No data to decode, attempt to get more data next time
+      state = FileDecoderState::IDLE;
+    } else {
+      switch (this->audio_file_type_) {
+        case AudioFileType::FLAC:
+          state = this->decode_flac_();
+          break;
+        case AudioFileType::MP3:
+          state = this->decode_mp3_();
+          break;
+        case AudioFileType::WAV:
+          state = this->decode_wav_();
+          break;
+        case AudioFileType::NONE:
+          state = FileDecoderState::IDLE;
+          break;
       }
     }
+
     if (state == FileDecoderState::POTENTIALLY_FAILED) {
       ++this->potentially_failed_count_;
     } else if (state == FileDecoderState::END_OF_FILE) {
@@ -241,8 +245,6 @@ FileDecoderState AudioDecoder::decode_mp3_() {
     MP3GetLastFrameInfo(this->mp3_decoder_, &mp3_frame_info);
     if (mp3_frame_info.outputSamps > 0) {
       int bytes_per_sample = (mp3_frame_info.bitsPerSample / 8);
-      // this->output_buffer_length_ = mp3_frame_info.outputSamps * bytes_per_sample;
-      // this->output_buffer_current_ = this->output_buffer_;
       this->output_transfer_buffer_->increase_buffer_length(mp3_frame_info.outputSamps * bytes_per_sample);
 
       audio::AudioStreamInfo stream_info;

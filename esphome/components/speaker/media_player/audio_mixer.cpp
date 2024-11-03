@@ -159,6 +159,17 @@ void AudioMixer::audio_mixer_task(void *params) {
       }
     }
 
+    // if ((this_mixer->media_ring_buffer_.use_count() == 1) && (this_mixer->media_ring_buffer_.available() > 0)) {
+    //   // Autoclear the data in the media ring buffer if the audio source no longer owns it
+    //   //  - This ensures that if a new pipeline starts feeding the mixer while paused, it won't play the old audio
+    //   this_mixer->media_ring_buffer_->reset();
+    // }
+    // if ((this_mixer->announcement_ring_buffer_.use_count() == 1) &&
+    //     (this_mixer->announcement_ring_buffer_.available() > 0)) {
+    //   // Autoclear the data in the announcement ring buffer if the audio source no longer owns it
+    //   this_mixer->announcement_ring_buffer_->reset();
+    // }
+
     output_transfer_buffer->transfer_audio_out(pdMS_TO_TICKS(TASK_DELAY_MS));
 
     media_transfer_buffer->read_ring_buffer(0);

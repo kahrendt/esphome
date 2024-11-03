@@ -45,7 +45,7 @@ class AudioTransferBuffer {
 
   size_t capacity() { return this->buffer_size_; }
 
-  std::shared_ptr<RingBuffer> &get_ring_buffer() { return this->ring_buffer_; }
+  virtual bool has_buffered_data() = 0;
 
  protected:
   void allocate_buffer_() {
@@ -87,13 +87,13 @@ class AudioOutTransferBuffer : public AudioTransferBuffer {
     return allocated_successfully();
   }
 
-  bool has_buffered_data() {
+  bool has_buffered_data() override {
     if (this->speaker_ != nullptr) {
-      return this->speaker_->has_buffered_data();
+      return (this->speaker_->has_buffered_data() || (this->available() > 0));
     } else if (this->ring_buffer_.use_count() > 0) {
-      return this->ring_buffer_->available() > 0;
+      return ((this->ring_buffer_->available() > 0) || (this->available() > 0));
     }
-    return false;
+    return (this->available() > 0);
   }
 
   bool allocated_successfully() override;
@@ -107,6 +107,13 @@ class AudioInTransferBuffer : public AudioTransferBuffer {
   // AudioInTransferBuffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size)
   //     : AudioTransferBuffer(ring_buffer, buffer_size) {}
   size_t read_ring_buffer(TickType_t ticks_to_wait);
+
+  bool has_buffered_data() override {
+    if (this->ring_buffer_.use_count() > 0) {
+      return ((this->ring_buffer_->available() > 0) || (this->available() > 0));
+    }
+    return (this->available() > 0);
+  }
 };
 
 }  // namespace audio
