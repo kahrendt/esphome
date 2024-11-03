@@ -88,10 +88,6 @@ esp_err_t AudioPipeline::start(audio::AudioFile *audio_file, uint32_t target_sam
 }
 
 esp_err_t AudioPipeline::allocate_buffers_() {
-  if (!this->raw_file_ring_buffer_.use_count()) {
-    this->raw_file_ring_buffer_ = std::move(RingBuffer::create(FILE_RING_BUFFER_SIZE));
-  }
-
   if (!this->decoded_ring_buffer_.use_count()) {
     this->decoded_ring_buffer_ = std::move(RingBuffer::create(BUFFER_SIZE_BYTES));
   }
@@ -322,15 +318,26 @@ void AudioPipeline::read_task(void *params) {
       esp_err_t err = ESP_OK;
 
       std::unique_ptr<audio::AudioReader> reader = make_unique<audio::AudioReader>();
-      // make_unique<audio::AudioReader>(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
 
       if (event_bits & READER_COMMAND_INIT_FILE) {
-        reader->add_ring_buffer(this_pipeline->raw_file_ring_buffer_, 0);
+        // reader->add_ring_buffer(this_pipeline->raw_file_ring_buffer_, 0);
         err = reader->start(this_pipeline->current_audio_file_, this_pipeline->current_audio_file_type_);
       } else {
-        reader->add_ring_buffer(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
         err = reader->start(this_pipeline->current_uri_, this_pipeline->current_audio_file_type_);
       }
+
+      if (err == ESP_OK) {
+        if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
+          this_pipeline->raw_file_ring_buffer_ = std::move(RingBuffer::create(FILE_RING_BUFFER_SIZE));
+        }
+        if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
+          // TODO: verify this check actually works to test if the ring buffer was allocated
+          err = ESP_ERR_NO_MEM;
+        } else {
+          reader->add_ring_buffer(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
+        }
+      }
+
       if (err != ESP_OK) {
         // Send specific error message
         event.err = err;

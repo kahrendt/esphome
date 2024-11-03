@@ -55,15 +55,6 @@ size_t AudioOutTransferBuffer::transfer_audio_out(TickType_t ticks_to_wait) {
   return bytes_written;
 }
 
-size_t AudioOutTransferBuffer::transfer_audio_out(const uint8_t *data, size_t length, TickType_t ticks_to_wait) {
-  if (this->speaker_ != nullptr) {
-    return this->speaker_->play(data, length, ticks_to_wait);
-  } else if (this->ring_buffer_.use_count() > 0) {
-    return this->ring_buffer_->write_without_replacement((void *) data, length, ticks_to_wait);
-  }
-  return 0;
-}
-
 bool AudioTransferBuffer::allocated_successfully() {
   // if (this->ring_buffer_.use_count() && (this->buffer_ != nullptr)) {
   //   return true;

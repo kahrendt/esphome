@@ -78,7 +78,6 @@ class AudioOutTransferBuffer : public AudioTransferBuffer {
   AudioOutTransferBuffer(size_t buffer_size) : AudioTransferBuffer(buffer_size) { this->allocate_buffer_(); }
 
   size_t transfer_audio_out(TickType_t ticks_to_wait);
-  size_t transfer_audio_out(const uint8_t *data, size_t length, TickType_t ticks_to_wait);
 
   bool add_speaker(speaker::Speaker *speaker, size_t buffer_size) {
     this->buffer_size_ = buffer_size;

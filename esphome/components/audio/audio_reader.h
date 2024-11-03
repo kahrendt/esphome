@@ -26,9 +26,12 @@ class AudioReader {
   ~AudioReader();
 
   bool add_ring_buffer(std::shared_ptr<esphome::RingBuffer> &output_ring_buffer, size_t output_buffer_size) {
+    if (current_audio_file_ != nullptr) {
+      this->file_ring_buffer_ = output_ring_buffer;
+      return true;
+    }
     this->output_transfer_buffer_ = make_unique<AudioOutTransferBuffer>();
-    this->output_transfer_buffer_->add_ring_buffer(output_ring_buffer, output_buffer_size);
-    return true;
+    return this->output_transfer_buffer_->add_ring_buffer(output_ring_buffer, output_buffer_size);
   }
 
   esp_err_t start(const std::string &uri, AudioFileType &file_type);
@@ -40,6 +43,7 @@ class AudioReader {
   AudioReaderState file_read_();
   AudioReaderState http_read_();
 
+  std::shared_ptr<RingBuffer> file_ring_buffer_;
   std::unique_ptr<AudioOutTransferBuffer> output_transfer_buffer_;
   void cleanup_connection_();
 

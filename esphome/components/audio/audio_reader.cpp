@@ -24,9 +24,9 @@ AudioReader::~AudioReader() { this->cleanup_connection_(); }
 esp_err_t AudioReader::start(AudioFile *audio_file, AudioFileType &file_type) {
   file_type = AudioFileType::NONE;
 
-  if (!this->output_transfer_buffer_->allocated_successfully()) {
-    return ESP_ERR_NO_MEM;
-  }
+  // if (!this->output_transfer_buffer_->allocated_successfully()) {
+  //   return ESP_ERR_NO_MEM;
+  // }
 
   this->current_audio_file_ = audio_file;
 
@@ -39,9 +39,9 @@ esp_err_t AudioReader::start(AudioFile *audio_file, AudioFileType &file_type) {
 esp_err_t AudioReader::start(const std::string &uri, AudioFileType &file_type) {
   file_type = AudioFileType::NONE;
 
-  if (!this->output_transfer_buffer_->allocated_successfully()) {
-    return ESP_ERR_NO_MEM;
-  }
+  // if (!this->output_transfer_buffer_->allocated_successfully()) {
+  //   return ESP_ERR_NO_MEM;
+  // }
 
   this->cleanup_connection_();
 
@@ -120,14 +120,14 @@ AudioReaderState AudioReader::read() {
 AudioReaderState AudioReader::file_read_() {
   size_t remaining_bytes = this->current_audio_file_->length - (this->file_current_ - this->current_audio_file_->data);
   if (remaining_bytes > 0) {
-    size_t bytes_written = this->output_transfer_buffer_->transfer_audio_out(this->file_current_, remaining_bytes,
-                                                                             pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+    size_t bytes_written = this->file_ring_buffer_->write_without_replacement(this->file_current_, remaining_bytes,
+                                                                              pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
     this->file_current_ += bytes_written;
 
     return AudioReaderState::READING;
   }
 
-  if (this->output_transfer_buffer_->has_buffered_data()) {
+  if (this->file_ring_buffer_->available() > 0) {
     return AudioReaderState::READING;
   }
 
