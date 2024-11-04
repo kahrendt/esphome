@@ -19,7 +19,7 @@
 
 #include <esp_http_client.h>
 
-#define SIMPLE_MEDIA_PLAYER
+// #define SIMPLE_MEDIA_PLAYER
 
 namespace esphome {
 namespace speaker {

@@ -229,6 +229,8 @@ async def to_code(config):
         "https://github.com/kahrendt/esp-audio-libs.git#update-wav-decoder-calls",
     )
 
+    cg.add_define("SIMPLE_MEDIA_PLAYER", True)
+
     # Wifi settings based on https://github.com/espressif/esp-adf/issues/297#issuecomment-783811702
     esp32.add_idf_sdkconfig_option("CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM", 16)
     esp32.add_idf_sdkconfig_option("CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM", 512)

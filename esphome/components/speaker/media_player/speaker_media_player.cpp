@@ -169,8 +169,7 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
       }
 
       if (err != ESP_OK) {
-        std::string error_string = {"Error starting the audio pipeline: %s", esp_err_to_name(err)};
-        this->status_set_error(error_string.c_str());
+        this->status_set_error(strcat("Error starting the audio pipeline: ", esp_err_to_name(err)));
       } else {
         this->status_clear_error();
       }
@@ -210,8 +209,7 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
       }
 
       if (err != ESP_OK) {
-        std::string error_string = {"Error starting the audio pipeline: %s", esp_err_to_name(err)};
-        this->status_set_error(error_string.c_str());
+        this->status_set_error(strcat("Error starting the audio pipeline: ", esp_err_to_name(err)));
       } else {
         this->status_clear_error();
       }
@@ -368,8 +366,10 @@ void SpeakerMediaPlayer::loop() {
     ESP_LOGE(TAG, "The media pipeline's file reader encountered an error.");
   } else if (this->media_pipeline_state_ == AudioPipelineState::ERROR_DECODING) {
     ESP_LOGE(TAG, "The media pipeline's audio decoder encountered an error.");
+#if !defined(SIMPLE_MEDIA_PLAYER)
   } else if (this->media_pipeline_state_ == AudioPipelineState::ERROR_RESAMPLING) {
     ESP_LOGE(TAG, "The media pipeline's audio resampler encountered an error.");
+#endif
   }
 
 #if !defined(SIMPLE_MEDIA_PLAYER)
