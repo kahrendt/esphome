@@ -27,10 +27,10 @@ class AudioTransferBuffer {
 
   virtual bool allocated_successfully();
 
-  bool add_ring_buffer(std::shared_ptr<RingBuffer> &ring_buffer, size_t buffer_size) {
+  bool add_ring_buffer(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size) {
     this->buffer_size_ = buffer_size;
     this->allocate_buffer_();
-    this->ring_buffer_ = ring_buffer;
+    this->ring_buffer_ = ring_buffer.lock();
     return this->allocated_successfully();
   }
 
@@ -46,6 +46,13 @@ class AudioTransferBuffer {
   size_t capacity() { return this->buffer_size_; }
 
   virtual bool has_buffered_data() = 0;
+
+  void clear_buffer() {
+    this->buffer_length_ = 0;
+    if (this->ring_buffer_.use_count() > 0) {
+      this->ring_buffer_->reset();
+    }
+  }
 
  protected:
   void allocate_buffer_() {

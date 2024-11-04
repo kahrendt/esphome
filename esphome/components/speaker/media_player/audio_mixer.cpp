@@ -68,17 +68,39 @@ void AudioMixer::audio_mixer_task(void *params) {
   CommandEvent command_event;
 
   std::unique_ptr<audio::AudioInTransferBuffer> media_transfer_buffer = make_unique<audio::AudioInTransferBuffer>();
-  // this_mixer->media_ring_buffer_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
-  media_transfer_buffer->add_ring_buffer(this_mixer->media_ring_buffer_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+
+  {  // After this block temp_media_ring_buffer will fall out of scope and release ownership
+    std::shared_ptr<RingBuffer> temp_media_ring_buffer;
+    if (this_mixer->media_ring_buffer_.use_count() == 0) {
+      temp_media_ring_buffer = std::move(RingBuffer::create(INPUT_RING_BUFFER_SAMPLES * sizeof(int16_t)));
+      this_mixer->media_ring_buffer_ = temp_media_ring_buffer;
+    }
+    if (this_mixer->media_ring_buffer_.use_count() == 0) {
+      // TODO: Handle no allocation
+    } else {
+      media_transfer_buffer->add_ring_buffer(temp_media_ring_buffer, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+    }
+  }
+
   std::unique_ptr<audio::AudioInTransferBuffer> announcement_transfer_buffer =
       make_unique<audio::AudioInTransferBuffer>();
-  announcement_transfer_buffer->add_ring_buffer(this_mixer->announcement_ring_buffer_,
-                                                OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
-  // make_unique<audio::AudioInTransferBuffer>(this_mixer->announcement_ring_buffer_,
-  //                                           OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+
+  {  // After this block temp_announncement_ring_buffer will fall out of scope and release ownership
+    std::shared_ptr<RingBuffer> temp_announcement_ring_buffer;
+    if (this_mixer->announcement_ring_buffer_.use_count() == 0) {
+      temp_announcement_ring_buffer = std::move(RingBuffer::create(INPUT_RING_BUFFER_SAMPLES * sizeof(int16_t)));
+      this_mixer->announcement_ring_buffer_ = temp_announcement_ring_buffer;
+    }
+    if (this_mixer->announcement_ring_buffer_.use_count() == 0) {
+      // TODO: Handle no allocation
+    } else {
+      announcement_transfer_buffer->add_ring_buffer(temp_announcement_ring_buffer,
+                                                    OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+    }
+  }
+
   std::unique_ptr<audio::AudioOutTransferBuffer> output_transfer_buffer = make_unique<audio::AudioOutTransferBuffer>();
   output_transfer_buffer->add_speaker(this_mixer->speaker_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
-  // make_unique<audio::AudioOutTransferBuffer>(this_mixer->speaker_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
 
   if (!media_transfer_buffer->allocated_successfully() || (!announcement_transfer_buffer->allocated_successfully()) ||
       (!output_transfer_buffer->allocated_successfully())) {
@@ -152,23 +174,24 @@ void AudioMixer::audio_mixer_task(void *params) {
         transfer_media = false;
       } else if (command_event.command == CommandEventType::RESUME_MEDIA) {
         transfer_media = true;
-      } else if (command_event.command == CommandEventType::CLEAR_MEDIA) {
-        this_mixer->media_ring_buffer_->reset();
-      } else if (command_event.command == CommandEventType::CLEAR_ANNOUNCEMENT) {
-        this_mixer->announcement_ring_buffer_->reset();
+        // printf("media_ring_buffer use count %ld\n", this_mixer->media_ring_buffer_.use_count());
+        // } else if (command_event.command == CommandEventType::CLEAR_MEDIA) {
+        //   this_mixer->media_ring_buffer_->reset();
+        // } else if (command_event.command == CommandEventType::CLEAR_ANNOUNCEMENT) {
+        // this_mixer->announcement_ring_buffer_->reset();
       }
     }
 
-    // if ((this_mixer->media_ring_buffer_.use_count() == 1) && (this_mixer->media_ring_buffer_.available() > 0)) {
-    //   // Autoclear the data in the media ring buffer if the audio source no longer owns it
-    //   //  - This ensures that if a new pipeline starts feeding the mixer while paused, it won't play the old audio
-    //   this_mixer->media_ring_buffer_->reset();
-    // }
-    // if ((this_mixer->announcement_ring_buffer_.use_count() == 1) &&
-    //     (this_mixer->announcement_ring_buffer_.available() > 0)) {
-    //   // Autoclear the data in the announcement ring buffer if the audio source no longer owns it
-    //   this_mixer->announcement_ring_buffer_->reset();
-    // }
+    if ((this_mixer->media_ring_buffer_.use_count() == 1) && (media_transfer_buffer->has_buffered_data())) {
+      // Autoclear the data in the media ring buffer if the audio source no longer owns it
+      //  - This ensures that if a new pipeline starts feeding the mixer while paused, it won't play the old audio
+      media_transfer_buffer->clear_buffer();
+    }
+    if ((this_mixer->announcement_ring_buffer_.use_count() == 1) &&
+        (announcement_transfer_buffer->has_buffered_data())) {
+      // Autoclear the data in the announcement ring buffer if the audio source no longer owns it
+      announcement_transfer_buffer->clear_buffer();
+    }
 
     output_transfer_buffer->transfer_audio_out(pdMS_TO_TICKS(TASK_DELAY_MS));
 
@@ -277,8 +300,6 @@ void AudioMixer::audio_mixer_task(void *params) {
   event.type = EventType::STOPPING;
   xQueueSend(this_mixer->event_queue_, &event, portMAX_DELAY);
 
-  this_mixer->reset_ring_buffers_();
-
   media_transfer_buffer.reset();
   announcement_transfer_buffer.reset();
   output_transfer_buffer.reset();
@@ -292,18 +313,6 @@ void AudioMixer::audio_mixer_task(void *params) {
 }
 
 esp_err_t AudioMixer::allocate_buffers_() {
-  if (!this->media_ring_buffer_.use_count()) {
-    this->media_ring_buffer_ = std::move(RingBuffer::create(INPUT_RING_BUFFER_SAMPLES * sizeof(int16_t)));
-  }
-
-  if (!this->announcement_ring_buffer_.use_count()) {
-    this->announcement_ring_buffer_ = std::move(RingBuffer::create(INPUT_RING_BUFFER_SAMPLES * sizeof(int16_t)));
-  }
-
-  if (!this->announcement_ring_buffer_.use_count() || !this->media_ring_buffer_.use_count()) {
-    return ESP_ERR_NO_MEM;
-  }
-
   if (this->event_queue_ == nullptr)
     this->event_queue_ = xQueueCreate(QUEUE_COUNT, sizeof(TaskEvent));
 
@@ -315,11 +324,6 @@ esp_err_t AudioMixer::allocate_buffers_() {
   }
 
   return ESP_OK;
-}
-
-void AudioMixer::reset_ring_buffers_() {
-  this->media_ring_buffer_->reset();
-  this->announcement_ring_buffer_->reset();
 }
 
 void AudioMixer::mix_audio_samples_without_clipping_(int16_t *media_buffer, int16_t *announcement_buffer,

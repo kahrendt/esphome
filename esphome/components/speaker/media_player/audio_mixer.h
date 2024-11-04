@@ -28,7 +28,7 @@ namespace speaker {
 //  - The mixer runs as a FreeRTOS task
 //    - The task reports its state using the TaskEvent queue. Regularly call the  `read_event` function to obtain the
 //      current state
-//    - Commands are sent to the task using a the CommandEvent queue. Use the `send_command` function to do so.
+//    - Commands are sent to the task using the CommandEvent queue. Use the `send_command` function to do so.
 //    - Use the `start` function to initiate. The `stop` function deletes the task, but be sure to send a STOP command
 //      first to avoid memory leaks.
 
@@ -101,13 +101,12 @@ class AudioMixer {
   void stop();
 
   /// @brief Retrieves the media stream's ring buffer pointer
-  /// @return pointer to media ring buffer
-  // RingBuffer *get_media_ring_buffer() { return this->media_ring_buffer_.get(); }
-  std::shared_ptr<RingBuffer> &get_media_ring_buffer() { return this->media_ring_buffer_; }
+  /// @return weak_ptr of the media ring buffer
+  std::weak_ptr<RingBuffer> get_media_ring_buffer() { return this->media_ring_buffer_; }
 
   /// @brief Retrieves the announcement stream's ring buffer pointer
-  /// @return pointer to announcement ring buffer
-  std::shared_ptr<RingBuffer> &get_announcement_ring_buffer() { return this->announcement_ring_buffer_; }
+  /// @return weak_ptr of the announcement ring buffer
+  std::weak_ptr<RingBuffer> get_announcement_ring_buffer() { return this->announcement_ring_buffer_; }
 
   /// @brief Suspends the mixer task
   void suspend_task();
@@ -118,9 +117,6 @@ class AudioMixer {
   /// @brief Allocates the ring buffers, task stack, and queues
   /// @return ESP_OK if successful or an error otherwise
   esp_err_t allocate_buffers_();
-
-  /// @brief Resets the media and anouncement ring buffers
-  void reset_ring_buffers_();
 
   /// @brief Mixes the media and announcement samples. If the resulting audio clips, the media samples are first
   /// scaled.
@@ -150,8 +146,8 @@ class AudioMixer {
 
   Speaker *speaker_{nullptr};
 
-  std::shared_ptr<RingBuffer> media_ring_buffer_;
-  std::shared_ptr<RingBuffer> announcement_ring_buffer_;
+  std::weak_ptr<RingBuffer> media_ring_buffer_;
+  std::weak_ptr<RingBuffer> announcement_ring_buffer_;
 };
 }  // namespace speaker
 }  // namespace esphome

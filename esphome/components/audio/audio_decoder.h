@@ -47,12 +47,12 @@ class AudioDecoder {
 
   ~AudioDecoder();
 
-  bool add_input_ring_buffer(std::shared_ptr<esphome::RingBuffer> &input_ring_buffer, size_t input_buffer_size) {
+  bool add_input_ring_buffer(std::weak_ptr<esphome::RingBuffer> input_ring_buffer, size_t input_buffer_size) {
     // this->input_transfer_buffer_ = make_unique<AudioInTransferBuffer>();
     this->input_transfer_buffer_->add_ring_buffer(input_ring_buffer, input_buffer_size);
     return true;
   }
-  bool add_output_ring_buffer(std::shared_ptr<esphome::RingBuffer> &output_ring_buffer, size_t output_buffer_size) {
+  bool add_output_ring_buffer(std::weak_ptr<esphome::RingBuffer> output_ring_buffer, size_t output_buffer_size) {
     // this->output_transfer_buffer_ = make_unique<AudioOutTransferBuffer>();
     this->output_transfer_buffer_->add_ring_buffer(output_ring_buffer, output_buffer_size);
     return true;

@@ -61,6 +61,8 @@ enum EventGroupBits : uint32_t {
 AudioPipeline::AudioPipeline(AudioMixer *mixer, AudioPipelineType pipeline_type) {
   this->mixer_ = mixer;
   this->pipeline_type_ = pipeline_type;
+
+  this->allocate_buffers_();
 }
 
 esp_err_t AudioPipeline::start(const std::string &uri, uint32_t target_sample_rate, const std::string &task_name,
@@ -243,29 +245,18 @@ esp_err_t AudioPipeline::stop() {
     return ESP_ERR_TIMEOUT;
   }
 
-  // Clear the ring buffer in the mixer; avoids playing incorrect audio when starting a new file while paused
-  CommandEvent command_event;
-  if (this->pipeline_type_ == AudioPipelineType::MEDIA) {
-    command_event.command = CommandEventType::CLEAR_MEDIA;
-  } else {
-    command_event.command = CommandEventType::CLEAR_ANNOUNCEMENT;
-  }
-  this->mixer_->send_command(&command_event);
+  // // Clear the ring buffer in the mixer; avoids playing incorrect audio when starting a new file while paused
+  // CommandEvent command_event;
+  // if (this->pipeline_type_ == AudioPipelineType::MEDIA) {
+  //   command_event.command = CommandEventType::CLEAR_MEDIA;
+  // } else {
+  //   command_event.command = CommandEventType::CLEAR_ANNOUNCEMENT;
+  // }
+  // this->mixer_->send_command(&command_event);
 
   xEventGroupClearBits(this->event_group_, UNFINISHED_BITS);
-  this->reset_ring_buffers();
 
   return ESP_OK;
-}
-
-void AudioPipeline::reset_ring_buffers() {
-  if (this->raw_file_ring_buffer_.use_count()) {
-    this->raw_file_ring_buffer_->reset();
-  }
-
-  if (this->decoded_ring_buffer_.use_count()) {
-    this->decoded_ring_buffer_->reset();
-  }
 }
 
 void AudioPipeline::suspend_tasks() {
@@ -316,16 +307,19 @@ void AudioPipeline::read_task(void *params) {
       std::unique_ptr<audio::AudioReader> reader = make_unique<audio::AudioReader>();
 
       if (event_bits & READER_COMMAND_INIT_FILE) {
-        // reader->add_ring_buffer(this_pipeline->raw_file_ring_buffer_, 0);
         err = reader->start(this_pipeline->current_audio_file_, this_pipeline->current_audio_file_type_);
       } else {
         err = reader->start(this_pipeline->current_uri_, this_pipeline->current_audio_file_type_);
       }
 
       if (err == ESP_OK) {
+        std::shared_ptr<RingBuffer> temp_ring_buffer;
+
         if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
-          this_pipeline->raw_file_ring_buffer_ = std::move(RingBuffer::create(FILE_RING_BUFFER_SIZE));
+          temp_ring_buffer = std::move(RingBuffer::create(FILE_RING_BUFFER_SIZE));
+          this_pipeline->raw_file_ring_buffer_ = temp_ring_buffer;
         }
+
         if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
           // TODO: verify this check actually works to test if the ring buffer was allocated
           err = ESP_ERR_NO_MEM;
@@ -396,9 +390,6 @@ void AudioPipeline::decode_task(void *params) {
 
       esp_err_t err = decoder->start(this_pipeline->current_audio_file_type_);
 
-      // Decoding has started, so the pipeline can release ownership of the raw_file_ring_buffer
-      this_pipeline->raw_file_ring_buffer_.reset();
-
       if (err != ESP_OK) {
         // Send specific error message
         event.err = err;
@@ -457,8 +448,11 @@ void AudioPipeline::decode_task(void *params) {
               // Audio format requires resampling, allocate the decoded ring buffer and inform the resampler that the
               // stream information is available
 
+              std::shared_ptr<RingBuffer> temp_ring_buffer;
+
               if (!this_pipeline->decoded_ring_buffer_.use_count()) {
-                this_pipeline->decoded_ring_buffer_ = std::move(RingBuffer::create(BUFFER_SIZE_BYTES));
+                temp_ring_buffer = std::move(RingBuffer::create((BUFFER_SIZE_BYTES)));
+                this_pipeline->decoded_ring_buffer_ = temp_ring_buffer;
               }
 
               if (!this_pipeline->decoded_ring_buffer_.use_count()) {
@@ -473,7 +467,7 @@ void AudioPipeline::decode_task(void *params) {
             } else {
               // Audio format doesn't require resampling, send it directly to the mixer
 
-              std::shared_ptr<RingBuffer> output_ring_buffer;
+              std::weak_ptr<RingBuffer> output_ring_buffer;
 
               if (this_pipeline->pipeline_type_ == AudioPipelineType::MEDIA) {
                 output_ring_buffer = this_pipeline->mixer_->get_media_ring_buffer();
@@ -510,7 +504,7 @@ void AudioPipeline::resample_task(void *params) {
       InfoErrorEvent event;
       event.source = InfoErrorSource::RESAMPLER;
 
-      std::shared_ptr<RingBuffer> output_ring_buffer;
+      std::weak_ptr<RingBuffer> output_ring_buffer;
 
       if (this_pipeline->pipeline_type_ == AudioPipelineType::MEDIA) {
         output_ring_buffer = this_pipeline->mixer_->get_media_ring_buffer();
@@ -519,15 +513,11 @@ void AudioPipeline::resample_task(void *params) {
       }
 
       std::unique_ptr<audio::AudioResampler> resampler = make_unique<audio::AudioResampler>();
-      // this_pipeline->decoded_ring_buffer_, output_ring_buffer, BUFFER_SIZE_SAMPLES);
 
       resampler->add_input_ring_buffer(this_pipeline->decoded_ring_buffer_, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
       resampler->add_output_ring_buffer(output_ring_buffer, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
       esp_err_t err = resampler->start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
                                        this_pipeline->current_resample_info_);
-
-      // Resampling has started, so the pipeline can release ownership of the decoded_ring_buffer
-      this_pipeline->decoded_ring_buffer_.reset();
 
       if (err != ESP_OK) {
         // Send specific error message

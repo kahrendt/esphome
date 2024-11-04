@@ -138,6 +138,14 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
       this->media_pipeline_ = make_unique<AudioPipeline>(this->audio_mixer_.get(), type);
     }
 
+    this->media_pipeline_->stop();
+    // if (this->is_paused_) {
+    //   CommandEvent command_event;
+    //   command_event.command = CommandEventType::RESUME_MEDIA;
+    //   this->audio_mixer_->send_command(&command_event);
+    // }
+    // this->is_paused_ = false;
+
     if (url) {
       err = this->media_pipeline_->start(this->media_url_.value(), this->sample_rate_, "media",
                                          MEDIA_PIPELINE_TASK_PRIORITY);

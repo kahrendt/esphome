@@ -25,9 +25,9 @@ class AudioReader {
   // }
   ~AudioReader();
 
-  bool add_ring_buffer(std::shared_ptr<esphome::RingBuffer> &output_ring_buffer, size_t output_buffer_size) {
+  bool add_ring_buffer(std::weak_ptr<esphome::RingBuffer> output_ring_buffer, size_t output_buffer_size) {
     if (current_audio_file_ != nullptr) {
-      this->file_ring_buffer_ = output_ring_buffer;
+      this->file_ring_buffer_ = output_ring_buffer.lock();
       return true;
     }
     this->output_transfer_buffer_ = make_unique<AudioOutTransferBuffer>();

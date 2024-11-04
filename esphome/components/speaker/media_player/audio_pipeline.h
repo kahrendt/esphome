@@ -86,9 +86,6 @@ class AudioPipeline {
   /// @return AudioPipelineState
   AudioPipelineState get_state();
 
-  /// @brief Resets the ring buffers, discarding any existing data
-  void reset_ring_buffers();
-
   /// @brief Suspends any running tasks
   void suspend_tasks();
   /// @brief Resumes any running tasks
@@ -119,8 +116,8 @@ class AudioPipeline {
 
   AudioPipelineType pipeline_type_;
 
-  std::shared_ptr<RingBuffer> raw_file_ring_buffer_;
-  std::shared_ptr<RingBuffer> decoded_ring_buffer_;
+  std::weak_ptr<RingBuffer> raw_file_ring_buffer_;
+  std::weak_ptr<RingBuffer> decoded_ring_buffer_;
 
   // Handles basic control/state of the three tasks
   EventGroupHandle_t event_group_{nullptr};
