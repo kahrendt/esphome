@@ -134,44 +134,76 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
   }
 
   if (type == AudioPipelineType::MEDIA) {
-    if (this->media_pipeline_ == nullptr) {
-      this->media_pipeline_ = make_unique<AudioPipeline>(this->audio_mixer_.get(), type);
-    }
+    // Retry if the mixer's ring buffer isn't allocated yet
+    this->set_retry(50, 2, [this, url](const uint8_t remaining_setup_attempts) {
+      if (this->audio_mixer_->get_media_ring_buffer().use_count() == 0) {
+        if (remaining_setup_attempts == 0) {
+          this->status_set_error(
+              "Error starting the audio pipeline since the mixer hasn't finished allocating buffers");
+        }
+        return RetryResult::RETRY;
+      }
+      if (this->media_pipeline_ == nullptr) {
+        this->media_pipeline_ = make_unique<AudioPipeline>(this->audio_mixer_->get_media_ring_buffer());
+      }
 
-    this->media_pipeline_->stop();
-    // if (this->is_paused_) {
-    //   CommandEvent command_event;
-    //   command_event.command = CommandEventType::RESUME_MEDIA;
-    //   this->audio_mixer_->send_command(&command_event);
-    // }
-    // this->is_paused_ = false;
+      esp_err_t err = ESP_OK;
+      if (url) {
+        err = this->media_pipeline_->start(this->media_url_.value(), this->sample_rate_, "media",
+                                           MEDIA_PIPELINE_TASK_PRIORITY);
+      } else {
+        err = this->media_pipeline_->start(this->media_file_.value(), this->sample_rate_, "media",
+                                           MEDIA_PIPELINE_TASK_PRIORITY);
+      }
 
-    if (url) {
-      err = this->media_pipeline_->start(this->media_url_.value(), this->sample_rate_, "media",
-                                         MEDIA_PIPELINE_TASK_PRIORITY);
-    } else {
-      err = this->media_pipeline_->start(this->media_file_.value(), this->sample_rate_, "media",
-                                         MEDIA_PIPELINE_TASK_PRIORITY);
-    }
+      if (err != ESP_OK) {
+        std::string error_string = {"Error starting the audio pipeline: %s", esp_err_to_name(err)};
+        this->status_set_error(error_string.c_str());
+      } else {
+        this->status_clear_error();
+      }
 
-    if (this->is_paused_) {
-      CommandEvent command_event;
-      command_event.command = CommandEventType::RESUME_MEDIA;
-      this->audio_mixer_->send_command(&command_event);
-    }
-    this->is_paused_ = false;
+      if (this->is_paused_) {
+        CommandEvent command_event;
+        command_event.command = CommandEventType::RESUME_MEDIA;
+        this->audio_mixer_->send_command(&command_event);
+      }
+      this->is_paused_ = false;
+
+      return RetryResult::DONE;
+    });
+
   } else if (type == AudioPipelineType::ANNOUNCEMENT) {
-    if (this->announcement_pipeline_ == nullptr) {
-      this->announcement_pipeline_ = make_unique<AudioPipeline>(this->audio_mixer_.get(), type);
-    }
+    this->set_retry(50, 2, [this, url](const uint8_t remaining_setup_attempts) {
+      if (this->audio_mixer_->get_announcement_ring_buffer().use_count() == 0) {
+        if (remaining_setup_attempts == 0) {
+          this->status_set_error(
+              "Error starting the audio pipeline since the mixer hasn't finished allocating buffers");
+        }
+        return RetryResult::RETRY;
+      }
+      if (this->announcement_pipeline_ == nullptr) {
+        this->announcement_pipeline_ = make_unique<AudioPipeline>(this->audio_mixer_->get_announcement_ring_buffer());
+      }
 
-    if (url) {
-      err = this->announcement_pipeline_->start(this->announcement_url_.value(), this->sample_rate_, "ann",
-                                                ANNOUNCEMENT_PIPELINE_TASK_PRIORITY);
-    } else {
-      err = this->announcement_pipeline_->start(this->announcement_file_.value(), this->sample_rate_, "ann",
-                                                ANNOUNCEMENT_PIPELINE_TASK_PRIORITY);
-    }
+      esp_err_t err = ESP_OK;
+      if (url) {
+        err = this->announcement_pipeline_->start(this->announcement_url_.value(), this->sample_rate_, "ann",
+                                                  ANNOUNCEMENT_PIPELINE_TASK_PRIORITY);
+      } else {
+        err = this->announcement_pipeline_->start(this->announcement_file_.value(), this->sample_rate_, "ann",
+                                                  ANNOUNCEMENT_PIPELINE_TASK_PRIORITY);
+      }
+
+      if (err != ESP_OK) {
+        std::string error_string = {"Error starting the audio pipeline: %s", esp_err_to_name(err)};
+        this->status_set_error(error_string.c_str());
+      } else {
+        this->status_clear_error();
+      }
+
+      return RetryResult::DONE;
+    });
   }
 
   return err;

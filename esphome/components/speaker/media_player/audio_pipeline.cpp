@@ -58,13 +58,6 @@ enum EventGroupBits : uint32_t {
                                                     // bits of uint32 are not set; cleared by stop()
 };
 
-AudioPipeline::AudioPipeline(AudioMixer *mixer, AudioPipelineType pipeline_type) {
-  this->mixer_ = mixer;
-  this->pipeline_type_ = pipeline_type;
-
-  this->allocate_buffers_();
-}
-
 esp_err_t AudioPipeline::start(const std::string &uri, uint32_t target_sample_rate, const std::string &task_name,
                                UBaseType_t priority) {
   esp_err_t err = this->common_start_(target_sample_rate, task_name, priority);
@@ -467,14 +460,8 @@ void AudioPipeline::decode_task(void *params) {
             } else {
               // Audio format doesn't require resampling, send it directly to the mixer
 
-              std::weak_ptr<RingBuffer> output_ring_buffer;
-
-              if (this_pipeline->pipeline_type_ == AudioPipelineType::MEDIA) {
-                output_ring_buffer = this_pipeline->mixer_->get_media_ring_buffer();
-              } else {
-                output_ring_buffer = this_pipeline->mixer_->get_announcement_ring_buffer();
-              }
-              decoder->add_output_ring_buffer(output_ring_buffer, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
+              decoder->add_output_ring_buffer(this_pipeline->output_ring_buffer_,
+                                              BUFFER_SIZE_SAMPLES * sizeof(int16_t));
             }
           }
 
@@ -504,18 +491,10 @@ void AudioPipeline::resample_task(void *params) {
       InfoErrorEvent event;
       event.source = InfoErrorSource::RESAMPLER;
 
-      std::weak_ptr<RingBuffer> output_ring_buffer;
-
-      if (this_pipeline->pipeline_type_ == AudioPipelineType::MEDIA) {
-        output_ring_buffer = this_pipeline->mixer_->get_media_ring_buffer();
-      } else {
-        output_ring_buffer = this_pipeline->mixer_->get_announcement_ring_buffer();
-      }
-
       std::unique_ptr<audio::AudioResampler> resampler = make_unique<audio::AudioResampler>();
 
       resampler->add_input_ring_buffer(this_pipeline->decoded_ring_buffer_, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
-      resampler->add_output_ring_buffer(output_ring_buffer, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
+      resampler->add_output_ring_buffer(this_pipeline->output_ring_buffer_, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
       esp_err_t err = resampler->start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
                                        this_pipeline->current_resample_info_);
 

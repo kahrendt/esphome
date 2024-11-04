@@ -2,7 +2,7 @@
 
 #ifdef USE_ESP_IDF
 
-#include "audio_mixer.h"
+// #include "audio_mixer.h"
 
 #include "esphome/components/audio/audio.h"
 #include "esphome/components/audio/audio_files.h"
@@ -58,12 +58,14 @@ struct InfoErrorEvent {
 
 class AudioPipeline {
  public:
-  AudioPipeline(AudioMixer *mixer, AudioPipelineType pipeline_type);
+  AudioPipeline(std::weak_ptr<RingBuffer> ring_buffer) : output_ring_buffer_(ring_buffer) {
+    this->allocate_buffers_();
+  };
 
   /// @brief Starts an audio pipeline given a media url
   /// @param uri media file url
   /// @param target_sample_rate the desired sample rate of the audio stream
-  /// @param task_name FreeRTOS task name
+  /// @param task_name FreeRTOS task names
   /// @param priority FreeRTOS task priority
   /// @return ESP_OK if successful or an appropriate error if not
   esp_err_t start(const std::string &uri, uint32_t target_sample_rate, const std::string &task_name,
@@ -104,7 +106,9 @@ class AudioPipeline {
   esp_err_t common_start_(uint32_t target_sample_rate, const std::string &task_name, UBaseType_t priority);
 
   // Pointer to the media player's mixer object. The resample task feeds the appropriate ring buffer directly
-  AudioMixer *mixer_;
+  // AudioMixer *mixer_;
+  std::weak_ptr<RingBuffer> output_ring_buffer_;
+  speaker::Speaker *speaker_;
 
   std::string current_uri_{};
   audio::AudioFile *current_audio_file_{nullptr};
@@ -113,8 +117,6 @@ class AudioPipeline {
   audio::AudioStreamInfo current_audio_stream_info_;
   audio::ResampleInfo current_resample_info_;
   uint32_t target_sample_rate_;
-
-  AudioPipelineType pipeline_type_;
 
   std::weak_ptr<RingBuffer> raw_file_ring_buffer_;
   std::weak_ptr<RingBuffer> decoded_ring_buffer_;
