@@ -78,7 +78,7 @@ void AudioMixer::audio_mixer_task(void *params) {
     if (this_mixer->media_ring_buffer_.use_count() == 0) {
       // TODO: Handle no allocation
     } else {
-      media_transfer_buffer->add_ring_buffer(temp_media_ring_buffer, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+      media_transfer_buffer->add_input(temp_media_ring_buffer, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
     }
   }
 
@@ -94,13 +94,12 @@ void AudioMixer::audio_mixer_task(void *params) {
     if (this_mixer->announcement_ring_buffer_.use_count() == 0) {
       // TODO: Handle no allocation
     } else {
-      announcement_transfer_buffer->add_ring_buffer(temp_announcement_ring_buffer,
-                                                    OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+      announcement_transfer_buffer->add_input(temp_announcement_ring_buffer, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
     }
   }
 
   std::unique_ptr<audio::AudioOutTransferBuffer> output_transfer_buffer = make_unique<audio::AudioOutTransferBuffer>();
-  output_transfer_buffer->add_speaker(this_mixer->speaker_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+  output_transfer_buffer->add_output(this_mixer->speaker_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
 
   if (!media_transfer_buffer->allocated_successfully() || (!announcement_transfer_buffer->allocated_successfully()) ||
       (!output_transfer_buffer->allocated_successfully())) {

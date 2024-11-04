@@ -56,10 +56,6 @@ size_t AudioOutTransferBuffer::transfer_audio_out(TickType_t ticks_to_wait) {
 }
 
 bool AudioTransferBuffer::allocated_successfully() {
-  // if (this->ring_buffer_.use_count() && (this->buffer_ != nullptr)) {
-  //   return true;
-  // }
-
   if ((this->buffer_ != nullptr) || (this->buffer_size_ == 0)) {
     return true;
   }

@@ -31,7 +31,7 @@ class AudioReader {
       return true;
     }
     this->output_transfer_buffer_ = make_unique<AudioOutTransferBuffer>();
-    return this->output_transfer_buffer_->add_ring_buffer(output_ring_buffer, output_buffer_size);
+    return this->output_transfer_buffer_->add_output(output_ring_buffer, output_buffer_size);
   }
 
   esp_err_t start(const std::string &uri, AudioFileType &file_type);
