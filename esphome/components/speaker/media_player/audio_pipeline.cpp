@@ -8,9 +8,13 @@
 namespace esphome {
 namespace speaker {
 
-static const size_t FILE_BUFFER_SIZE = 32 * 1024;
-static const size_t FILE_RING_BUFFER_SIZE = 64 * 1024;
-static const size_t BUFFER_SIZE_SAMPLES = 32768;
+// static const size_t FILE_BUFFER_SIZE = 32 * 1024;
+// static const size_t FILE_RING_BUFFER_SIZE = 64 * 1024;
+// static const size_t BUFFER_SIZE_SAMPLES = 32768;
+// static const size_t BUFFER_SIZE_BYTES = BUFFER_SIZE_SAMPLES * sizeof(int16_t);
+static const size_t FILE_BUFFER_SIZE = 4 * 1024;
+static const size_t FILE_RING_BUFFER_SIZE = 4 * 1024;
+static const size_t BUFFER_SIZE_SAMPLES = 2048;
 static const size_t BUFFER_SIZE_BYTES = BUFFER_SIZE_SAMPLES * sizeof(int16_t);
 
 static const uint32_t READER_TASK_STACK_SIZE = 5 * 1024;

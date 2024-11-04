@@ -2,9 +2,11 @@
 
 #ifdef USE_ESP_IDF
 
-#include <flac_decoder.h>
 #include <wav_decoder.h>
+#if !defined(SIMPLE_MEDIA_PLAYER)
+#include <flac_decoder.h>
 #include <mp3_decoder.h>
+#endif
 
 #include "audio.h"
 #include "audio_files.h"
@@ -69,18 +71,18 @@ class AudioDecoder {
   const optional<audio::AudioStreamInfo> &get_audio_stream_info() const { return this->audio_stream_info_; }
 
  protected:
-  FileDecoderState decode_flac_();
-  FileDecoderState decode_mp3_();
   FileDecoderState decode_wav_();
+  std::unique_ptr<wav_decoder::WAVDecoder> wav_decoder_;
+#if !defined(SIMPLE_MEDIA_PLAYER)
+  FileDecoderState decode_flac_();
+  std::unique_ptr<flac::FLACDecoder> flac_decoder_;
+  FileDecoderState decode_mp3_();
+  HMP3Decoder mp3_decoder_;
+#endif
 
   std::unique_ptr<AudioInTransferBuffer> input_transfer_buffer_;
   std::unique_ptr<AudioOutTransferBuffer> output_transfer_buffer_;
 
-  std::unique_ptr<flac::FLACDecoder> flac_decoder_;
-
-  HMP3Decoder mp3_decoder_;
-
-  std::unique_ptr<wav_decoder::WAVDecoder> wav_decoder_;
   size_t wav_bytes_left_{0};
 
   AudioFileType audio_file_type_{AudioFileType::NONE};

@@ -2,10 +2,13 @@
 
 #include "audio_decoder.h"
 
+#if !defined(SIMPLE_MEDIA_PLAYER)
 #include "mp3_decoder.h"
+#endif
 
-#include "esphome/core/ring_buffer.h"
+#include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
+#include "esphome/core/ring_buffer.h"
 
 namespace esphome {
 namespace audio {
@@ -14,6 +17,7 @@ static const size_t READ_WRITE_TIMEOUT_MS = 20;
 static const size_t DECODING_TIMEOUT_MS = 50;
 
 AudioDecoder::~AudioDecoder() {
+#if !defined(SIMPLE_MEDIA_PLAYER)
   if (this->flac_decoder_ != nullptr) {
     this->flac_decoder_->free_buffers();
     this->flac_decoder_.reset();  // Free the unique_ptr
@@ -23,7 +27,7 @@ AudioDecoder::~AudioDecoder() {
   if (this->audio_file_type_ == AudioFileType::MP3) {
     MP3FreeDecoder(this->mp3_decoder_);
   }
-
+#endif
   if (this->wav_decoder_ != nullptr) {
     this->wav_decoder_.reset();  // Free the unique_ptr
     this->wav_decoder_ = nullptr;
@@ -42,6 +46,7 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
   this->end_of_file_ = false;
 
   switch (this->audio_file_type_) {
+#if !defined(SIMPLE_MEDIA_PLAYER)
     case AudioFileType::FLAC:
       this->flac_decoder_ = make_unique<flac::FLACDecoder>(this->input_transfer_buffer_->get_buffer_start());
       this->free_buffer_required_ =
@@ -51,12 +56,14 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
       this->mp3_decoder_ = MP3InitDecoder();
       this->free_buffer_required_ = 1152;
       break;
+#endif
     case AudioFileType::WAV:
       this->wav_decoder_ = make_unique<wav_decoder::WAVDecoder>();
       this->wav_decoder_->reset();
       this->free_buffer_required_ = 1024;
       break;
     case AudioFileType::NONE:
+    default:
       return ESP_ERR_NOT_SUPPORTED;
       break;
   }
@@ -121,16 +128,19 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
       state = FileDecoderState::IDLE;
     } else {
       switch (this->audio_file_type_) {
+#if !defined(SIMPLE_MEDIA_PLAYER)
         case AudioFileType::FLAC:
           state = this->decode_flac_();
           break;
         case AudioFileType::MP3:
           state = this->decode_mp3_();
           break;
+#endif
         case AudioFileType::WAV:
           state = this->decode_wav_();
           break;
         case AudioFileType::NONE:
+        default:
           state = FileDecoderState::IDLE;
           break;
       }
@@ -149,6 +159,7 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   return AudioDecoderState::DECODING;
 }
 
+#if !defined(SIMPLE_MEDIA_PLAYER)
 FileDecoderState AudioDecoder::decode_flac_() {
   if (!this->audio_stream_info_.has_value()) {
     // Header hasn't been read
@@ -257,6 +268,7 @@ FileDecoderState AudioDecoder::decode_mp3_() {
 
   return FileDecoderState::MORE_TO_PROCESS;
 }
+#endif
 
 FileDecoderState AudioDecoder::decode_wav_() {
   if (!this->audio_stream_info_.has_value()) {
