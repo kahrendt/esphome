@@ -19,6 +19,8 @@
 
 #include <esp_http_client.h>
 
+#define SIMPLE_MEDIA_PLAYER
+
 namespace esphome {
 namespace speaker {
 
@@ -45,11 +47,6 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   media_player::MediaPlayerTraits get_traits() override;
   bool is_muted() const override { return this->is_muted_; }
 
-  /// @brief Sets the ducking level for the media stream in the mixer
-  /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by 10 dB
-  /// @param duration (float) The duration (in seconds) for transitioning to the new ducking level
-  void set_ducking_reduction(uint8_t decibel_reduction, float duration);
-
   void set_sample_rate(uint32_t sample_rate) { this->sample_rate_ = sample_rate; }
 
   // Percentage to increase or decrease the volume for volume up or volume down commands
@@ -65,6 +62,13 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   Trigger<float> *get_volume_trigger() const { return this->volume_trigger_; }
 
   void play_file(audio::AudioFile *media_file, bool announcement);
+
+#if !defined(SIMPLE_MEDIA_PLAYER)
+  /// @brief Sets the ducking level for the media stream in the mixer
+  /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by 10 dB
+  /// @param duration (float) The duration (in seconds) for transitioning to the new ducking level
+  void set_ducking_reduction(uint8_t decibel_reduction, float duration);
+#endif
 
  protected:
   // Receives commands from HA or from the voice assistant component
@@ -86,25 +90,28 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   void watch_media_commands_();
 
   std::unique_ptr<AudioPipeline> media_pipeline_;
-  std::unique_ptr<AudioPipeline> announcement_pipeline_;
-  std::unique_ptr<AudioMixer> audio_mixer_;
-
   Speaker *speaker_{nullptr};
 
+#if !defined(SIMPLE_MEDIA_PLAYER)
+  std::unique_ptr<AudioPipeline> announcement_pipeline_;
+  std::unique_ptr<AudioMixer> audio_mixer_;
   // Monitors the mixer task
   void watch_mixer_();
+#endif
 
   // Starts the ``type`` pipeline with a ``url`` or file. Starts the mixer, pipeline, and speaker tasks if necessary.
   // Unpauses if starting media in paused state
   esp_err_t start_pipeline_(AudioPipelineType type, bool url);
 
   AudioPipelineState media_pipeline_state_{AudioPipelineState::STOPPED};
-  AudioPipelineState announcement_pipeline_state_{AudioPipelineState::STOPPED};
+  optional<std::string> media_url_{};          // only modified by control function
+  optional<audio::AudioFile *> media_file_{};  // only modified by play_file function
 
-  optional<std::string> media_url_{};                 // only modified by control function
+#if !defined(SIMPLE_MEDIA_PLAYER)
+  AudioPipelineState announcement_pipeline_state_{AudioPipelineState::STOPPED};
   optional<std::string> announcement_url_{};          // only modified by control function
-  optional<audio::AudioFile *> media_file_{};         // only modified by play_file function
   optional<audio::AudioFile *> announcement_file_{};  // only modified by play_file function
+#endif
 
   QueueHandle_t media_control_command_queue_;
 

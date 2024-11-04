@@ -436,33 +436,38 @@ void AudioPipeline::decode_task(void *params) {
             xEventGroupSetBits(this_pipeline->event_group_,
                                EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
           } else {
-            if ((this_pipeline->current_audio_stream_info_.channels < 2) ||
-                (this_pipeline->current_audio_stream_info_.sample_rate != this_pipeline->target_sample_rate_)) {
-              // Audio format requires resampling, allocate the decoded ring buffer and inform the resampler that the
-              // stream information is available
+            // if ((this_pipeline->current_audio_stream_info_.channels < 2) ||
+            //     (this_pipeline->current_audio_stream_info_.sample_rate != this_pipeline->target_sample_rate_)) {
+            //   // Audio format requires resampling, allocate the decoded ring buffer and inform the resampler that the
+            //   // stream information is available
 
-              std::shared_ptr<RingBuffer> temp_ring_buffer;
+            //   std::shared_ptr<RingBuffer> temp_ring_buffer;
 
-              if (!this_pipeline->decoded_ring_buffer_.use_count()) {
-                temp_ring_buffer = std::move(RingBuffer::create((BUFFER_SIZE_BYTES)));
-                this_pipeline->decoded_ring_buffer_ = temp_ring_buffer;
-              }
+            //   if (!this_pipeline->decoded_ring_buffer_.use_count()) {
+            //     temp_ring_buffer = std::move(RingBuffer::create((BUFFER_SIZE_BYTES)));
+            //     this_pipeline->decoded_ring_buffer_ = temp_ring_buffer;
+            //   }
 
-              if (!this_pipeline->decoded_ring_buffer_.use_count()) {
-                // TODO: verify this check actually works to test if the ring buffer was allocated
-                // Setting up the decoder failed, stop the pipeline
-                xEventGroupSetBits(this_pipeline->event_group_,
-                                   EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
-              } else {
-                decoder->add_output_ring_buffer(this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
-                xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_LOADED_STREAM_INFO);
-              }
-            } else {
-              // Audio format doesn't require resampling, send it directly to the mixer
-
+            //   if (!this_pipeline->decoded_ring_buffer_.use_count()) {
+            //     // TODO: verify this check actually works to test if the ring buffer was allocated
+            //     // Setting up the decoder failed, stop the pipeline
+            //     xEventGroupSetBits(this_pipeline->event_group_,
+            //                        EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
+            //   } else {
+            //     decoder->add_output_ring_buffer(this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
+            //     xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_LOADED_STREAM_INFO);
+            //   }
+            // } else {
+            // Audio format doesn't require resampling, send it directly to the mixer
+            if (this_pipeline->speaker_ != nullptr) {
+              this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
+              decoder->add_speaker(this_pipeline->speaker_, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
+              printf("sending decoded audio directly to speaker\n");
+            } else if (this_pipeline->output_ring_buffer_.use_count() > 0) {
               decoder->add_output_ring_buffer(this_pipeline->output_ring_buffer_,
                                               BUFFER_SIZE_SAMPLES * sizeof(int16_t));
             }
+            // }
           }
 
           xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);

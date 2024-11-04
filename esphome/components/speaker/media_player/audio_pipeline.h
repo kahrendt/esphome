@@ -9,6 +9,7 @@
 #include "esphome/components/audio/audio_reader.h"
 #include "esphome/components/audio/audio_decoder.h"
 #include "esphome/components/audio/audio_resampler.h"
+#include "esphome/components/speaker/speaker.h"
 
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
@@ -61,6 +62,7 @@ class AudioPipeline {
   AudioPipeline(std::weak_ptr<RingBuffer> ring_buffer) : output_ring_buffer_(ring_buffer) {
     this->allocate_buffers_();
   };
+  AudioPipeline(speaker::Speaker *speaker) : speaker_(speaker) { this->allocate_buffers_(); };
 
   /// @brief Starts an audio pipeline given a media url
   /// @param uri media file url

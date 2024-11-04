@@ -274,26 +274,38 @@ FileDecoderState AudioDecoder::decode_wav_() {
       audio_stream_info.bits_per_sample = this->wav_decoder_->bits_per_sample();
       this->audio_stream_info_ = audio_stream_info;
       this->wav_bytes_left_ = this->wav_decoder_->chunk_bytes_left();
+      if (this->wav_bytes_left_ > 0) {
+        this->wav_has_known_end_ = true;
+      } else {
+        this->wav_has_known_end_ = false;
+      }
     } else if (result == wav_decoder::WAV_DECODER_WARNING_INCOMPLETE_DATA) {
       // Available data didn't have the full header
       return FileDecoderState::POTENTIALLY_FAILED;
     } else {
       return FileDecoderState::FAILED;
     }
-  }
+  } else {
+    if (!this->wav_has_known_end_ || (this->wav_bytes_left_ > 0)) {
+      size_t bytes_to_copy = this->input_transfer_buffer_->available();
 
-  if (this->wav_bytes_left_ > 0) {
-    size_t bytes_to_copy = std::min(this->wav_bytes_left_, this->input_transfer_buffer_->available());
-    bytes_to_copy = std::min(bytes_to_copy, this->output_transfer_buffer_->free());
+      if (this->wav_has_known_end_) {
+        bytes_to_copy = std::min(bytes_to_copy, this->wav_bytes_left_);
+      }
 
-    if (bytes_to_copy > 0) {
-      std::memcpy(this->output_transfer_buffer_->get_buffer_end(), this->input_transfer_buffer_->get_buffer_start(),
-                  bytes_to_copy);
-      this->input_transfer_buffer_->decrease_buffer_length(bytes_to_copy);
-      this->output_transfer_buffer_->increase_buffer_length(bytes_to_copy);
-      this->wav_bytes_left_ -= bytes_to_copy;
+      bytes_to_copy = std::min(bytes_to_copy, this->output_transfer_buffer_->free());
+
+      if (bytes_to_copy > 0) {
+        std::memcpy(this->output_transfer_buffer_->get_buffer_end(), this->input_transfer_buffer_->get_buffer_start(),
+                    bytes_to_copy);
+        this->input_transfer_buffer_->decrease_buffer_length(bytes_to_copy);
+        this->output_transfer_buffer_->increase_buffer_length(bytes_to_copy);
+        if (this->wav_has_known_end_) {
+          this->wav_bytes_left_ -= bytes_to_copy;
+        }
+      }
+      return FileDecoderState::IDLE;
     }
-    return FileDecoderState::IDLE;
   }
 
   return FileDecoderState::END_OF_FILE;

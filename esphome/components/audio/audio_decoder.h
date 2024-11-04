@@ -58,6 +58,10 @@ class AudioDecoder {
     return true;
   }
 
+  bool add_speaker(speaker::Speaker *speaker, size_t output_buffer_size) {
+    this->output_transfer_buffer_->add_output(speaker, output_buffer_size);
+    return true;
+  }
   esp_err_t start(AudioFileType audio_file_type);
 
   AudioDecoderState decode(bool stop_gracefully);
@@ -86,6 +90,7 @@ class AudioDecoder {
 
   size_t potentially_failed_count_{0};
   bool end_of_file_{false};
+  bool wav_has_known_end_{false};
 };
 }  // namespace audio
 }  // namespace esphome
