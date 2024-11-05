@@ -23,37 +23,27 @@ bool AudioTransferBuffer::has_buffered_data() {
   return (this->available() > 0);
 }
 
-bool AudioTransferBuffer::add_ring_buffer_(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size) {
-  this->buffer_size_ = buffer_size;
-  this->allocate_buffer_();
-  this->ring_buffer_ = ring_buffer.lock();
-  return this->allocated_successfully();
+bool AudioTransferBuffer::allocated_successfully() {
+  if (this->buffer_ != nullptr) {
+    return true;
+  }
+
+  return false;
 }
 
-void AudioTransferBuffer::allocate_buffer_() {
+void AudioTransferBuffer::decrease_buffer_length(size_t bytes) {
+  this->buffer_length_ -= bytes;
+  this->data_start_ += bytes;
+}
+
+void AudioTransferBuffer::allocate_buffer_(size_t buffer_size) {
+  this->buffer_size_ = buffer_size;
+
   ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
-  if (this->buffer_ != nullptr) {
-    allocator.deallocate(this->buffer_, this->buffer_size_);
-  }
 
   this->buffer_ = allocator.allocate(this->buffer_size_);
   this->data_start_ = this->buffer_;
   this->buffer_length_ = 0;
-}
-
-bool AudioSinkTransferBuffer::add_sink(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size) {
-  return this->add_ring_buffer_(ring_buffer, buffer_size);
-}
-
-bool AudioSinkTransferBuffer::add_sink(speaker::Speaker *speaker, size_t buffer_size) {
-  this->buffer_size_ = buffer_size;
-  this->allocate_buffer_();
-  this->speaker_ = speaker;
-  return allocated_successfully();
-}
-
-bool AudioSourceTransferBuffer::add_source(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size) {
-  return this->add_ring_buffer_(ring_buffer, buffer_size);
 }
 
 size_t AudioSourceTransferBuffer::transfer_data_from_source(TickType_t ticks_to_wait) {
@@ -88,7 +78,9 @@ size_t AudioSinkTransferBuffer::transfer_data_to_sink(TickType_t ticks_to_wait) 
   if (this->available()) {
     if (this->speaker_ != nullptr) {
       bytes_written = this->speaker_->play(this->data_start_, this->available(), ticks_to_wait);
-    } else if (this->ring_buffer_.use_count() > 0) {
+    }
+
+    if (this->ring_buffer_.use_count() > 0) {
       bytes_written =
           this->ring_buffer_->write_without_replacement((void *) this->data_start_, this->available(), ticks_to_wait);
     }
@@ -111,17 +103,5 @@ bool AudioSinkTransferBuffer::has_buffered_data() {
   return (this->available() > 0);
 }
 
-bool AudioTransferBuffer::allocated_successfully() {
-  if ((this->buffer_ != nullptr) || (this->buffer_size_ == 0)) {
-    return true;
-  }
-
-  return false;
-}
-
-void AudioTransferBuffer::decrease_buffer_length(size_t bytes) {
-  this->buffer_length_ -= bytes;
-  this->data_start_ += bytes;
-}
 }  // namespace audio
 }  // namespace esphome

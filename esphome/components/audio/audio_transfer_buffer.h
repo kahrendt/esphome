@@ -19,8 +19,7 @@ class AudioTransferBuffer {
    * The transfer buffer temporarily holds data for processing in other audio components.
    */
  public:
-  AudioTransferBuffer() {}
-  AudioTransferBuffer(size_t buffer_size) : buffer_size_(buffer_size) {}
+  AudioTransferBuffer(size_t buffer_size) { this->allocate_buffer_(buffer_size); }
 
   /// @brief Destructor that deallocates the transfer buffer
   ~AudioTransferBuffer();
@@ -59,14 +58,8 @@ class AudioTransferBuffer {
   void clear_buffered_data();
 
  protected:
-  /// @brief Adds a ring buffer as the transfer buffer's source/sink.
-  /// @param ring_buffer weak_ptr to the allocated ring buffer
-  /// @param buffer_size the size of the transfer buffer
-  /// @return True if the transfer buffer is allocated sucessfully, false otherwise
-  bool add_ring_buffer_(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size);
-
   /// @brief Allocates the transfer buffer in external memory, if available.
-  void allocate_buffer_();
+  void allocate_buffer_(size_t buffer_size);
 
   // A possible source or sink for the transfer buffer
   std::shared_ptr<RingBuffer> ring_buffer_;
@@ -74,7 +67,7 @@ class AudioTransferBuffer {
   uint8_t *buffer_{nullptr};
   uint8_t *data_start_{nullptr};
 
-  size_t buffer_size_{0};
+  size_t buffer_size_;
   size_t buffer_length_;
 };
 
@@ -84,8 +77,7 @@ class AudioSinkTransferBuffer : public AudioTransferBuffer {
    * Supports writing audio data to a ring buffer or a speaker component.
    */
  public:
-  AudioSinkTransferBuffer() {}
-  AudioSinkTransferBuffer(size_t buffer_size) : AudioTransferBuffer(buffer_size) { this->allocate_buffer_(); }
+  AudioSinkTransferBuffer(size_t buffer_size) : AudioTransferBuffer(buffer_size) {}
 
   /// @brief Writes any available data in the transfer buffer to the sink.
   /// @param ticks_to_wait FreeRTOS ticks to block while waiting for the sink to have enough space
@@ -94,15 +86,11 @@ class AudioSinkTransferBuffer : public AudioTransferBuffer {
 
   /// @brief Adds a ring buffer as the transfer buffer's sink.
   /// @param ring_buffer weak_ptr to the allocated ring buffer
-  /// @param buffer_size The size of the tranfer buffer
-  /// @return True if the transfer buffer is allocated sucessfully, false otherwise
-  bool add_sink(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size);
+  void set_sink(std::weak_ptr<RingBuffer> ring_buffer) { this->ring_buffer_ = ring_buffer.lock(); }
 
   /// @brief Adds a speaker as the transfer buffer's sink.
   /// @param speaker Pointer to the speaker component
-  /// @param buffer_size The size of the tranfer buffer
-  /// @return True if the transfer buffer is allocated sucessfully, false otherwise
-  bool add_sink(speaker::Speaker *speaker, size_t buffer_size);
+  void set_sink(speaker::Speaker *speaker) { this->speaker_ = speaker; }
 
   bool has_buffered_data() override;
 
@@ -116,6 +104,8 @@ class AudioSourceTransferBuffer : public AudioTransferBuffer {
    * Supports reading audio data from a ring buffer.
    */
  public:
+  AudioSourceTransferBuffer(size_t buffer_size) : AudioTransferBuffer(buffer_size) {}
+
   /// @brief Reads any available data from the sink into the transfer buffer.
   /// @param ticks_to_wait FreeRTOS ticks to block while waiting for the source to have enough data
   /// @return Number of bytes read
@@ -123,9 +113,7 @@ class AudioSourceTransferBuffer : public AudioTransferBuffer {
 
   /// @brief Adds a ring buffer as the transfer buffer's source.
   /// @param ring_buffer weak_ptr to the allocated ring buffer
-  /// @param buffer_size The size of the tranfer buffer
-  /// @return True if the transfer buffer is allocated sucessfully, false otherwise
-  bool add_source(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size);
+  void set_source(std::weak_ptr<RingBuffer> ring_buffer) { this->ring_buffer_ = ring_buffer.lock(); };
 };
 
 }  // namespace audio

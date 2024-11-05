@@ -330,7 +330,7 @@ void AudioPipeline::read_task(void *params) {
       event.source = InfoErrorSource::READER;
       esp_err_t err = ESP_OK;
 
-      std::unique_ptr<audio::AudioReader> reader = make_unique<audio::AudioReader>();
+      std::unique_ptr<audio::AudioReader> reader = make_unique<audio::AudioReader>(FILE_BUFFER_SIZE);
 
       if (event_bits & READER_COMMAND_INIT_FILE) {
         err = reader->start(this_pipeline->current_audio_file_, this_pipeline->current_audio_file_type_);
@@ -350,7 +350,7 @@ void AudioPipeline::read_task(void *params) {
           // TODO: verify this check actually works to test if the ring buffer was allocated
           err = ESP_ERR_NO_MEM;
         } else {
-          reader->add_ring_buffer(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
+          reader->add_ring_buffer(this_pipeline->raw_file_ring_buffer_);
         }
       }
 
@@ -411,8 +411,9 @@ void AudioPipeline::decode_task(void *params) {
       InfoErrorEvent event;
       event.source = InfoErrorSource::DECODER;
 
-      std::unique_ptr<audio::AudioDecoder> decoder = make_unique<audio::AudioDecoder>(FILE_BUFFER_SIZE);
-      decoder->add_input_ring_buffer(this_pipeline->raw_file_ring_buffer_, FILE_BUFFER_SIZE);
+      std::unique_ptr<audio::AudioDecoder> decoder =
+          make_unique<audio::AudioDecoder>(FILE_BUFFER_SIZE, FILE_BUFFER_SIZE);
+      decoder->add_input_ring_buffer(this_pipeline->raw_file_ring_buffer_);
 
       esp_err_t err = decoder->start(this_pipeline->current_audio_file_type_);
 
@@ -488,20 +489,19 @@ void AudioPipeline::decode_task(void *params) {
                 xEventGroupSetBits(this_pipeline->event_group_,
                                    EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
               } else {
-                decoder->add_output_ring_buffer(this_pipeline->decoded_ring_buffer_, FILE_BUFFER_SIZE);
+                decoder->add_output_ring_buffer(this_pipeline->decoded_ring_buffer_);
                 xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_LOADED_STREAM_INFO);
               }
             } else {
               // Audio format doesn't require resampling, send it directly to the output
               if (this_pipeline->output_ring_buffer_.use_count() > 0) {
-                decoder->add_output_ring_buffer(this_pipeline->output_ring_buffer_,
-                                                BUFFER_SIZE_SAMPLES * sizeof(int16_t));
+                decoder->add_output_ring_buffer(this_pipeline->output_ring_buffer_);
               }
             }
 #else
             if (this_pipeline->speaker_ != nullptr) {
               this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
-              decoder->add_speaker(this_pipeline->speaker_, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
+              decoder->add_speaker(this_pipeline->speaker_);
             }
 #endif
           }
@@ -532,10 +532,11 @@ void AudioPipeline::resample_task(void *params) {
       InfoErrorEvent event;
       event.source = InfoErrorSource::RESAMPLER;
 
-      std::unique_ptr<audio::AudioResampler> resampler = make_unique<audio::AudioResampler>();
+      std::unique_ptr<audio::AudioResampler> resampler = make_unique<audio::AudioResampler>(
+          BUFFER_SIZE_SAMPLES * sizeof(int16_t), BUFFER_SIZE_SAMPLES * sizeof(int16_t));
 
-      resampler->add_input_ring_buffer(this_pipeline->decoded_ring_buffer_, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
-      resampler->add_output_ring_buffer(this_pipeline->output_ring_buffer_, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
+      resampler->add_input_ring_buffer(this_pipeline->decoded_ring_buffer_);
+      resampler->add_output_ring_buffer(this_pipeline->output_ring_buffer_);
       esp_err_t err = resampler->start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
                                        this_pipeline->current_resample_info_);
 
