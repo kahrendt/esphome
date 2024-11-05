@@ -54,7 +54,7 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
       break;
     case AudioFileType::MP3:
       this->mp3_decoder_ = MP3InitDecoder();
-      this->free_buffer_required_ = 1152;
+      this->free_buffer_required_ = 1152 * sizeof(int16_t) * 2;  // samples * size per sample * channels
       break;
 #endif
     case AudioFileType::WAV:
