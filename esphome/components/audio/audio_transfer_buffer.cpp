@@ -41,18 +41,18 @@ void AudioTransferBuffer::allocate_buffer_() {
   this->buffer_length_ = 0;
 }
 
-bool AudioSinkTransferBuffer::add_output(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size) {
+bool AudioSinkTransferBuffer::add_sink(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size) {
   return this->add_ring_buffer_(ring_buffer, buffer_size);
 }
 
-bool AudioSinkTransferBuffer::add_output(speaker::Speaker *speaker, size_t buffer_size) {
+bool AudioSinkTransferBuffer::add_sink(speaker::Speaker *speaker, size_t buffer_size) {
   this->buffer_size_ = buffer_size;
   this->allocate_buffer_();
   this->speaker_ = speaker;
   return allocated_successfully();
 }
 
-bool AudioSourceTransferBuffer::add_input(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size) {
+bool AudioSourceTransferBuffer::add_source(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size) {
   return this->add_ring_buffer_(ring_buffer, buffer_size);
 }
 

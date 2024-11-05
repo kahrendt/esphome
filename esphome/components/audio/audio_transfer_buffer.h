@@ -96,13 +96,13 @@ class AudioSinkTransferBuffer : public AudioTransferBuffer {
   /// @param ring_buffer weak_ptr to the allocated ring buffer
   /// @param buffer_size The size of the tranfer buffer
   /// @return True if the transfer buffer is allocated sucessfully, false otherwise
-  bool add_output(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size);
+  bool add_sink(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size);
 
   /// @brief Adds a speaker as the transfer buffer's sink.
   /// @param speaker Pointer to the speaker component
   /// @param buffer_size The size of the tranfer buffer
   /// @return True if the transfer buffer is allocated sucessfully, false otherwise
-  bool add_output(speaker::Speaker *speaker, size_t buffer_size);
+  bool add_sink(speaker::Speaker *speaker, size_t buffer_size);
 
   bool has_buffered_data() override;
 
@@ -125,7 +125,7 @@ class AudioSourceTransferBuffer : public AudioTransferBuffer {
   /// @param ring_buffer weak_ptr to the allocated ring buffer
   /// @param buffer_size The size of the tranfer buffer
   /// @return True if the transfer buffer is allocated sucessfully, false otherwise
-  bool add_input(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size);
+  bool add_source(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size);
 };
 
 }  // namespace audio
