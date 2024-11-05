@@ -48,7 +48,7 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
   switch (this->audio_file_type_) {
 #if !defined(SIMPLE_MEDIA_PLAYER)
     case AudioFileType::FLAC:
-      this->flac_decoder_ = make_unique<flac::FLACDecoder>(this->input_transfer_buffer_->get_buffer_start());
+      this->flac_decoder_ = make_unique<flac::FLACDecoder>();
       this->free_buffer_required_ =
           this->output_transfer_buffer_->capacity();  // We'll revise this after reading the header
       break;
@@ -163,7 +163,8 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
 FileDecoderState AudioDecoder::decode_flac_() {
   if (!this->audio_stream_info_.has_value()) {
     // Header hasn't been read
-    auto result = this->flac_decoder_->read_header(this->input_transfer_buffer_->available());
+    auto result = this->flac_decoder_->read_header(this->input_transfer_buffer_->get_buffer_start(),
+                                                   this->input_transfer_buffer_->available());
 
     if (result == flac::FLAC_DECODER_HEADER_OUT_OF_DATA) {
       return FileDecoderState::POTENTIALLY_FAILED;
@@ -195,9 +196,9 @@ FileDecoderState AudioDecoder::decode_flac_() {
   }
 
   uint32_t output_samples = 0;
-  auto result =
-      this->flac_decoder_->decode_frame(this->input_transfer_buffer_->available(),
-                                        (int16_t *) this->output_transfer_buffer_->get_buffer_end(), &output_samples);
+  auto result = this->flac_decoder_->decode_frame(
+      this->input_transfer_buffer_->get_buffer_start(), this->input_transfer_buffer_->available(),
+      (int16_t *) this->output_transfer_buffer_->get_buffer_end(), &output_samples);
 
   if (result == flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
     // Not an issue, just needs more data that we'll get next time.
