@@ -135,7 +135,7 @@ AudioReaderState AudioReader::file_read_() {
 }
 
 AudioReaderState AudioReader::http_read_() {
-  this->output_transfer_buffer_->transfer_audio_out(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+  this->output_transfer_buffer_->transfer_data_to_sink(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
   if (esp_http_client_is_complete_data_received(this->client_)) {
     if (!this->output_transfer_buffer_->has_buffered_data()) {

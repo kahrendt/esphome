@@ -21,7 +21,7 @@ enum class AudioReaderState : uint8_t {
 class AudioReader {
  public:
   // AudioReader(std::shared_ptr<esphome::RingBuffer> &output_ring_buffer, size_t output_buffer_size) {
-  //   this->output_transfer_buffer_ = make_unique<AudioOutTransferBuffer>(output_ring_buffer, output_buffer_size);
+  //   this->output_transfer_buffer_ = make_unique<AudioSinkTransferBuffer>(output_ring_buffer, output_buffer_size);
   // }
   ~AudioReader();
 
@@ -30,7 +30,7 @@ class AudioReader {
       this->file_ring_buffer_ = output_ring_buffer.lock();
       return true;
     }
-    this->output_transfer_buffer_ = make_unique<AudioOutTransferBuffer>();
+    this->output_transfer_buffer_ = make_unique<AudioSinkTransferBuffer>();
     return this->output_transfer_buffer_->add_output(output_ring_buffer, output_buffer_size);
   }
 
@@ -44,7 +44,7 @@ class AudioReader {
   AudioReaderState http_read_();
 
   std::shared_ptr<RingBuffer> file_ring_buffer_;
-  std::unique_ptr<AudioOutTransferBuffer> output_transfer_buffer_;
+  std::unique_ptr<AudioSinkTransferBuffer> output_transfer_buffer_;
   void cleanup_connection_();
 
   ssize_t no_data_read_count_;

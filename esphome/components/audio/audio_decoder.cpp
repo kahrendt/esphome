@@ -101,7 +101,7 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   while (state == FileDecoderState::MORE_TO_PROCESS) {
     // Transfer decoded out
     if (this->output_transfer_buffer_->available() > 0) {
-      this->output_transfer_buffer_->transfer_audio_out(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+      this->output_transfer_buffer_->transfer_data_to_sink(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
     }
 
     // Verify there is enough space to store more decoded audio and that the function hasn't been running too long
@@ -111,7 +111,7 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
     }
 
     // Decode more data
-    size_t bytes_read = this->input_transfer_buffer_->read_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+    size_t bytes_read = this->input_transfer_buffer_->transfer_data_from_source(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
     if ((this->potentially_failed_count_ > 0) && (bytes_read == 0)) {
       // Failed to decode in last attempt and there is no new data

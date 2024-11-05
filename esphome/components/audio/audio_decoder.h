@@ -39,23 +39,25 @@ class AudioDecoder {
   // AudioDecoder(std::shared_ptr<RingBuffer> &input_ring_buffer, std::shared_ptr<esphome::RingBuffer>
   // &output_ring_buffer,
   //              size_t internal_buffer_size) {
-  //   // this->input_transfer_buffer_ = make_unique<AudioInTransferBuffer>(input_ring_buffer, internal_buffer_size);
-  //   // this->output_transfer_buffer_ = make_unique<AudioOutTransferBuffer>(output_ring_buffer, internal_buffer_size);
+  //   // this->input_transfer_buffer_ = make_unique<AudioSourceTransferBuffer>(input_ring_buffer,
+  //   internal_buffer_size);
+  //   // this->output_transfer_buffer_ = make_unique<AudioSinkTransferBuffer>(output_ring_buffer,
+  //   internal_buffer_size);
   // }
   AudioDecoder(size_t buffer_size) {
-    this->input_transfer_buffer_ = make_unique<AudioInTransferBuffer>();
-    this->output_transfer_buffer_ = make_unique<AudioOutTransferBuffer>(buffer_size);
+    this->input_transfer_buffer_ = make_unique<AudioSourceTransferBuffer>();
+    this->output_transfer_buffer_ = make_unique<AudioSinkTransferBuffer>(buffer_size);
   }
 
   ~AudioDecoder();
 
   bool add_input_ring_buffer(std::weak_ptr<esphome::RingBuffer> input_ring_buffer, size_t input_buffer_size) {
-    // this->input_transfer_buffer_ = make_unique<AudioInTransferBuffer>();
+    // this->input_transfer_buffer_ = make_unique<AudioSourceTransferBuffer>();
     this->input_transfer_buffer_->add_input(input_ring_buffer, input_buffer_size);
     return true;
   }
   bool add_output_ring_buffer(std::weak_ptr<esphome::RingBuffer> output_ring_buffer, size_t output_buffer_size) {
-    // this->output_transfer_buffer_ = make_unique<AudioOutTransferBuffer>();
+    // this->output_transfer_buffer_ = make_unique<AudioSinkTransferBuffer>();
     this->output_transfer_buffer_->add_output(output_ring_buffer, output_buffer_size);
     return true;
   }
@@ -80,8 +82,8 @@ class AudioDecoder {
   HMP3Decoder mp3_decoder_;
 #endif
 
-  std::unique_ptr<AudioInTransferBuffer> input_transfer_buffer_;
-  std::unique_ptr<AudioOutTransferBuffer> output_transfer_buffer_;
+  std::unique_ptr<AudioSourceTransferBuffer> input_transfer_buffer_;
+  std::unique_ptr<AudioSinkTransferBuffer> output_transfer_buffer_;
 
   size_t wav_bytes_left_{0};
 

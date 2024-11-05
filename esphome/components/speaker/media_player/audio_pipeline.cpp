@@ -1,5 +1,3 @@
-#ifdef USE_ESP_IDF
-
 #include "audio_pipeline.h"
 
 #include "esphome/core/helpers.h"
@@ -8,14 +6,14 @@
 namespace esphome {
 namespace speaker {
 
-// static const size_t FILE_BUFFER_SIZE = 32 * 1024;
-// static const size_t FILE_RING_BUFFER_SIZE = 64 * 1024;
-// static const size_t BUFFER_SIZE_SAMPLES = 32768;
-// static const size_t BUFFER_SIZE_BYTES = BUFFER_SIZE_SAMPLES * sizeof(int16_t);
-static const size_t FILE_BUFFER_SIZE = 4 * 1024;
-static const size_t FILE_RING_BUFFER_SIZE = 4 * 1024;
-static const size_t BUFFER_SIZE_SAMPLES = 2048;
+static const size_t FILE_BUFFER_SIZE = 32 * 1024;
+static const size_t FILE_RING_BUFFER_SIZE = 64 * 1024;
+static const size_t BUFFER_SIZE_SAMPLES = 32768;
 static const size_t BUFFER_SIZE_BYTES = BUFFER_SIZE_SAMPLES * sizeof(int16_t);
+// static const size_t FILE_BUFFER_SIZE = 4 * 1024;
+// static const size_t FILE_RING_BUFFER_SIZE = 4 * 1024;
+// static const size_t BUFFER_SIZE_SAMPLES = 2048;
+// static const size_t BUFFER_SIZE_BYTES = BUFFER_SIZE_SAMPLES * sizeof(int16_t);
 
 static const uint32_t READER_TASK_STACK_SIZE = 5 * 1024;
 static const uint32_t DECODER_TASK_STACK_SIZE = 3 * 1024;
@@ -494,21 +492,19 @@ void AudioPipeline::decode_task(void *params) {
                 xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_LOADED_STREAM_INFO);
               }
             } else {
-#endif
-              // Audio format doesn't require resampling, send it directly to the mixer
-              if (this_pipeline->speaker_ != nullptr) {
-                this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
-                decoder->add_speaker(this_pipeline->speaker_, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
-              }
-#if !defined(SIMPLE_MEDIA_PLAYER)
-              else if (this_pipeline->output_ring_buffer_.use_count() > 0) {
+              // Audio format doesn't require resampling, send it directly to the output
+              if (this_pipeline->output_ring_buffer_.use_count() > 0) {
                 decoder->add_output_ring_buffer(this_pipeline->output_ring_buffer_,
                                                 BUFFER_SIZE_SAMPLES * sizeof(int16_t));
               }
             }
+#else
+            if (this_pipeline->speaker_ != nullptr) {
+              this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
+              decoder->add_speaker(this_pipeline->speaker_, BUFFER_SIZE_SAMPLES * sizeof(int16_t));
+            }
 #endif
           }
-
           xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
         }
       }
@@ -581,4 +577,3 @@ void AudioPipeline::resample_task(void *params) {
 
 }  // namespace speaker
 }  // namespace esphome
-#endif

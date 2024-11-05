@@ -30,19 +30,20 @@ class AudioResampler {
   // AudioResampler(std::shared_ptr<RingBuffer> &input_ring_buffer, std::shared_ptr<RingBuffer> &output_ring_buffer,
   //                size_t internal_buffer_samples)
   //     : internal_buffer_samples_(internal_buffer_samples) {
-  //   this->input_transfer_buffer_ = make_unique<AudioInTransferBuffer>(input_ring_buffer, internal_buffer_samples);
-  //   this->output_transfer_buffer_ = make_unique<AudioOutTransferBuffer>(output_ring_buffer, internal_buffer_samples);
+  //   this->input_transfer_buffer_ = make_unique<AudioSourceTransferBuffer>(input_ring_buffer,
+  //   internal_buffer_samples); this->output_transfer_buffer_ =
+  //   make_unique<AudioSinkTransferBuffer>(output_ring_buffer, internal_buffer_samples);
   // }
   ~AudioResampler();
 
   bool add_input_ring_buffer(std::weak_ptr<esphome::RingBuffer> input_ring_buffer, size_t input_buffer_size) {
-    this->input_transfer_buffer_ = make_unique<AudioInTransferBuffer>();
+    this->input_transfer_buffer_ = make_unique<AudioSourceTransferBuffer>();
     this->input_transfer_buffer_->add_input(input_ring_buffer, input_buffer_size);
     this->internal_buffer_samples_ = std::max(this->internal_buffer_samples_, input_buffer_size);
     return true;
   }
   bool add_output_ring_buffer(std::weak_ptr<esphome::RingBuffer> output_ring_buffer, size_t output_buffer_size) {
-    this->output_transfer_buffer_ = make_unique<AudioOutTransferBuffer>();
+    this->output_transfer_buffer_ = make_unique<AudioSinkTransferBuffer>();
     this->output_transfer_buffer_->add_output(output_ring_buffer, output_buffer_size);
     this->internal_buffer_samples_ = std::max(this->internal_buffer_samples_, output_buffer_size);
     return true;
@@ -61,8 +62,8 @@ class AudioResampler {
 
   size_t internal_buffer_samples_{0};
 
-  std::unique_ptr<AudioInTransferBuffer> input_transfer_buffer_;
-  std::unique_ptr<AudioOutTransferBuffer> output_transfer_buffer_;
+  std::unique_ptr<AudioSourceTransferBuffer> input_transfer_buffer_;
+  std::unique_ptr<AudioSinkTransferBuffer> output_transfer_buffer_;
 
   uint8_t *output_buffer_current_{nullptr};
 

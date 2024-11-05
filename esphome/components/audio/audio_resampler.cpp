@@ -147,12 +147,12 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
 
   if (this->output_transfer_buffer_->available() > 0) {
     // this->output_transfer_buffer_->write_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
-    this->output_transfer_buffer_->transfer_audio_out(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+    this->output_transfer_buffer_->transfer_data_to_sink(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
     return AudioResamplerState::RESAMPLING;
   }
 
   // Refill the input buffer
-  this->input_transfer_buffer_->read_ring_buffer(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+  this->input_transfer_buffer_->transfer_data_from_source(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
   if (this->input_transfer_buffer_->available() == 0) {
     return AudioResamplerState::RESAMPLING;

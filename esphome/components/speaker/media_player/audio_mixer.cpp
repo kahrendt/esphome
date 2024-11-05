@@ -67,7 +67,8 @@ void AudioMixer::audio_mixer_task(void *params) {
   TaskEvent event;
   CommandEvent command_event;
 
-  std::unique_ptr<audio::AudioInTransferBuffer> media_transfer_buffer = make_unique<audio::AudioInTransferBuffer>();
+  std::unique_ptr<audio::AudioSourceTransferBuffer> media_transfer_buffer =
+      make_unique<audio::AudioSourceTransferBuffer>();
 
   {  // After this block temp_media_ring_buffer will fall out of scope and release ownership
     std::shared_ptr<RingBuffer> temp_media_ring_buffer;
@@ -82,8 +83,8 @@ void AudioMixer::audio_mixer_task(void *params) {
     }
   }
 
-  std::unique_ptr<audio::AudioInTransferBuffer> announcement_transfer_buffer =
-      make_unique<audio::AudioInTransferBuffer>();
+  std::unique_ptr<audio::AudioSourceTransferBuffer> announcement_transfer_buffer =
+      make_unique<audio::AudioSourceTransferBuffer>();
 
   {  // After this block temp_announncement_ring_buffer will fall out of scope and release ownership
     std::shared_ptr<RingBuffer> temp_announcement_ring_buffer;
@@ -98,7 +99,8 @@ void AudioMixer::audio_mixer_task(void *params) {
     }
   }
 
-  std::unique_ptr<audio::AudioOutTransferBuffer> output_transfer_buffer = make_unique<audio::AudioOutTransferBuffer>();
+  std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
+      make_unique<audio::AudioSinkTransferBuffer>();
   output_transfer_buffer->add_output(this_mixer->speaker_, OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
 
   if (!media_transfer_buffer->allocated_successfully() || (!announcement_transfer_buffer->allocated_successfully()) ||
@@ -184,18 +186,18 @@ void AudioMixer::audio_mixer_task(void *params) {
     if ((this_mixer->media_ring_buffer_.use_count() == 1) && (media_transfer_buffer->has_buffered_data())) {
       // Autoclear the data in the media ring buffer if the audio source no longer owns it
       //  - This ensures that if a new pipeline starts feeding the mixer while paused, it won't play the old audio
-      media_transfer_buffer->clear_buffer();
+      media_transfer_buffer->clear_buffered_data();
     }
     if ((this_mixer->announcement_ring_buffer_.use_count() == 1) &&
         (announcement_transfer_buffer->has_buffered_data())) {
       // Autoclear the data in the announcement ring buffer if the audio source no longer owns it
-      announcement_transfer_buffer->clear_buffer();
+      announcement_transfer_buffer->clear_buffered_data();
     }
 
-    output_transfer_buffer->transfer_audio_out(pdMS_TO_TICKS(TASK_DELAY_MS));
+    output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(TASK_DELAY_MS));
 
-    media_transfer_buffer->read_ring_buffer(0);
-    announcement_transfer_buffer->read_ring_buffer(0);
+    media_transfer_buffer->transfer_data_from_source(0);
+    announcement_transfer_buffer->transfer_data_from_source(0);
 
     size_t media_available =
         std::min(media_transfer_buffer->available() * transfer_media, output_transfer_buffer->free());
