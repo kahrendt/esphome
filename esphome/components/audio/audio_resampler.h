@@ -27,13 +27,6 @@ struct ResampleInfo {
 
 class AudioResampler {
  public:
-  // AudioResampler(std::shared_ptr<RingBuffer> &input_ring_buffer, std::shared_ptr<RingBuffer> &output_ring_buffer,
-  //                size_t internal_buffer_samples)
-  //     : internal_buffer_samples_(internal_buffer_samples) {
-  //   this->input_transfer_buffer_ = make_unique<AudioSourceTransferBuffer>(input_ring_buffer,
-  //   internal_buffer_samples); this->output_transfer_buffer_ =
-  //   make_unique<AudioSinkTransferBuffer>(output_ring_buffer, internal_buffer_samples);
-  // }
   AudioResampler(size_t input_buffer_size, size_t output_buffer_size) {
     this->input_transfer_buffer_ = make_unique<AudioSourceTransferBuffer>(input_buffer_size);
     this->output_transfer_buffer_ = make_unique<AudioSinkTransferBuffer>(output_buffer_size);

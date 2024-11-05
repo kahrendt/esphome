@@ -24,10 +24,6 @@ AudioReader::~AudioReader() { this->cleanup_connection_(); }
 esp_err_t AudioReader::start(AudioFile *audio_file, AudioFileType &file_type) {
   file_type = AudioFileType::NONE;
 
-  // if (!this->output_transfer_buffer_->allocated_successfully()) {
-  //   return ESP_ERR_NO_MEM;
-  // }
-
   this->current_audio_file_ = audio_file;
 
   this->file_current_ = audio_file->data;
@@ -38,10 +34,6 @@ esp_err_t AudioReader::start(AudioFile *audio_file, AudioFileType &file_type) {
 
 esp_err_t AudioReader::start(const std::string &uri, AudioFileType &file_type) {
   file_type = AudioFileType::NONE;
-
-  // if (!this->output_transfer_buffer_->allocated_successfully()) {
-  //   return ESP_ERR_NO_MEM;
-  // }
 
   this->cleanup_connection_();
 
