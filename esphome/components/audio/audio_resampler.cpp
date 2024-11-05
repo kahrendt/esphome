@@ -23,10 +23,12 @@ AudioResampler::~AudioResampler() {
   ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
 
   if (this->float_input_buffer_ != nullptr) {
-    float_allocator.deallocate(this->float_input_buffer_, this->internal_buffer_samples_);
+    float_allocator.deallocate(this->float_input_buffer_,
+                               this->input_transfer_buffer_->capacity() / OUTPUT_BYTES_PER_SAMPLE);
   }
   if (this->float_output_buffer_ != nullptr) {
-    float_allocator.deallocate(this->float_output_buffer_, this->internal_buffer_samples_);
+    float_allocator.deallocate(this->float_output_buffer_,
+                               this->output_transfer_buffer_->capacity() / OUTPUT_BYTES_PER_SAMPLE);
   }
   if (this->resampler_ != nullptr) {
     resampleFree(this->resampler_);
@@ -43,10 +45,12 @@ esp_err_t AudioResampler::allocate_buffers_() {
   }
 
   if (this->float_input_buffer_ == nullptr)
-    this->float_input_buffer_ = float_allocator.allocate(this->internal_buffer_samples_);
+    this->float_input_buffer_ =
+        float_allocator.allocate(this->input_transfer_buffer_->capacity() / OUTPUT_BYTES_PER_SAMPLE);
 
   if (this->float_output_buffer_ == nullptr)
-    this->float_output_buffer_ = float_allocator.allocate(this->internal_buffer_samples_);
+    this->float_output_buffer_ =
+        float_allocator.allocate(this->output_transfer_buffer_->capacity() / OUTPUT_BYTES_PER_SAMPLE);
 
   if ((this->float_input_buffer_ == nullptr) || (this->float_output_buffer_ == nullptr)) {
     return ESP_ERR_NO_MEM;
@@ -205,9 +209,10 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
 
     ResampleResult res;
 
-    res =
-        resampleProcessInterleaved(this->resampler_, this->float_input_buffer_, frames_read, this->float_output_buffer_,
-                                   this->internal_buffer_samples_ / this->channel_factor_, this->sample_ratio_);
+    res = resampleProcessInterleaved(
+        this->resampler_, this->float_input_buffer_, frames_read, this->float_output_buffer_,
+        (this->output_transfer_buffer_->capacity() / OUTPUT_BYTES_PER_SAMPLE) / this->channel_factor_,
+        this->sample_ratio_);
 
     size_t frames_used = res.input_used;
     size_t samples_used = frames_used * this->stream_info_.channels;

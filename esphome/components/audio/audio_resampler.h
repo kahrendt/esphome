@@ -42,14 +42,10 @@ class AudioResampler {
 
   bool add_input_ring_buffer(std::weak_ptr<esphome::RingBuffer> input_ring_buffer) {
     this->input_transfer_buffer_->set_source(input_ring_buffer);
-    this->internal_buffer_samples_ =
-        std::max(this->internal_buffer_samples_, this->input_transfer_buffer_->capacity() / sizeof(int16_t));
     return this->input_transfer_buffer_->allocated_successfully();
   }
   bool add_output_ring_buffer(std::weak_ptr<esphome::RingBuffer> output_ring_buffer) {
     this->output_transfer_buffer_->set_sink(output_ring_buffer);
-    this->internal_buffer_samples_ =
-        std::max(this->internal_buffer_samples_, this->input_transfer_buffer_->capacity() / sizeof(int16_t));
     return this->output_transfer_buffer_->allocated_successfully();
   }
 
@@ -63,8 +59,6 @@ class AudioResampler {
 
  protected:
   esp_err_t allocate_buffers_();
-
-  size_t internal_buffer_samples_{0};
 
   std::unique_ptr<AudioSourceTransferBuffer> input_transfer_buffer_;
   std::unique_ptr<AudioSinkTransferBuffer> output_transfer_buffer_;
