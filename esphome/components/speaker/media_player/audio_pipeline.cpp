@@ -363,7 +363,6 @@ void AudioPipeline::read_task(void *params) {
         }
 
         if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
-          // TODO: verify this check actually works to test if the ring buffer was allocated
           err = ESP_ERR_NO_MEM;
         } else {
           reader->add_ring_buffer(this_pipeline->raw_file_ring_buffer_);
@@ -502,8 +501,9 @@ void AudioPipeline::decode_task(void *params) {
               }
 
               if (!this_pipeline->decoded_ring_buffer_.use_count()) {
-                // TODO: verify this check actually works to test if the ring buffer was allocated
-                // Setting up the decoder failed, stop the pipeline
+                // Allocating the ring buffer failed, stop the pipeline
+                event.err = ESP_ERR_NO_MEM;
+
                 xEventGroupSetBits(this_pipeline->event_group_,
                                    EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
               } else {

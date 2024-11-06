@@ -79,6 +79,8 @@ void AudioMixer::audio_mixer_task(void *params) {
   TaskEvent event;
   CommandEvent command_event;
 
+  esp_err_t err = ESP_OK;
+
   std::unique_ptr<audio::AudioSourceTransferBuffer> media_transfer_buffer =
       audio::AudioSourceTransferBuffer::create(this_mixer->transfer_buffer_size_);
 
@@ -89,7 +91,7 @@ void AudioMixer::audio_mixer_task(void *params) {
       this_mixer->media_ring_buffer_ = temp_media_ring_buffer;
     }
     if (this_mixer->media_ring_buffer_.use_count() == 0) {
-      // TODO: Handle no allocation
+      err = ESP_ERR_NO_MEM;
     } else {
       media_transfer_buffer->set_source(temp_media_ring_buffer);
     }
@@ -105,7 +107,7 @@ void AudioMixer::audio_mixer_task(void *params) {
       this_mixer->announcement_ring_buffer_ = temp_announcement_ring_buffer;
     }
     if (this_mixer->announcement_ring_buffer_.use_count() == 0) {
-      // TODO: Handle no allocation
+      err = ESP_ERR_NO_MEM;
     } else {
       announcement_transfer_buffer->set_source(temp_announcement_ring_buffer);
     }
@@ -116,7 +118,7 @@ void AudioMixer::audio_mixer_task(void *params) {
   output_transfer_buffer->set_sink(this_mixer->speaker_);
 
   if ((media_transfer_buffer == nullptr) || (announcement_transfer_buffer == nullptr) ||
-      (output_transfer_buffer == nullptr)) {
+      (output_transfer_buffer == nullptr) || (err == ESP_ERR_NO_MEM)) {
     event.type = EventType::WARNING;
     event.err = ESP_ERR_NO_MEM;
     xQueueSend(this_mixer->event_queue_, &event, portMAX_DELAY);
@@ -187,7 +189,6 @@ void AudioMixer::audio_mixer_task(void *params) {
         transfer_media = false;
       } else if (command_event.command == CommandEventType::RESUME_MEDIA) {
         transfer_media = true;
-        // printf("media_ring_buffer use count %ld\n", this_mixer->media_ring_buffer_.use_count());
         // } else if (command_event.command == CommandEventType::CLEAR_MEDIA) {
         //   this_mixer->media_ring_buffer_->reset();
         // } else if (command_event.command == CommandEventType::CLEAR_ANNOUNCEMENT) {
