@@ -23,14 +23,6 @@ bool AudioTransferBuffer::has_buffered_data() {
   return (this->available() > 0);
 }
 
-bool AudioTransferBuffer::allocated_successfully() {
-  if (this->buffer_ != nullptr) {
-    return true;
-  }
-
-  return false;
-}
-
 void AudioTransferBuffer::decrease_buffer_length(size_t bytes) {
   this->buffer_length_ -= bytes;
   this->data_start_ += bytes;
@@ -47,10 +39,6 @@ void AudioTransferBuffer::allocate_buffer_(size_t buffer_size) {
 }
 
 size_t AudioSourceTransferBuffer::transfer_data_from_source(TickType_t ticks_to_wait) {
-  if (!this->allocated_successfully()) {
-    return 0;
-  }
-
   // Shift data in buffer to start
   if (this->buffer_length_ > 0) {
     memmove(this->buffer_, this->data_start_, this->buffer_length_);
@@ -70,10 +58,6 @@ size_t AudioSourceTransferBuffer::transfer_data_from_source(TickType_t ticks_to_
 }
 
 size_t AudioSinkTransferBuffer::transfer_data_to_sink(TickType_t ticks_to_wait) {
-  if (!this->allocated_successfully()) {
-    return 0;
-  }
-
   size_t bytes_written = 0;
   if (this->available()) {
     if (this->speaker_ != nullptr) {

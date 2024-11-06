@@ -96,6 +96,11 @@ esp_err_t AudioReader::start(const std::string &uri, AudioFileType &file_type) {
 
   this->no_data_read_count_ = 0;
 
+  this->output_transfer_buffer_ = AudioSinkTransferBuffer::create(this->buffer_size_);
+  if (this->output_transfer_buffer_ == nullptr) {
+    return ESP_ERR_NO_MEM;
+  }
+
   return ESP_OK;
 }
 

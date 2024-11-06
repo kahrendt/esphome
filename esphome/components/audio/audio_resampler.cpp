@@ -36,24 +36,29 @@ AudioResampler::~AudioResampler() {
   }
 }
 
-esp_err_t AudioResampler::allocate_buffers_() {
-  ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
-
-  if (!this->input_transfer_buffer_->allocated_successfully() ||
-      !this->output_transfer_buffer_->allocated_successfully()) {
+esp_err_t AudioResampler::allocate_buffers_(bool allocate_float_buffers) {
+  if ((this->input_transfer_buffer_ == nullptr) || (this->output_transfer_buffer_ == nullptr)) {
     return ESP_ERR_NO_MEM;
   }
 
-  if (this->float_input_buffer_ == nullptr)
-    this->float_input_buffer_ =
-        float_allocator.allocate(this->input_transfer_buffer_->capacity() / OUTPUT_BYTES_PER_SAMPLE);
+  if (allocate_float_buffers) {
+    ExternalRAMAllocator<float> float_allocator(ExternalRAMAllocator<float>::ALLOW_FAILURE);
+    if (this->float_input_buffer_ == nullptr) {
+      this->float_input_buffer_ = float_allocator.allocate(this->input_buffer_size_ / OUTPUT_BYTES_PER_SAMPLE);
+    }
 
-  if (this->float_output_buffer_ == nullptr)
-    this->float_output_buffer_ =
-        float_allocator.allocate(this->output_transfer_buffer_->capacity() / OUTPUT_BYTES_PER_SAMPLE);
+    if (this->float_output_buffer_ == nullptr) {
+      this->float_output_buffer_ = float_allocator.allocate(this->output_buffer_size_ / OUTPUT_BYTES_PER_SAMPLE);
+    }
 
-  if ((this->float_input_buffer_ == nullptr) || (this->float_output_buffer_ == nullptr)) {
-    return ESP_ERR_NO_MEM;
+    if ((this->float_input_buffer_ == nullptr) || (this->float_output_buffer_ == nullptr)) {
+      return ESP_ERR_NO_MEM;
+    } else {
+      this->float_input_buffer_current_ = this->float_input_buffer_;
+      this->float_input_buffer_length_ = 0;
+      this->float_output_buffer_current_ = this->float_output_buffer_;
+      this->float_output_buffer_length_ = 0;
+    }
   }
 
   return ESP_OK;
@@ -61,18 +66,7 @@ esp_err_t AudioResampler::allocate_buffers_() {
 
 esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sample_rate,
                                 ResampleInfo &resample_info) {
-  esp_err_t err = this->allocate_buffers_();
-  if (err != ESP_OK) {
-    return err;
-  }
-
   this->stream_info_ = stream_info;
-
-  this->float_input_buffer_current_ = this->float_input_buffer_;
-  this->float_input_buffer_length_ = 0;
-
-  this->float_output_buffer_current_ = this->float_output_buffer_;
-  this->float_output_buffer_length_ = 0;
 
   resample_info.mono_to_stereo = (stream_info.channels != 2);
 
@@ -139,6 +133,12 @@ esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sa
   }
 
   this->resample_info_ = resample_info;
+
+  esp_err_t err = this->allocate_buffers_(resample_info.resample);
+  if (err != ESP_OK) {
+    return err;
+  }
+
   return ESP_OK;
 }
 
@@ -162,13 +162,15 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
     return AudioResamplerState::RESAMPLING;
   }
 
-  // Samples are indiviudal int16 values. Frames include 1 sample for mono and 2 samples for stereo
-  // Be careful converting between bytes, samples, and frames!
-  // 1 sample = 2 bytes = sizeof(int16_t) = OUTPUT_BYTES_PER_SAMPLE
-  // if mono:
-  //    1 frame = 1 sample
-  // if stereo:
-  //    1 frame = 2 samples (left and right)
+  /*
+   Samples are indiviudal int16 values. Frames include 1 sample for mono and 2 samples for stereo
+   Be careful converting between bytes, samples, and frames!
+   1 sample = 2 bytes = sizeof(int16_t) = OUTPUT_BYTES_PER_SAMPLE
+   if mono:
+      1 frame = 1 sample
+   if stereo:
+      1 frame = 2 samples (left and right)
+  */
 
   const size_t samples_free_to_write = this->output_transfer_buffer_->free() / OUTPUT_BYTES_PER_SAMPLE;
   const size_t frames_free_to_write = samples_free_to_write / OUTPUT_CHANNELS;

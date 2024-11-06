@@ -27,19 +27,27 @@ struct ResampleInfo {
 
 class AudioResampler {
  public:
-  AudioResampler(size_t input_buffer_size, size_t output_buffer_size) {
-    this->input_transfer_buffer_ = make_unique<AudioSourceTransferBuffer>(input_buffer_size);
-    this->output_transfer_buffer_ = make_unique<AudioSinkTransferBuffer>(output_buffer_size);
+  AudioResampler(size_t input_buffer_size, size_t output_buffer_size)
+      : input_buffer_size_(input_buffer_size), output_buffer_size_(output_buffer_size) {
+    this->input_transfer_buffer_ = AudioSourceTransferBuffer::create(input_buffer_size);
+    this->output_transfer_buffer_ = AudioSinkTransferBuffer::create(output_buffer_size);
   }
   ~AudioResampler();
 
-  bool add_input_ring_buffer(std::weak_ptr<esphome::RingBuffer> input_ring_buffer) {
-    this->input_transfer_buffer_->set_source(input_ring_buffer);
-    return this->input_transfer_buffer_->allocated_successfully();
+  esp_err_t add_input_ring_buffer(std::weak_ptr<esphome::RingBuffer> input_ring_buffer) {
+    if (this->input_transfer_buffer_ != nullptr) {
+      this->input_transfer_buffer_->set_source(input_ring_buffer);
+      return ESP_OK;
+    }
+    return ESP_ERR_NO_MEM;
   }
-  bool add_output_ring_buffer(std::weak_ptr<esphome::RingBuffer> output_ring_buffer) {
-    this->output_transfer_buffer_->set_sink(output_ring_buffer);
-    return this->output_transfer_buffer_->allocated_successfully();
+
+  esp_err_t add_output_ring_buffer(std::weak_ptr<esphome::RingBuffer> output_ring_buffer) {
+    if (this->output_transfer_buffer_ != nullptr) {
+      this->output_transfer_buffer_->set_sink(output_ring_buffer);
+      return ESP_OK;
+    }
+    return ESP_ERR_NO_MEM;
   }
 
   /// @brief Sets up the various bits necessary to resample
@@ -51,7 +59,7 @@ class AudioResampler {
   AudioResamplerState resample(bool stop_gracefully);
 
  protected:
-  esp_err_t allocate_buffers_();
+  esp_err_t allocate_buffers_(bool allocate_float_buffers);
 
   std::unique_ptr<AudioSourceTransferBuffer> input_transfer_buffer_;
   std::unique_ptr<AudioSinkTransferBuffer> output_transfer_buffer_;
@@ -61,10 +69,12 @@ class AudioResampler {
   float *float_input_buffer_{nullptr};
   float *float_input_buffer_current_{nullptr};
   size_t float_input_buffer_length_;
+  size_t input_buffer_size_;
 
   float *float_output_buffer_{nullptr};
   float *float_output_buffer_current_{nullptr};
   size_t float_output_buffer_length_;
+  size_t output_buffer_size_;
 
   AudioStreamInfo stream_info_;
   ResampleInfo resample_info_;

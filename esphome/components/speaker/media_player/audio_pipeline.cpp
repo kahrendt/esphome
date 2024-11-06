@@ -6,14 +6,17 @@
 namespace esphome {
 namespace speaker {
 
-static const size_t FILE_BUFFER_SIZE = 32 * 1024;
-static const size_t FILE_RING_BUFFER_SIZE = 64 * 1024;
-static const size_t BUFFER_SIZE_SAMPLES = 32768;
-static const size_t BUFFER_SIZE_BYTES = BUFFER_SIZE_SAMPLES * sizeof(int16_t);
+// static const size_t FILE_BUFFER_SIZE = 32 * 1024;
+// static const size_t FILE_RING_BUFFER_SIZE = 64 * 1024;
+// static const size_t BUFFER_SIZE_SAMPLES = 32768;
+// static const size_t BUFFER_SIZE_BYTES = BUFFER_SIZE_SAMPLES * sizeof(int16_t);
 // static const size_t FILE_BUFFER_SIZE = 4 * 1024;
 // static const size_t FILE_RING_BUFFER_SIZE = 4 * 1024;
 // static const size_t BUFFER_SIZE_SAMPLES = 2048;
 // static const size_t BUFFER_SIZE_BYTES = BUFFER_SIZE_SAMPLES * sizeof(int16_t);
+
+static const size_t TRANSFER_BUFFER_SIZE = 24 * 1024;
+static const uint32_t DECODED_BUFFER_DURATION_MS = 500;
 
 static const uint32_t READER_TASK_STACK_SIZE = 5 * 1024;
 static const uint32_t DECODER_TASK_STACK_SIZE = 3 * 1024;
@@ -330,7 +333,7 @@ void AudioPipeline::read_task(void *params) {
       event.source = InfoErrorSource::READER;
       esp_err_t err = ESP_OK;
 
-      std::unique_ptr<audio::AudioReader> reader = make_unique<audio::AudioReader>(FILE_BUFFER_SIZE);
+      std::unique_ptr<audio::AudioReader> reader = make_unique<audio::AudioReader>(TRANSFER_BUFFER_SIZE);
 
       if (event_bits & READER_COMMAND_INIT_FILE) {
         err = reader->start(this_pipeline->current_audio_file_, this_pipeline->current_audio_file_type_);
@@ -341,8 +344,21 @@ void AudioPipeline::read_task(void *params) {
       if (err == ESP_OK) {
         std::shared_ptr<RingBuffer> temp_ring_buffer;
 
+        size_t file_ring_buffer_size = TRANSFER_BUFFER_SIZE * this_pipeline->target_sample_rate_ / 1000;
+
+        switch (this_pipeline->current_audio_file_type_) {
+          case audio::AudioFileType::MP3:
+            file_ring_buffer_size /= 8;
+            break;
+          case audio::AudioFileType::FLAC:
+            file_ring_buffer_size /= 2;
+            break;
+          default:
+            break;
+        }
+
         if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
-          temp_ring_buffer = std::move(RingBuffer::create(FILE_RING_BUFFER_SIZE));
+          temp_ring_buffer = std::move(RingBuffer::create(file_ring_buffer_size));
           this_pipeline->raw_file_ring_buffer_ = temp_ring_buffer;
         }
 
@@ -412,10 +428,10 @@ void AudioPipeline::decode_task(void *params) {
       event.source = InfoErrorSource::DECODER;
 
       std::unique_ptr<audio::AudioDecoder> decoder =
-          make_unique<audio::AudioDecoder>(FILE_BUFFER_SIZE, FILE_BUFFER_SIZE);
-      decoder->add_input_ring_buffer(this_pipeline->raw_file_ring_buffer_);
+          make_unique<audio::AudioDecoder>(TRANSFER_BUFFER_SIZE, TRANSFER_BUFFER_SIZE);
 
       esp_err_t err = decoder->start(this_pipeline->current_audio_file_type_);
+      decoder->add_input_ring_buffer(this_pipeline->raw_file_ring_buffer_);
 
       if (err != ESP_OK) {
         // Send specific error message
@@ -479,7 +495,9 @@ void AudioPipeline::decode_task(void *params) {
               std::shared_ptr<RingBuffer> temp_ring_buffer;
 
               if (!this_pipeline->decoded_ring_buffer_.use_count()) {
-                temp_ring_buffer = std::move(RingBuffer::create((BUFFER_SIZE_BYTES)));
+                temp_ring_buffer = std::move(RingBuffer::create(
+                    DECODED_BUFFER_DURATION_MS * this_pipeline->current_audio_stream_info_.sample_rate *
+                    this_pipeline->current_audio_stream_info_.channels * sizeof(int16_t) / 1000));
                 this_pipeline->decoded_ring_buffer_ = temp_ring_buffer;
               }
 
@@ -532,13 +550,15 @@ void AudioPipeline::resample_task(void *params) {
       InfoErrorEvent event;
       event.source = InfoErrorSource::RESAMPLER;
 
-      std::unique_ptr<audio::AudioResampler> resampler = make_unique<audio::AudioResampler>(
-          BUFFER_SIZE_SAMPLES * sizeof(int16_t), BUFFER_SIZE_SAMPLES * sizeof(int16_t));
+      const size_t output_transfer_buffer_size =
+          TRANSFER_BUFFER_SIZE + this_pipeline->current_resample_info_.mono_to_stereo * TRANSFER_BUFFER_SIZE;
+      std::unique_ptr<audio::AudioResampler> resampler =
+          make_unique<audio::AudioResampler>(TRANSFER_BUFFER_SIZE, output_transfer_buffer_size);
 
-      resampler->add_input_ring_buffer(this_pipeline->decoded_ring_buffer_);
-      resampler->add_output_ring_buffer(this_pipeline->output_ring_buffer_);
       esp_err_t err = resampler->start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
                                        this_pipeline->current_resample_info_);
+      resampler->add_input_ring_buffer(this_pipeline->decoded_ring_buffer_);
+      resampler->add_output_ring_buffer(this_pipeline->output_ring_buffer_);
 
       if (err != ESP_OK) {
         // Send specific error message

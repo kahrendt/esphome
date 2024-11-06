@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef USE_ESP_IDF
-
 #include "esphome/components/audio/audio_transfer_buffer.h"
 #include "esphome/components/speaker/speaker.h"
 
@@ -74,6 +72,8 @@ static const std::vector<int16_t> DECIBEL_REDUCTION_TABLE = {
 
 class AudioMixer {
  public:
+  static std::unique_ptr<AudioMixer> create(size_t ring_buffer_size, size_t transfer_buffer_size);
+
   /// @brief Sends a CommandEvent to the command queue
   /// @param command Pointer to CommandEvent object to be sent
   /// @param ticks_to_wait The number of FreeRTOS ticks to wait for an event to appear on the queue. Defaults to 0.
@@ -148,8 +148,10 @@ class AudioMixer {
 
   std::weak_ptr<RingBuffer> media_ring_buffer_;
   std::weak_ptr<RingBuffer> announcement_ring_buffer_;
+
+  size_t ring_buffer_size_;
+  size_t transfer_buffer_size_;
 };
+
 }  // namespace speaker
 }  // namespace esphome
-
-#endif

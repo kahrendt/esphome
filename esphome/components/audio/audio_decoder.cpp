@@ -35,8 +35,7 @@ AudioDecoder::~AudioDecoder() {
 }
 
 esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
-  if (!this->input_transfer_buffer_->allocated_successfully() ||
-      !this->output_transfer_buffer_->allocated_successfully()) {
+  if ((this->input_transfer_buffer_ == nullptr) || (this->output_transfer_buffer_ == nullptr)) {
     return ESP_ERR_NO_MEM;
   }
 

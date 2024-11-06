@@ -131,7 +131,10 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
 
 #if !defined(SIMPLE_MEDIA_PLAYER)
   if (this->audio_mixer_ == nullptr) {
-    this->audio_mixer_ = make_unique<AudioMixer>();
+    this->audio_mixer_ = AudioMixer::create(sizeof(int16_t) * 2 * 500 * this->sample_rate_ / 1000, 8192);
+    if (this->audio_mixer_ == nullptr) {
+      return ESP_ERR_NO_MEM;
+    }
     err = this->audio_mixer_->start(this->speaker_, "mixer", MIXER_TASK_PRIORITY);
     if (err != ESP_OK) {
       return err;

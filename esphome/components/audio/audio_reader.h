@@ -23,16 +23,19 @@ class AudioReader {
   AudioReader(size_t buffer_size) : buffer_size_(buffer_size) {}
   ~AudioReader();
 
-  bool add_ring_buffer(std::weak_ptr<esphome::RingBuffer> output_ring_buffer) {
+  esp_err_t add_ring_buffer(std::weak_ptr<esphome::RingBuffer> output_ring_buffer) {
     if (current_audio_file_ != nullptr) {
-      // A tranfser buffer isn't ncessary for a local file
+      // A transfer buffer isn't ncessary for a local file
       this->file_ring_buffer_ = output_ring_buffer.lock();
-      return true;
+      return ESP_OK;
     }
 
-    this->output_transfer_buffer_ = make_unique<AudioSinkTransferBuffer>(this->buffer_size_);
-    this->output_transfer_buffer_->set_sink(output_ring_buffer);
-    return this->output_transfer_buffer_->allocated_successfully();
+    if (this->output_transfer_buffer_ != nullptr) {
+      this->output_transfer_buffer_->set_sink(output_ring_buffer);
+      return ESP_OK;
+    }
+
+    return ESP_ERR_NO_MEM;
   }
 
   esp_err_t start(const std::string &uri, AudioFileType &file_type);

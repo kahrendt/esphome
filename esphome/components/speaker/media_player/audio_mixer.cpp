@@ -1,5 +1,3 @@
-#ifdef USE_ESP_IDF
-
 #include "audio_mixer.h"
 
 #include <dsp.h>
@@ -10,8 +8,6 @@
 namespace esphome {
 namespace speaker {
 
-static const size_t INPUT_RING_BUFFER_SAMPLES = 24000;
-static const size_t OUTPUT_BUFFER_SAMPLES = 8192;
 static const size_t QUEUE_COUNT = 20;
 
 static const uint32_t TASK_STACK_SIZE = 3072;
@@ -19,6 +15,22 @@ static const size_t TASK_DELAY_MS = 25;
 
 static const int16_t MAX_AUDIO_SAMPLE_VALUE = INT16_MAX;
 static const int16_t MIN_AUDIO_SAMPLE_VALUE = INT16_MIN;
+
+std::unique_ptr<AudioMixer> AudioMixer::create(size_t ring_buffer_size, size_t transfer_buffer_size) {
+  std::unique_ptr<AudioMixer> mixer = make_unique<AudioMixer>();
+
+  mixer->ring_buffer_size_ = ring_buffer_size;
+  mixer->transfer_buffer_size_ = transfer_buffer_size;
+
+  esp_err_t err = ESP_OK;
+  err = mixer->allocate_buffers_();
+
+  if (err != ESP_OK) {
+    return nullptr;
+  }
+
+  return mixer;
+}
 
 esp_err_t AudioMixer::start(Speaker *speaker, const std::string &task_name, UBaseType_t priority) {
   esp_err_t err = this->allocate_buffers_();
@@ -68,12 +80,12 @@ void AudioMixer::audio_mixer_task(void *params) {
   CommandEvent command_event;
 
   std::unique_ptr<audio::AudioSourceTransferBuffer> media_transfer_buffer =
-      make_unique<audio::AudioSourceTransferBuffer>(OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+      audio::AudioSourceTransferBuffer::create(this_mixer->transfer_buffer_size_);
 
   {  // After this block temp_media_ring_buffer will fall out of scope and release ownership
     std::shared_ptr<RingBuffer> temp_media_ring_buffer;
     if (this_mixer->media_ring_buffer_.use_count() == 0) {
-      temp_media_ring_buffer = std::move(RingBuffer::create(INPUT_RING_BUFFER_SAMPLES * sizeof(int16_t)));
+      temp_media_ring_buffer = std::move(RingBuffer::create(this_mixer->ring_buffer_size_));
       this_mixer->media_ring_buffer_ = temp_media_ring_buffer;
     }
     if (this_mixer->media_ring_buffer_.use_count() == 0) {
@@ -84,12 +96,12 @@ void AudioMixer::audio_mixer_task(void *params) {
   }
 
   std::unique_ptr<audio::AudioSourceTransferBuffer> announcement_transfer_buffer =
-      make_unique<audio::AudioSourceTransferBuffer>(OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+      audio::AudioSourceTransferBuffer::create(this_mixer->transfer_buffer_size_);
 
   {  // After this block temp_announncement_ring_buffer will fall out of scope and release ownership
     std::shared_ptr<RingBuffer> temp_announcement_ring_buffer;
     if (this_mixer->announcement_ring_buffer_.use_count() == 0) {
-      temp_announcement_ring_buffer = std::move(RingBuffer::create(INPUT_RING_BUFFER_SAMPLES * sizeof(int16_t)));
+      temp_announcement_ring_buffer = std::move(RingBuffer::create(this_mixer->ring_buffer_size_));
       this_mixer->announcement_ring_buffer_ = temp_announcement_ring_buffer;
     }
     if (this_mixer->announcement_ring_buffer_.use_count() == 0) {
@@ -100,11 +112,11 @@ void AudioMixer::audio_mixer_task(void *params) {
   }
 
   std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
-      make_unique<audio::AudioSinkTransferBuffer>(OUTPUT_BUFFER_SAMPLES * sizeof(int16_t));
+      audio::AudioSinkTransferBuffer::create(this_mixer->transfer_buffer_size_);
   output_transfer_buffer->set_sink(this_mixer->speaker_);
 
-  if (!media_transfer_buffer->allocated_successfully() || (!announcement_transfer_buffer->allocated_successfully()) ||
-      (!output_transfer_buffer->allocated_successfully())) {
+  if ((media_transfer_buffer == nullptr) || (announcement_transfer_buffer == nullptr) ||
+      (output_transfer_buffer == nullptr)) {
     event.type = EventType::WARNING;
     event.err = ESP_ERR_NO_MEM;
     xQueueSend(this_mixer->event_queue_, &event, portMAX_DELAY);
@@ -387,4 +399,3 @@ void AudioMixer::scale_audio_samples_(int16_t *audio_samples, int16_t *output_bu
 
 }  // namespace speaker
 }  // namespace esphome
-#endif

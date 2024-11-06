@@ -15,6 +15,8 @@
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
 
+#include "esp_err.h"
+
 namespace esphome {
 namespace audio {
 
@@ -37,25 +39,36 @@ enum class FileDecoderState : uint8_t {
 class AudioDecoder {
  public:
   AudioDecoder(size_t input_buffer_size, size_t output_buffer_size) {
-    this->input_transfer_buffer_ = make_unique<AudioSourceTransferBuffer>(input_buffer_size);
-    this->output_transfer_buffer_ = make_unique<AudioSinkTransferBuffer>(output_buffer_size);
+    this->input_transfer_buffer_ = AudioSourceTransferBuffer::create(input_buffer_size);
+    this->output_transfer_buffer_ = AudioSinkTransferBuffer::create(output_buffer_size);
   }
 
   ~AudioDecoder();
 
-  bool add_input_ring_buffer(std::weak_ptr<esphome::RingBuffer> input_ring_buffer) {
-    this->input_transfer_buffer_->set_source(input_ring_buffer);
-    return this->input_transfer_buffer_->allocated_successfully();
-  }
-  bool add_output_ring_buffer(std::weak_ptr<esphome::RingBuffer> output_ring_buffer) {
-    this->output_transfer_buffer_->set_sink(output_ring_buffer);
-    return this->output_transfer_buffer_->allocated_successfully();
+  esp_err_t add_input_ring_buffer(std::weak_ptr<esphome::RingBuffer> input_ring_buffer) {
+    if (this->input_transfer_buffer_ != nullptr) {
+      this->input_transfer_buffer_->set_source(input_ring_buffer);
+      return ESP_OK;
+    }
+    return ESP_ERR_NO_MEM;
   }
 
-  bool add_speaker(speaker::Speaker *speaker) {
-    this->output_transfer_buffer_->set_sink(speaker);
-    return this->output_transfer_buffer_->allocated_successfully();
+  esp_err_t add_output_ring_buffer(std::weak_ptr<esphome::RingBuffer> output_ring_buffer) {
+    if (this->output_transfer_buffer_ != nullptr) {
+      this->output_transfer_buffer_->set_sink(output_ring_buffer);
+      return ESP_OK;
+    }
+    return ESP_ERR_NO_MEM;
   }
+
+  esp_err_t add_speaker(speaker::Speaker *speaker) {
+    if (this->output_transfer_buffer_ != nullptr) {
+      this->output_transfer_buffer_->set_sink(speaker);
+      return ESP_OK;
+    }
+    return ESP_ERR_NO_MEM;
+  }
+
   esp_err_t start(AudioFileType audio_file_type);
 
   AudioDecoderState decode(bool stop_gracefully);
