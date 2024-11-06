@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef USE_ESP_IDF
-
 #include "biquad.h"
 #include "resampler.h"
 
@@ -94,5 +92,3 @@ class AudioResampler {
 
 }  // namespace audio
 }  // namespace esphome
-
-#endif

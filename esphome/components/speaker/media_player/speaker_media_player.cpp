@@ -1,5 +1,3 @@
-#ifdef USE_ESP_IDF
-
 #include "speaker_media_player.h"
 
 #include "esphome/components/audio/audio.h"
@@ -568,4 +566,3 @@ void SpeakerMediaPlayer::set_volume_(float volume, bool publish) {
 
 }  // namespace speaker
 }  // namespace esphome
-#endif

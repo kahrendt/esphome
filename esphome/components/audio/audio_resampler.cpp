@@ -1,5 +1,3 @@
-#ifdef USE_ESP_IDF
-
 #include "audio_resampler.h"
 
 #include "esphome/core/ring_buffer.h"
@@ -262,5 +260,3 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
 
 }  // namespace audio
 }  // namespace esphome
-
-#endif

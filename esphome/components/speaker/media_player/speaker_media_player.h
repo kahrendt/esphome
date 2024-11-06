@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef USE_ESP_IDF
-
 #include "audio_mixer.h"
 #include "audio_pipeline.h"
 
@@ -136,5 +134,3 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
 
 }  // namespace speaker
 }  // namespace esphome
-
-#endif

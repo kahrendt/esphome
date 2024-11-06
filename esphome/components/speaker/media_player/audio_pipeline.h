@@ -1,9 +1,5 @@
 #pragma once
 
-#ifdef USE_ESP_IDF
-
-// #include "audio_mixer.h"
-
 #include "esphome/components/audio/audio.h"
 #include "esphome/components/audio/audio_files.h"
 #include "esphome/components/audio/audio_reader.h"
@@ -15,6 +11,7 @@
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
 
+#include "esp_err.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
 #include <freertos/queue.h>
@@ -152,5 +149,3 @@ class AudioPipeline {
 
 }  // namespace speaker
 }  // namespace esphome
-
-#endif
