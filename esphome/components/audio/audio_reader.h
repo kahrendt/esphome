@@ -35,7 +35,7 @@ class AudioReader {
       return ESP_OK;
     }
 
-    return ESP_ERR_NO_MEM;
+    return ESP_ERR_INVALID_STATE;
   }
 
   esp_err_t start(const std::string &uri, AudioFileType &file_type);
