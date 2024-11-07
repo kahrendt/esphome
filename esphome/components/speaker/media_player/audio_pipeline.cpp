@@ -444,7 +444,7 @@ void AudioPipeline::read_task(void *params) {
       if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
         err = ESP_ERR_NO_MEM;
       } else {
-        reader->add_ring_buffer(this_pipeline->raw_file_ring_buffer_);
+        reader->add_sink(this_pipeline->raw_file_ring_buffer_);
       }
     }
 

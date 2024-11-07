@@ -31,20 +31,10 @@ class AudioReader {
   AudioReader(size_t buffer_size) : buffer_size_(buffer_size) {}
   ~AudioReader();
 
-  esp_err_t add_ring_buffer(std::weak_ptr<esphome::RingBuffer> output_ring_buffer) {
-    if (current_audio_file_ != nullptr) {
-      // A transfer buffer isn't ncessary for a local file
-      this->file_ring_buffer_ = output_ring_buffer.lock();
-      return ESP_OK;
-    }
-
-    if (this->output_transfer_buffer_ != nullptr) {
-      this->output_transfer_buffer_->set_sink(output_ring_buffer);
-      return ESP_OK;
-    }
-
-    return ESP_ERR_INVALID_STATE;
-  }
+  /// @brief Adds a sink ring buffer for audio data. Takes ownership of the ring buffer in a shared_ptr
+  /// @param output_ring_buffer weak_ptr of a shared_ptr of the sink ring buffer to transfer ownership
+  /// @return  ESP_OK if successful, ESP_ERR_INVALID_STATE otherwise
+  esp_err_t add_sink(std::weak_ptr<esphome::RingBuffer> output_ring_buffer);
 
   /// @brief Starts reading an audio file from an http source. The transfer buffer is allocated here.
   /// @param uri Web url to the http file.
