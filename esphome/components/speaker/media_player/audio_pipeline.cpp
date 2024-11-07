@@ -550,10 +550,8 @@ void AudioPipeline::resample_task(void *params) {
       InfoErrorEvent event;
       event.source = InfoErrorSource::RESAMPLER;
 
-      const size_t output_transfer_buffer_size =
-          TRANSFER_BUFFER_SIZE + this_pipeline->current_resample_info_.mono_to_stereo * TRANSFER_BUFFER_SIZE;
       std::unique_ptr<audio::AudioResampler> resampler =
-          make_unique<audio::AudioResampler>(TRANSFER_BUFFER_SIZE, output_transfer_buffer_size);
+          make_unique<audio::AudioResampler>(TRANSFER_BUFFER_SIZE, TRANSFER_BUFFER_SIZE);
 
       esp_err_t err = resampler->start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
                                        this_pipeline->current_resample_info_);
