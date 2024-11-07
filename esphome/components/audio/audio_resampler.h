@@ -1,6 +1,5 @@
 #pragma once
 
-// #include "biquad.h"
 #include "resampler.h"
 
 #include "audio.h"
@@ -12,24 +11,28 @@ namespace esphome {
 namespace audio {
 
 enum class AudioResamplerState : uint8_t {
-  INITIALIZED = 0,
-  RESAMPLING,
-  FINISHED,
-  FAILED,
+  RESAMPLING,  // More data is available to resample
+  FINISHED,    // All file data has been resampled and transferred
+  FAILED,      // Unused state included for consistency among Audio classes
 };
 
 struct ResampleInfo {
-  bool resample;
-  bool mono_to_stereo;
+  bool resample;        // True if converting sample ratess
+  bool mono_to_stereo;  // True if converting mono to stereo
 };
 
 class AudioResampler {
+  /*
+   * @brief Class that facilitates resampling an audio file.
+   * The audio data is read from a ring buffer source, decoded, and sent to an audio sink (ring buffer or speaker
+   * component).
+   * Supports adjusting the sample rate and converting mono audio to stereo.
+   */
  public:
-  AudioResampler(size_t input_buffer_size, size_t output_buffer_size)
-      : input_buffer_size_(input_buffer_size), output_buffer_size_(output_buffer_size) {
-    this->input_transfer_buffer_ = AudioSourceTransferBuffer::create(input_buffer_size);
-    this->output_transfer_buffer_ = AudioSinkTransferBuffer::create(output_buffer_size);
-  }
+  /// @brief Allocates the input and output transfer buffers
+  /// @param input_buffer_size Size of the input transfer buffer in bytes.
+  /// @param output_buffer_size Size of the output transfer buffer in bytes.
+  AudioResampler(size_t input_buffer_size, size_t output_buffer_size);
 
   esp_err_t add_input_ring_buffer(std::weak_ptr<esphome::RingBuffer> input_ring_buffer) {
     if (this->input_transfer_buffer_ != nullptr) {
@@ -47,13 +50,18 @@ class AudioResampler {
     return ESP_ERR_NO_MEM;
   }
 
-  /// @brief Sets up the various bits necessary to resample
+  /// @brief Sets up the class to resample
   /// @param stream_info the incoming sample rate, bits per sample, and number of channels
   /// @param target_sample_rate the necessary sample rate to convert to
-  /// @param resample_info ResampleInfo object passed by reference that indicates which resampling processes are applied
-  /// @return ESP_OK if it is able to convert the incoming stream or an error otherwise
+  /// @param resample_info ResampleInfo object passed-by-reference that indicates which resampling processes are applied
+  /// @return ESP_OK if it is able to convert the incoming stream, ESP_ERR_NO_MEM if the transfer buffers failed to
+  /// allocate, ESP_ERR_NOT_SUPPORTED if the stream can't be converted.
   esp_err_t start(AudioStreamInfo &stream_info, uint32_t target_sample_rate, ResampleInfo &resample_info);
 
+  /// @brief Resamples audio from the ring buffer source and writes to the sink.
+  /// @param stop_gracefully If true, it indicates the file decoder is finished. The resampler will resample all the
+  /// reamining audio and then finish.
+  /// @return AudioResamplerState
   AudioResamplerState resample(bool stop_gracefully);
 
  protected:

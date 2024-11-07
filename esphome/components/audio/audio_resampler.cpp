@@ -16,6 +16,12 @@ static const uint8_t OUTPUT_BITS_PER_SAMPLE = 8 * OUTPUT_BYTES_PER_SAMPLE;
 
 static const size_t READ_WRITE_TIMEOUT_MS = 20;
 
+AudioResampler::AudioResampler(size_t input_buffer_size, size_t output_buffer_size)
+    : input_buffer_size_(input_buffer_size), output_buffer_size_(output_buffer_size) {
+  this->input_transfer_buffer_ = AudioSourceTransferBuffer::create(input_buffer_size);
+  this->output_transfer_buffer_ = AudioSinkTransferBuffer::create(output_buffer_size);
+}
+
 esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sample_rate,
                                 ResampleInfo &resample_info) {
   this->stream_info_ = stream_info;
