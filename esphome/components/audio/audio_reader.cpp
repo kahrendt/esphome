@@ -1,5 +1,3 @@
-#ifdef USE_ESP_IDF
-
 #include "audio_reader.h"
 
 #include "esphome/core/helpers.h"
@@ -194,5 +192,3 @@ void AudioReader::cleanup_connection_() {
 
 }  // namespace audio
 }  // namespace esphome
-
-#endif
