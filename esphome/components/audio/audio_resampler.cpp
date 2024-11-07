@@ -1,7 +1,7 @@
 #include "audio_resampler.h"
 
-#include "esphome/core/ring_buffer.h"
 #include "esphome/core/helpers.h"
+#include "esphome/core/ring_buffer.h"
 
 namespace esphome {
 namespace audio {

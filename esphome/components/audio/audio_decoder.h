@@ -1,11 +1,5 @@
 #pragma once
 
-#include <wav_decoder.h>
-#if !defined(SIMPLE_MEDIA_PLAYER)
-#include <flac_decoder.h>
-#include <mp3_decoder.h>
-#endif
-
 #include "audio.h"
 #include "audio_files.h"
 #include "audio_transfer_buffer.h"
@@ -17,6 +11,13 @@
 #ifdef USE_SPEAKER
 #include "esphome/components/speaker/speaker.h"
 #endif
+
+// esp-audio-libs
+#if !defined(SIMPLE_MEDIA_PLAYER)
+#include <flac_decoder.h>
+#include <mp3_decoder.h>
+#endif
+#include <wav_decoder.h>
 
 #include "esp_err.h"
 

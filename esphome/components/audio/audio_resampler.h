@@ -1,11 +1,11 @@
 #pragma once
 
-#include "resampler.h"
-
 #include "audio.h"
 #include "audio_transfer_buffer.h"
 
 #include "esphome/core/ring_buffer.h"
+
+#include <resampler.h>  // esp-audio-libs
 
 namespace esphome {
 namespace audio {
@@ -17,7 +17,7 @@ enum class AudioResamplerState : uint8_t {
 };
 
 struct ResampleInfo {
-  bool resample;        // True if converting sample ratess
+  bool resample;        // True if converting sample rates
   bool mono_to_stereo;  // True if converting mono to stereo
 };
 
