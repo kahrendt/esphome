@@ -49,9 +49,12 @@ esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sa
       subsample_interpolate = false;
     }
 
-    this->resampler_->initialize(static_cast<float>(target_sample_rate), static_cast<float>(stream_info.sample_rate),
-                                 stream_info.channels, (uint16_t) NUM_TAPS, number_of_filters, false,
-                                 subsample_interpolate);
+    if (!this->resampler_->initialize(static_cast<float>(target_sample_rate),
+                                      static_cast<float>(stream_info.sample_rate), stream_info.channels,
+                                      (uint16_t) NUM_TAPS, number_of_filters, false, subsample_interpolate)) {
+      // Failed to allocate the resampler's internal buffers
+      return ESP_ERR_NO_MEM;
+    }
 
   } else {
     resample_info.resample = false;
