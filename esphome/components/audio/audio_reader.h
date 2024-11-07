@@ -32,7 +32,7 @@ class AudioReader {
   /// @brief Adds a sink ring buffer for audio data. Takes ownership of the ring buffer in a shared_ptr
   /// @param output_ring_buffer weak_ptr of a shared_ptr of the sink ring buffer to transfer ownership
   /// @return  ESP_OK if successful, ESP_ERR_INVALID_STATE otherwise
-  esp_err_t add_sink(std::weak_ptr<esphome::RingBuffer> output_ring_buffer);
+  esp_err_t add_sink(std::weak_ptr<RingBuffer> output_ring_buffer);
 
   /// @brief Starts reading an audio file from an http source. The transfer buffer is allocated here.
   /// @param uri Web url to the http file.

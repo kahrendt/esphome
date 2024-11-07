@@ -37,12 +37,12 @@ class AudioResampler {
   /// @brief Adds a source ring buffer for audio data. Takes ownership of the ring buffer in a shared_ptr.
   /// @param input_ring_buffer weak_ptr of a shared_ptr of the sink ring buffer to transfer ownership
   /// @return ESP_OK if successsful, ESP_ERR_NO_MEM if the transfer buffer wasn't allocated
-  esp_err_t add_source(std::weak_ptr<esphome::RingBuffer> input_ring_buffer);
+  esp_err_t add_source(std::weak_ptr<RingBuffer> input_ring_buffer);
 
   /// @brief Adds a sink ring buffer for resampled audio. Takes ownership of the ring buffer in a shared_ptr.
   /// @param output_ring_buffer weak_ptr of a shared_ptr of the sink ring buffer to transfer ownership
   /// @return ESP_OK if successsful, ESP_ERR_NO_MEM if the transfer buffer wasn't allocated
-  esp_err_t add_sink(std::weak_ptr<esphome::RingBuffer> output_ring_buffer);
+  esp_err_t add_sink(std::weak_ptr<RingBuffer> output_ring_buffer);
 
   /// @brief Sets up the class to resample
   /// @param stream_info the incoming sample rate, bits per sample, and number of channels

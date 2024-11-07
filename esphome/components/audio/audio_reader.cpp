@@ -19,7 +19,7 @@ static const size_t HTTP_STREAM_BUFFER_SIZE = 2048;
 
 AudioReader::~AudioReader() { this->cleanup_connection_(); }
 
-esp_err_t AudioReader::add_sink(std::weak_ptr<esphome::RingBuffer> output_ring_buffer) {
+esp_err_t AudioReader::add_sink(std::weak_ptr<RingBuffer> output_ring_buffer) {
   if (current_audio_file_ != nullptr) {
     // A transfer buffer isn't ncessary for a local file
     this->file_ring_buffer_ = output_ring_buffer.lock();
