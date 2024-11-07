@@ -26,28 +26,34 @@ namespace esphome {
 namespace audio {
 
 enum class AudioDecoderState : uint8_t {
-  INITIALIZED = 0,
-  DECODING,
-  FINISHED,
-  FAILED,
+  DECODING = 0,  // More data is available to decode
+  FINISHED,      // All file data has been decoded and transferred
+  FAILED,        // Encountered an error
 };
 
 // Only used within the AudioDecoder class; conveys the state of the particular file type decoder
 enum class FileDecoderState : uint8_t {
-  MORE_TO_PROCESS,
-  IDLE,
-  POTENTIALLY_FAILED,
-  FAILED,
-  END_OF_FILE,
+  MORE_TO_PROCESS,     // Successsfully read a file chunk and more data is available to decode
+  IDLE,                // Not enough data to decode, waiting for more to be transferred
+  POTENTIALLY_FAILED,  // Decoder encountered a potentially recoverable error if more file data is available
+  FAILED,              // Decoder encoutnered an uncrecoverable error
+  END_OF_FILE,         // The specific file decoder knows its the end of the file
 };
 
 class AudioDecoder {
+  /*
+   * @brief Class that facilitates decoding an audio file.
+   * The audio file is read from a ring buffer source, decoded, and sent to an audio sink (ring buffer or speaker
+   * component).
+   * Supports wav, flac, and mp3 formats.
+   */
  public:
-  AudioDecoder(size_t input_buffer_size, size_t output_buffer_size) {
-    this->input_transfer_buffer_ = AudioSourceTransferBuffer::create(input_buffer_size);
-    this->output_transfer_buffer_ = AudioSinkTransferBuffer::create(output_buffer_size);
-  }
+  /// @brief Allocates the input and output transfer buffers
+  /// @param input_buffer_size Size of the input transfer buffer in bytes.
+  /// @param output_buffer_size Size of the output transfer buffer in bytes.
+  AudioDecoder(size_t input_buffer_size, size_t output_buffer_size);
 
+  /// @brief Deallocates the MP3 decoder (the flac and wav decoders are deallocated automatically)
   ~AudioDecoder();
 
   esp_err_t add_input_ring_buffer(std::weak_ptr<esphome::RingBuffer> input_ring_buffer) {
@@ -76,10 +82,20 @@ class AudioDecoder {
   }
 #endif
 
+  /// @brief Sets up decoding the file
+  /// @param audio_file_type AudioFileType of the file
+  /// @return ESP_OK if successful, ESP_ERR_NO_MEM if the transfer buffers fail to allocate, or ESP_ERR_NOT_SUPPORTED if
+  /// the format isn't supported.
   esp_err_t start(AudioFileType audio_file_type);
 
+  /// @brief Decodes audio from the ring buffer source and writes to the sink.
+  /// @param stop_gracefully If true, it indicates the file source is finished. The decoder will decode all the
+  /// reamining data and then finish.
+  /// @return AudioDecoderState
   AudioDecoderState decode(bool stop_gracefully);
 
+  /// @brief Gets the audio stream information, if it has been decoded from the files header
+  /// @return optional<AudioStreamInfo> with the audio information. If not available yet, returns no value.
   const optional<audio::AudioStreamInfo> &get_audio_stream_info() const { return this->audio_stream_info_; }
 
  protected:

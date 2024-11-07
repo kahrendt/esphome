@@ -2,10 +2,6 @@
 
 #include "audio_decoder.h"
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
-#include "mp3_decoder.h"
-#endif
-
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
@@ -16,22 +12,17 @@ namespace audio {
 static const size_t READ_WRITE_TIMEOUT_MS = 20;
 static const size_t DECODING_TIMEOUT_MS = 50;
 
+AudioDecoder::AudioDecoder(size_t input_buffer_size, size_t output_buffer_size) {
+  this->input_transfer_buffer_ = AudioSourceTransferBuffer::create(input_buffer_size);
+  this->output_transfer_buffer_ = AudioSinkTransferBuffer::create(output_buffer_size);
+}
+
 AudioDecoder::~AudioDecoder() {
 #if !defined(SIMPLE_MEDIA_PLAYER)
-  if (this->flac_decoder_ != nullptr) {
-    this->flac_decoder_->free_buffers();
-    this->flac_decoder_.reset();  // Free the unique_ptr
-    this->flac_decoder_ = nullptr;
-  }
-
   if (this->audio_file_type_ == AudioFileType::MP3) {
     MP3FreeDecoder(this->mp3_decoder_);
   }
 #endif
-  if (this->wav_decoder_ != nullptr) {
-    this->wav_decoder_.reset();  // Free the unique_ptr
-    this->wav_decoder_ = nullptr;
-  }
 }
 
 esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
