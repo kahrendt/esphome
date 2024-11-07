@@ -60,11 +60,12 @@ size_t AudioSourceTransferBuffer::transfer_data_from_source(TickType_t ticks_to_
 size_t AudioSinkTransferBuffer::transfer_data_to_sink(TickType_t ticks_to_wait) {
   size_t bytes_written = 0;
   if (this->available()) {
+#ifdef USE_SPEAKER
     if (this->speaker_ != nullptr) {
       bytes_written = this->speaker_->play(this->data_start_, this->available(), ticks_to_wait);
-    }
-
-    if (this->ring_buffer_.use_count() > 0) {
+    } else
+#endif
+        if (this->ring_buffer_.use_count() > 0) {
       bytes_written =
           this->ring_buffer_->write_without_replacement((void *) this->data_start_, this->available(), ticks_to_wait);
     }
@@ -79,9 +80,12 @@ size_t AudioSinkTransferBuffer::transfer_data_to_sink(TickType_t ticks_to_wait) 
 }
 
 bool AudioSinkTransferBuffer::has_buffered_data() {
+#ifdef USE_SPEAKER
   if (this->speaker_ != nullptr) {
     return (this->speaker_->has_buffered_data() || (this->available() > 0));
-  } else if (this->ring_buffer_.use_count() > 0) {
+  }
+#endif
+  if (this->ring_buffer_.use_count() > 0) {
     return ((this->ring_buffer_->available() > 0) || (this->available() > 0));
   }
   return (this->available() > 0);

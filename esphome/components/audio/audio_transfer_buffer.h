@@ -1,10 +1,13 @@
 
 #pragma once
 
+#include "esphome/core/defines.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
 
+#ifdef USE_SPEAKER
 #include "esphome/components/speaker/speaker.h"
+#endif
 
 #include "esp_err.h"
 
@@ -93,14 +96,18 @@ class AudioSinkTransferBuffer : public AudioTransferBuffer {
   /// @param ring_buffer weak_ptr to the allocated ring buffer
   void set_sink(std::weak_ptr<RingBuffer> ring_buffer) { this->ring_buffer_ = ring_buffer.lock(); }
 
+#ifdef USE_SPEAKER
   /// @brief Adds a speaker as the transfer buffer's sink.
   /// @param speaker Pointer to the speaker component
   void set_sink(speaker::Speaker *speaker) { this->speaker_ = speaker; }
+#endif
 
   bool has_buffered_data() override;
 
  protected:
+#ifdef USE_SPEAKER
   speaker::Speaker *speaker_{nullptr};
+#endif
 };
 
 class AudioSourceTransferBuffer : public AudioTransferBuffer {
@@ -109,8 +116,6 @@ class AudioSourceTransferBuffer : public AudioTransferBuffer {
    * Supports reading audio data from a ring buffer.
    */
  public:
-  // AudioSourceTransferBuffer(size_t buffer_size) : AudioTransferBuffer(buffer_size) {}
-
   static std::unique_ptr<AudioSourceTransferBuffer> create(size_t buffer_size) {
     std::unique_ptr<AudioSourceTransferBuffer> source_buffer = make_unique<AudioSourceTransferBuffer>();
 

@@ -12,8 +12,13 @@
 #include "audio_files.h"
 #include "audio_transfer_buffer.h"
 
+#include "esphome/core/defines.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
+
+#ifdef USE_SPEAKER
+#include "esphome/components/speaker/speaker.h"
+#endif
 
 #include "esp_err.h"
 
@@ -61,6 +66,7 @@ class AudioDecoder {
     return ESP_ERR_NO_MEM;
   }
 
+#ifdef USE_SPEAKER
   esp_err_t add_speaker(speaker::Speaker *speaker) {
     if (this->output_transfer_buffer_ != nullptr) {
       this->output_transfer_buffer_->set_sink(speaker);
@@ -68,6 +74,7 @@ class AudioDecoder {
     }
     return ESP_ERR_NO_MEM;
   }
+#endif
 
   esp_err_t start(AudioFileType audio_file_type);
 
