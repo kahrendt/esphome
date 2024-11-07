@@ -13,13 +13,21 @@ namespace esphome {
 namespace audio {
 
 enum class AudioReaderState : uint8_t {
-  READING = 0,
-  FINISHED,
-  FAILED,
+  READING = 0,  // More data is available to read
+  FINISHED,     // All data has been read and transferred
+  FAILED,       // Encountered an error
 };
 
 class AudioReader {
+  /*
+   * @brief Class that facilitates reading a raw audio file.
+   * Files can be read from flash (stored as an AudioFile struct) or from an http source.
+   * The file data is sent to a ring buffer sink.
+   */
  public:
+  /// @brief Constructs an AudioReader object.
+  /// The transfer buffer isn't allocated here, but only when necessary (an http source) in the start function.
+  /// @param buffer_size Transfer buffer size in bytes.
   AudioReader(size_t buffer_size) : buffer_size_(buffer_size) {}
   ~AudioReader();
 
@@ -38,9 +46,20 @@ class AudioReader {
     return ESP_ERR_INVALID_STATE;
   }
 
+  /// @brief Starts reading an audio file from an http source. The transfer buffer is allocated here.
+  /// @param uri Web url to the http file.
+  /// @param file_type AudioFileType variable passed-by-reference indicating the type of file being read.
+  /// @return ESP_OK if successful, an ESP_ERR* code otherwise.
   esp_err_t start(const std::string &uri, AudioFileType &file_type);
+
+  /// @brief Starts reading an audio file from flash. No transfer buffer is allocated.
+  /// @param audio_file AudioFile struct containing the file.
+  /// @param file_type AudioFileType variable passed-by-reference indicating the type of file being read.
+  /// @return ESP_OK
   esp_err_t start(AudioFile *audio_file, AudioFileType &file_type);
 
+  /// @brief Reads new file data from the source and sends to the ring buffer sink.
+  /// @return AudioReaderState
   AudioReaderState read();
 
  protected:
