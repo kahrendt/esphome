@@ -22,6 +22,22 @@ AudioResampler::AudioResampler(size_t input_buffer_size, size_t output_buffer_si
   this->output_transfer_buffer_ = AudioSinkTransferBuffer::create(output_buffer_size);
 }
 
+esp_err_t AudioResampler::add_source(std::weak_ptr<esphome::RingBuffer> input_ring_buffer) {
+  if (this->input_transfer_buffer_ != nullptr) {
+    this->input_transfer_buffer_->set_source(input_ring_buffer);
+    return ESP_OK;
+  }
+  return ESP_ERR_NO_MEM;
+}
+
+esp_err_t AudioResampler::add_sink(std::weak_ptr<esphome::RingBuffer> output_ring_buffer) {
+  if (this->output_transfer_buffer_ != nullptr) {
+    this->output_transfer_buffer_->set_sink(output_ring_buffer);
+    return ESP_OK;
+  }
+  return ESP_ERR_NO_MEM;
+}
+
 esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sample_rate,
                                 ResampleInfo &resample_info) {
   this->stream_info_ = stream_info;

@@ -509,7 +509,7 @@ void AudioPipeline::decode_task(void *params) {
         make_unique<audio::AudioDecoder>(TRANSFER_BUFFER_SIZE, TRANSFER_BUFFER_SIZE);
 
     esp_err_t err = decoder->start(this_pipeline->current_audio_file_type_);
-    decoder->add_input_ring_buffer(this_pipeline->raw_file_ring_buffer_);
+    decoder->add_source(this_pipeline->raw_file_ring_buffer_);
 
     if (err != ESP_OK) {
       // Send specific error message
@@ -586,19 +586,19 @@ void AudioPipeline::decode_task(void *params) {
               xEventGroupSetBits(this_pipeline->event_group_,
                                  EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
             } else {
-              decoder->add_output_ring_buffer(this_pipeline->decoded_ring_buffer_);
+              decoder->add_sink(this_pipeline->decoded_ring_buffer_);
               xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_LOADED_STREAM_INFO);
             }
           } else {
             // Audio format doesn't require resampling, send it directly to the output
             if (this_pipeline->output_ring_buffer_.use_count() > 0) {
-              decoder->add_output_ring_buffer(this_pipeline->output_ring_buffer_);
+              decoder->add_sink(this_pipeline->output_ring_buffer_);
             }
           }
 #else
           if (this_pipeline->speaker_ != nullptr) {
             this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
-            decoder->add_speaker(this_pipeline->speaker_);
+            decoder->add_sink(this_pipeline->speaker_);
           }
 #endif
         }
@@ -633,8 +633,8 @@ void AudioPipeline::resample_task(void *params) {
 
     esp_err_t err = resampler->start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
                                      this_pipeline->current_resample_info_);
-    resampler->add_input_ring_buffer(this_pipeline->decoded_ring_buffer_);
-    resampler->add_output_ring_buffer(this_pipeline->output_ring_buffer_);
+    resampler->add_source(this_pipeline->decoded_ring_buffer_);
+    resampler->add_sink(this_pipeline->output_ring_buffer_);
 
     if (err != ESP_OK) {
       // Send specific error message

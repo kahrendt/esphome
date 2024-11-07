@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef USE_ESP_IDF
-
 #include <wav_decoder.h>
 #if !defined(SIMPLE_MEDIA_PLAYER)
 #include <flac_decoder.h>
@@ -56,30 +54,21 @@ class AudioDecoder {
   /// @brief Deallocates the MP3 decoder (the flac and wav decoders are deallocated automatically)
   ~AudioDecoder();
 
-  esp_err_t add_input_ring_buffer(std::weak_ptr<esphome::RingBuffer> input_ring_buffer) {
-    if (this->input_transfer_buffer_ != nullptr) {
-      this->input_transfer_buffer_->set_source(input_ring_buffer);
-      return ESP_OK;
-    }
-    return ESP_ERR_NO_MEM;
-  }
+  /// @brief Adds a source ring buffer for raw file data. Takes ownership of the ring buffer in a shared_ptr.
+  /// @param input_ring_buffer weak_ptr of a shared_ptr of the sink ring buffer to transfer ownership
+  /// @return ESP_OK if successsful, ESP_ERR_NO_MEM if the transfer buffer wasn't allocated
+  esp_err_t add_source(std::weak_ptr<esphome::RingBuffer> input_ring_buffer);
 
-  esp_err_t add_output_ring_buffer(std::weak_ptr<esphome::RingBuffer> output_ring_buffer) {
-    if (this->output_transfer_buffer_ != nullptr) {
-      this->output_transfer_buffer_->set_sink(output_ring_buffer);
-      return ESP_OK;
-    }
-    return ESP_ERR_NO_MEM;
-  }
+  /// @brief Adds a sink ring buffer for decoded audio. Takes ownership of the ring buffer in a shared_ptr.
+  /// @param output_ring_buffer weak_ptr of a shared_ptr of the sink ring buffer to transfer ownership
+  /// @return ESP_OK if successsful, ESP_ERR_NO_MEM if the transfer buffer wasn't allocated
+  esp_err_t add_sink(std::weak_ptr<esphome::RingBuffer> output_ring_buffer);
 
 #ifdef USE_SPEAKER
-  esp_err_t add_speaker(speaker::Speaker *speaker) {
-    if (this->output_transfer_buffer_ != nullptr) {
-      this->output_transfer_buffer_->set_sink(speaker);
-      return ESP_OK;
-    }
-    return ESP_ERR_NO_MEM;
-  }
+  /// @brief Adds a sink speaker for decoded audio.
+  /// @param speaker pointer to speaker component
+  /// @return ESP_OK if successsful, ESP_ERR_NO_MEM if the transfer buffer wasn't allocated
+  esp_err_t add_sink(speaker::Speaker *speaker);
 #endif
 
   /// @brief Sets up decoding the file
@@ -124,5 +113,3 @@ class AudioDecoder {
 };
 }  // namespace audio
 }  // namespace esphome
-
-#endif
