@@ -9,6 +9,33 @@ AudioTransferBuffer::~AudioTransferBuffer() {
   }
 }
 
+std::unique_ptr<AudioSinkTransferBuffer> AudioSinkTransferBuffer::create(size_t buffer_size) {
+  std::unique_ptr<AudioSinkTransferBuffer> sink_buffer = make_unique<AudioSinkTransferBuffer>();
+
+  if (!sink_buffer->allocate_buffer_(buffer_size)) {
+    return nullptr;
+  }
+
+  return sink_buffer;
+}
+
+std::unique_ptr<AudioSourceTransferBuffer> AudioSourceTransferBuffer::create(size_t buffer_size) {
+  std::unique_ptr<AudioSourceTransferBuffer> source_buffer = make_unique<AudioSourceTransferBuffer>();
+
+  if (!source_buffer->allocate_buffer_(buffer_size)) {
+    return nullptr;
+  }
+
+  return source_buffer;
+}
+
+void AudioTransferBuffer::decrease_buffer_length(size_t bytes) {
+  this->buffer_length_ -= bytes;
+  this->data_start_ += bytes;
+}
+
+void AudioTransferBuffer::increase_buffer_length(size_t bytes) { this->buffer_length_ += bytes; }
+
 void AudioTransferBuffer::clear_buffered_data() {
   this->buffer_length_ = 0;
   if (this->ring_buffer_.use_count() > 0) {
@@ -23,19 +50,20 @@ bool AudioTransferBuffer::has_buffered_data() {
   return (this->available() > 0);
 }
 
-void AudioTransferBuffer::decrease_buffer_length(size_t bytes) {
-  this->buffer_length_ -= bytes;
-  this->data_start_ += bytes;
-}
-
-void AudioTransferBuffer::allocate_buffer_(size_t buffer_size) {
+bool AudioTransferBuffer::allocate_buffer_(size_t buffer_size) {
   this->buffer_size_ = buffer_size;
 
   ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
 
   this->buffer_ = allocator.allocate(this->buffer_size_);
+  if (this->buffer_ == nullptr) {
+    return false;
+  }
+
   this->data_start_ = this->buffer_;
   this->buffer_length_ = 0;
+
+  return true;
 }
 
 size_t AudioSourceTransferBuffer::transfer_data_from_source(TickType_t ticks_to_wait) {

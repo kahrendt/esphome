@@ -19,7 +19,9 @@ namespace audio {
 class AudioTransferBuffer {
   /*
    * @brief Class that facilitates tranferring data between a buffer and an audio source or sink.
-   * The transfer buffer temporarily holds data for processing in other audio components.
+   * The transfer buffer is a typical C array that temporarily holds data for processing in other audio components.
+   * Both sink and source transfer buffers can use a ring buffer as the sink/source.
+   *   - The ring buffer is stored in a shared_ptr, so destroying the transfer buffer object will release ownership.
    */
  public:
   /// @brief Destructor that deallocates the transfer buffer
@@ -37,10 +39,7 @@ class AudioTransferBuffer {
 
   /// @brief Updates the internal state of the transfer buffer. This should be called after writing data
   /// @param bytes The number of bytes written
-  void increase_buffer_length(size_t bytes) { this->buffer_length_ += bytes; }
-
-  /// @brief Returns the transfer buffer's currrently free bytes that can be written
-  size_t free() const { return this->buffer_size_ - (this->buffer_length_ - (this->data_start_ - this->buffer_)); }
+  void increase_buffer_length(size_t bytes);
 
   /// @brief Returns the transfer buffer's currently available bytes that can be read
   size_t available() const { return this->buffer_length_; }
@@ -48,16 +47,20 @@ class AudioTransferBuffer {
   /// @brief Returns the transfer buffers allocated bytes
   size_t capacity() const { return this->buffer_size_; }
 
-  /// @brief Tests if there is any data in the tranfer buffer or the source/sink.
-  /// @return True if there is data, false otherwise.
-  virtual bool has_buffered_data();
+  /// @brief Returns the transfer buffer's currrently free bytes that can be written
+  size_t free() const { return this->buffer_size_ - (this->buffer_length_ - (this->data_start_ - this->buffer_)); }
 
   /// @brief Clears data in the transfer buffer and, if possible, the source/sink.
   void clear_buffered_data();
 
+  /// @brief Tests if there is any data in the tranfer buffer or the source/sink.
+  /// @return True if there is data, false otherwise.
+  virtual bool has_buffered_data();
+
  protected:
   /// @brief Allocates the transfer buffer in external memory, if available.
-  void allocate_buffer_(size_t buffer_size);
+  /// @return True is successful, false otherwise.
+  bool allocate_buffer_(size_t buffer_size);
 
   // A possible source or sink for the transfer buffer
   std::shared_ptr<RingBuffer> ring_buffer_;
@@ -72,20 +75,13 @@ class AudioTransferBuffer {
 class AudioSinkTransferBuffer : public AudioTransferBuffer {
   /*
    * @brief A class that implements a transfer buffer for audio sinks.
-   * Supports writing audio data to a ring buffer or a speaker component.
+   * Supports writing processed data in the transfer buffer to a ring buffer or a speaker component.
    */
  public:
-  static std::unique_ptr<AudioSinkTransferBuffer> create(size_t buffer_size) {
-    std::unique_ptr<AudioSinkTransferBuffer> sink_buffer = make_unique<AudioSinkTransferBuffer>();
-
-    sink_buffer->allocate_buffer_(buffer_size);
-
-    if (sink_buffer->buffer_ == nullptr) {
-      return nullptr;
-    }
-
-    return sink_buffer;
-  }
+  /// @brief Creates a new sink transfer buffer.
+  /// @param buffer_size Size of the transfer buffer in bytes.
+  /// @return unique_ptr if successfully allocated, nullptr otherwise
+  static std::unique_ptr<AudioSinkTransferBuffer> create(size_t buffer_size);
 
   /// @brief Writes any available data in the transfer buffer to the sink.
   /// @param ticks_to_wait FreeRTOS ticks to block while waiting for the sink to have enough space
@@ -113,20 +109,13 @@ class AudioSinkTransferBuffer : public AudioTransferBuffer {
 class AudioSourceTransferBuffer : public AudioTransferBuffer {
   /*
    * @brief A class that implements a transfer buffer for audio sources.
-   * Supports reading audio data from a ring buffer.
+   * Supports reading audio data from a ring buffer into the transfer buffer for processing.
    */
  public:
-  static std::unique_ptr<AudioSourceTransferBuffer> create(size_t buffer_size) {
-    std::unique_ptr<AudioSourceTransferBuffer> source_buffer = make_unique<AudioSourceTransferBuffer>();
-
-    source_buffer->allocate_buffer_(buffer_size);
-
-    if (source_buffer->buffer_ == nullptr) {
-      return nullptr;
-    }
-
-    return source_buffer;
-  }
+  /// @brief Creates a new source transfer buffer.
+  /// @param buffer_size Size of the transfer buffer in bytes.
+  /// @return unique_ptr if successfully allocated, nullptr otherwise
+  static std::unique_ptr<AudioSourceTransferBuffer> create(size_t buffer_size);
 
   /// @brief Reads any available data from the sink into the transfer buffer.
   /// @param ticks_to_wait FreeRTOS ticks to block while waiting for the source to have enough data
