@@ -1,12 +1,12 @@
 #include "audio_mixer.h"
 
-#include <dsp.h>
-
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 
+#include <dsp.h>  // esp_audio_libs
+
 namespace esphome {
-namespace speaker {
+namespace audio {
 
 static const size_t QUEUE_COUNT = 20;
 
@@ -32,13 +32,8 @@ std::unique_ptr<AudioMixer> AudioMixer::create(size_t ring_buffer_size, size_t t
   return mixer;
 }
 
-esp_err_t AudioMixer::start(Speaker *speaker, const std::string &task_name, UBaseType_t priority) {
-  esp_err_t err = this->allocate_buffers_();
-
-  if (err != ESP_OK) {
-    return err;
-  }
-
+#ifdef USE_SPEAKER
+esp_err_t AudioMixer::start(speaker::Speaker *speaker, const std::string &task_name, UBaseType_t priority) {
   if (this->task_handle_ == nullptr) {
     xTaskCreate(AudioMixer::audio_mixer_task, task_name.c_str(), TASK_STACK_SIZE, (void *) this, priority,
                 &this->task_handle_);
@@ -49,6 +44,23 @@ esp_err_t AudioMixer::start(Speaker *speaker, const std::string &task_name, UBas
   }
 
   this->speaker_ = speaker;
+
+  return ESP_OK;
+}
+#endif
+
+esp_err_t AudioMixer::start(std::weak_ptr<RingBuffer> output_ring_buffer, const std::string &task_name,
+                            UBaseType_t priority) {
+  if (this->task_handle_ == nullptr) {
+    xTaskCreate(AudioMixer::audio_mixer_task, task_name.c_str(), TASK_STACK_SIZE, (void *) this, priority,
+                &this->task_handle_);
+  }
+
+  if (this->task_handle_ == nullptr) {
+    return ESP_FAIL;
+  }
+
+  this->output_ring_buffer_ = output_ring_buffer;
 
   return ESP_OK;
 }
@@ -71,6 +83,26 @@ void AudioMixer::resume_task() {
   if (this->task_handle_ != nullptr) {
     vTaskResume(task_handle_);
   }
+}
+
+void AudioMixer::set_ducking_reduction(uint8_t decibel_reduction, size_t transition_samples) {
+  CommandEvent command_event;
+  command_event.command = CommandEventType::DUCK;
+  command_event.decibel_reduction = decibel_reduction;
+
+  // Convert the duration in seconds to number of samples, accounting for the sample rate and number of channels
+  command_event.transition_samples = transition_samples;
+  this->send_command_(&command_event);
+}
+
+void AudioMixer::set_pause_state(bool pause_state) {
+  CommandEvent command_event;
+  if (pause_state) {
+    command_event.command = CommandEventType::PAUSE_MEDIA;
+  } else {
+    command_event.command = CommandEventType::RESUME_MEDIA;
+  }
+  this->send_command_(&command_event);
 }
 
 void AudioMixer::audio_mixer_task(void *params) {
@@ -115,7 +147,17 @@ void AudioMixer::audio_mixer_task(void *params) {
 
   std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
       audio::AudioSinkTransferBuffer::create(this_mixer->transfer_buffer_size_);
-  output_transfer_buffer->set_sink(this_mixer->speaker_);
+
+#ifdef USE_SPEAKER
+  if (this_mixer->speaker_ != nullptr) {
+    output_transfer_buffer->set_sink(this_mixer->speaker_);
+  } else
+#endif
+      if (this_mixer->output_ring_buffer_.use_count() > 0) {
+    output_transfer_buffer->set_sink(this_mixer->output_ring_buffer_);
+  } else {
+    // TODO: INVALID STATE!
+  }
 
   if ((media_transfer_buffer == nullptr) || (announcement_transfer_buffer == nullptr) ||
       (output_transfer_buffer == nullptr) || (err == ESP_ERR_NO_MEM)) {
@@ -130,8 +172,6 @@ void AudioMixer::audio_mixer_task(void *params) {
     while (true) {
       delay(TASK_DELAY_MS);
     }
-
-    return;
   }
 
   // Handles media stream pausing
@@ -340,6 +380,20 @@ esp_err_t AudioMixer::allocate_buffers_() {
   return ESP_OK;
 }
 
+BaseType_t AudioMixer::read_event_(TaskEvent *event, TickType_t ticks_to_wait) {
+  if (this->event_queue_ != nullptr) {
+    return xQueueReceive(this->event_queue_, event, ticks_to_wait);
+  }
+  return pdFALSE;
+}
+
+BaseType_t AudioMixer::send_command_(CommandEvent *command, TickType_t ticks_to_wait) {
+  if (this->command_queue_ != nullptr) {
+    return xQueueSend(this->command_queue_, command, ticks_to_wait);
+  }
+  return pdFALSE;
+}
+
 void AudioMixer::mix_audio_samples_without_clipping_(int16_t *media_buffer, int16_t *announcement_buffer,
                                                      int16_t *output_buffer, size_t samples_to_mix) {
   // We first test adding the two clips samples together and check for any clipping
@@ -398,5 +452,5 @@ void AudioMixer::scale_audio_samples_(int16_t *audio_samples, int16_t *output_bu
   }
 }
 
-}  // namespace speaker
+}  // namespace audio
 }  // namespace esphome

@@ -129,7 +129,7 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
 
 #if !defined(SIMPLE_MEDIA_PLAYER)
   if (this->audio_mixer_ == nullptr) {
-    this->audio_mixer_ = AudioMixer::create(sizeof(int16_t) * 2 * 500 * this->sample_rate_ / 1000, 8192);
+    this->audio_mixer_ = audio::AudioMixer::create(sizeof(int16_t) * 2 * 500 * this->sample_rate_ / 1000, 8192);
     if (this->audio_mixer_ == nullptr) {
       return ESP_ERR_NO_MEM;
     }
@@ -177,9 +177,7 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
 
 #if !defined(SIMPLE_MEDIA_PLAYER)
       if (this->is_paused_) {
-        CommandEvent command_event;
-        command_event.command = CommandEventType::RESUME_MEDIA;
-        this->audio_mixer_->send_command(&command_event);
+        this->audio_mixer_->set_pause_state(false);
       }
       this->is_paused_ = false;
 #endif
@@ -225,7 +223,6 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
 
 void SpeakerMediaPlayer::watch_media_commands_() {
   MediaCallCommand media_command;
-  CommandEvent command_event;
   esp_err_t err = ESP_OK;
 
   if (xQueueReceive(this->media_control_command_queue_, &media_command, 0) == pdTRUE) {
@@ -270,21 +267,18 @@ void SpeakerMediaPlayer::watch_media_commands_() {
 #if !defined(SIMPLE_MEDIA_PLAYER)
         case media_player::MEDIA_PLAYER_COMMAND_PLAY:
           if ((this->audio_mixer_ != nullptr) && this->is_paused_) {
-            command_event.command = CommandEventType::RESUME_MEDIA;
-            this->audio_mixer_->send_command(&command_event);
+            this->audio_mixer_->set_pause_state(false);
           }
           this->is_paused_ = false;
           break;
         case media_player::MEDIA_PLAYER_COMMAND_PAUSE:
           if ((this->audio_mixer_ != nullptr) && !this->is_paused_) {
-            command_event.command = CommandEventType::PAUSE_MEDIA;
-            this->audio_mixer_->send_command(&command_event);
+            this->audio_mixer_->set_pause_state(true);
           }
           this->is_paused_ = true;
           break;
 #endif
         case media_player::MEDIA_PLAYER_COMMAND_STOP:
-          command_event.command = CommandEventType::STOP;
 #if !defined(SIMPLE_MEDIA_PLAYER)
           if (media_command.announce.has_value() && media_command.announce.value()) {
             if (this->announcement_pipeline_ != nullptr) {
@@ -302,12 +296,10 @@ void SpeakerMediaPlayer::watch_media_commands_() {
 #if !defined(SIMPLE_MEDIA_PLAYER)
         case media_player::MEDIA_PLAYER_COMMAND_TOGGLE:
           if ((this->audio_mixer_ != nullptr) && this->is_paused_) {
-            command_event.command = CommandEventType::RESUME_MEDIA;
-            this->audio_mixer_->send_command(&command_event);
+            this->audio_mixer_->set_pause_state(false);
             this->is_paused_ = false;
           } else if (this->audio_mixer_ != nullptr) {
-            command_event.command = CommandEventType::PAUSE_MEDIA;
-            this->audio_mixer_->send_command(&command_event);
+            this->audio_mixer_->set_pause_state(true);
             this->is_paused_ = true;
           }
           break;
@@ -339,14 +331,8 @@ void SpeakerMediaPlayer::watch_media_commands_() {
 
 #if !defined(SIMPLE_MEDIA_PLAYER)
 void SpeakerMediaPlayer::watch_mixer_() {
-  TaskEvent event;
   if (this->audio_mixer_ != nullptr) {
-    while (this->audio_mixer_->read_event(&event)) {
-      if (event.type == EventType::WARNING) {
-        ESP_LOGD(TAG, "Mixer encountered an error: %s", esp_err_to_name(event.err));
-        this->status_set_error();
-      }
-    }
+    this->audio_mixer_->get_state();
   }
 }
 #endif
@@ -407,13 +393,8 @@ void SpeakerMediaPlayer::loop() {
 #if !defined(SIMPLE_MEDIA_PLAYER)
 void SpeakerMediaPlayer::set_ducking_reduction(uint8_t decibel_reduction, float duration) {
   if (this->audio_mixer_ != nullptr) {
-    CommandEvent command_event;
-    command_event.command = CommandEventType::DUCK;
-    command_event.decibel_reduction = decibel_reduction;
-
-    // Convert the duration in seconds to number of samples, accounting for the sample rate and number of channels
-    command_event.transition_samples = static_cast<size_t>(duration * this->sample_rate_ * NUMBER_OF_CHANNELS);
-    this->audio_mixer_->send_command(&command_event);
+    this->audio_mixer_->set_ducking_reduction(decibel_reduction,
+                                              static_cast<size_t>(duration * this->sample_rate_ * NUMBER_OF_CHANNELS));
   }
 }
 #endif

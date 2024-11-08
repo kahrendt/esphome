@@ -1,17 +1,21 @@
 #pragma once
 
-#include "esphome/components/audio/audio_transfer_buffer.h"
-#include "esphome/components/speaker/speaker.h"
+#include "audio_transfer_buffer.h"
 
+#include "esphome/core/defines.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
+
+#ifdef USE_SPEAKER
+#include "esphome/components/speaker/speaker.h"
+#endif
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 
 namespace esphome {
-namespace speaker {
+namespace audio {
 
 // Mixes two incoming audio streams together
 //  - The media stream intended for music playback
@@ -74,28 +78,21 @@ class AudioMixer {
  public:
   static std::unique_ptr<AudioMixer> create(size_t ring_buffer_size, size_t transfer_buffer_size);
 
-  /// @brief Sends a CommandEvent to the command queue
-  /// @param command Pointer to CommandEvent object to be sent
-  /// @param ticks_to_wait The number of FreeRTOS ticks to wait for an event to appear on the queue. Defaults to 0.
-  /// @return pdTRUE if successful, pdFALSE otherwises
-  BaseType_t send_command(CommandEvent *command, TickType_t ticks_to_wait = portMAX_DELAY) {
-    return xQueueSend(this->command_queue_, command, ticks_to_wait);
-  }
-
-  /// @brief Reads a TaskEvent from the event queue indicating its current status
-  /// @param event Pointer to TaskEvent object to store the event in
-  /// @param ticks_to_wait The number of FreeRTOS ticks to wait for an event to appear on the queue. Defaults to 0.
-  /// @return pdTRUE if successful, pdFALSE otherwise
-  BaseType_t read_event(TaskEvent *event, TickType_t ticks_to_wait = 0) {
-    return xQueueReceive(this->event_queue_, event, ticks_to_wait);
-  }
-
+#ifdef USE_SPEAKER
   /// @brief Starts the mixer task
-  /// @param speaker Pointer to Speaker component
+  /// @param speaker Pointer to sink speaker component
   /// @param task_name FreeRTOS task name
   /// @param priority FreeRTOS task priority. Defaults to 1
   /// @return ESP_OK if successful, and error otherwise
-  esp_err_t start(Speaker *speaker, const std::string &task_name, UBaseType_t priority = 1);
+  esp_err_t start(speaker::Speaker *speaker, const std::string &task_name, UBaseType_t priority = 1);
+#endif
+
+  /// @brief Starts the mixer task
+  /// @param output_ring_buffer weak_ptr of a shared_ptr of the sink ring buffer to transfer ownership
+  /// @param task_name FreeRTOS task name
+  /// @param priority FreeRTOS task priority. Defaults to 1
+  /// @return ESP_OK if successful, and error otherwise
+  esp_err_t start(std::weak_ptr<RingBuffer> output_ring_buffer, const std::string &task_name, UBaseType_t priority = 1);
 
   /// @brief Stops the mixer task and clears the queues
   void stop();
@@ -113,10 +110,39 @@ class AudioMixer {
   /// @brief Resumes the mixer task
   void resume_task();
 
+  /// @brief Sets the ducking level for the media stream in the mixer
+  /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by 10 dB
+  /// @param transition_samples (size_t) The number of samples to transition to the new ducking level over
+  void set_ducking_reduction(uint8_t decibel_reduction, size_t transition_samples);
+
+  void set_pause_state(bool pause_state);
+
+  void get_state() {
+    TaskEvent event;
+    while (this->read_event_(&event)) {
+      if (event.type == EventType::WARNING) {
+        // ESP_LOGD(TAG, "Mixer encountered an error: %s", esp_err_to_name(event.err));
+        // this->status_set_error();
+      }
+    }
+  }
+
  protected:
   /// @brief Allocates the ring buffers, task stack, and queues
   /// @return ESP_OK if successful or an error otherwise
   esp_err_t allocate_buffers_();
+
+  /// @brief Reads a TaskEvent from the event queue indicating its current status
+  /// @param event Pointer to TaskEvent object to store the event in
+  /// @param ticks_to_wait The number of FreeRTOS ticks to wait for an event to appear on the queue. Defaults to 0.
+  /// @return pdTRUE if successful, pdFALSE otherwise
+  BaseType_t read_event_(TaskEvent *event, TickType_t ticks_to_wait = 0);
+
+  /// @brief Sends a CommandEvent to the command queue
+  /// @param command Pointer to CommandEvent object to be sent
+  /// @param ticks_to_wait The number of FreeRTOS ticks to wait for an event to appear on the queue. Defaults to 0.
+  /// @return pdTRUE if successful, pdFALSE otherwises
+  BaseType_t send_command_(CommandEvent *command, TickType_t ticks_to_wait = portMAX_DELAY);
 
   /// @brief Mixes the media and announcement samples. If the resulting audio clips, the media samples are first
   /// scaled.
@@ -139,12 +165,13 @@ class AudioMixer {
   TaskHandle_t task_handle_{nullptr};
 
   // Reports events from the mixer task
-  QueueHandle_t event_queue_;
+  QueueHandle_t event_queue_{nullptr};
 
   // Stores commands to send the mixer task
-  QueueHandle_t command_queue_;
+  QueueHandle_t command_queue_{nullptr};
 
-  Speaker *speaker_{nullptr};
+  std::weak_ptr<RingBuffer> output_ring_buffer_;
+  speaker::Speaker *speaker_{nullptr};
 
   std::weak_ptr<RingBuffer> media_ring_buffer_;
   std::weak_ptr<RingBuffer> announcement_ring_buffer_;
@@ -153,5 +180,5 @@ class AudioMixer {
   size_t transfer_buffer_size_;
 };
 
-}  // namespace speaker
+}  // namespace audio
 }  // namespace esphome

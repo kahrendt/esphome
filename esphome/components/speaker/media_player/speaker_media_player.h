@@ -1,9 +1,9 @@
 #pragma once
 
-#include "audio_mixer.h"
 #include "audio_pipeline.h"
 
 #include "esphome/components/audio/audio_files.h"
+#include "esphome/components/audio/audio_mixer.h"
 
 #include "esphome/components/media_player/media_player.h"
 #include "esphome/components/speaker/speaker.h"
@@ -63,7 +63,8 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
 
 #if !defined(SIMPLE_MEDIA_PLAYER)
   /// @brief Sets the ducking level for the media stream in the mixer
-  /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by 10 dB
+  /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by s10
+  /// dB
   /// @param duration (float) The duration (in seconds) for transitioning to the new ducking level
   void set_ducking_reduction(uint8_t decibel_reduction, float duration);
 #endif
@@ -92,7 +93,7 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
 
 #if !defined(SIMPLE_MEDIA_PLAYER)
   std::unique_ptr<AudioPipeline> announcement_pipeline_;
-  std::unique_ptr<AudioMixer> audio_mixer_;
+  std::unique_ptr<audio::AudioMixer> audio_mixer_;
   // Monitors the mixer task
   void watch_mixer_();
 #endif
