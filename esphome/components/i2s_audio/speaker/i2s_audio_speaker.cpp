@@ -23,12 +23,15 @@ static const ssize_t TASK_PRIORITY = 23;
 
 static const size_t I2S_EVENT_QUEUE_COUNT = DMA_BUFFERS_COUNT + 1;
 
+static const size_t I2S_EVENT_QUEUE_COUNT = DMA_BUFFERS_COUNT + 1;
+
 static const char *const TAG = "i2s_audio.speaker";
 
 enum SpeakerEventGroupBits : uint32_t {
-  COMMAND_START = (1 << 0),            // starts the speaker task
-  COMMAND_STOP = (1 << 1),             // stops the speaker task
-  COMMAND_STOP_GRACEFULLY = (1 << 2),  // Stops the speaker task once all data has been written
+  COMMAND_START = (1 << 0),                           // Starts the main task purpose
+  COMMAND_STOP = (1 << 1),                            // stops the main task
+  COMMAND_STOP_GRACEFULLY = (1 << 2),                 // Stops the task once all data has been written
+  MESSAGE_RING_BUFFER_AVAILABLE_TO_WRITE = (1 << 5),  // Locks the ring buffer when not set
   STATE_STARTING = (1 << 10),
   STATE_RUNNING = (1 << 11),
   STATE_STOPPING = (1 << 12),
@@ -99,6 +102,14 @@ void I2SAudioSpeaker::setup() {
 
   if (this->event_group_ == nullptr) {
     ESP_LOGE(TAG, "Failed to create event group");
+    this->mark_failed();
+    return;
+  }
+
+  this->i2s_event_queue_ = xQueueCreate(I2S_EVENT_QUEUE_COUNT, sizeof(i2s_event_t));
+
+  if (this->i2s_event_queue_ == nullptr) {
+    ESP_LOGE(TAG, "Failed to create I2S event queue");
     this->mark_failed();
     return;
   }
@@ -403,8 +414,8 @@ esp_err_t I2SAudioSpeaker::allocate_buffers_(size_t data_buffer_size, size_t rin
     return ESP_ERR_NO_MEM;
   }
 
-  if (this->audio_ring_buffer_.use_count() == 0) {
-    // Allocate ring buffer. Uses a shared_ptr to ensure it isn't improperly deallocated.
+  if (this->audio_ring_buffer_ == nullptr) {
+    // Allocate ring buffer
     this->audio_ring_buffer_ = RingBuffer::create(ring_buffer_size);
   }
 
@@ -513,6 +524,7 @@ void I2SAudioSpeaker::delete_task_(size_t buffer_size) {
   }
 
   xEventGroupSetBits(this->event_group_, SpeakerEventGroupBits::STATE_STOPPED);
+  xQueueReset(this->i2s_event_queue_);
 
   this->task_created_ = false;
   vTaskDelete(nullptr);
