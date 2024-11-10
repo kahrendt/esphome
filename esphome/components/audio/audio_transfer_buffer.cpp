@@ -43,6 +43,18 @@ void AudioTransferBuffer::clear_buffered_data() {
   }
 }
 
+void AudioSinkTransferBuffer::clear_buffered_data() {
+  this->buffer_length_ = 0;
+  if (this->ring_buffer_.use_count() > 0) {
+    this->ring_buffer_->reset();
+  }
+#ifdef USE_SPEAKER
+  if (this->speaker_ != nullptr) {
+    this->speaker_->stop();
+  }
+#endif
+}
+
 bool AudioTransferBuffer::has_buffered_data() {
   if (this->ring_buffer_.use_count() > 0) {
     return ((this->ring_buffer_->available() > 0) || (this->available() > 0));

@@ -51,7 +51,7 @@ class AudioTransferBuffer {
   size_t free() const { return this->buffer_size_ - (this->buffer_length_ - (this->data_start_ - this->buffer_)); }
 
   /// @brief Clears data in the transfer buffer and, if possible, the source/sink.
-  void clear_buffered_data();
+  virtual void clear_buffered_data();
 
   /// @brief Tests if there is any data in the tranfer buffer or the source/sink.
   /// @return True if there is data, false otherwise.
@@ -97,6 +97,8 @@ class AudioSinkTransferBuffer : public AudioTransferBuffer {
   /// @param speaker Pointer to the speaker component
   void set_sink(speaker::Speaker *speaker) { this->speaker_ = speaker; }
 #endif
+
+  void clear_buffered_data() override;
 
   bool has_buffered_data() override;
 
