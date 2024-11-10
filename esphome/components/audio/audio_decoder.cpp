@@ -91,7 +91,7 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
 
 AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   if (stop_gracefully) {
-    if (!this->output_transfer_buffer_->has_buffered_data()) {
+    if (this->output_transfer_buffer_->available() == 0) {
       if (this->end_of_file_) {
         // the file decoder indicates it reached the end of file
         return AudioDecoderState::FINISHED;

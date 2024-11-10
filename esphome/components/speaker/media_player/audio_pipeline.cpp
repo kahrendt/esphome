@@ -403,10 +403,9 @@ void AudioPipeline::read_task(void *params) {
       // Send the file type to the pipeline
       event.file_type = this_pipeline->current_audio_file_type_;
       xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
-
-      // Inform the decoder that the media type is available
-      xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE);
     }
+
+    bool started_playback = false;
 
     while (true) {
       event_bits = xEventGroupGetBits(this_pipeline->event_group_);
@@ -417,7 +416,18 @@ void AudioPipeline::read_task(void *params) {
 
       audio::AudioReaderState reader_state = reader->read();
 
+      if (!started_playback && (reader_state == audio::AudioReaderState::BUFFER_FULL)) {
+        // Inform the decoder that the media type is available
+        xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE);
+        started_playback = true;
+      }
+
       if (reader_state == audio::AudioReaderState::FINISHED) {
+        if (!started_playback) {
+          // Inform the decoder that the media type is available
+          xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE);
+          started_playback = true;
+        }
         break;
       } else if (reader_state == audio::AudioReaderState::FAILED) {
         xEventGroupSetBits(this_pipeline->event_group_,

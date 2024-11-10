@@ -14,6 +14,7 @@ namespace audio {
 
 enum class AudioReaderState : uint8_t {
   READING = 0,  // More data is available to read
+  BUFFER_FULL,  // Output ring buffer is full
   FINISHED,     // All data has been read and transferred
   FAILED,       // Encountered an error
 };

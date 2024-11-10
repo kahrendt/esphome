@@ -101,7 +101,7 @@ esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sa
 
 AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
   if (stop_gracefully) {
-    if (!this->input_transfer_buffer_->has_buffered_data() && !this->output_transfer_buffer_->has_buffered_data()) {
+    if (!this->input_transfer_buffer_->has_buffered_data() && (this->output_transfer_buffer_->available() == 0)) {
       return AudioResamplerState::FINISHED;
     }
   }
