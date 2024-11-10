@@ -1,5 +1,7 @@
 #include "audio_mixer.h"
 
+#ifdef USE_ESP32
+
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 
@@ -89,9 +91,8 @@ void AudioMixer::set_ducking_reduction(uint8_t decibel_reduction, size_t transit
   CommandEvent command_event;
   command_event.command = CommandEventType::DUCK;
   command_event.decibel_reduction = decibel_reduction;
-
-  // Convert the duration in seconds to number of samples, accounting for the sample rate and number of channels
   command_event.transition_samples = transition_samples;
+
   this->send_command_(&command_event);
 }
 
@@ -151,13 +152,13 @@ void AudioMixer::audio_mixer_task(void *params) {
 #ifdef USE_SPEAKER
   if (this_mixer->speaker_ != nullptr) {
     output_transfer_buffer->set_sink(this_mixer->speaker_);
-  } else
+  }  // else
 #endif
-      if (this_mixer->output_ring_buffer_.use_count() > 0) {
-    output_transfer_buffer->set_sink(this_mixer->output_ring_buffer_);
-  } else {
-    // TODO: INVALID STATE!
-  }
+  //     if (this_mixer->output_ring_buffer_.use_count() > 0) {
+  //   output_transfer_buffer->set_sink(this_mixer->output_ring_buffer_);
+  // } else {
+  //   // TODO: INVALID STATE!
+  // }
 
   if ((media_transfer_buffer == nullptr) || (announcement_transfer_buffer == nullptr) ||
       (output_transfer_buffer == nullptr) || (err == ESP_ERR_NO_MEM)) {
@@ -255,7 +256,7 @@ void AudioMixer::audio_mixer_task(void *params) {
     size_t media_available =
         std::min(media_transfer_buffer->available() * transfer_media, output_transfer_buffer->free());
     size_t announcement_available = std::min(announcement_transfer_buffer->available(), output_transfer_buffer->free());
-
+    // printf("media available = %d, announcement availble =%d\n", media_available, announcement_available);
     if (media_available + announcement_available > 0) {
       if (media_available > 0) {
         // Duck here
@@ -454,3 +455,5 @@ void AudioMixer::scale_audio_samples_(int16_t *audio_samples, int16_t *output_bu
 
 }  // namespace audio
 }  // namespace esphome
+
+#endif

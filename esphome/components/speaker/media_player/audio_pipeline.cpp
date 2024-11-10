@@ -1,5 +1,7 @@
 #include "audio_pipeline.h"
 
+#ifdef USE_ESP32
+
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
 
@@ -606,3 +608,5 @@ void AudioPipeline::resample_task(void *params) {
 
 }  // namespace speaker
 }  // namespace esphome
+
+#endif

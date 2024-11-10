@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef USE_ESP32
+
 #include "audio_files.h"
 #include "audio_transfer_buffer.h"
 
@@ -68,3 +70,5 @@ class AudioReader {
 };
 }  // namespace audio
 }  // namespace esphome
+
+#endif

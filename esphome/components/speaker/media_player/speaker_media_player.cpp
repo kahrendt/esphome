@@ -1,5 +1,7 @@
 #include "speaker_media_player.h"
 
+#ifdef USE_ESP32
+
 #include "esphome/components/audio/audio.h"
 
 #include "esphome/core/hal.h"
@@ -488,3 +490,5 @@ void SpeakerMediaPlayer::set_volume_(float volume, bool publish) {
 
 }  // namespace speaker
 }  // namespace esphome
+
+#endif

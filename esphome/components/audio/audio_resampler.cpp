@@ -1,5 +1,7 @@
 #include "audio_resampler.h"
 
+#ifdef USE_ESP32
+
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
 
@@ -179,3 +181,5 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
 
 }  // namespace audio
 }  // namespace esphome
+
+#endif

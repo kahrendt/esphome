@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef USE_ESP32
+
 #include "audio_transfer_buffer.h"
 
 #include "esphome/core/defines.h"
@@ -171,7 +173,9 @@ class AudioMixer {
   QueueHandle_t command_queue_{nullptr};
 
   std::weak_ptr<RingBuffer> output_ring_buffer_;
+#ifdef USE_SPEAKER
   speaker::Speaker *speaker_{nullptr};
+#endif
 
   std::weak_ptr<RingBuffer> media_ring_buffer_;
   std::weak_ptr<RingBuffer> announcement_ring_buffer_;
@@ -182,3 +186,5 @@ class AudioMixer {
 
 }  // namespace audio
 }  // namespace esphome
+
+#endif

@@ -1,5 +1,7 @@
 #include "mixer_speaker.h"
 
+#ifdef USE_ESP32
+
 namespace esphome {
 namespace mixer_speaker {
 
@@ -21,3 +23,5 @@ void InputSpeaker::set_volume(float volume) {
 
 }  // namespace mixer_speaker
 }  // namespace esphome
+
+#endif

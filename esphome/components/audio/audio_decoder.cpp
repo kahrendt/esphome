@@ -1,5 +1,7 @@
 #include "audio_decoder.h"
 
+#ifdef USE_ESP32
+
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
@@ -346,3 +348,5 @@ FileDecoderState AudioDecoder::decode_wav_() {
 
 }  // namespace audio
 }  // namespace esphome
+
+#endif

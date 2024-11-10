@@ -1,5 +1,7 @@
 #include "audio_transfer_buffer.h"
 
+#ifdef USE_ESP32
+
 namespace esphome {
 namespace audio {
 AudioTransferBuffer::~AudioTransferBuffer() {
@@ -133,3 +135,5 @@ bool AudioSinkTransferBuffer::has_buffered_data() {
 
 }  // namespace audio
 }  // namespace esphome
+
+#endif

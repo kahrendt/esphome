@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef USE_ESP32
+
 #include "audio.h"
 #include "audio_transfer_buffer.h"
 
@@ -82,3 +84,5 @@ class AudioResampler {
 
 }  // namespace audio
 }  // namespace esphome
+
+#endif

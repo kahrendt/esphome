@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef USE_ESP32
+
 #include "audio_pipeline.h"
 
 #include "esphome/components/audio/audio_files.h"
@@ -135,3 +137,5 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
 
 }  // namespace speaker
 }  // namespace esphome
+
+#endif

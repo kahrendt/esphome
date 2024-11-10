@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef USE_ESP32
+
 #include "esphome/components/audio/audio.h"
 #include "esphome/components/audio/audio_mixer.h"
 #include "esphome/components/audio/audio_transfer_buffer.h"
@@ -144,3 +146,5 @@ class MixerSpeaker : public Component {
 
 }  // namespace mixer_speaker
 }  // namespace esphome
+
+#endif

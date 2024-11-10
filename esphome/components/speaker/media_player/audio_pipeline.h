@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef USE_ESP32
+
 #include "esphome/components/audio/audio.h"
 #include "esphome/components/audio/audio_files.h"
 #include "esphome/components/audio/audio_reader.h"
@@ -149,3 +151,5 @@ class AudioPipeline {
 
 }  // namespace speaker
 }  // namespace esphome
+
+#endif
