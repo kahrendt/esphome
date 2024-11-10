@@ -100,6 +100,8 @@ class AudioPipeline {
   /// @brief Resumes any running tasks
   void resume_tasks();
 
+  uint32_t get_playback_ms() { return this->playback_ms_; }
+
  protected:
   /// @brief Allocates the ring buffers, event group, and info error queue.
   /// @return ESP_OK if successful or ESP_ERR_NO_MEM if it is unable to allocate all parts
@@ -111,6 +113,8 @@ class AudioPipeline {
   /// @param priority FreeRTOS task priority
   /// @return ESP_OK if successful or an appropriate error if not
   esp_err_t common_start_(uint32_t target_sample_rate, const std::string &task_name, UBaseType_t priority);
+
+  uint32_t playback_ms_;
 
   // Pointer to the media player's mixer object. The resample task feeds the appropriate ring buffer directly
   // AudioMixer *mixer_;

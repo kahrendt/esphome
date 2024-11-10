@@ -91,6 +91,22 @@ class AudioDecoder {
   /// @return optional<AudioStreamInfo> with the audio information. If not available yet, returns no value.
   const optional<audio::AudioStreamInfo> &get_audio_stream_info() const { return this->audio_stream_info_; }
 
+  uint32_t compute_play_duration_differential_ms() {
+    // Compute the transferred audio's duration
+    uint32_t playback_ms = 0;
+    if (this->audio_stream_info_.has_value()) {
+      const size_t bytes_to_duration_divisor = (this->audio_stream_info_.value().bits_per_sample / 8) *
+                                               this->audio_stream_info_.value().channels *
+                                               (this->audio_stream_info_.value().sample_rate / 1000);
+
+      playback_ms = this->bytes_written_ / bytes_to_duration_divisor;
+
+      this->bytes_written_ = this->bytes_written_ % bytes_to_duration_divisor;
+    }
+
+    return playback_ms;
+  }
+
  protected:
   FileDecoderState decode_wav_();
   std::unique_ptr<wav_decoder::WAVDecoder> wav_decoder_;
@@ -116,6 +132,8 @@ class AudioDecoder {
   size_t potentially_failed_count_{0};
   bool end_of_file_{false};
   bool wav_has_known_end_{false};
+
+  size_t bytes_written_{0};
 };
 }  // namespace audio
 }  // namespace esphome

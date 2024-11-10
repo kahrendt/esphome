@@ -289,8 +289,11 @@ void SpeakerMediaPlayer::loop() {
   // Determine state of the media player
   media_player::MediaPlayerState old_state = this->state;
 
-  if (this->media_pipeline_ != nullptr)
+  if (this->media_pipeline_ != nullptr) {
+    static uint32_t decoded_duration = 0;
     this->media_pipeline_state_ = this->media_pipeline_->get_state();
+    decoded_duration = this->media_pipeline_->get_playback_ms();
+  }
 
   if (this->media_pipeline_state_ == AudioPipelineState::ERROR_READING) {
     ESP_LOGE(TAG, "The media pipeline's file reader encountered an error.");

@@ -149,6 +149,7 @@ esp_err_t AudioPipeline::common_start_(uint32_t target_sample_rate, const std::s
   }
 
   this->target_sample_rate_ = target_sample_rate;
+  this->playback_ms_ = 0;
 
   return err;
 }
@@ -464,6 +465,11 @@ void AudioPipeline::decode_task(void *params) {
 
       // Stop gracefully if the reader has finished
       audio::AudioDecoderState decoder_state = decoder->decode(event_bits & READER_MESSAGE_FINISHED);
+
+      if ((decoder_state == audio::AudioDecoderState::DECODING) ||
+          (decoder_state == audio::AudioDecoderState::FINISHED)) {
+        this_pipeline->playback_ms_ += decoder->compute_play_duration_differential_ms();
+      }
 
       if (decoder_state == audio::AudioDecoderState::FINISHED) {
         break;
