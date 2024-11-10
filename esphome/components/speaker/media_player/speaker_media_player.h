@@ -17,8 +17,6 @@
 
 #include <esp_http_client.h>
 
-// #define SIMPLE_MEDIA_PLAYER
-
 namespace esphome {
 namespace speaker {
 
@@ -53,7 +51,8 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   void set_volume_max(float volume_max) { this->volume_max_ = volume_max; }
   void set_volume_min(float volume_min) { this->volume_min_ = volume_min; }
 
-  void set_speaker(Speaker *speaker) { this->speaker_ = speaker; }
+  void set_announcement_speaker(Speaker *announcement_speaker) { this->announcement_speaker_ = announcement_speaker; }
+  void set_media_speaker(Speaker *media_speaker) { this->media_speaker_ = media_speaker; }
 
   Trigger<> *get_mute_trigger() const { return this->mute_trigger_; }
   Trigger<> *get_unmute_trigger() const { return this->unmute_trigger_; }
@@ -89,7 +88,8 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   void watch_media_commands_();
 
   std::unique_ptr<AudioPipeline> media_pipeline_;
-  Speaker *speaker_{nullptr};
+  Speaker *media_speaker_{nullptr};
+  Speaker *announcement_speaker_{nullptr};
 
 #if !defined(SIMPLE_MEDIA_PLAYER)
   std::unique_ptr<AudioPipeline> announcement_pipeline_;
