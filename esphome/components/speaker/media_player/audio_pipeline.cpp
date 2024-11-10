@@ -288,79 +288,9 @@ esp_err_t AudioPipeline::stop() {
   this->resample_task_handle_ = nullptr;
 #endif
 
-  //   if ((this->read_task_handle_ != nullptr) || (this->decode_task_handle_ != nullptr)
-  // #if !defined(SIMPLE_MEDIA_PLAYER)
-  //       || (this->resample_task_handle_ != nullptr)
-  // #endif
-  //   ) {
-  //     xEventGroupSetBits(this->event_group_, PIPELINE_COMMAND_STOP);
-
-  //     uint32_t running_task_bits = 0;
-  //     if (this->read_task_handle_ != nullptr) {
-  //       running_task_bits |= READER_MESSAGE_FINISHED;
-  //     }
-  //     if (this->decode_task_handle_ != nullptr) {
-  //       running_task_bits |= DECODER_MESSAGE_FINISHED;
-  //     }
-  // #if !defined(SIMPLE_MEDIA_PLAYER)
-  //     if (this->resample_task_handle_ != nullptr) {
-  //       running_task_bits |= RESAMPLER_MESSAGE_FINISHED;
-  //     }
-  // #endif
-
-  //     uint32_t event_group_bits = xEventGroupWaitBits(this->event_group_,
-  //                                                     running_task_bits,    // Bit message to read
-  //                                                     pdFALSE,              // Clear the bits on exit
-  //                                                     pdTRUE,               // Wait for all the bits,
-  //                                                     pdMS_TO_TICKS(300));  // Duration to block/wait
-
-  //     if (!(event_group_bits & READER_MESSAGE_FINISHED) && (this->read_task_handle_ != nullptr)) {
-  //       // Reader failed to stop
-  //       xEventGroupSetBits(this->event_group_, EventGroupBits::READER_MESSAGE_ERROR);
-  //     }
-  //     if (!(event_group_bits & DECODER_MESSAGE_FINISHED) && (this->decode_task_handle_ != nullptr)) {
-  //       // Decoder failed to stop
-  //       xEventGroupSetBits(this->event_group_, EventGroupBits::DECODER_MESSAGE_ERROR);
-  //     }
-
-  // #if !defined(SIMPLE_MEDIA_PLAYER)
-  //     if (!(event_group_bits & RESAMPLER_MESSAGE_FINISHED) && (this->resample_task_handle_ != nullptr)) {
-  //       // Resampler failed to stop
-  //       xEventGroupSetBits(this->event_group_, EventGroupBits::RESAMPLER_MESSAGE_ERROR);
-  //     }
-  // #endif
-
-  //     if ((event_group_bits & running_task_bits) != running_task_bits) {
-  //       // Not all bits were set, so it timed out
-  //       return ESP_ERR_TIMEOUT;
-  //     }
-  //   }
-
-  //   if (this->read_task_handle_ != nullptr) {
-  //     vTaskDelete(this->read_task_handle_);
-  //     this->read_task_handle_ = nullptr;
-  //   }
-  //   if (this->decode_task_handle_ != nullptr) {
-  //     vTaskDelete(this->decode_task_handle_);
-  //     this->decode_task_handle_ = nullptr;
-  //   }
-  // #if !defined(SIMPLE_MEDIA_PLAYER)
-  //   if (this->resample_task_handle_ != nullptr) {
-  //     vTaskDelete(this->resample_task_handle_);
-  //     this->resample_task_handle_ = nullptr;
-  //   }
-  // #endif
-
-  // // Clear the ring buffer in the mixer; avoids playing incorrect audio when starting a new file while paused
-  // CommandEvent command_event;
-  // if (this->pipeline_type_ == AudioPipelineType::MEDIA) {
-  //   command_event.command = CommandEventType::CLEAR_MEDIA;
-  // } else {
-  //   command_event.command = CommandEventType::CLEAR_ANNOUNCEMENT;
-  // }
-  // this->mixer_->send_command(&command_event);
-
   xEventGroupClearBits(this->event_group_, UNFINISHED_BITS);
+
+  this->speaker_->stop();
 
   return ESP_OK;
 }
@@ -591,8 +521,8 @@ void AudioPipeline::decode_task(void *params) {
             }
           } else {
             // Audio format doesn't require resampling, send it directly to the output
-            if (this_pipeline->output_ring_buffer_.use_count() > 0) {
-              decoder->add_sink(this_pipeline->output_ring_buffer_);
+            if (this_pipeline->speaker_ != nullptr) {
+              decoder->add_sink(this_pipeline->speaker_);
             }
           }
 #else
@@ -634,7 +564,7 @@ void AudioPipeline::resample_task(void *params) {
     esp_err_t err = resampler->start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
                                      this_pipeline->current_resample_info_);
     resampler->add_source(this_pipeline->decoded_ring_buffer_);
-    resampler->add_sink(this_pipeline->output_ring_buffer_);
+    resampler->add_sink(this_pipeline->speaker_);
 
     if (err != ESP_OK) {
       // Send specific error message
