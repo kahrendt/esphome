@@ -38,6 +38,16 @@ esp_err_t AudioResampler::add_sink(std::weak_ptr<RingBuffer> output_ring_buffer)
   return ESP_ERR_NO_MEM;
 }
 
+#ifdef USE_SPEAKER
+esp_err_t AudioResampler::add_sink(speaker::Speaker *speaker) {
+  if (this->output_transfer_buffer_ != nullptr) {
+    this->output_transfer_buffer_->set_sink(speaker);
+    return ESP_OK;
+  }
+  return ESP_ERR_NO_MEM;
+}
+#endif
+
 esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sample_rate,
                                 ResampleInfo &resample_info) {
   this->stream_info_ = stream_info;
