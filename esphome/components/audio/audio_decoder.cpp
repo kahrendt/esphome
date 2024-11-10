@@ -16,7 +16,7 @@ AudioDecoder::AudioDecoder(size_t input_buffer_size, size_t output_buffer_size) 
 }
 
 AudioDecoder::~AudioDecoder() {
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_AUDIO_MP3_SUPPORT
   if (this->audio_file_type_ == AudioFileType::MP3) {
     MP3FreeDecoder(this->mp3_decoder_);
   }
@@ -60,12 +60,14 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
   this->end_of_file_ = false;
 
   switch (this->audio_file_type_) {
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_AUDIO_FLAC_SUPPORT
     case AudioFileType::FLAC:
       this->flac_decoder_ = make_unique<flac::FLACDecoder>();
       this->free_buffer_required_ =
           this->output_transfer_buffer_->capacity();  // We'll revise this after reading the header
       break;
+#endif
+#ifdef USE_AUDIO_MP3_SUPPORT
     case AudioFileType::MP3:
       this->mp3_decoder_ = MP3InitDecoder();
       this->free_buffer_required_ = 1152 * sizeof(int16_t) * 2;  // samples * size per sample * channels
@@ -142,10 +144,12 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
       state = FileDecoderState::IDLE;
     } else {
       switch (this->audio_file_type_) {
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_AUDIO_FLAC_SUPPORT
         case AudioFileType::FLAC:
           state = this->decode_flac_();
           break;
+#endif
+#ifdef USE_AUDIO_MP3_SUPPORT
         case AudioFileType::MP3:
           state = this->decode_mp3_();
           break;
@@ -173,7 +177,7 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   return AudioDecoderState::DECODING;
 }
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_AUDIO_FLAC_SUPPORT
 FileDecoderState AudioDecoder::decode_flac_() {
   if (!this->audio_stream_info_.has_value()) {
     // Header hasn't been read
@@ -236,7 +240,9 @@ FileDecoderState AudioDecoder::decode_flac_() {
 
   return FileDecoderState::IDLE;
 }
+#endif
 
+#ifdef USE_AUDIO_MP3_SUPPORT
 FileDecoderState AudioDecoder::decode_mp3_() {
   // Look for the next sync word
   int32_t offset =

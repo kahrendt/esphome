@@ -60,14 +60,6 @@ SpeakerMediaPlayer = speaker_ns.class_(
     cg.Component,
 )
 
-# MediaFile = speaker_ns.struct("MediaFile")
-# MediaFileType = speaker_ns.enum("MediaFileType", is_class=True)
-# MEDIA_FILE_TYPE_ENUM = {
-#     "NONE": MediaFileType.NONE,
-#     "WAV": MediaFileType.WAV,
-#     "MP3": MediaFileType.MP3,
-#     "FLAC": MediaFileType.FLAC,
-# }
 
 PipelineType = speaker_ns.enum("AudioPipelineType", is_class=True)
 PIPELINE_TYPE_ENUM = {
@@ -236,6 +228,9 @@ async def to_code(config):
     )
 
     # cg.add_define("SIMPLE_MEDIA_PLAYER", True)
+
+    cg.add_define("USE_AUDIO_FLAC_SUPPORT", True)
+    cg.add_define("USE_AUDIO_MP3_SUPPORT", True)
 
     # Wifi settings based on https://github.com/espressif/esp-adf/issues/297#issuecomment-783811702
     esp32.add_idf_sdkconfig_option("CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM", 16)

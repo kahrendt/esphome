@@ -1,5 +1,6 @@
 #include "audio_reader.h"
 
+#include "esphome/core/defines.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
 
@@ -97,11 +98,18 @@ esp_err_t AudioReader::start(const std::string &uri, AudioFileType &file_type) {
 
   if (str_endswith(url_string, ".wav")) {
     file_type = AudioFileType::WAV;
-  } else if (str_endswith(url_string, ".mp3")) {
+  }
+#ifdef USE_AUDIO_MP3_SUPPORT
+  else if (str_endswith(url_string, ".mp3")) {
     file_type = AudioFileType::MP3;
-  } else if (str_endswith(url_string, ".flac")) {
+  }
+#endif
+#ifdef USE_AUDIO_FLAC_SUPPORT
+  else if (str_endswith(url_string, ".flac")) {
     file_type = AudioFileType::FLAC;
-  } else {
+  }
+#endif
+  else {
     file_type = AudioFileType::NONE;
     this->cleanup_connection_();
     return ESP_ERR_NOT_SUPPORTED;

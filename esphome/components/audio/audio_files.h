@@ -1,5 +1,7 @@
 #pragma once
 
+#include "esphome/core/defines.h"
+
 #include <cstdint>
 #include <cstddef>
 
@@ -8,9 +10,13 @@ namespace audio {
 
 enum class AudioFileType : uint8_t {
   NONE = 0,
-  WAV,
-  MP3,
+#ifdef USE_AUDIO_FLAC_SUPPORT
   FLAC,
+#endif
+#ifdef USE_AUDIO_MP3_SUPPORT
+  MP3,
+#endif
+  WAV,
 };
 const char *audio_file_type_to_string(AudioFileType file_type);
 

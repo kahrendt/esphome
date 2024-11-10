@@ -13,8 +13,10 @@
 #endif
 
 // esp-audio-libs
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_AUDIO_FLAC_SUPPORT
 #include <flac_decoder.h>
+#endif
+#ifdef USE_AUDIO_MP3_SUPPORT
 #include <mp3_decoder.h>
 #endif
 #include <wav_decoder.h>
@@ -91,9 +93,11 @@ class AudioDecoder {
  protected:
   FileDecoderState decode_wav_();
   std::unique_ptr<wav_decoder::WAVDecoder> wav_decoder_;
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_AUDIO_FLAC_SUPPORT
   FileDecoderState decode_flac_();
   std::unique_ptr<flac::FLACDecoder> flac_decoder_;
+#endif
+#ifdef USE_AUDIO_MP3_SUPPORT
   FileDecoderState decode_mp3_();
   HMP3Decoder mp3_decoder_;
 #endif
