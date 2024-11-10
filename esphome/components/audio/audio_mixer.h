@@ -53,12 +53,10 @@ struct TaskEvent {
 };
 
 enum class CommandEventType : uint8_t {
-  STOP,                // Stop mixing to prepare for stopping the mixing task
-  DUCK,                // Duck the media audio
-  PAUSE_MEDIA,         // Pauses the media stream
-  RESUME_MEDIA,        // Resumes the media stream
-  CLEAR_MEDIA,         // Resets the media ring buffer
-  CLEAR_ANNOUNCEMENT,  // Resets the announcement ring buffer
+  STOP,          // Stop mixing to prepare for stopping the mixing task
+  DUCK,          // Duck the media audio
+  PAUSE_MEDIA,   // Pauses the media stream
+  RESUME_MEDIA,  // Resumes the media stream
 };
 
 // Used to send commands to the mixer task
