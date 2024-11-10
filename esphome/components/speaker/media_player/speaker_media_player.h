@@ -95,9 +95,6 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
 
 #if !defined(SIMPLE_MEDIA_PLAYER)
   std::unique_ptr<AudioPipeline> announcement_pipeline_;
-  std::unique_ptr<audio::AudioMixer> audio_mixer_;
-  // Monitors the mixer task
-  void watch_mixer_();
 #endif
 
   // Starts the ``type`` pipeline with a ``url`` or file. Starts the mixer, pipeline, and speaker tasks if necessary.

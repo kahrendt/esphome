@@ -102,10 +102,10 @@ class MixerSpeaker : public Component {
     }
 
     // Want 0.5 seconds of audio in the ring buffers
-    // sample_rate*channels/2*sizeof(int16_t)
+    // sample_rate*channels*sizeof(int16_t)*1/2
 
-    this->mixer_ =
-        audio::AudioMixer::create(stream_info.sample_rate * stream_info.channels * sizeof(int16_t) / 2, 4096);
+    this->mixer_ = audio::AudioMixer::create(stream_info.sample_rate * stream_info.channels * sizeof(int16_t) / 20,
+                                             4096);  // /20 for 50 ms
     if (this->mixer_ == nullptr) {
       this->status_set_error("Failed to allocate mixer buffers");
       return;

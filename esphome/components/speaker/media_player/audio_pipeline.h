@@ -102,6 +102,8 @@ class AudioPipeline {
 
   uint32_t get_playback_ms() { return this->playback_ms_; }
 
+  void set_pause_state(bool pause_state);
+
  protected:
   /// @brief Allocates the ring buffers, event group, and info error queue.
   /// @return ESP_OK if successful or ESP_ERR_NO_MEM if it is unable to allocate all parts
@@ -127,6 +129,7 @@ class AudioPipeline {
   audio::AudioFileType current_audio_file_type_;
   audio::AudioStreamInfo current_audio_stream_info_;
   audio::ResampleInfo current_resample_info_;
+
   uint32_t target_sample_rate_;
 
   std::weak_ptr<RingBuffer> raw_file_ring_buffer_;

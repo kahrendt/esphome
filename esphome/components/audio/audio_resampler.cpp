@@ -106,8 +106,13 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
     }
   }
 
-  // Move audio data to the sink/from the source
-  this->output_transfer_buffer_->transfer_data_to_sink(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+  if (!this->pause_output_) {
+    // Move audio data to the sink/from the source
+    this->output_transfer_buffer_->transfer_data_to_sink(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+  } else {
+    // If paused, block to avoid wasting CPU resources
+    delay(READ_WRITE_TIMEOUT_MS);
+  }
   this->input_transfer_buffer_->transfer_data_from_source(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
   if (this->input_transfer_buffer_->available() == 0) {

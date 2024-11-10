@@ -107,6 +107,8 @@ class AudioDecoder {
     return playback_ms;
   }
 
+  void set_pause_output_state(bool pause_state) { this->pause_output_ = pause_state; }
+
  protected:
   FileDecoderState decode_wav_();
   std::unique_ptr<wav_decoder::WAVDecoder> wav_decoder_;
@@ -132,6 +134,8 @@ class AudioDecoder {
   size_t potentially_failed_count_{0};
   bool end_of_file_{false};
   bool wav_has_known_end_{false};
+
+  bool pause_output_{false};
 
   size_t bytes_written_{0};
 };

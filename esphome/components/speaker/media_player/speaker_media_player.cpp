@@ -59,7 +59,6 @@ static const uint8_t NUMBER_OF_CHANNELS = 2;  // Hard-coded expectation of stere
 
 static const UBaseType_t MEDIA_PIPELINE_TASK_PRIORITY = 1;
 static const UBaseType_t ANNOUNCEMENT_PIPELINE_TASK_PRIORITY = 1;
-static const UBaseType_t MIXER_TASK_PRIORITY = 10;
 
 static const size_t TASK_DELAY_MS = 10;
 
@@ -91,9 +90,6 @@ void SpeakerMediaPlayer::setup() {
             this->media_pipeline_->suspend_tasks();
           }
 #if !defined(SIMPLE_MEDIA_PLAYER)
-          if (this->audio_mixer_ != nullptr) {
-            this->audio_mixer_->suspend_task();
-          }
           if (this->announcement_pipeline_ != nullptr) {
             this->announcement_pipeline_->suspend_tasks();
           }
@@ -103,9 +99,6 @@ void SpeakerMediaPlayer::setup() {
             this->media_pipeline_->resume_tasks();
           }
 #if !defined(SIMPLE_MEDIA_PLAYER)
-          if (this->audio_mixer_ != nullptr) {
-            this->audio_mixer_->resume_task();
-          }
           if (this->announcement_pipeline_ != nullptr) {
             this->announcement_pipeline_->resume_tasks();
           }
@@ -179,6 +172,7 @@ void SpeakerMediaPlayer::watch_media_commands_() {
 #if !defined(SIMPLE_MEDIA_PLAYER)
       }
 #endif
+      this->is_paused_ = false;
     }
 
     if (media_command.new_file.has_value() && media_command.new_file.value()) {
@@ -191,6 +185,7 @@ void SpeakerMediaPlayer::watch_media_commands_() {
 #if !defined(SIMPLE_MEDIA_PLAYER)
       }
 #endif
+      this->is_paused_ = false;
     }
 
     if (err != ESP_OK) {
@@ -209,14 +204,14 @@ void SpeakerMediaPlayer::watch_media_commands_() {
       switch (media_command.command.value()) {
 #if !defined(SIMPLE_MEDIA_PLAYER)
         case media_player::MEDIA_PLAYER_COMMAND_PLAY:
-          if ((this->audio_mixer_ != nullptr) && this->is_paused_) {
-            this->audio_mixer_->set_pause_state(false);
+          if ((this->media_pipeline_ != nullptr) && (this->is_paused_)) {
+            this->media_pipeline_->set_pause_state(false);
           }
           this->is_paused_ = false;
           break;
         case media_player::MEDIA_PLAYER_COMMAND_PAUSE:
-          if ((this->audio_mixer_ != nullptr) && !this->is_paused_) {
-            this->audio_mixer_->set_pause_state(true);
+          if ((this->media_pipeline_ != nullptr) && (!this->is_paused_)) {
+            this->media_pipeline_->set_pause_state(true);
           }
           this->is_paused_ = true;
           break;
@@ -238,12 +233,14 @@ void SpeakerMediaPlayer::watch_media_commands_() {
           break;
 #if !defined(SIMPLE_MEDIA_PLAYER)
         case media_player::MEDIA_PLAYER_COMMAND_TOGGLE:
-          if ((this->audio_mixer_ != nullptr) && this->is_paused_) {
-            this->audio_mixer_->set_pause_state(false);
-            this->is_paused_ = false;
-          } else if (this->audio_mixer_ != nullptr) {
-            this->audio_mixer_->set_pause_state(true);
-            this->is_paused_ = true;
+          if (this->media_pipeline_ != nullptr) {
+            if (this->is_paused_) {
+              this->media_pipeline_->set_pause_state(false);
+              this->is_paused_ = false;
+            } else {
+              this->media_pipeline_->set_pause_state(true);
+              this->is_paused_ = true;
+            }
           }
           break;
 #endif
@@ -272,19 +269,8 @@ void SpeakerMediaPlayer::watch_media_commands_() {
   }
 }
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
-void SpeakerMediaPlayer::watch_mixer_() {
-  if (this->audio_mixer_ != nullptr) {
-    this->audio_mixer_->get_state();
-  }
-}
-#endif
-
 void SpeakerMediaPlayer::loop() {
   this->watch_media_commands_();
-#if !defined(SIMPLE_MEDIA_PLAYER)
-  this->watch_mixer_();
-#endif
 
   // Determine state of the media player
   media_player::MediaPlayerState old_state = this->state;
@@ -335,15 +321,6 @@ void SpeakerMediaPlayer::loop() {
     this->publish_state();
   }
 }
-
-#if !defined(SIMPLE_MEDIA_PLAYER)
-void SpeakerMediaPlayer::set_ducking_reduction(uint8_t decibel_reduction, float duration) {
-  if (this->audio_mixer_ != nullptr) {
-    this->audio_mixer_->set_ducking_reduction(decibel_reduction,
-                                              static_cast<size_t>(duration * this->sample_rate_ * NUMBER_OF_CHANNELS));
-  }
-}
-#endif
 
 void SpeakerMediaPlayer::play_file(audio::AudioFile *media_file, bool announcement) {
   if (!this->is_ready()) {

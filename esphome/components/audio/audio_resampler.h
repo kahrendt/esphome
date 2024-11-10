@@ -69,12 +69,16 @@ class AudioResampler {
   /// @return AudioResamplerState
   AudioResamplerState resample(bool stop_gracefully);
 
+  void set_pause_output_state(bool pause_state) { this->pause_output_ = pause_state; }
+
  protected:
   std::unique_ptr<AudioSourceTransferBuffer> input_transfer_buffer_;
   std::unique_ptr<AudioSinkTransferBuffer> output_transfer_buffer_;
 
   size_t input_buffer_size_;
   size_t output_buffer_size_;
+
+  bool pause_output_{false};
 
   AudioStreamInfo stream_info_;
   ResampleInfo resample_info_;

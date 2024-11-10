@@ -118,9 +118,12 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
 
   while (state == FileDecoderState::MORE_TO_PROCESS) {
     // Transfer decoded out
-    if (this->output_transfer_buffer_->available() > 0) {
+    if (!this->pause_output_) {
       this->bytes_written_ +=
           this->output_transfer_buffer_->transfer_data_to_sink(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+    } else {
+      // If paused, block to avoid wasting CPU resources
+      delay(READ_WRITE_TIMEOUT_MS);
     }
 
     // Verify there is enough space to store more decoded audio and that the function hasn't been running too long
