@@ -27,7 +27,7 @@ class AudioTransferBuffer {
    */
  public:
   /// @brief Destructor that deallocates the transfer buffer
-  ~AudioTransferBuffer();
+  ~AudioTransferBuffer() { this->deallocate_buffer_(); };
 
   /// @brief Returns a pointer to the start of the transfer buffer where available() bytes of exisiting data can be read
   uint8_t *get_buffer_start() { return this->data_start_; }
@@ -59,10 +59,26 @@ class AudioTransferBuffer {
   /// @return True if there is data, false otherwise.
   virtual bool has_buffered_data();
 
+  bool reallocate(size_t new_buffer_size) {
+    if (this->buffer_length_ > 0) {
+      // Already has data in the buffer, fail
+      return false;
+    }
+    this->deallocate_buffer_();
+    return this->allocate_buffer_(new_buffer_size);
+  }
+
  protected:
   /// @brief Allocates the transfer buffer in external memory, if available.
   /// @return True is successful, false otherwise.
   bool allocate_buffer_(size_t buffer_size);
+
+  void deallocate_buffer_() {
+    if (this->buffer_ != nullptr) {
+      ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
+      allocator.deallocate(this->buffer_, this->buffer_size_);
+    }
+  }
 
   // A possible source or sink for the transfer buffer
   std::shared_ptr<RingBuffer> ring_buffer_;

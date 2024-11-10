@@ -199,12 +199,14 @@ FileDecoderState AudioDecoder::decode_flac_() {
     size_t bytes_consumed = this->flac_decoder_->get_bytes_index();
     this->input_transfer_buffer_->decrease_buffer_length(bytes_consumed);
 
-    size_t flac_decoder_output_buffer_min_size = flac_decoder_->get_output_buffer_size();
-    if (this->output_transfer_buffer_->capacity() < flac_decoder_output_buffer_min_size * sizeof(int16_t)) {
+    this->free_buffer_required_ = flac_decoder_->get_output_buffer_size_bytes();
+    if (this->output_transfer_buffer_->capacity() < this->free_buffer_required_) {
       // Output buffer is not big enough
-      return FileDecoderState::FAILED;
+      if (!this->output_transfer_buffer_->reallocate(this->free_buffer_required_)) {
+        // Couldn't reallocate output buffer
+        return FileDecoderState::FAILED;
+      }
     }
-    this->free_buffer_required_ = flac_decoder_output_buffer_min_size * sizeof(int16_t);
 
     audio::AudioStreamInfo audio_stream_info;
     audio_stream_info.channels = this->flac_decoder_->get_num_channels();
@@ -241,7 +243,7 @@ FileDecoderState AudioDecoder::decode_flac_() {
     return FileDecoderState::END_OF_FILE;
   }
 
-  return FileDecoderState::IDLE;
+  return FileDecoderState::MORE_TO_PROCESS;
 }
 #endif
 

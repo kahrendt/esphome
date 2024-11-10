@@ -4,12 +4,6 @@
 
 namespace esphome {
 namespace audio {
-AudioTransferBuffer::~AudioTransferBuffer() {
-  if (this->buffer_ != nullptr) {
-    ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
-    allocator.deallocate(this->buffer_, this->buffer_size_);
-  }
-}
 
 std::unique_ptr<AudioSinkTransferBuffer> AudioSinkTransferBuffer::create(size_t buffer_size) {
   std::unique_ptr<AudioSinkTransferBuffer> sink_buffer = make_unique<AudioSinkTransferBuffer>();
