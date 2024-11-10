@@ -19,7 +19,7 @@ from esphome.const import (
     CONF_PATH,
     CONF_RAW_DATA_ID,
     CONF_SAMPLE_RATE,
-    CONF_SPEAKER,
+    # CONF_SPEAKER,
     CONF_TYPE,
     CONF_URL,
 )
@@ -45,6 +45,9 @@ CONF_STREAM = "stream"
 CONF_VOLUME_INCREMENT = "volume_increment"
 CONF_VOLUME_MIN = "volume_min"
 CONF_VOLUME_MAX = "volume_max"
+
+CONF_ANNOUNCEMENT_SPEAKER = "announcement_speaker"
+CONF_MEDIA_SPEAKER = "media_speaker"
 
 CONF_ON_MUTE = "on_mute"
 CONF_ON_UNMUTE = "on_unmute"
@@ -207,7 +210,8 @@ CONFIG_SCHEMA = cv.All(
     media_player.MEDIA_PLAYER_SCHEMA.extend(
         {
             cv.GenerateID(): cv.declare_id(SpeakerMediaPlayer),
-            cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
+            cv.Required(CONF_ANNOUNCEMENT_SPEAKER): cv.use_id(speaker.Speaker),
+            cv.Required(CONF_MEDIA_SPEAKER): cv.use_id(speaker.Speaker),
             cv.Optional(CONF_SAMPLE_RATE, default=16000): cv.int_range(min=1),
             cv.Optional(CONF_VOLUME_INCREMENT, default=0.05): cv.percentage,
             cv.Optional(CONF_VOLUME_MAX, default=1.0): cv.percentage,
@@ -276,8 +280,10 @@ async def to_code(config):
     cg.add(var.set_volume_max(config[CONF_VOLUME_MAX]))
     cg.add(var.set_volume_min(config[CONF_VOLUME_MIN]))
 
-    spkr = await cg.get_variable(config[CONF_SPEAKER])
-    cg.add(var.set_speaker(spkr))
+    spkr = await cg.get_variable(config[CONF_ANNOUNCEMENT_SPEAKER])
+    cg.add(var.set_announcement_speaker(spkr))
+    spkr = await cg.get_variable(config[CONF_MEDIA_SPEAKER])
+    cg.add(var.set_media_speaker(spkr))
 
     if on_mute := config.get(CONF_ON_MUTE):
         await automation.build_automation(
