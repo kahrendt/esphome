@@ -120,7 +120,7 @@ void AudioMixer::audio_mixer_task(void *params) {
   {  // After this block temp_media_ring_buffer will fall out of scope and release ownership
     std::shared_ptr<RingBuffer> temp_media_ring_buffer;
     if (this_mixer->media_ring_buffer_.use_count() == 0) {
-      temp_media_ring_buffer = std::move(RingBuffer::create(this_mixer->ring_buffer_size_));
+      temp_media_ring_buffer = RingBuffer::create(this_mixer->ring_buffer_size_);
       this_mixer->media_ring_buffer_ = temp_media_ring_buffer;
     }
     if (this_mixer->media_ring_buffer_.use_count() == 0) {
@@ -136,7 +136,7 @@ void AudioMixer::audio_mixer_task(void *params) {
   {  // After this block temp_announncement_ring_buffer will fall out of scope and release ownership
     std::shared_ptr<RingBuffer> temp_announcement_ring_buffer;
     if (this_mixer->announcement_ring_buffer_.use_count() == 0) {
-      temp_announcement_ring_buffer = std::move(RingBuffer::create(this_mixer->ring_buffer_size_));
+      temp_announcement_ring_buffer = RingBuffer::create(this_mixer->ring_buffer_size_);
       this_mixer->announcement_ring_buffer_ = temp_announcement_ring_buffer;
     }
     if (this_mixer->announcement_ring_buffer_.use_count() == 0) {

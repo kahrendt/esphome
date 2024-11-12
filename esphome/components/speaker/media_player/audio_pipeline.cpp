@@ -380,7 +380,7 @@ void AudioPipeline::read_task(void *params) {
       }
 
       if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
-        temp_ring_buffer = std::move(RingBuffer::create(file_ring_buffer_size));
+        temp_ring_buffer = RingBuffer::create(file_ring_buffer_size);
         this_pipeline->raw_file_ring_buffer_ = temp_ring_buffer;
       }
 
@@ -534,9 +534,9 @@ void AudioPipeline::decode_task(void *params) {
             std::shared_ptr<RingBuffer> temp_ring_buffer;
 
             if (!this_pipeline->decoded_ring_buffer_.use_count()) {
-              temp_ring_buffer = std::move(RingBuffer::create(
+              temp_ring_buffer = RingBuffer::create(
                   DECODED_BUFFER_DURATION_MS * this_pipeline->current_audio_stream_info_.sample_rate *
-                  this_pipeline->current_audio_stream_info_.channels * sizeof(int16_t) / 1000));
+                  this_pipeline->current_audio_stream_info_.channels * sizeof(int16_t) / 1000);
               this_pipeline->decoded_ring_buffer_ = temp_ring_buffer;
             }
 
