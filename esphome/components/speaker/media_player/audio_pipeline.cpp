@@ -355,8 +355,6 @@ void AudioPipeline::read_task(void *params) {
     }
 
     if (err == ESP_OK) {
-      std::shared_ptr<RingBuffer> temp_ring_buffer;
-
       size_t file_ring_buffer_size = TRANSFER_BUFFER_SIZE * this_pipeline->target_sample_rate_ / 1000;
 
       switch (this_pipeline->current_audio_file_type_) {
@@ -373,6 +371,8 @@ void AudioPipeline::read_task(void *params) {
         default:
           break;
       }
+
+      std::shared_ptr<RingBuffer> temp_ring_buffer;
 
       if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
         temp_ring_buffer = RingBuffer::create(file_ring_buffer_size);
@@ -398,6 +398,7 @@ void AudioPipeline::read_task(void *params) {
       // Send the file type to the pipeline
       event.file_type = this_pipeline->current_audio_file_type_;
       xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
+      xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE);
     }
 
     bool started_playback = false;
@@ -411,18 +412,7 @@ void AudioPipeline::read_task(void *params) {
 
       audio::AudioReaderState reader_state = reader->read();
 
-      if (!started_playback && (reader_state == audio::AudioReaderState::BUFFER_FULL)) {
-        // Inform the decoder that the media type is available
-        xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE);
-        started_playback = true;
-      }
-
       if (reader_state == audio::AudioReaderState::FINISHED) {
-        if (!started_playback) {
-          // Inform the decoder that the media type is available
-          xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE);
-          started_playback = true;
-        }
         break;
       } else if (reader_state == audio::AudioReaderState::FAILED) {
         xEventGroupSetBits(this_pipeline->event_group_,
@@ -433,6 +423,7 @@ void AudioPipeline::read_task(void *params) {
   }
 
   xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_FINISHED);
+  printf("reader task stopped\n");
   vTaskDelete(NULL);
 }
 
@@ -470,6 +461,9 @@ void AudioPipeline::decode_task(void *params) {
     }
 
     bool has_stream_info = false;
+    bool started_playback = false;
+
+    size_t initial_bytes_to_buffer = 0;
 
     while (true) {
       event_bits = xEventGroupGetBits(this_pipeline->event_group_);
@@ -479,7 +473,15 @@ void AudioPipeline::decode_task(void *params) {
       }
 
       // Update pause state
-      decoder->set_pause_output_state(event_bits & EventGroupBits::PIPELINE_COMMAND_PAUSE);
+      if (!started_playback) {
+        if (!(event_bits & READER_MESSAGE_FINISHED)) {
+          decoder->set_pause_output_state(true);
+        } else {
+          started_playback = true;
+        }
+      } else {
+        decoder->set_pause_output_state(event_bits & EventGroupBits::PIPELINE_COMMAND_PAUSE);
+      }
 
       // Stop gracefully if the reader has finished
       audio::AudioDecoderState decoder_state = decoder->decode(event_bits & READER_MESSAGE_FINISHED);
@@ -549,21 +551,58 @@ void AudioPipeline::decode_task(void *params) {
             // Audio format doesn't require resampling, send it directly to the output
             if (this_pipeline->speaker_ != nullptr) {
               decoder->add_sink(this_pipeline->speaker_);
+              xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::RESAMPLER_MESSAGE_FINISHED);
             }
           }
 #else
           if (this_pipeline->speaker_ != nullptr) {
             this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
             decoder->add_sink(this_pipeline->speaker_);
+            xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::RESAMPLER_MESSAGE_FINISHED);
           }
 #endif
         }
+
+        const size_t bytes_per_ms = this_pipeline->current_audio_stream_info_.get_bytes_per_sample() *
+                                    this_pipeline->current_audio_stream_info_.channels *
+                                    this_pipeline->current_audio_stream_info_.sample_rate / 1000;
+        const uint32_t initial_buffer_ms = 1000;
+        initial_bytes_to_buffer = bytes_per_ms * initial_buffer_ms;
+        switch (this_pipeline->current_audio_file_type_) {
+#ifdef USE_AUDIO_MP3_SUPPORT
+          case audio::AudioFileType::MP3:
+            initial_bytes_to_buffer /= 8;
+            break;
+#endif
+#ifdef USE_AUDIO_FLAC_SUPPORT
+          case audio::AudioFileType::FLAC:
+            initial_bytes_to_buffer /= 2;
+            break;
+#endif
+          default:
+            break;
+        }
         xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
+      }
+
+      if (!started_playback && has_stream_info) {
+        // Check to see if enough data is available to confidently start the stream
+        std::shared_ptr<RingBuffer> temp_ring_buffer = this_pipeline->raw_file_ring_buffer_.lock();
+        if (temp_ring_buffer->free() == 0) {
+          started_playback = true;
+          printf("started playback because the ring buffer is full\n");
+        }
+
+        if (temp_ring_buffer->available() >= initial_bytes_to_buffer) {
+          started_playback = true;
+          printf("started playback because we buffered %d bytes\n", initial_bytes_to_buffer);
+        }
       }
     }
   }
 
   xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_FINISHED);
+  printf("decoder task stopped\n");
   vTaskDelete(NULL);
 }
 
