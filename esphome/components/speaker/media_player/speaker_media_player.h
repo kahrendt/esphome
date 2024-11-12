@@ -62,13 +62,14 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
 
   void play_file(audio::AudioFile *media_file, bool announcement);
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
-  /// @brief Sets the ducking level for the media stream in the mixer
-  /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by s10
-  /// dB
-  /// @param duration (float) The duration (in seconds) for transitioning to the new ducking level
-  void set_ducking_reduction(uint8_t decibel_reduction, float duration);
-#endif
+  // #if !defined(SIMPLE_MEDIA_PLAYER)
+  //   /// @brief Sets the ducking level for the media stream in the mixer
+  //   /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by
+  //   s10
+  //   /// dB
+  //   /// @param duration (float) The duration (in seconds) for transitioning to the new ducking level
+  //   void set_ducking_reduction(uint8_t decibel_reduction, float duration);
+  // #endif
 
  protected:
   // Receives commands from HA or from the voice assistant component
@@ -93,7 +94,7 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   Speaker *media_speaker_{nullptr};
   Speaker *announcement_speaker_{nullptr};
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   std::unique_ptr<AudioPipeline> announcement_pipeline_;
 #endif
 
@@ -105,7 +106,7 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   optional<std::string> media_url_{};          // only modified by control function
   optional<audio::AudioFile *> media_file_{};  // only modified by play_file function
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   AudioPipelineState announcement_pipeline_state_{AudioPipelineState::STOPPED};
   optional<std::string> announcement_url_{};          // only modified by control function
   optional<audio::AudioFile *> announcement_file_{};  // only modified by play_file function

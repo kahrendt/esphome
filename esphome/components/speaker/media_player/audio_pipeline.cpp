@@ -8,21 +8,12 @@
 namespace esphome {
 namespace speaker {
 
-// static const size_t FILE_BUFFER_SIZE = 32 * 1024;
-// static const size_t FILE_RING_BUFFER_SIZE = 64 * 1024;
-// static const size_t BUFFER_SIZE_SAMPLES = 32768;
-// static const size_t BUFFER_SIZE_BYTES = BUFFER_SIZE_SAMPLES * sizeof(int16_t);
-// static const size_t FILE_BUFFER_SIZE = 4 * 1024;
-// static const size_t FILE_RING_BUFFER_SIZE = 4 * 1024;
-// static const size_t BUFFER_SIZE_SAMPLES = 2048;
-// static const size_t BUFFER_SIZE_BYTES = BUFFER_SIZE_SAMPLES * sizeof(int16_t);
-
 static const size_t TRANSFER_BUFFER_SIZE = 24 * 1024;
 static const uint32_t DECODED_BUFFER_DURATION_MS = 500;
 
 static const uint32_t READER_TASK_STACK_SIZE = 5 * 1024;
 static const uint32_t DECODER_TASK_STACK_SIZE = 3 * 1024;
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
 static const uint32_t RESAMPLER_TASK_STACK_SIZE = 3 * 1024;
 #endif
 
@@ -58,7 +49,7 @@ enum EventGroupBits : uint32_t {
   // Error decoding the file; cleared by get_state() by decoder task
   DECODER_MESSAGE_ERROR = (1 << 13),
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
   // Resampler is done (either through a failure or the end of the stream); cleared by resampler task
   RESAMPLER_MESSAGE_FINISHED = (1 << 17),
   // Error resampling the file; cleared by get_state()
@@ -67,7 +58,7 @@ enum EventGroupBits : uint32_t {
 
   // Cleared by respective tasks
   FINISHED_BITS = READER_MESSAGE_FINISHED | DECODER_MESSAGE_FINISHED
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
                   | RESAMPLER_MESSAGE_FINISHED
 #endif
   ,
@@ -143,7 +134,7 @@ esp_err_t AudioPipeline::common_start_(uint32_t target_sample_rate, const std::s
     xTaskCreate(AudioPipeline::decode_task, (task_name + "_decode").c_str(), DECODER_TASK_STACK_SIZE, (void *) this,
                 priority, &this->decode_task_handle_);
   }
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
   if (this->resample_task_handle_ == nullptr) {
     xTaskCreate(AudioPipeline::resample_task, (task_name + "_resample").c_str(), RESAMPLER_TASK_STACK_SIZE,
                 (void *) this, priority, &this->resample_task_handle_);
@@ -151,7 +142,7 @@ esp_err_t AudioPipeline::common_start_(uint32_t target_sample_rate, const std::s
 #endif
 
   if ((this->read_task_handle_ == nullptr) || (this->decode_task_handle_ == nullptr)
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
       || (this->resample_task_handle_ == nullptr)
 #endif
   ) {
@@ -202,7 +193,7 @@ AudioPipelineState AudioPipeline::get_state() {
             }
           }
           break;
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
         case InfoErrorSource::RESAMPLER:
           if (event.err.has_value()) {
             ESP_LOGE(TAG, "Resampler encountered an error: %s", esp_err_to_name(event.err.has_value()));
@@ -222,7 +213,7 @@ AudioPipelineState AudioPipeline::get_state() {
 
   EventBits_t event_bits = xEventGroupGetBits(this->event_group_);
   if (!this->read_task_handle_ && !this->decode_task_handle_
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
       && !this->resample_task_handle_
 #endif
   ) {
@@ -239,7 +230,7 @@ AudioPipelineState AudioPipeline::get_state() {
     return AudioPipelineState::ERROR_DECODING;
   }
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
   if ((event_bits & RESAMPLER_MESSAGE_ERROR)) {
     xEventGroupClearBits(this->event_group_, RESAMPLER_MESSAGE_ERROR);
     return AudioPipelineState::ERROR_RESAMPLING;
@@ -247,7 +238,7 @@ AudioPipelineState AudioPipeline::get_state() {
 #endif
 
   if ((event_bits & READER_MESSAGE_FINISHED) && (event_bits & DECODER_MESSAGE_FINISHED)
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
       && (event_bits & RESAMPLER_MESSAGE_FINISHED)
 #endif
   ) {
@@ -272,7 +263,7 @@ esp_err_t AudioPipeline::stop() {
     finished_bits_to_check |= DECODER_MESSAGE_FINISHED;
   }
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
   if ((this->resample_task_handle_ != nullptr) && !(event_bits & RESAMPLER_MESSAGE_FINISHED)) {
     // resampler task is active
     finished_bits_to_check |= RESAMPLER_MESSAGE_FINISHED;
@@ -297,7 +288,7 @@ esp_err_t AudioPipeline::stop() {
   // Tasks can't be running
   this->read_task_handle_ = nullptr;
   this->decode_task_handle_ = nullptr;
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
   this->resample_task_handle_ = nullptr;
 #endif
 
@@ -315,7 +306,7 @@ void AudioPipeline::suspend_tasks() {
   if (this->decode_task_handle_ != nullptr) {
     vTaskSuspend(this->decode_task_handle_);
   }
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
   if (this->resample_task_handle_ != nullptr) {
     vTaskSuspend(this->resample_task_handle_);
   }
@@ -329,7 +320,7 @@ void AudioPipeline::resume_tasks() {
   if (this->decode_task_handle_ != nullptr) {
     vTaskResume(this->decode_task_handle_);
   }
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
   if (this->resample_task_handle_ != nullptr) {
     vTaskResume(this->resample_task_handle_);
   }
@@ -369,12 +360,16 @@ void AudioPipeline::read_task(void *params) {
       size_t file_ring_buffer_size = TRANSFER_BUFFER_SIZE * this_pipeline->target_sample_rate_ / 1000;
 
       switch (this_pipeline->current_audio_file_type_) {
+#ifdef USE_AUDIO_MP3_SUPPORT
         case audio::AudioFileType::MP3:
           file_ring_buffer_size /= 8;
           break;
+#endif
+#ifdef USE_AUDIO_FLAC_SUPPORT
         case audio::AudioFileType::FLAC:
           file_ring_buffer_size /= 2;
           break;
+#endif
         default:
           break;
       }
@@ -525,7 +520,7 @@ void AudioPipeline::decode_task(void *params) {
           xEventGroupSetBits(this_pipeline->event_group_,
                              EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
         } else {
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
           if ((this_pipeline->current_audio_stream_info_.channels < 2) ||
               (this_pipeline->current_audio_stream_info_.sample_rate != this_pipeline->target_sample_rate_)) {
             // Audio format requires resampling, allocate the decoded ring buffer and inform the resampler that the
@@ -572,7 +567,7 @@ void AudioPipeline::decode_task(void *params) {
   vTaskDelete(NULL);
 }
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
 void AudioPipeline::resample_task(void *params) {
   AudioPipeline *this_pipeline = (AudioPipeline *) params;
 

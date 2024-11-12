@@ -58,7 +58,9 @@ static const size_t QUEUE_LENGTH = 20;
 static const uint8_t NUMBER_OF_CHANNELS = 2;  // Hard-coded expectation of stereo (2 channel) audio
 
 static const UBaseType_t MEDIA_PIPELINE_TASK_PRIORITY = 1;
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
 static const UBaseType_t ANNOUNCEMENT_PIPELINE_TASK_PRIORITY = 1;
+#endif
 
 static const size_t TASK_DELAY_MS = 10;
 
@@ -89,7 +91,7 @@ void SpeakerMediaPlayer::setup() {
           if (this->media_pipeline_ != nullptr) {
             this->media_pipeline_->suspend_tasks();
           }
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
           if (this->announcement_pipeline_ != nullptr) {
             this->announcement_pipeline_->suspend_tasks();
           }
@@ -98,7 +100,7 @@ void SpeakerMediaPlayer::setup() {
           if (this->media_pipeline_ != nullptr) {
             this->media_pipeline_->resume_tasks();
           }
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
           if (this->announcement_pipeline_ != nullptr) {
             this->announcement_pipeline_->resume_tasks();
           }
@@ -123,8 +125,7 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
     this->media_speaker_->set_audio_stream_info(audio_stream_info);
   }
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
-
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   if (type == AudioPipelineType::MEDIA) {
 #endif
     if (this->media_pipeline_ == nullptr) {
@@ -138,7 +139,7 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
                                          MEDIA_PIPELINE_TASK_PRIORITY);
     }
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   } else if (type == AudioPipelineType::ANNOUNCEMENT) {
     if (this->announcement_pipeline_ == nullptr) {
       this->announcement_pipeline_ = make_unique<AudioPipeline>(this->announcement_speaker_);
@@ -163,26 +164,26 @@ void SpeakerMediaPlayer::watch_media_commands_() {
 
   if (xQueueReceive(this->media_control_command_queue_, &media_command, 0) == pdTRUE) {
     if (media_command.new_url.has_value() && media_command.new_url.value()) {
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
       if (media_command.announce.has_value() && media_command.announce.value()) {
         err = this->start_pipeline_(AudioPipelineType::ANNOUNCEMENT, true);
       } else {
 #endif
         err = this->start_pipeline_(AudioPipelineType::MEDIA, true);
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
       }
 #endif
       this->is_paused_ = false;
     }
 
     if (media_command.new_file.has_value() && media_command.new_file.value()) {
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
       if (media_command.announce.has_value() && media_command.announce.value()) {
         err = this->start_pipeline_(AudioPipelineType::ANNOUNCEMENT, false);
       } else {
 #endif
         err = this->start_pipeline_(AudioPipelineType::MEDIA, false);
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
       }
 #endif
       this->is_paused_ = false;
@@ -202,7 +203,6 @@ void SpeakerMediaPlayer::watch_media_commands_() {
 
     if (media_command.command.has_value()) {
       switch (media_command.command.value()) {
-#if !defined(SIMPLE_MEDIA_PLAYER)
         case media_player::MEDIA_PLAYER_COMMAND_PLAY:
           if ((this->media_pipeline_ != nullptr) && (this->is_paused_)) {
             this->media_pipeline_->set_pause_state(false);
@@ -215,9 +215,8 @@ void SpeakerMediaPlayer::watch_media_commands_() {
           }
           this->is_paused_ = true;
           break;
-#endif
         case media_player::MEDIA_PLAYER_COMMAND_STOP:
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
           if (media_command.announce.has_value() && media_command.announce.value()) {
             if (this->announcement_pipeline_ != nullptr) {
               this->announcement_pipeline_->stop();
@@ -227,11 +226,10 @@ void SpeakerMediaPlayer::watch_media_commands_() {
             if (this->media_pipeline_ != nullptr) {
               this->media_pipeline_->stop();
             }
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
           }
 #endif
           break;
-#if !defined(SIMPLE_MEDIA_PLAYER)
         case media_player::MEDIA_PLAYER_COMMAND_TOGGLE:
           if (this->media_pipeline_ != nullptr) {
             if (this->is_paused_) {
@@ -243,7 +241,6 @@ void SpeakerMediaPlayer::watch_media_commands_() {
             }
           }
           break;
-#endif
         case media_player::MEDIA_PLAYER_COMMAND_MUTE: {
           this->set_mute_state_(true);
 
@@ -285,13 +282,13 @@ void SpeakerMediaPlayer::loop() {
     ESP_LOGE(TAG, "The media pipeline's file reader encountered an error.");
   } else if (this->media_pipeline_state_ == AudioPipelineState::ERROR_DECODING) {
     ESP_LOGE(TAG, "The media pipeline's audio decoder encountered an error.");
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   } else if (this->media_pipeline_state_ == AudioPipelineState::ERROR_RESAMPLING) {
     ESP_LOGE(TAG, "The media pipeline's audio resampler encountered an error.");
 #endif
   }
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   if (this->announcement_pipeline_ != nullptr)
     this->announcement_pipeline_state_ = this->announcement_pipeline_->get_state();
 
@@ -314,7 +311,7 @@ void SpeakerMediaPlayer::loop() {
     } else {
       this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
     }
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   }
 #endif
   if (this->state != old_state) {
@@ -331,7 +328,7 @@ void SpeakerMediaPlayer::play_file(audio::AudioFile *media_file, bool announceme
   MediaCallCommand media_command;
 
   media_command.new_file = true;
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   if (announcement) {
     this->announcement_file_ = media_file;
     media_command.announce = true;
@@ -339,7 +336,7 @@ void SpeakerMediaPlayer::play_file(audio::AudioFile *media_file, bool announceme
 #endif
     this->media_file_ = media_file;
     media_command.announce = false;
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   }
 #endif
   xQueueSend(this->media_control_command_queue_, &media_command, portMAX_DELAY);
@@ -363,13 +360,13 @@ void SpeakerMediaPlayer::control(const media_player::MediaPlayerCall &call) {
     std::string new_uri = call.get_media_url().value();
 
     media_command.new_url = true;
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
     if (call.get_announcement().has_value() && call.get_announcement().value()) {
       this->announcement_url_ = new_uri;
     } else {
 #endif
       this->media_url_ = new_uri;
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
     }
 #endif
     xQueueSend(this->media_control_command_queue_, &media_command, portMAX_DELAY);
@@ -397,8 +394,8 @@ void SpeakerMediaPlayer::control(const media_player::MediaPlayerCall &call) {
 
 media_player::MediaPlayerTraits SpeakerMediaPlayer::get_traits() {
   auto traits = media_player::MediaPlayerTraits();
-#if !defined(SIMPLE_MEDIA_PLAYER)
   traits.set_supports_pause(true);
+#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   traits.get_supported_formats().push_back(
       media_player::MediaPlayerSupportedFormat{.format = "flac",
                                                .sample_rate = this->sample_rate_,

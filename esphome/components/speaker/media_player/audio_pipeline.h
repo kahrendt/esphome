@@ -31,7 +31,7 @@ enum class AudioPipelineState : uint8_t {
   STOPPED,
   ERROR_READING,
   ERROR_DECODING,
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
   ERROR_RESAMPLING,
 #endif
 };
@@ -39,7 +39,7 @@ enum class AudioPipelineState : uint8_t {
 enum class InfoErrorSource : uint8_t {
   READER = 0,
   DECODER,
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
   RESAMPLER,
 #endif
 };
@@ -56,7 +56,7 @@ struct InfoErrorEvent {
   optional<esp_err_t> err;
   optional<audio::AudioFileType> file_type;
   optional<audio::AudioStreamInfo> audio_stream_info;
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
   optional<audio::ResampleInfo> resample_info;
 #endif
   optional<DecodingError> decoding_err;
@@ -149,7 +149,7 @@ class AudioPipeline {
   static void decode_task(void *params);
   TaskHandle_t decode_task_handle_{nullptr};
 
-#if !defined(SIMPLE_MEDIA_PLAYER)
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
   // Resamples the audio to match the specified target sample rate. Converts mono audio to stereo audio if necessary.
   static void resample_task(void *params);
   TaskHandle_t resample_task_handle_{nullptr};
