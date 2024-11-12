@@ -316,6 +316,7 @@ void SpeakerMediaPlayer::loop() {
 #endif
   if (this->state != old_state) {
     this->publish_state();
+    ESP_LOGD(TAG, "State changed to %s", media_player::media_player_state_to_string(this->state));
   }
 }
 
