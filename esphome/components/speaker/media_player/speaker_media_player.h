@@ -45,6 +45,8 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   media_player::MediaPlayerTraits get_traits() override;
   bool is_muted() const override { return this->is_muted_; }
 
+  void set_buffer_size(size_t buffer_size) { this->buffer_size_ = buffer_size; }
+
   void set_sample_rate(uint32_t sample_rate) { this->sample_rate_ = sample_rate; }
 
   // Percentage to increase or decrease the volume for volume up or volume down commands
@@ -113,6 +115,8 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
 #endif
 
   QueueHandle_t media_control_command_queue_;
+
+  size_t buffer_size_;
 
   uint32_t sample_rate_;
 

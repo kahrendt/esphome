@@ -129,7 +129,7 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
   if (type == AudioPipelineType::MEDIA) {
 #endif
     if (this->media_pipeline_ == nullptr) {
-      this->media_pipeline_ = make_unique<AudioPipeline>(this->media_speaker_);
+      this->media_pipeline_ = make_unique<AudioPipeline>(this->media_speaker_, this->buffer_size_);
     }
     if (url) {
       err = this->media_pipeline_->start(this->media_url_.value(), this->sample_rate_, "media",
@@ -142,7 +142,7 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
 #ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   } else if (type == AudioPipelineType::ANNOUNCEMENT) {
     if (this->announcement_pipeline_ == nullptr) {
-      this->announcement_pipeline_ = make_unique<AudioPipeline>(this->announcement_speaker_);
+      this->announcement_pipeline_ = make_unique<AudioPipeline>(this->announcement_speaker_, this->buffer_size_);
     }
 
     if (url) {

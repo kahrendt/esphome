@@ -8,8 +8,8 @@
 namespace esphome {
 namespace speaker {
 
-static const size_t TRANSFER_BUFFER_SIZE = 24 * 1024;
-static const uint32_t DECODED_BUFFER_DURATION_MS = 500;
+static const uint32_t DECODED_BUFFER_DURATION_MS = 100;  // Ring buffer between decoder and resampler
+static const uint32_t INITIAL_BUFFER_MS = 1000;          // Start playback after buffering this duration of the file
 
 static const uint32_t READER_TASK_STACK_SIZE = 5 * 1024;
 static const uint32_t DECODER_TASK_STACK_SIZE = 3 * 1024;
@@ -346,7 +346,7 @@ void AudioPipeline::read_task(void *params) {
     event.source = InfoErrorSource::READER;
     esp_err_t err = ESP_OK;
 
-    std::unique_ptr<audio::AudioReader> reader = make_unique<audio::AudioReader>(TRANSFER_BUFFER_SIZE);
+    std::unique_ptr<audio::AudioReader> reader = make_unique<audio::AudioReader>(this_pipeline->transfer_buffer_size_);
 
     if (event_bits & READER_COMMAND_INIT_FILE) {
       err = reader->start(this_pipeline->current_audio_file_, this_pipeline->current_audio_file_type_);
@@ -355,22 +355,22 @@ void AudioPipeline::read_task(void *params) {
     }
 
     if (err == ESP_OK) {
-      size_t file_ring_buffer_size = TRANSFER_BUFFER_SIZE * this_pipeline->target_sample_rate_ / 1000;
+      size_t file_ring_buffer_size = this_pipeline->buffer_size_;
 
-      switch (this_pipeline->current_audio_file_type_) {
-#ifdef USE_AUDIO_MP3_SUPPORT
-        case audio::AudioFileType::MP3:
-          file_ring_buffer_size /= 8;
-          break;
-#endif
-#ifdef USE_AUDIO_FLAC_SUPPORT
-        case audio::AudioFileType::FLAC:
-          file_ring_buffer_size /= 2;
-          break;
-#endif
-        default:
-          break;
-      }
+      //       switch (this_pipeline->current_audio_file_type_) {
+      // #ifdef USE_AUDIO_MP3_SUPPORT
+      //         case audio::AudioFileType::MP3:
+      //           file_ring_buffer_size /= 8;
+      //           break;
+      // #endif
+      // #ifdef USE_AUDIO_FLAC_SUPPORT
+      //         case audio::AudioFileType::FLAC:
+      //           file_ring_buffer_size /= 2;
+      //           break;
+      // #endif
+      //         default:
+      //           break;
+      //       }
 
       std::shared_ptr<RingBuffer> temp_ring_buffer;
 
@@ -445,7 +445,7 @@ void AudioPipeline::decode_task(void *params) {
     event.source = InfoErrorSource::DECODER;
 
     std::unique_ptr<audio::AudioDecoder> decoder =
-        make_unique<audio::AudioDecoder>(TRANSFER_BUFFER_SIZE, TRANSFER_BUFFER_SIZE);
+        make_unique<audio::AudioDecoder>(this_pipeline->transfer_buffer_size_, this_pipeline->transfer_buffer_size_);
 
     esp_err_t err = decoder->start(this_pipeline->current_audio_file_type_);
     decoder->add_source(this_pipeline->raw_file_ring_buffer_);
@@ -558,25 +558,26 @@ void AudioPipeline::decode_task(void *params) {
           if (this_pipeline->speaker_ != nullptr) {
             this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
             decoder->add_sink(this_pipeline->speaker_);
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
             xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::RESAMPLER_MESSAGE_FINISHED);
+#endif
           }
 #endif
         }
 
-        const size_t bytes_per_ms = this_pipeline->current_audio_stream_info_.get_bytes_per_sample() *
-                                    this_pipeline->current_audio_stream_info_.channels *
-                                    this_pipeline->current_audio_stream_info_.sample_rate / 1000;
-        const uint32_t initial_buffer_ms = 1000;
-        initial_bytes_to_buffer = bytes_per_ms * initial_buffer_ms;
+        initial_bytes_to_buffer =
+            std::min(INITIAL_BUFFER_MS * this_pipeline->current_audio_stream_info_.get_bytes_per_ms(),
+                     this_pipeline->buffer_size_);
+
         switch (this_pipeline->current_audio_file_type_) {
 #ifdef USE_AUDIO_MP3_SUPPORT
           case audio::AudioFileType::MP3:
-            initial_bytes_to_buffer /= 8;
+            initial_bytes_to_buffer /= 8;  // Estimate the MP3 compression factor is 8
             break;
 #endif
 #ifdef USE_AUDIO_FLAC_SUPPORT
           case audio::AudioFileType::FLAC:
-            initial_bytes_to_buffer /= 2;
+            initial_bytes_to_buffer /= 2;  // Estimate the FLAC compression factor is 2
             break;
 #endif
           default:
@@ -586,13 +587,8 @@ void AudioPipeline::decode_task(void *params) {
       }
 
       if (!started_playback && has_stream_info) {
-        // Check to see if enough data is available to confidently start the stream
+        // Verify enough data is available before starting playback
         std::shared_ptr<RingBuffer> temp_ring_buffer = this_pipeline->raw_file_ring_buffer_.lock();
-        if (temp_ring_buffer->free() == 0) {
-          started_playback = true;
-          printf("started playback because the ring buffer is full\n");
-        }
-
         if (temp_ring_buffer->available() >= initial_bytes_to_buffer) {
           started_playback = true;
           printf("started playback because we buffered %d bytes\n", initial_bytes_to_buffer);
@@ -624,7 +620,7 @@ void AudioPipeline::resample_task(void *params) {
     event.source = InfoErrorSource::RESAMPLER;
 
     std::unique_ptr<audio::AudioResampler> resampler =
-        make_unique<audio::AudioResampler>(TRANSFER_BUFFER_SIZE, TRANSFER_BUFFER_SIZE);
+        make_unique<audio::AudioResampler>(this_pipeline->transfer_buffer_size_, this_pipeline->transfer_buffer_size_);
 
     esp_err_t err = resampler->start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
                                      this_pipeline->current_resample_info_);

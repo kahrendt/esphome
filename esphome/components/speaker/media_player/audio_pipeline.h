@@ -21,6 +21,9 @@
 namespace esphome {
 namespace speaker {
 
+// Internal sink/source buffers for reader, decoder, and resampler
+static const size_t DEFAULT_TRANSFER_BUFFER_SIZE = 24 * 1024;
+
 enum class AudioPipelineType : uint8_t {
   MEDIA,
   ANNOUNCEMENT,
@@ -64,10 +67,15 @@ struct InfoErrorEvent {
 
 class AudioPipeline {
  public:
-  AudioPipeline(std::weak_ptr<RingBuffer> ring_buffer) : output_ring_buffer_(ring_buffer) {
+  AudioPipeline(std::weak_ptr<RingBuffer> ring_buffer, size_t buffer_size)
+      : output_ring_buffer_(ring_buffer), buffer_size_(buffer_size) {
     this->allocate_buffers_();
+    this->transfer_buffer_size_ = std::min(buffer_size_ / 4, DEFAULT_TRANSFER_BUFFER_SIZE);
   };
-  AudioPipeline(speaker::Speaker *speaker) : speaker_(speaker) { this->allocate_buffers_(); };
+  AudioPipeline(speaker::Speaker *speaker, size_t buffer_size) : speaker_(speaker), buffer_size_(buffer_size) {
+    this->allocate_buffers_();
+    this->transfer_buffer_size_ = std::min(buffer_size_ / 4, DEFAULT_TRANSFER_BUFFER_SIZE);
+  };
 
   /// @brief Starts an audio pipeline given a media url
   /// @param uri media file url
@@ -129,6 +137,9 @@ class AudioPipeline {
   audio::AudioFileType current_audio_file_type_;
   audio::AudioStreamInfo current_audio_stream_info_;
   audio::ResampleInfo current_resample_info_;
+
+  size_t buffer_size_;           // Ring buffer between reader and decoder
+  size_t transfer_buffer_size_;  // Internal source/sink buffers for the audio reader, decoder, and resampler
 
   uint32_t target_sample_rate_;
 

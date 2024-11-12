@@ -12,6 +12,7 @@ from esphome.components import esp32, media_player, speaker
 from esphome.components.audio import AUDIO_FILE_TYPE_ENUM, AudioFile
 import esphome.config_validation as cv
 from esphome.const import (
+    CONF_BUFFER_SIZE,
     CONF_DURATION,
     CONF_FILE,
     CONF_FILES,
@@ -204,6 +205,9 @@ CONFIG_SCHEMA = cv.All(
             cv.GenerateID(): cv.declare_id(SpeakerMediaPlayer),
             cv.Required(CONF_ANNOUNCEMENT_SPEAKER): cv.use_id(speaker.Speaker),
             cv.Required(CONF_MEDIA_SPEAKER): cv.use_id(speaker.Speaker),
+            cv.Optional(CONF_BUFFER_SIZE, default=1000000): cv.int_range(
+                min=8000, max=8000000
+            ),
             cv.Optional(CONF_SAMPLE_RATE, default=16000): cv.int_range(min=1),
             cv.Optional(CONF_VOLUME_INCREMENT, default=0.05): cv.percentage,
             cv.Optional(CONF_VOLUME_MAX, default=1.0): cv.percentage,
@@ -270,6 +274,8 @@ async def to_code(config):
     await media_player.register_media_player(var, config)
 
     cg.add_define("USE_OTA_STATE_CALLBACK")
+
+    cg.add(var.set_buffer_size(config[CONF_BUFFER_SIZE]))
 
     cg.add(var.set_sample_rate(config[CONF_SAMPLE_RATE]))
 
