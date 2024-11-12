@@ -229,17 +229,17 @@ FileDecoderState AudioDecoder::decode_flac_() {
   if (result == flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
     // Not an issue, just needs more data that we'll get next time.
     return FileDecoderState::POTENTIALLY_FAILED;
-  } else if (result > flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
-    // Corrupted frame, don't retry with current buffer content, wait for new sync
-    size_t bytes_consumed = this->flac_decoder_->get_bytes_index();
-    this->input_transfer_buffer_->decrease_buffer_length(bytes_consumed);
+  }
 
+  size_t bytes_consumed = this->flac_decoder_->get_bytes_index();
+  this->input_transfer_buffer_->decrease_buffer_length(bytes_consumed);
+
+  if (result > flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
+    // Corrupted frame, don't retry with current buffer content, wait for new sync
     return FileDecoderState::POTENTIALLY_FAILED;
   }
 
   // We have successfully decoded some input data and have new output data
-  size_t bytes_consumed = this->flac_decoder_->get_bytes_index();
-  this->input_transfer_buffer_->decrease_buffer_length(bytes_consumed);
   this->output_transfer_buffer_->increase_buffer_length(output_samples * sizeof(int16_t));
 
   if (result == flac::FLAC_DECODER_NO_MORE_FRAMES) {
