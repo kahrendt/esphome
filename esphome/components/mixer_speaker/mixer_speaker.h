@@ -12,57 +12,23 @@
 namespace esphome {
 namespace mixer_speaker {
 
-static const UBaseType_t MIXER_TASK_PRIORITY = 10;
-
 class MixerSpeaker;
 
 class InputSpeaker : public speaker::Speaker, public Component {
  public:
   void setup() override {}
 
-  void loop() override {
-    if (this->state_ == speaker::STATE_RUNNING) {
-      if (((millis() - this->last_seen_data_ms_) > this->timeout_ms_) && !this->has_buffered_data()) {
-        this->state_ = speaker::STATE_STOPPED;
-        this->stop_gracefully_ = false;
-      }
-      if (this->stop_gracefully_ && !this->has_buffered_data()) {
-        this->state_ = speaker::STATE_STOPPED;
-        this->stop_gracefully_ = false;
-      }
-    }
-  }
+  void loop() override;
 
-  size_t play(const uint8_t *data, size_t length, TickType_t ticks_to_wait) override {
-    this->last_seen_data_ms_ = millis();
-    if (this->is_stopped()) {
-      this->start();
-    }
-    size_t bytes_written = 0;
-    if (this->ring_buffer_.use_count() > 0) {
-      bytes_written = this->ring_buffer_->write_without_replacement(data, length, ticks_to_wait);
-    }
-    return bytes_written;
-  }
+  size_t play(const uint8_t *data, size_t length, TickType_t ticks_to_wait) override;
 
   size_t play(const uint8_t *data, size_t length) override { return this->play(data, length, 0); }
 
   void start() override;
-  void stop() override {
-    if (this->ring_buffer_.use_count() > 0) {
-      this->ring_buffer_->reset();
-    }
-
-    this->state_ = speaker::STATE_STOPPED;
-  }
+  void stop() override;
   void finish() override { this->stop_gracefully_ = true; }
 
-  bool has_buffered_data() const override {
-    if (this->ring_buffer_.use_count() > 0) {
-      return (this->ring_buffer_->available() > 0);
-    }
-    return false;
-  }
+  bool has_buffered_data() const override;
 
   void set_mute_state(bool mute_state) override;
 
@@ -87,48 +53,7 @@ class MixerSpeaker : public Component {
  public:
   void setup() override {}
 
-  void start(audio::AudioStreamInfo &stream_info) {
-    if (!this->audio_stream_info_.has_value()) {
-      this->audio_stream_info_ = stream_info;
-      this->output_speaker_->set_audio_stream_info(stream_info);
-    } else {
-      if (stream_info != this->audio_stream_info_.value()) {
-        printf("mismatching audio stream info, can't play");
-      }
-    }
-
-    if (this->mixer_ != nullptr) {
-      return;
-    }
-
-    // Want 0.5 seconds of audio in the ring buffers
-    // sample_rate*channels*sizeof(int16_t)*1/2
-
-    this->mixer_ = audio::AudioMixer::create(stream_info.sample_rate * stream_info.channels * sizeof(int16_t) / 20,
-                                             4096);  // /20 for 50 ms
-    if (this->mixer_ == nullptr) {
-      this->status_set_error("Failed to allocate mixer buffers");
-      return;
-    }
-
-    this->mixer_->start(this->output_speaker_, "mixer", MIXER_TASK_PRIORITY);
-
-    this->set_retry(50, 2, [this](const uint8_t remaining_setup_attempts) {
-      if ((this->mixer_->get_announcement_ring_buffer().use_count() == 0) ||
-          (this->mixer_->get_media_ring_buffer().use_count() == 0)) {
-        if (remaining_setup_attempts == 0) {
-          this->status_set_error(
-              "Error starting the audio pipeline since the mixer hasn't finished allocating buffers");
-        }
-        return RetryResult::RETRY;
-      }
-
-      this->announcement_speaker_->set_sink(this->mixer_->get_announcement_ring_buffer());
-      this->media_speaker_->set_sink(this->mixer_->get_media_ring_buffer());
-
-      return RetryResult::DONE;
-    });
-  }
+  void start(audio::AudioStreamInfo &stream_info);
 
   void set_announcement_speaker(InputSpeaker *announcement_speaker) {
     this->announcement_speaker_ = announcement_speaker;
