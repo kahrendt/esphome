@@ -1,6 +1,6 @@
-#include "audio_mixer.h"
-
 #ifdef USE_ESP32
+
+#include "audio_mixer.h"
 
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"

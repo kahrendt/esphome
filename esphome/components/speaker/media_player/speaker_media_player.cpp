@@ -1,12 +1,11 @@
-#include "speaker_media_player.h"
-
 #ifdef USE_ESP32
 
-#include "esphome/components/audio/audio.h"
+#include "speaker_media_player.h"
 
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
+#include "esphome/components/audio/audio.h"
 #ifdef USE_OTA
 #include "esphome/components/ota/ota_backend.h"
 #endif

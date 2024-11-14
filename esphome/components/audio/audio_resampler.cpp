@@ -1,6 +1,6 @@
-#include "audio_resampler.h"
-
 #ifdef USE_ESP32
+
+#include "audio_resampler.h"
 
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"

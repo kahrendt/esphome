@@ -1,9 +1,8 @@
 
 #pragma once
 
-#include "esphome/core/defines.h"
-
 #ifdef USE_ESP32
+#include "esphome/core/defines.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
 

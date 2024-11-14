@@ -1,6 +1,6 @@
-#include "mixer_speaker.h"
-
 #ifdef USE_ESP32
+
+#include "mixer_speaker.h"
 
 namespace esphome {
 namespace mixer_speaker {
