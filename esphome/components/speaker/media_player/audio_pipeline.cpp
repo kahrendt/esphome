@@ -271,7 +271,6 @@ esp_err_t AudioPipeline::stop() {
 #endif
 
   if (finished_bits_to_check) {
-    printf("sending stop comamnd\n");
     xEventGroupSetBits(this->event_group_, PIPELINE_COMMAND_STOP);
     uint32_t event_group_bits = xEventGroupWaitBits(this->event_group_,
                                                     finished_bits_to_check,  // Bit message to read
@@ -423,7 +422,6 @@ void AudioPipeline::read_task(void *params) {
   }
 
   xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_FINISHED);
-  printf("reader task stopped\n");
   vTaskDelete(NULL);
 }
 
@@ -591,14 +589,12 @@ void AudioPipeline::decode_task(void *params) {
         std::shared_ptr<RingBuffer> temp_ring_buffer = this_pipeline->raw_file_ring_buffer_.lock();
         if (temp_ring_buffer->available() >= initial_bytes_to_buffer) {
           started_playback = true;
-          printf("started playback because we buffered %d bytes\n", initial_bytes_to_buffer);
         }
       }
     }
   }
 
   xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_FINISHED);
-  printf("decoder task stopped\n");
   vTaskDelete(NULL);
 }
 
