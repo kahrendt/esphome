@@ -159,6 +159,10 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
 }
 
 void SpeakerMediaPlayer::watch_media_commands_() {
+  if (!this->is_ready()) {
+    return;
+  }
+
   MediaCallCommand media_command;
   esp_err_t err = ESP_OK;
 
