@@ -219,7 +219,6 @@ CONFIG_SCHEMA = cv.All(
         }
     ),
     cv.only_on([PLATFORM_ESP32]),
-    cv.only_with_esp_idf,
 )
 FINAL_VALIDATE_SCHEMA = _supported_local_file_validate
 
