@@ -253,34 +253,40 @@ FileDecoderState AudioDecoder::decode_flac_() {
 #ifdef USE_AUDIO_MP3_SUPPORT
 FileDecoderState AudioDecoder::decode_mp3_() {
   // Look for the next sync word
-  int32_t offset =
-      MP3FindSyncWord(this->input_transfer_buffer_->get_buffer_start(), this->input_transfer_buffer_->available());
+  int buffer_length = (int) this->input_transfer_buffer_->available();
+  int32_t offset = MP3FindSyncWord(this->input_transfer_buffer_->get_buffer_start(), buffer_length);
+
   if (offset < 0) {
-    // We may recover if we have more data
+    // New data may have the sync word
+    this->input_transfer_buffer_->decrease_buffer_length(buffer_length);
     return FileDecoderState::POTENTIALLY_FAILED;
   }
 
-  // Advance read pointer
-  this->input_transfer_buffer_->increase_buffer_length(offset);
-
+  // Advance read pointer to match the offset for the syncword
+  this->input_transfer_buffer_->decrease_buffer_length(offset);
   uint8_t *buffer_start = this->input_transfer_buffer_->get_buffer_start();
-  int buffer_length = (int) this->input_transfer_buffer_->available();
+
+  buffer_length = (int) this->input_transfer_buffer_->available();
   int err = MP3Decode(this->mp3_decoder_, &buffer_start, &buffer_length,
                       (int16_t *) this->output_transfer_buffer_->get_buffer_end(), 0);
+
+  size_t consumed = this->input_transfer_buffer_->available() - buffer_length;
+  this->input_transfer_buffer_->decrease_buffer_length(consumed);
+
   if (err) {
     switch (err) {
-      case ERR_MP3_MAINDATA_UNDERFLOW:
-        // Not a problem. Next call to decode will provide more data.
-        return FileDecoderState::POTENTIALLY_FAILED;
+      case ERR_MP3_OUT_OF_MEMORY:
+        return FileDecoderState::FAILED;
+        break;
+      case ERR_MP3_NULL_POINTER:
+        return FileDecoderState::FAILED;
         break;
       default:
-        return FileDecoderState::FAILED;
+        // Most errors are recoverable by moving on to the next frame, so mark potentailly failed for these
+        return FileDecoderState::POTENTIALLY_FAILED;
         break;
     }
   } else {
-    size_t consumed = this->input_transfer_buffer_->available() - buffer_length;
-    this->input_transfer_buffer_->decrease_buffer_length(consumed);
-
     MP3FrameInfo mp3_frame_info;
     MP3GetLastFrameInfo(this->mp3_decoder_, &mp3_frame_info);
     if (mp3_frame_info.outputSamps > 0) {
