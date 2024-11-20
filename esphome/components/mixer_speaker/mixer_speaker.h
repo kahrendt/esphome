@@ -28,10 +28,8 @@ struct TaskEvent {
 };
 
 enum class CommandEventType : uint8_t {
-  STOP,          // Stop mixing to prepare for stopping the mixing task
-  DUCK,          // Duck the media audio
-  PAUSE_MEDIA,   // Pauses the media stream
-  RESUME_MEDIA,  // Resumes the media stream
+  STOP,  // Stop mixing to prepare for stopping the mixing task
+  DUCK,  // Duck the media audio
 };
 
 // Used to send commands to the mixer task
@@ -109,8 +107,6 @@ class MixerSpeaker : public Component {
   /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by 10 dB
   /// @param transition_samples (size_t) The number of samples to transition to the new ducking level over
   void set_ducking_reduction(uint8_t decibel_reduction, size_t transition_samples);
-
-  void set_pause_state(bool pause_state);
 
   void get_state() {
     TaskEvent event;

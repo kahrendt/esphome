@@ -179,9 +179,6 @@ void MixerSpeaker::audio_mixer_task(void *params) {
     }
   }
 
-  // Handles media stream pausing
-  bool transfer_media = true;
-
   // Parameters to control the ducking dB reduction and its transitions
   // There is a built in negative sign; e.g., reducing by 5 dB is changing the gain by -5 dB
   int8_t target_ducking_db_reduction = 0;
@@ -230,10 +227,6 @@ void MixerSpeaker::audio_mixer_task(void *params) {
             current_ducking_db_reduction = target_ducking_db_reduction;
           }
         }
-      } else if (command_event.command == CommandEventType::PAUSE_MEDIA) {
-        transfer_media = false;
-      } else if (command_event.command == CommandEventType::RESUME_MEDIA) {
-        transfer_media = true;
       }
     }
 
@@ -242,8 +235,7 @@ void MixerSpeaker::audio_mixer_task(void *params) {
     media_transfer_buffer->transfer_data_from_source(0);
     announcement_transfer_buffer->transfer_data_from_source(0);
 
-    size_t media_available =
-        std::min(media_transfer_buffer->available() * transfer_media, output_transfer_buffer->free());
+    size_t media_available = std::min(media_transfer_buffer->available(), output_transfer_buffer->free());
     size_t announcement_available = std::min(announcement_transfer_buffer->available(), output_transfer_buffer->free());
     // printf("media available = %d, announcement availble =%d\n", media_available, announcement_available);
     if (media_available + announcement_available > 0) {
