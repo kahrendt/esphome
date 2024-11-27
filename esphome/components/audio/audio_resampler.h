@@ -25,7 +25,6 @@ class AudioResampler {
    * @brief Class that facilitates resampling an audio file.
    * The audio data is read from a ring buffer source, decoded, and sent to an audio sink (ring buffer or speaker
    * component).
-   * Supports adjusting the sample rate and converting mono audio to stereo.
    */
  public:
   /// @brief Allocates the input and output transfer buffers
@@ -51,11 +50,11 @@ class AudioResampler {
 #endif
 
   /// @brief Sets up the class to resample
-  /// @param stream_info the incoming sample rate, bits per sample, and number of channels
+  /// @param input_stream_info the incoming sample rate, bits per sample, and number of channels
   /// @param target_sample_rate the necessary sample rate to convert to
   /// @return ESP_OK if it is able to convert the incoming stream, ESP_ERR_NO_MEM if the transfer buffers failed to
   /// allocate, ESP_ERR_NOT_SUPPORTED if the stream can't be converted.
-  esp_err_t start(AudioStreamInfo &stream_info, uint32_t target_sample_rate);
+  esp_err_t start(AudioStreamInfo &input_stream_info, uint32_t target_sample_rate);
 
   /// @brief Resamples audio from the ring buffer source and writes to the sink.
   /// @param stop_gracefully If true, it indicates the file decoder is finished. The resampler will resample all the
@@ -73,9 +72,9 @@ class AudioResampler {
   size_t output_buffer_size_;
 
   bool pause_output_{false};
-  bool requires_resampling_;
 
-  AudioStreamInfo stream_info_;
+  AudioStreamInfo input_stream_info_;
+  AudioStreamInfo output_stream_info_;
 
   std::unique_ptr<resampler::Resampler> resampler_;
 };

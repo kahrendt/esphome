@@ -11,8 +11,7 @@ namespace audio {
 static const size_t NUM_TAPS = 16;
 static const size_t NUM_FILTERS = 16;
 
-// These output parameters are currently hardcoded in the elements further down the pipeline (mixer and speaker)
-static const uint8_t OUTPUT_CHANNELS = 2;
+// The resampling library's implementation hardcodes the bits per sample
 static const uint8_t OUTPUT_BYTES_PER_SAMPLE = sizeof(int16_t);
 static const uint8_t OUTPUT_BITS_PER_SAMPLE = 8 * OUTPUT_BYTES_PER_SAMPLE;
 
@@ -50,44 +49,46 @@ esp_err_t AudioResampler::add_sink(speaker::Speaker *speaker) {
 }
 #endif
 
-esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sample_rate) {
-  this->stream_info_ = stream_info;
+esp_err_t AudioResampler::start(AudioStreamInfo &input_stream_info, uint32_t target_sample_rate) {
+  this->input_stream_info_ = input_stream_info;
 
   if ((this->input_transfer_buffer_ == nullptr) || (this->output_transfer_buffer_ == nullptr)) {
     return ESP_ERR_NO_MEM;
   }
 
-  if ((stream_info.channels > OUTPUT_CHANNELS) || (stream_info_.bits_per_sample != OUTPUT_BITS_PER_SAMPLE)) {
+  if (input_stream_info_.bits_per_sample != OUTPUT_BITS_PER_SAMPLE) {
     return ESP_ERR_NOT_SUPPORTED;
   }
 
-  if (stream_info.sample_rate != target_sample_rate) {
-    this->resampler_ = make_unique<resampler::Resampler>(this->input_buffer_size_ / OUTPUT_BYTES_PER_SAMPLE,
-                                                         this->output_buffer_size_ / OUTPUT_BYTES_PER_SAMPLE);
+  if (input_stream_info.sample_rate != target_sample_rate) {
+    this->resampler_ =
+        make_unique<resampler::Resampler>(this->input_buffer_size_ / input_stream_info.get_bytes_per_sample(),
+                                          this->output_buffer_size_ / input_stream_info.get_bytes_per_sample());
 
     uint16_t number_of_filters = NUM_FILTERS;
     bool subsample_interpolate = true;
-    if (target_sample_rate % stream_info.sample_rate == 0) {
+    if (target_sample_rate % input_stream_info.sample_rate == 0) {
       // Upsampling by an integer factor
-      number_of_filters = target_sample_rate / stream_info.sample_rate;
+      number_of_filters = target_sample_rate / input_stream_info.sample_rate;
       subsample_interpolate = false;
     }
 
-    if (stream_info.sample_rate % target_sample_rate == 0) {
+    if (input_stream_info.sample_rate % target_sample_rate == 0) {
       // Downsampling by an integer factor
       subsample_interpolate = false;
     }
 
     if (!this->resampler_->initialize(static_cast<float>(target_sample_rate),
-                                      static_cast<float>(stream_info.sample_rate), stream_info.channels,
+                                      static_cast<float>(input_stream_info.sample_rate), input_stream_info.channels,
                                       (uint16_t) NUM_TAPS, number_of_filters, false, subsample_interpolate)) {
       // Failed to allocate the resampler's internal buffers
       return ESP_ERR_NO_MEM;
     }
 
-    this->requires_resampling_ = true;
+    this->output_stream_info_ = this->input_stream_info_;
+    this->output_stream_info_.sample_rate = target_sample_rate;
   } else {
-    this->requires_resampling_ = false;
+    this->output_stream_info_ = this->input_stream_info_;
   }
 
   return ESP_OK;
@@ -116,52 +117,34 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
 
   int16_t *output_buffer = reinterpret_cast<int16_t *>(this->output_transfer_buffer_->get_buffer_end());
 
-  /*
-   * Samples are indiviudal int16 values. Frames include 1 sample for mono and 2 samples for stereo
-   * Be careful converting between bytes, samples, and frames!
-   * 1 sample = 2 bytes = sizeof(int16_t) = OUTPUT_BYTES_PER_SAMPLE
-   * if mono:
-   *   1 frame = 1 sample
-   * if stereo:
-   *   1 frame = 2 samples (left and right)
-   */
-
+  // Samples are indiviudal int16 values with a size of 2 bytes. Frames include a sample for each channel.
   const size_t bytes_free = this->output_transfer_buffer_->free();
-  const size_t samples_free = bytes_free / OUTPUT_BYTES_PER_SAMPLE;
-
-  // With mono audio, we will duplicate the samples in place, so ensure there is space for a copy of each sample
-  const size_t frames_free = samples_free / OUTPUT_CHANNELS;
+  const size_t frames_free = bytes_free / this->output_stream_info_.get_bytes_per_frame();
 
   const size_t bytes_available = this->input_transfer_buffer_->available();
-  const size_t samples_available = bytes_available / OUTPUT_BYTES_PER_SAMPLE;
-  const size_t frames_available = samples_available / this->stream_info_.channels;
+  const size_t frames_available = bytes_available / this->input_stream_info_.get_bytes_per_frame();
 
-  size_t samples_generated = 0;
-
-  if (this->requires_resampling_) {
+  if (this->input_stream_info_.sample_rate != this->output_stream_info_.sample_rate) {
     size_t frames_used = 0;
     size_t frames_generated = 0;
 
     this->resampler_->resample(reinterpret_cast<int16_t *>(this->input_transfer_buffer_->get_buffer_start()),
                                output_buffer, frames_available, frames_free, frames_used, frames_generated);
 
-    const size_t samples_used = frames_used * this->stream_info_.channels;
-    this->input_transfer_buffer_->decrease_buffer_length(samples_used * sizeof(int16_t));
-
-    samples_generated = frames_generated * this->stream_info_.channels;
-
+    this->input_transfer_buffer_->decrease_buffer_length(frames_used * this->input_stream_info_.get_bytes_per_frame());
+    this->output_transfer_buffer_->increase_buffer_length(frames_generated *
+                                                          this->output_stream_info_.get_bytes_per_frame());
   } else {
     // No resampling required, copy samples directly to the output transfer buffer
 
-    const size_t bytes_to_transfer = std::min(frames_free * OUTPUT_BYTES_PER_SAMPLE, bytes_available);
+    const size_t bytes_to_transfer = std::min(frames_free * this->output_stream_info_.get_bytes_per_frame(),
+                                              frames_available * this->input_stream_info_.get_bytes_per_frame());
 
     std::memcpy((void *) output_buffer, (void *) this->input_transfer_buffer_->get_buffer_start(), bytes_to_transfer);
 
     this->input_transfer_buffer_->decrease_buffer_length(bytes_to_transfer);
-    samples_generated = bytes_to_transfer / sizeof(int16_t);
+    this->output_transfer_buffer_->increase_buffer_length(bytes_to_transfer);
   }
-
-  this->output_transfer_buffer_->increase_buffer_length(samples_generated * OUTPUT_BYTES_PER_SAMPLE);
 
   return AudioResamplerState::RESAMPLING;
 }
