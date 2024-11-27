@@ -134,11 +134,16 @@ class MixerSpeaker : public Component {
   /// @brief Mixes the media and announcement samples. If the resulting audio clips, the media samples are first
   /// scaled.
   /// @param media_buffer buffer for media samples
+  /// @param media_stream_info stream info for the media samples
   /// @param announcement_buffer buffer for announcement samples
-  /// @param combination_buffer buffer for the mixed samples
-  /// @param samples_to_mix number of samples in the media and annoucnement buffers to mix together
-  void mix_audio_samples_without_clipping_(int16_t *media_buffer, int16_t *announcement_buffer,
-                                           int16_t *combination_buffer, size_t samples_to_mix);
+  /// @param announcement_stream_info stream info for the announcement samples
+  /// @param output_buffer buffer for the mixed samples
+  /// @param output_stream_info stream info for the output buffer
+  /// @param frames_to_mix number of frames in the media and annoucnement buffers to mix together
+  void mix_audio_samples_without_clipping_(int16_t *media_buffer, audio::AudioStreamInfo media_stream_info,
+                                           int16_t *announcement_buffer,
+                                           audio::AudioStreamInfo announcement_stream_info, int16_t *output_buffer,
+                                           audio::AudioStreamInfo output_stream_info, size_t frames_to_mix);
 
   /// @brief Scales audio samples. Scales in place when audio_samples == output_buffer.
   /// @param audio_samples PCM int16 audio samples
@@ -147,6 +152,10 @@ class MixerSpeaker : public Component {
   /// @param samples_to_scale Number of samples to scale
   void scale_audio_samples_(int16_t *audio_samples, int16_t *output_buffer, int16_t scale_factor,
                             size_t samples_to_scale);
+
+  void copy_frames_(int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
+                    audio::AudioStreamInfo output_stream_info, uint32_t frames_to_transfer, size_t &bytes_read,
+                    size_t &bytes_written);
 
   static void audio_mixer_task(void *params);
   TaskHandle_t task_handle_{nullptr};
@@ -168,8 +177,6 @@ class MixerSpeaker : public Component {
 
   size_t ring_buffer_size_;
   size_t transfer_buffer_size_;
-
-  uint8_t announcement_channel_divisor_{2};
 };
 
 }  // namespace mixer_speaker
