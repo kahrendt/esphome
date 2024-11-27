@@ -197,12 +197,10 @@ AudioPipelineState AudioPipeline::get_state() {
         case InfoErrorSource::RESAMPLER:
           if (event.err.has_value()) {
             ESP_LOGE(TAG, "Resampler encountered an error: %s", esp_err_to_name(event.err.has_value()));
-          } else if (event.resample_info.has_value()) {
-            if (event.resample_info.value().resample) {
-              ESP_LOGD(TAG, "Converting the audio sample rate");
-            }
-            if (event.resample_info.value().mono_to_stereo) {
-              ESP_LOGD(TAG, "Converting mono channel audio to stereo channel audio");
+          } else if (event.resampling.has_value()) {
+            if (event.resampling.value()) {
+              ESP_LOGD(TAG, "Converting the audio sample rate from %d Hz to %d Hz",
+                       this->current_audio_stream_info_.sample_rate, this->target_sample_rate_);
             }
           }
           break;
@@ -356,21 +354,6 @@ void AudioPipeline::read_task(void *params) {
     if (err == ESP_OK) {
       size_t file_ring_buffer_size = this_pipeline->buffer_size_;
 
-      //       switch (this_pipeline->current_audio_file_type_) {
-      // #ifdef USE_AUDIO_MP3_SUPPORT
-      //         case audio::AudioFileType::MP3:
-      //           file_ring_buffer_size /= 8;
-      //           break;
-      // #endif
-      // #ifdef USE_AUDIO_FLAC_SUPPORT
-      //         case audio::AudioFileType::FLAC:
-      //           file_ring_buffer_size /= 2;
-      //           break;
-      // #endif
-      //         default:
-      //           break;
-      //       }
-
       std::shared_ptr<RingBuffer> temp_ring_buffer;
 
       if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
@@ -521,8 +504,7 @@ void AudioPipeline::decode_task(void *params) {
                              EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
         } else {
 #ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
-          if ((this_pipeline->current_audio_stream_info_.channels < 2) ||
-              (this_pipeline->current_audio_stream_info_.sample_rate != this_pipeline->target_sample_rate_)) {
+          if (this_pipeline->current_audio_stream_info_.sample_rate != this_pipeline->target_sample_rate_) {
             // Audio format requires resampling, allocate the decoded ring buffer and inform the resampler that the
             // stream information is available
 
@@ -548,6 +530,7 @@ void AudioPipeline::decode_task(void *params) {
           } else {
             // Audio format doesn't require resampling, send it directly to the output
             if (this_pipeline->speaker_ != nullptr) {
+              this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
               decoder->add_sink(this_pipeline->speaker_);
               xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::RESAMPLER_MESSAGE_FINISHED);
             }
@@ -618,9 +601,12 @@ void AudioPipeline::resample_task(void *params) {
     std::unique_ptr<audio::AudioResampler> resampler =
         make_unique<audio::AudioResampler>(this_pipeline->transfer_buffer_size_, this_pipeline->transfer_buffer_size_);
 
-    esp_err_t err = resampler->start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_,
-                                     this_pipeline->current_resample_info_);
+    esp_err_t err = resampler->start(this_pipeline->current_audio_stream_info_, this_pipeline->target_sample_rate_);
     resampler->add_source(this_pipeline->decoded_ring_buffer_);
+
+    audio::AudioStreamInfo resampled_stream_info = this_pipeline->current_audio_stream_info_;
+    resampled_stream_info.sample_rate = this_pipeline->target_sample_rate_;
+    this_pipeline->speaker_->set_audio_stream_info(resampled_stream_info);
     resampler->add_sink(this_pipeline->speaker_);
 
     if (err != ESP_OK) {
@@ -632,7 +618,7 @@ void AudioPipeline::resample_task(void *params) {
       xEventGroupSetBits(this_pipeline->event_group_,
                          EventGroupBits::RESAMPLER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
     } else {
-      event.resample_info = this_pipeline->current_resample_info_;
+      event.resampling = true;
       xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
     }
 

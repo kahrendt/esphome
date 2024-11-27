@@ -60,7 +60,7 @@ struct InfoErrorEvent {
   optional<audio::AudioFileType> file_type;
   optional<audio::AudioStreamInfo> audio_stream_info;
 #ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
-  optional<audio::ResampleInfo> resample_info;
+  optional<bool> resampling;
 #endif
   optional<DecodingError> decoding_err;
 };
@@ -136,7 +136,6 @@ class AudioPipeline {
 
   audio::AudioFileType current_audio_file_type_;
   audio::AudioStreamInfo current_audio_stream_info_;
-  audio::ResampleInfo current_resample_info_;
 
   size_t buffer_size_;           // Ring buffer between reader and decoder
   size_t transfer_buffer_size_;  // Internal source/sink buffers for the audio reader, decoder, and resampler

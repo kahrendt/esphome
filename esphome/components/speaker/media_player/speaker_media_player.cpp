@@ -114,16 +114,6 @@ void SpeakerMediaPlayer::setup() {
 esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) {
   esp_err_t err = ESP_OK;
 
-  if (this->media_speaker_ != nullptr) {
-    audio::AudioStreamInfo audio_stream_info;
-    audio_stream_info.channels = 2;
-    audio_stream_info.bits_per_sample = 16;
-    audio_stream_info.sample_rate = this->sample_rate_;
-
-    this->announcement_speaker_->set_audio_stream_info(audio_stream_info);
-    this->media_speaker_->set_audio_stream_info(audio_stream_info);
-  }
-
 #ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   if (type == AudioPipelineType::MEDIA) {
 #endif

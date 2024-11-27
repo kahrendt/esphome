@@ -50,11 +50,8 @@ esp_err_t AudioResampler::add_sink(speaker::Speaker *speaker) {
 }
 #endif
 
-esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sample_rate,
-                                ResampleInfo &resample_info) {
+esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sample_rate) {
   this->stream_info_ = stream_info;
-
-  resample_info.mono_to_stereo = (stream_info.channels != 2);
 
   if ((this->input_transfer_buffer_ == nullptr) || (this->output_transfer_buffer_ == nullptr)) {
     return ESP_ERR_NO_MEM;
@@ -65,8 +62,6 @@ esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sa
   }
 
   if (stream_info.sample_rate != target_sample_rate) {
-    resample_info.resample = true;
-
     this->resampler_ = make_unique<resampler::Resampler>(this->input_buffer_size_ / OUTPUT_BYTES_PER_SAMPLE,
                                                          this->output_buffer_size_ / OUTPUT_BYTES_PER_SAMPLE);
 
@@ -90,11 +85,10 @@ esp_err_t AudioResampler::start(AudioStreamInfo &stream_info, uint32_t target_sa
       return ESP_ERR_NO_MEM;
     }
 
+    this->requires_resampling_ = true;
   } else {
-    resample_info.resample = false;
+    this->requires_resampling_ = false;
   }
-
-  this->resample_info_ = resample_info;
 
   return ESP_OK;
 }
@@ -144,7 +138,7 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
 
   size_t samples_generated = 0;
 
-  if (this->resample_info_.resample) {
+  if (this->requires_resampling_) {
     size_t frames_used = 0;
     size_t frames_generated = 0;
 
@@ -167,19 +161,7 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
     samples_generated = bytes_to_transfer / sizeof(int16_t);
   }
 
-  if (this->resample_info_.mono_to_stereo) {
-    // Convert mono to stereo in place
-
-    for (int i = (int) samples_generated - 1; i >= 0; --i) {
-      reinterpret_cast<int16_t *>(output_buffer)[2 * i] = reinterpret_cast<int16_t *>(output_buffer)[i];
-      reinterpret_cast<int16_t *>(output_buffer)[2 * i + 1] = reinterpret_cast<int16_t *>(output_buffer)[i];
-    }
-
-    this->output_transfer_buffer_->increase_buffer_length(samples_generated * OUTPUT_CHANNELS *
-                                                          OUTPUT_BYTES_PER_SAMPLE);
-  } else {
-    this->output_transfer_buffer_->increase_buffer_length(samples_generated * OUTPUT_BYTES_PER_SAMPLE);
-  }
+  this->output_transfer_buffer_->increase_buffer_length(samples_generated * OUTPUT_BYTES_PER_SAMPLE);
 
   return AudioResamplerState::RESAMPLING;
 }

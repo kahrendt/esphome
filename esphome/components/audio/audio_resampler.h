@@ -20,11 +20,6 @@ enum class AudioResamplerState : uint8_t {
   FAILED,      // Unused state included for consistency among Audio classes
 };
 
-struct ResampleInfo {
-  bool resample;        // True if converting sample rates
-  bool mono_to_stereo;  // True if converting mono to stereo
-};
-
 class AudioResampler {
   /*
    * @brief Class that facilitates resampling an audio file.
@@ -58,10 +53,9 @@ class AudioResampler {
   /// @brief Sets up the class to resample
   /// @param stream_info the incoming sample rate, bits per sample, and number of channels
   /// @param target_sample_rate the necessary sample rate to convert to
-  /// @param resample_info ResampleInfo object passed-by-reference that indicates which resampling processes are applied
   /// @return ESP_OK if it is able to convert the incoming stream, ESP_ERR_NO_MEM if the transfer buffers failed to
   /// allocate, ESP_ERR_NOT_SUPPORTED if the stream can't be converted.
-  esp_err_t start(AudioStreamInfo &stream_info, uint32_t target_sample_rate, ResampleInfo &resample_info);
+  esp_err_t start(AudioStreamInfo &stream_info, uint32_t target_sample_rate);
 
   /// @brief Resamples audio from the ring buffer source and writes to the sink.
   /// @param stop_gracefully If true, it indicates the file decoder is finished. The resampler will resample all the
@@ -79,9 +73,9 @@ class AudioResampler {
   size_t output_buffer_size_;
 
   bool pause_output_{false};
+  bool requires_resampling_;
 
   AudioStreamInfo stream_info_;
-  ResampleInfo resample_info_;
 
   std::unique_ptr<resampler::Resampler> resampler_;
 };
