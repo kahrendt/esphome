@@ -12,6 +12,7 @@ struct AudioStreamInfo {
   }
   bool operator!=(const AudioStreamInfo &rhs) const { return !operator==(rhs); }
   size_t get_bytes_per_sample() const { return bits_per_sample / 8; }
+  uint32_t get_bytes_per_frame() const { return channels * bits_per_sample / 8; }
   uint32_t get_frames_per_ms() const { return sample_rate / 1000; }
   uint32_t get_samples_per_ms() const { return get_frames_per_ms() * channels; }
   size_t get_bytes_per_ms() const { return get_samples_per_ms() * get_bytes_per_sample(); }
