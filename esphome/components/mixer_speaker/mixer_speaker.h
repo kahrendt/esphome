@@ -168,6 +168,8 @@ class MixerSpeaker : public Component {
 
   size_t ring_buffer_size_;
   size_t transfer_buffer_size_;
+
+  uint8_t announcement_channel_divisor_{2};
 };
 
 }  // namespace mixer_speaker
