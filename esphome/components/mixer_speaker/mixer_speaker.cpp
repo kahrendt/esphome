@@ -456,53 +456,55 @@ void MixerSpeaker::mix_audio_samples_without_clipping_(int16_t *media_buffer, au
 
       int32_t added_sample = media_sample + announcement_sample;
 
-      if ((added_sample > MAX_AUDIO_SAMPLE_VALUE) || (added_sample < MIN_AUDIO_SAMPLE_VALUE)) {
-        // The largest magnitude the media sample can be to avoid clipping (converted to Q30 fixed point)
-        int32_t q30_media_sample_safe_max =
-            static_cast<int32_t>(std::abs(MIN_AUDIO_SAMPLE_VALUE) - std::abs(announcement_sample)) << 15;
+      output_buffer[frames_index * output_channels + output_channel_index] =
+          (int16_t) clamp<int32_t>(added_sample, MIN_AUDIO_SAMPLE_VALUE, MAX_AUDIO_SAMPLE_VALUE);
+      // if ((added_sample > MAX_AUDIO_SAMPLE_VALUE) || (added_sample < MIN_AUDIO_SAMPLE_VALUE)) {
+      //   // The largest magnitude the media sample can be to avoid clipping (converted to Q30 fixed point)
+      //   int32_t q30_media_sample_safe_max =
+      //       static_cast<int32_t>(std::abs(MIN_AUDIO_SAMPLE_VALUE) - std::abs(announcement_sample)) << 15;
 
-        // Actual media sample value (Q15 number stored in an int32 for future division)
-        int32_t absolute_media_sample_value = abs(media_sample);
+      //   // Actual media sample value (Q15 number stored in an int32 for future division)
+      //   int32_t absolute_media_sample_value = abs(media_sample);
 
-        // Calculation to perform the Q15 division for media_sample_safe_max/media_sample_value
-        // Reference: https://sestevenson.wordpress.com/2010/09/20/fixed-point-division-2/ (accessed August 15,
-        // 2024)
-        int16_t necessary_q15_factor = static_cast<int16_t>(q30_media_sample_safe_max / absolute_media_sample_value);
-        // Take the minimum scaling factor (the smaller the factor, the more it needs to be scaled down)
-        q15_scaling_factor = std::min(necessary_q15_factor, q15_scaling_factor);
-      } else {
-        // Store the combined samples in the output buffer. If we do not need to scale, then the samples are already
-        // mixed.
-        output_buffer[frames_index * output_channels + output_channel_index] = added_sample;
-      }
+      //   // Calculation to perform the Q15 division for media_sample_safe_max/media_sample_value
+      //   // Reference: https://sestevenson.wordpress.com/2010/09/20/fixed-point-division-2/ (accessed August 15,
+      //   // 2024)
+      //   int16_t necessary_q15_factor = static_cast<int16_t>(q30_media_sample_safe_max / absolute_media_sample_value);
+      //   // Take the minimum scaling factor (the smaller the factor, the more it needs to be scaled down)
+      //   q15_scaling_factor = std::min(necessary_q15_factor, q15_scaling_factor);
+      // } else {
+      //   // Store the combined samples in the output buffer. If we do not need to scale, then the samples are already
+      //   // mixed.
+      //   output_buffer[frames_index * output_channels + output_channel_index] = added_sample;
+      // }
     }
   }
 
-  if (q15_scaling_factor < MAX_AUDIO_SAMPLE_VALUE) {
-    // Need to scale to avoid clipping
-    this->scale_audio_samples_(media_buffer, media_buffer, q15_scaling_factor, frames_to_mix * media_channels);
+  // if (q15_scaling_factor < MAX_AUDIO_SAMPLE_VALUE) {
+  //   // Need to scale to avoid clipping
+  //   this->scale_audio_samples_(media_buffer, media_buffer, q15_scaling_factor, frames_to_mix * media_channels);
 
-    // // Mix both stream by adding them together with no bitshift
-    // // The dsps_add functions have the following inputs:
-    // // (buffer 1, buffer 2, output buffer, number of samples, buffer 1 step, buffer 2 step, output buffer step,
-    // // bitshift)
-    // if (announcement_channels == 1) {
-    //   dsps_add_s16(media_buffer, announcement_buffer, output_buffer, frames_to_mix, 2, 1, 2, 0);
-    //   dsps_add_s16(media_buffer + 1, announcement_buffer, output_buffer + 1, frames_to_mix, 2, 1, 2, 0);
-    // } else {
-    //   dsps_add_s16(media_buffer, announcement_buffer, output_buffer, frames_to_mix * 2, 1, 1, 1, 0);
-    // }
+  //   // // Mix both stream by adding them together with no bitshift
+  //   // // The dsps_add functions have the following inputs:
+  //   // // (buffer 1, buffer 2, output buffer, number of samples, buffer 1 step, buffer 2 step, output buffer step,
+  //   // // bitshift)
+  //   // if (announcement_channels == 1) {
+  //   //   dsps_add_s16(media_buffer, announcement_buffer, output_buffer, frames_to_mix, 2, 1, 2, 0);
+  //   //   dsps_add_s16(media_buffer + 1, announcement_buffer, output_buffer + 1, frames_to_mix, 2, 1, 2, 0);
+  //   // } else {
+  //   //   dsps_add_s16(media_buffer, announcement_buffer, output_buffer, frames_to_mix * 2, 1, 1, 1, 0);
+  //   // }
 
-    for (uint8_t output_channel_index = 0; output_channel_index < output_channels; ++output_channel_index) {
-      const ssize_t media_channel_index = std::min(output_channel_index, media_channels);
-      const ssize_t announcement_channel_index = std::min(output_channel_index, announcement_channels);
-      const ssize_t output_channel_index_offset = output_channel_index * frames_to_mix;
+  //   for (uint8_t output_channel_index = 0; output_channel_index < output_channels; ++output_channel_index) {
+  //     const ssize_t media_channel_index = std::min(output_channel_index, media_channels);
+  //     const ssize_t announcement_channel_index = std::min(output_channel_index, announcement_channels);
+  //     const ssize_t output_channel_index_offset = output_channel_index * frames_to_mix;
 
-      dsps_add_s16(media_buffer + media_channel_index, announcement_buffer + announcement_channel_index,
-                   output_buffer + output_channel_index_offset, frames_to_mix, media_channels, announcement_channels,
-                   output_channels, 0);
-    }
-  }
+  //     dsps_add_s16(media_buffer + media_channel_index, announcement_buffer + announcement_channel_index,
+  //                  output_buffer + output_channel_index_offset, frames_to_mix, media_channels, announcement_channels,
+  //                  output_channels, 0);
+  //   }
+  // }
 }
 
 void MixerSpeaker::scale_audio_samples_(int16_t *audio_samples, int16_t *output_buffer, int16_t scale_factor,
