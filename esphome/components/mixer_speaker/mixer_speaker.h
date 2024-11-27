@@ -105,8 +105,8 @@ class MixerSpeaker : public Component {
 
   /// @brief Sets the ducking level for the media stream in the mixer
   /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by 10 dB
-  /// @param transition_samples (size_t) The number of samples to transition to the new ducking level over
-  void set_ducking_reduction(uint8_t decibel_reduction, size_t transition_samples);
+  /// @param duration (uint32_t) The number of milliseconds to transition from the current level to the new level
+  void set_ducking_reduction(uint8_t decibel_reduction, uint32_t duration);
 
   void get_state() {
     TaskEvent event;
