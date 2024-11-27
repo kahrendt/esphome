@@ -10,7 +10,7 @@ namespace mixer_speaker {
 static const UBaseType_t MIXER_TASK_PRIORITY = 10;
 
 static const uint32_t MIXER_INPUT_RING_BUFFER_DURATION_MS = 50;
-static const size_t TRANSFER_BUFFER_SIZE = 4096;
+static const size_t TRANSFER_BUFFER_SIZE = 8192;
 
 static const size_t QUEUE_COUNT = 20;
 
@@ -274,52 +274,9 @@ void MixerSpeaker::audio_mixer_task(void *params) {
       int16_t *current_media_buffer =
           reinterpret_cast<int16_t *>(media_transfer_buffer->get_buffer_start() + media_bytes_ducked);
 
-      if (ducking_transition_samples_remaining > 0) {
-        // Ducking level is still transitioning
-
-        // Take the ceiling of media_samples_to_duck/samples_per_ducking_step
-        size_t ducking_steps_in_batch =
-            media_samples_to_duck / samples_per_ducking_step + (media_samples_to_duck % samples_per_ducking_step != 0);
-
-        for (size_t i = 0; i < ducking_steps_in_batch; ++i) {
-          size_t samples_left_in_step = ducking_transition_samples_remaining % samples_per_ducking_step;
-
-          if (samples_left_in_step == 0) {
-            samples_left_in_step = samples_per_ducking_step;
-          }
-
-          size_t samples_to_duck = std::min(media_samples_to_duck, samples_left_in_step);
-          samples_to_duck = std::min(samples_to_duck, ducking_transition_samples_remaining);
-
-          // Ensure we only point to valid index in the Q15 scaling factor table
-          uint8_t safe_db_reduction_index =
-              clamp<uint8_t>(current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
-          int16_t q15_scale_factor = DECIBEL_REDUCTION_TABLE[safe_db_reduction_index];
-
-          this_mixer->scale_audio_samples_(current_media_buffer, current_media_buffer, q15_scale_factor,
-                                           samples_to_duck);
-
-          if (samples_left_in_step - samples_to_duck == 0) {
-            // After scaling the current samples, we are ready to transition to the next step
-            current_ducking_db_reduction += db_change_per_ducking_step;
-          }
-
-          current_media_buffer += samples_to_duck;
-          ducking_transition_samples_remaining -= samples_to_duck;
-          media_samples_to_duck -= samples_to_duck;
-        }
-      }
-
-      if ((current_ducking_db_reduction > 0) && (media_samples_to_duck > 0)) {
-        // We still need to apply ducking, but we are not in the middle of a transition step
-
-        uint8_t safe_db_reduction_index =
-            clamp<uint8_t>(current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
-        int16_t q15_scale_factor = DECIBEL_REDUCTION_TABLE[safe_db_reduction_index];
-
-        this_mixer->scale_audio_samples_(current_media_buffer, current_media_buffer, q15_scale_factor,
-                                         media_samples_to_duck);
-      }
+      this_mixer->duck_samples_(current_media_buffer, media_samples_to_duck, target_ducking_db_reduction,
+                                current_ducking_db_reduction, db_change_per_ducking_step,
+                                ducking_transition_samples_remaining, samples_per_ducking_step);
     }
 
     // Restrict the number of frames available to the amount that the output transfer buffer can store
@@ -400,6 +357,56 @@ BaseType_t MixerSpeaker::send_command_(CommandEvent *command, TickType_t ticks_t
   return pdFALSE;
 }
 
+void MixerSpeaker::duck_samples_(int16_t *input_buffer, uint32_t media_samples_to_duck,
+                                 int8_t &target_ducking_db_reduction, int8_t &current_ducking_db_reduction,
+                                 int8_t &db_change_per_ducking_step, size_t &ducking_transition_samples_remaining,
+                                 size_t &samples_per_ducking_step) {
+  if (ducking_transition_samples_remaining > 0) {
+    // Ducking level is still transitioning
+
+    // Take the ceiling of media_samples_to_duck/samples_per_ducking_step
+    size_t ducking_steps_in_batch =
+        media_samples_to_duck / samples_per_ducking_step + (media_samples_to_duck % samples_per_ducking_step != 0);
+
+    for (size_t i = 0; i < ducking_steps_in_batch; ++i) {
+      size_t samples_left_in_step = ducking_transition_samples_remaining % samples_per_ducking_step;
+
+      if (samples_left_in_step == 0) {
+        samples_left_in_step = samples_per_ducking_step;
+      }
+
+      size_t samples_to_duck = std::min(media_samples_to_duck, samples_left_in_step);
+      samples_to_duck = std::min(samples_to_duck, ducking_transition_samples_remaining);
+
+      // Ensure we only point to valid index in the Q15 scaling factor table
+      uint8_t safe_db_reduction_index =
+          clamp<uint8_t>(current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
+      int16_t q15_scale_factor = DECIBEL_REDUCTION_TABLE[safe_db_reduction_index];
+
+      this->scale_audio_samples_(input_buffer, input_buffer, q15_scale_factor, samples_to_duck);
+
+      if (samples_left_in_step - samples_to_duck == 0) {
+        // After scaling the current samples, we are ready to transition to the next step
+        current_ducking_db_reduction += db_change_per_ducking_step;
+      }
+
+      input_buffer += samples_to_duck;
+      ducking_transition_samples_remaining -= samples_to_duck;
+      media_samples_to_duck -= samples_to_duck;
+    }
+  }
+
+  if ((current_ducking_db_reduction > 0) && (media_samples_to_duck > 0)) {
+    // We still need to apply ducking, but we are not in the middle of a transition step
+
+    uint8_t safe_db_reduction_index =
+        clamp<uint8_t>(current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
+    int16_t q15_scale_factor = DECIBEL_REDUCTION_TABLE[safe_db_reduction_index];
+
+    this->scale_audio_samples_(input_buffer, input_buffer, q15_scale_factor, media_samples_to_duck);
+  }
+}
+
 void MixerSpeaker::copy_frames_(int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
                                 audio::AudioStreamInfo output_stream_info, uint32_t frames_to_transfer,
                                 size_t &bytes_read, size_t &bytes_written) {
@@ -454,13 +461,13 @@ void MixerSpeaker::mix_audio_samples_without_clipping_(int16_t *media_buffer, au
   for (uint32_t frames_index = 0; frames_index < frames_to_mix; ++frames_index) {
     for (uint8_t output_channel_index = 0; output_channel_index < output_channels; ++output_channel_index) {
       const ssize_t media_channel_index = std::min(output_channel_index, max_media_channel_index);
-      int32_t media_sample = media_buffer[frames_index * media_channels + media_channel_index];
+      const int32_t media_sample = media_buffer[frames_index * media_channels + media_channel_index];
 
       const ssize_t announcement_channel_index = std::min(output_channel_index, max_announcement_channel_index);
-      int32_t announcement_sample =
+      const int32_t announcement_sample =
           static_cast<int32_t>(announcement_buffer[frames_index * announcement_channels + announcement_channel_index]);
 
-      int32_t added_sample = media_sample + announcement_sample;
+      const int32_t added_sample = media_sample + announcement_sample;
 
       if ((added_sample > MAX_AUDIO_SAMPLE_VALUE) || (added_sample < MIN_AUDIO_SAMPLE_VALUE)) {
         // The largest magnitude the media sample can be to avoid clipping (converted to Q30 fixed point)
