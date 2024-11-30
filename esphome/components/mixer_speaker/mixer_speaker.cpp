@@ -274,9 +274,9 @@ void MixerSpeaker::audio_mixer_task(void *params) {
       int16_t *current_media_buffer =
           reinterpret_cast<int16_t *>(media_transfer_buffer->get_buffer_start() + media_bytes_ducked);
 
-      this_mixer->duck_samples_(current_media_buffer, media_samples_to_duck, target_ducking_db_reduction,
-                                current_ducking_db_reduction, db_change_per_ducking_step,
-                                ducking_transition_samples_remaining, samples_per_ducking_step);
+      this_mixer->duck_samples_(current_media_buffer, media_samples_to_duck, current_ducking_db_reduction,
+                                ducking_transition_samples_remaining, samples_per_ducking_step,
+                                db_change_per_ducking_step);
     }
 
     // Restrict the number of frames available to the amount that the output transfer buffer can store
@@ -358,9 +358,8 @@ BaseType_t MixerSpeaker::send_command_(CommandEvent *command, TickType_t ticks_t
 }
 
 void MixerSpeaker::duck_samples_(int16_t *input_buffer, uint32_t media_samples_to_duck,
-                                 int8_t &target_ducking_db_reduction, int8_t &current_ducking_db_reduction,
-                                 int8_t &db_change_per_ducking_step, size_t &ducking_transition_samples_remaining,
-                                 size_t &samples_per_ducking_step) {
+                                 int8_t &current_ducking_db_reduction, size_t &ducking_transition_samples_remaining,
+                                 size_t samples_per_ducking_step, int8_t db_change_per_ducking_step) {
   if (ducking_transition_samples_remaining > 0) {
     // Ducking level is still transitioning
 

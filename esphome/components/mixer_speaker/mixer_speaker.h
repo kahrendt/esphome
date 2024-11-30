@@ -157,9 +157,9 @@ class MixerSpeaker : public Component {
                     audio::AudioStreamInfo output_stream_info, uint32_t frames_to_transfer, size_t &bytes_read,
                     size_t &bytes_written);
 
-  void duck_samples_(int16_t *input_buffer, uint32_t media_samples_to_duck, int8_t &target_ducking_db_reduction,
-                     int8_t &current_ducking_db_reduction, int8_t &db_change_per_ducking_step,
-                     size_t &ducking_transition_samples_remaining, size_t &samples_per_ducking_step);
+  void duck_samples_(int16_t *input_buffer, uint32_t media_samples_to_duck, int8_t &current_ducking_db_reduction,
+                     size_t &ducking_transition_samples_remaining, size_t samples_per_ducking_step,
+                     int8_t db_change_per_ducking_step);
 
   static void audio_mixer_task(void *params);
   TaskHandle_t task_handle_{nullptr};
