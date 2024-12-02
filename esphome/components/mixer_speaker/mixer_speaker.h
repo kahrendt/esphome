@@ -153,6 +153,16 @@ class MixerSpeaker : public Component {
   void scale_audio_samples_(int16_t *audio_samples, int16_t *output_buffer, int16_t scale_factor,
                             size_t samples_to_scale);
 
+  /// @brief Copies audio frames from the input buffer to the output buffer taking into account the number of channels
+  /// in each stream. If the output stream has more channels, the input samples are duplicated. If the output stream has
+  /// less channels, the extra channel input samples are dropped.
+  /// @param input_buffer
+  /// @param input_stream_info
+  /// @param output_buffer
+  /// @param output_stream_info
+  /// @param frames_to_transfer number of frames (consisting of a sample for each channel) to copy from the input buffer
+  /// @param bytes_read passed by reference indicating the number of bytes read from the input buffer
+  /// @param bytes_written passed by reference indicating the number of bytes written to the output buffer
   void copy_frames_(int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
                     audio::AudioStreamInfo output_stream_info, uint32_t frames_to_transfer, size_t &bytes_read,
                     size_t &bytes_written);
