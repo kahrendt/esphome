@@ -357,7 +357,7 @@ BaseType_t MixerSpeaker::send_command_(CommandEvent *command, TickType_t ticks_t
   return pdFALSE;
 }
 
-void MixerSpeaker::duck_samples_(int16_t *input_buffer, uint32_t media_samples_to_duck,
+void MixerSpeaker::duck_samples_(int16_t *input_buffer, uint32_t input_samples_to_duck,
                                  int8_t &current_ducking_db_reduction, size_t &ducking_transition_samples_remaining,
                                  size_t samples_per_ducking_step, int8_t db_change_per_ducking_step) {
   if (ducking_transition_samples_remaining > 0) {
@@ -365,7 +365,7 @@ void MixerSpeaker::duck_samples_(int16_t *input_buffer, uint32_t media_samples_t
 
     // Take the ceiling of media_samples_to_duck/samples_per_ducking_step
     size_t ducking_steps_in_batch =
-        media_samples_to_duck / samples_per_ducking_step + (media_samples_to_duck % samples_per_ducking_step != 0);
+        input_samples_to_duck / samples_per_ducking_step + (input_samples_to_duck % samples_per_ducking_step != 0);
 
     for (size_t i = 0; i < ducking_steps_in_batch; ++i) {
       size_t samples_left_in_step = ducking_transition_samples_remaining % samples_per_ducking_step;
@@ -374,7 +374,7 @@ void MixerSpeaker::duck_samples_(int16_t *input_buffer, uint32_t media_samples_t
         samples_left_in_step = samples_per_ducking_step;
       }
 
-      size_t samples_to_duck = std::min(media_samples_to_duck, samples_left_in_step);
+      size_t samples_to_duck = std::min(input_samples_to_duck, samples_left_in_step);
       samples_to_duck = std::min(samples_to_duck, ducking_transition_samples_remaining);
 
       // Ensure we only point to valid index in the Q15 scaling factor table
@@ -391,18 +391,18 @@ void MixerSpeaker::duck_samples_(int16_t *input_buffer, uint32_t media_samples_t
 
       input_buffer += samples_to_duck;
       ducking_transition_samples_remaining -= samples_to_duck;
-      media_samples_to_duck -= samples_to_duck;
+      input_samples_to_duck -= samples_to_duck;
     }
   }
 
-  if ((current_ducking_db_reduction > 0) && (media_samples_to_duck > 0)) {
+  if ((current_ducking_db_reduction > 0) && (input_samples_to_duck > 0)) {
     // We still need to apply ducking, but we are not in the middle of a transition step
 
     uint8_t safe_db_reduction_index =
         clamp<uint8_t>(current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
     int16_t q15_scale_factor = DECIBEL_REDUCTION_TABLE[safe_db_reduction_index];
 
-    this->scale_audio_samples_(input_buffer, input_buffer, q15_scale_factor, media_samples_to_duck);
+    this->scale_audio_samples_(input_buffer, input_buffer, q15_scale_factor, input_samples_to_duck);
   }
 }
 
