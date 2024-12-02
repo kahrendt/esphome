@@ -275,7 +275,7 @@ void SpeakerMediaPlayer::loop() {
     ESP_LOGE(TAG, "The media pipeline's file reader encountered an error.");
   } else if (this->media_pipeline_state_ == AudioPipelineState::ERROR_DECODING) {
     ESP_LOGE(TAG, "The media pipeline's audio decoder encountered an error.");
-#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
   } else if (this->media_pipeline_state_ == AudioPipelineState::ERROR_RESAMPLING) {
     ESP_LOGE(TAG, "The media pipeline's audio resampler encountered an error.");
 #endif
@@ -289,8 +289,10 @@ void SpeakerMediaPlayer::loop() {
     ESP_LOGE(TAG, "The announcement pipeline's file reader encountered an error.");
   } else if (this->announcement_pipeline_state_ == AudioPipelineState::ERROR_DECODING) {
     ESP_LOGE(TAG, "The announcement pipeline's audio decoder encountered an error.");
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
   } else if (this->announcement_pipeline_state_ == AudioPipelineState::ERROR_RESAMPLING) {
     ESP_LOGE(TAG, "The announcement pipeline's audio resampler encountered an error.");
+#endif
   }
 
   if (this->announcement_pipeline_state_ != AudioPipelineState::STOPPED) {

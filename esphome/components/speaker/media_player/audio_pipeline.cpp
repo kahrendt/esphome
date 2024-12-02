@@ -528,20 +528,16 @@ void AudioPipeline::decode_task(void *params) {
               xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_LOADED_STREAM_INFO);
             }
           } else {
-            // Audio format doesn't require resampling, send it directly to the output
+#endif
+            // Send audio directly to the speaker
             if (this_pipeline->speaker_ != nullptr) {
               this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
               decoder->add_sink(this_pipeline->speaker_);
-              xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::RESAMPLER_MESSAGE_FINISHED);
-            }
-          }
-#else
-          if (this_pipeline->speaker_ != nullptr) {
-            this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
-            decoder->add_sink(this_pipeline->speaker_);
 #ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
-            xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::RESAMPLER_MESSAGE_FINISHED);
+              xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::RESAMPLER_MESSAGE_FINISHED);
 #endif
+            }
+#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
           }
 #endif
         }

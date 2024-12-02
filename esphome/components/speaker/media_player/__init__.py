@@ -232,7 +232,7 @@ async def to_code(config):
     )
 
     cg.add_define("USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE")
-    cg.add_define("USE_SPEAKER_MEDIA_PLAYER_RESAMPLER")
+    # cg.add_define("USE_SPEAKER_MEDIA_PLAYER_RESAMPLER")
     cg.add_define("USE_AUDIO_FLAC_SUPPORT", True)
     cg.add_define("USE_AUDIO_MP3_SUPPORT", True)
 
