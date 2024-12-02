@@ -29,7 +29,7 @@ struct TaskEvent {
 
 enum class CommandEventType : uint8_t {
   STOP,  // Stop mixing to prepare for stopping the mixing task
-  DUCK,  // Duck the media audio
+  DUCK,  // Duck the secondary audio
 };
 
 // Used to send commands to the mixer task
@@ -90,10 +90,8 @@ class MixerSpeaker : public Component {
 
   void start(audio::AudioStreamInfo &stream_info);
 
-  void set_announcement_speaker(InputSpeaker *announcement_speaker) {
-    this->announcement_speaker_ = announcement_speaker;
-  }
-  void set_media_speaker(InputSpeaker *media_speaker) { this->media_speaker_ = media_speaker; }
+  void set_primary_speaker(InputSpeaker *primary_speaker) { this->primary_speaker_ = primary_speaker; }
+  void set_secondary_speaker(InputSpeaker *secondary_speaker) { this->secondary_speaker_ = secondary_speaker; }
 
   void set_output_speaker(speaker::Speaker *speaker) { this->output_speaker_ = speaker; }
   speaker::Speaker *get_output_speaker() { return this->output_speaker_; }
@@ -103,7 +101,7 @@ class MixerSpeaker : public Component {
   /// @brief Resumes the mixer task
   void resume_task();
 
-  /// @brief Sets the ducking level for the media stream in the mixer
+  /// @brief Sets the ducking level for the secondary stream in the mixer
   /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by 10 dB
   /// @param duration (uint32_t) The number of milliseconds to transition from the current level to the new level
   void set_ducking_reduction(uint8_t decibel_reduction, uint32_t duration);
@@ -174,8 +172,8 @@ class MixerSpeaker : public Component {
   static void audio_mixer_task(void *params);
   TaskHandle_t task_handle_{nullptr};
 
-  InputSpeaker *announcement_speaker_{nullptr};
-  InputSpeaker *media_speaker_{nullptr};
+  InputSpeaker *primary_speaker_{nullptr};
+  InputSpeaker *secondary_speaker_{nullptr};
   speaker::Speaker *output_speaker_{nullptr};
 
   optional<audio::AudioStreamInfo> audio_stream_info_;
@@ -186,8 +184,8 @@ class MixerSpeaker : public Component {
   // Stores commands to send the mixer task
   QueueHandle_t command_queue_{nullptr};
 
-  std::weak_ptr<RingBuffer> media_ring_buffer_;
-  std::weak_ptr<RingBuffer> announcement_ring_buffer_;
+  std::weak_ptr<RingBuffer> secondary_ring_buffer_;
+  std::weak_ptr<RingBuffer> primary_ring_buffer_;
 
   size_t ring_buffer_size_;
   size_t transfer_buffer_size_;

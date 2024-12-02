@@ -93,7 +93,8 @@ void MixerSpeaker::set_ducking_reduction(uint8_t decibel_reduction, uint32_t dur
     command_event.decibel_reduction = decibel_reduction;
 
     // Convert the duration in seconds to number of samples, accounting for the sample rate and number of channels
-    command_event.transition_samples = duration * this->media_speaker_->get_audio_stream_info().get_samples_per_ms();
+    command_event.transition_samples =
+        duration * this->secondary_speaker_->get_audio_stream_info().get_samples_per_ms();
     this->send_command_(&command_event);
   }
 }
@@ -129,15 +130,15 @@ void MixerSpeaker::start(audio::AudioStreamInfo &stream_info) {
   // TODO: Test that the task actually started
 
   this->set_retry(50, 2, [this](const uint8_t remaining_setup_attempts) {
-    if ((this->announcement_ring_buffer_.use_count() == 0) || (this->media_ring_buffer_.use_count() == 0)) {
+    if ((this->primary_ring_buffer_.use_count() == 0) || (this->secondary_ring_buffer_.use_count() == 0)) {
       if (remaining_setup_attempts == 0) {
         this->status_set_error("Error starting the audio pipeline since the mixer hasn't finished allocating buffers");
       }
       return RetryResult::RETRY;
     }
 
-    this->announcement_speaker_->set_sink(this->announcement_ring_buffer_);
-    this->media_speaker_->set_sink(this->media_ring_buffer_);
+    this->primary_speaker_->set_sink(this->primary_ring_buffer_);
+    this->secondary_speaker_->set_sink(this->secondary_ring_buffer_);
 
     return RetryResult::DONE;
   });
@@ -151,35 +152,35 @@ void MixerSpeaker::audio_mixer_task(void *params) {
 
   esp_err_t err = ESP_OK;
 
-  std::unique_ptr<audio::AudioSourceTransferBuffer> media_transfer_buffer =
+  std::unique_ptr<audio::AudioSourceTransferBuffer> secondary_transfer_buffer =
       audio::AudioSourceTransferBuffer::create(TRANSFER_BUFFER_SIZE);
 
-  {  // After this block temp_media_ring_buffer will fall out of scope and release ownership
-    std::shared_ptr<RingBuffer> temp_media_ring_buffer;
-    if (this_mixer->media_ring_buffer_.use_count() == 0) {
-      temp_media_ring_buffer = RingBuffer::create(this_mixer->ring_buffer_size_);
-      this_mixer->media_ring_buffer_ = temp_media_ring_buffer;
+  {  // After this block temp_secondary_ring_buffer will fall out of scope and release ownership
+    std::shared_ptr<RingBuffer> temp_secondary_ring_buffer;
+    if (this_mixer->secondary_ring_buffer_.use_count() == 0) {
+      temp_secondary_ring_buffer = RingBuffer::create(this_mixer->ring_buffer_size_);
+      this_mixer->secondary_ring_buffer_ = temp_secondary_ring_buffer;
     }
-    if (this_mixer->media_ring_buffer_.use_count() == 0) {
+    if (this_mixer->secondary_ring_buffer_.use_count() == 0) {
       err = ESP_ERR_NO_MEM;
     } else {
-      media_transfer_buffer->set_source(temp_media_ring_buffer);
+      secondary_transfer_buffer->set_source(temp_secondary_ring_buffer);
     }
   }
 
-  std::unique_ptr<audio::AudioSourceTransferBuffer> announcement_transfer_buffer =
+  std::unique_ptr<audio::AudioSourceTransferBuffer> primary_transfer_buffer =
       audio::AudioSourceTransferBuffer::create(TRANSFER_BUFFER_SIZE);
 
   {  // After this block temp_announncement_ring_buffer will fall out of scope and release ownership
-    std::shared_ptr<RingBuffer> temp_announcement_ring_buffer;
-    if (this_mixer->announcement_ring_buffer_.use_count() == 0) {
-      temp_announcement_ring_buffer = RingBuffer::create(this_mixer->ring_buffer_size_);
-      this_mixer->announcement_ring_buffer_ = temp_announcement_ring_buffer;
+    std::shared_ptr<RingBuffer> temp_primary_ring_buffer;
+    if (this_mixer->primary_ring_buffer_.use_count() == 0) {
+      temp_primary_ring_buffer = RingBuffer::create(this_mixer->ring_buffer_size_);
+      this_mixer->primary_ring_buffer_ = temp_primary_ring_buffer;
     }
-    if (this_mixer->announcement_ring_buffer_.use_count() == 0) {
+    if (this_mixer->primary_ring_buffer_.use_count() == 0) {
       err = ESP_ERR_NO_MEM;
     } else {
-      announcement_transfer_buffer->set_source(temp_announcement_ring_buffer);
+      primary_transfer_buffer->set_source(temp_primary_ring_buffer);
     }
   }
 
@@ -187,7 +188,7 @@ void MixerSpeaker::audio_mixer_task(void *params) {
       audio::AudioSinkTransferBuffer::create(TRANSFER_BUFFER_SIZE);
   output_transfer_buffer->set_sink(this_mixer->output_speaker_);
 
-  if ((media_transfer_buffer == nullptr) || (announcement_transfer_buffer == nullptr) ||
+  if ((secondary_transfer_buffer == nullptr) || (primary_transfer_buffer == nullptr) ||
       (output_transfer_buffer == nullptr) || (err == ESP_ERR_NO_MEM)) {
     event.type = EventType::WARNING;
     event.err = ESP_ERR_NO_MEM;
@@ -258,67 +259,68 @@ void MixerSpeaker::audio_mixer_task(void *params) {
     const uint32_t output_frames_free =
         output_transfer_buffer->free() / this_mixer->audio_stream_info_.value().get_bytes_per_frame();
 
-    audio::AudioStreamInfo announcement_stream_info = this_mixer->announcement_speaker_->get_audio_stream_info();
-    announcement_transfer_buffer->transfer_data_from_source(0);
-    uint32_t announcement_frames_available =
-        announcement_transfer_buffer->available() / announcement_stream_info.get_bytes_per_frame();
+    audio::AudioStreamInfo primary_stream_info = this_mixer->primary_speaker_->get_audio_stream_info();
+    primary_transfer_buffer->transfer_data_from_source(0);
+    uint32_t primary_frames_available =
+        primary_transfer_buffer->available() / primary_stream_info.get_bytes_per_frame();
 
-    const size_t media_bytes_ducked = media_transfer_buffer->available();
-    audio::AudioStreamInfo media_stream_info = this_mixer->media_speaker_->get_audio_stream_info();
-    media_transfer_buffer->transfer_data_from_source(0);
-    uint32_t media_frames_available = media_transfer_buffer->available() / media_stream_info.get_bytes_per_frame();
-    size_t media_samples_to_duck =
-        (media_transfer_buffer->available() - media_bytes_ducked) / media_stream_info.get_bytes_per_sample();
+    const size_t secondary_bytes_ducked = secondary_transfer_buffer->available();
+    audio::AudioStreamInfo secondary_stream_info = this_mixer->secondary_speaker_->get_audio_stream_info();
+    secondary_transfer_buffer->transfer_data_from_source(0);
+    uint32_t secondary_frames_available =
+        secondary_transfer_buffer->available() / secondary_stream_info.get_bytes_per_frame();
+    size_t secondary_samples_to_duck = (secondary_transfer_buffer->available() - secondary_bytes_ducked) /
+                                       secondary_stream_info.get_bytes_per_sample();
 
-    if (media_samples_to_duck > 0) {
-      int16_t *current_media_buffer =
-          reinterpret_cast<int16_t *>(media_transfer_buffer->get_buffer_start() + media_bytes_ducked);
+    if (secondary_samples_to_duck > 0) {
+      int16_t *current_secondary_buffer =
+          reinterpret_cast<int16_t *>(secondary_transfer_buffer->get_buffer_start() + secondary_bytes_ducked);
 
-      this_mixer->duck_samples_(current_media_buffer, media_samples_to_duck, current_ducking_db_reduction,
+      this_mixer->duck_samples_(current_secondary_buffer, secondary_samples_to_duck, current_ducking_db_reduction,
                                 ducking_transition_samples_remaining, samples_per_ducking_step,
                                 db_change_per_ducking_step);
     }
 
     // Restrict the number of frames available to the amount that the output transfer buffer can store
-    announcement_frames_available = std::min(announcement_frames_available, output_frames_free);
-    media_frames_available = std::min(media_frames_available, output_frames_free);
+    primary_frames_available = std::min(primary_frames_available, output_frames_free);
+    secondary_frames_available = std::min(secondary_frames_available, output_frames_free);
 
-    if (media_frames_available + announcement_frames_available > 0) {
+    if (secondary_frames_available + primary_frames_available > 0) {
       // Copies audio based on frames instead of bytes to avoid ever transferring half a sample or frame
 
       size_t bytes_written = 0;
-      if ((media_frames_available > 0) && (announcement_frames_available > 0)) {
+      if ((secondary_frames_available > 0) && (primary_frames_available > 0)) {
         // Mix the audio
-        uint32_t frames_to_transfer = std::min(media_frames_available, announcement_frames_available);
+        uint32_t frames_to_transfer = std::min(secondary_frames_available, primary_frames_available);
 
         this_mixer->mix_audio_samples_without_clipping_(
-            reinterpret_cast<int16_t *>(announcement_transfer_buffer->get_buffer_start()), announcement_stream_info,
-            reinterpret_cast<int16_t *>(media_transfer_buffer->get_buffer_start()), media_stream_info,
+            reinterpret_cast<int16_t *>(primary_transfer_buffer->get_buffer_start()), primary_stream_info,
+            reinterpret_cast<int16_t *>(secondary_transfer_buffer->get_buffer_start()), secondary_stream_info,
             reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
             this_mixer->audio_stream_info_.value(), frames_to_transfer);
 
-        size_t announcement_bytes_read = frames_to_transfer * announcement_stream_info.get_bytes_per_frame();
-        size_t media_bytes_read = frames_to_transfer * media_stream_info.get_bytes_per_frame();
+        size_t primary_bytes_read = frames_to_transfer * primary_stream_info.get_bytes_per_frame();
+        size_t secondary_bytes_read = frames_to_transfer * secondary_stream_info.get_bytes_per_frame();
         bytes_written = frames_to_transfer * this_mixer->audio_stream_info_.value().get_bytes_per_frame();
 
-        announcement_transfer_buffer->decrease_buffer_length(announcement_bytes_read);
-        media_transfer_buffer->decrease_buffer_length(media_bytes_read);
-      } else if (announcement_frames_available > 0) {
+        primary_transfer_buffer->decrease_buffer_length(primary_bytes_read);
+        secondary_transfer_buffer->decrease_buffer_length(secondary_bytes_read);
+      } else if (primary_frames_available > 0) {
         size_t bytes_read = 0;
         this_mixer->copy_frames_(
-            reinterpret_cast<int16_t *>(announcement_transfer_buffer->get_buffer_start()), announcement_stream_info,
+            reinterpret_cast<int16_t *>(primary_transfer_buffer->get_buffer_start()), primary_stream_info,
             reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
-            this_mixer->audio_stream_info_.value(), announcement_frames_available, bytes_read, bytes_written);
+            this_mixer->audio_stream_info_.value(), primary_frames_available, bytes_read, bytes_written);
 
-        announcement_transfer_buffer->decrease_buffer_length(bytes_read);
-      } else if (media_frames_available > 0) {
+        primary_transfer_buffer->decrease_buffer_length(bytes_read);
+      } else if (secondary_frames_available > 0) {
         size_t bytes_read = 0;
         this_mixer->copy_frames_(
-            reinterpret_cast<int16_t *>(media_transfer_buffer->get_buffer_start()), media_stream_info,
+            reinterpret_cast<int16_t *>(secondary_transfer_buffer->get_buffer_start()), secondary_stream_info,
             reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
-            this_mixer->audio_stream_info_.value(), media_frames_available, bytes_read, bytes_written);
+            this_mixer->audio_stream_info_.value(), secondary_frames_available, bytes_read, bytes_written);
 
-        media_transfer_buffer->decrease_buffer_length(bytes_read);
+        secondary_transfer_buffer->decrease_buffer_length(bytes_read);
       }
 
       output_transfer_buffer->increase_buffer_length(bytes_written);
@@ -331,8 +333,8 @@ void MixerSpeaker::audio_mixer_task(void *params) {
   event.type = EventType::STOPPING;
   xQueueSend(this_mixer->event_queue_, &event, portMAX_DELAY);
 
-  media_transfer_buffer.reset();
-  announcement_transfer_buffer.reset();
+  secondary_transfer_buffer.reset();
+  primary_transfer_buffer.reset();
   output_transfer_buffer.reset();
 
   event.type = EventType::STOPPED;
@@ -363,7 +365,7 @@ void MixerSpeaker::duck_samples_(int16_t *input_buffer, uint32_t input_samples_t
   if (ducking_transition_samples_remaining > 0) {
     // Ducking level is still transitioning
 
-    // Take the ceiling of media_samples_to_duck/samples_per_ducking_step
+    // Take the ceiling of secondary_samples_to_duck/samples_per_ducking_step
     size_t ducking_steps_in_batch =
         input_samples_to_duck / samples_per_ducking_step + (input_samples_to_duck % samples_per_ducking_step != 0);
 
@@ -438,12 +440,12 @@ void MixerSpeaker::mix_audio_samples_without_clipping_(
     audio::AudioStreamInfo secondary_stream_info, int16_t *output_buffer, audio::AudioStreamInfo output_stream_info,
     size_t frames_to_mix) {
   // We first test adding the two clips samples together and check for any clipping
-  // We want the announcement volume to be consistent, regardless if media is playing or not
-  // If there is clipping, we determine what factor we need to multiply that media sample by to avoid it
-  // We take the smallest factor necessary for all the samples so the media volume is consistent on this batch
+  // We want the primary volume to be consistent, regardless if secondary is playing or not
+  // If there is clipping, we determine what factor we need to multiply that secondary sample by to avoid it
+  // We take the smallest factor necessary for all the samples so the secondary volume is consistent on this batch
   // of samples
   // Note: This may not be the best approach. Adding 2 audio samples together makes both sound louder, even if
-  // we are not clipping. As a result, the mixed announcement will sound louder (by around 3dB if the audio
+  // we are not clipping. As a result, the mixed primary will sound louder (by around 3dB if the audio
   // streams are independent?) than if it were by itself.
 
   const uint8_t primary_channels = primary_stream_info.channels;
@@ -467,11 +469,11 @@ void MixerSpeaker::mix_audio_samples_without_clipping_(
       const int32_t added_sample = secondary_sample + primary_sample;
 
       if ((added_sample > MAX_AUDIO_SAMPLE_VALUE) || (added_sample < MIN_AUDIO_SAMPLE_VALUE)) {
-        // The largest magnitude the media sample can be to avoid clipping (converted to Q30 fixed point)
+        // The largest magnitude the secondary sample can be to avoid clipping (converted to Q30 fixed point)
         int32_t q30_secondary_sample_safe_max =
             static_cast<int32_t>(std::abs(MIN_AUDIO_SAMPLE_VALUE) - std::abs(primary_sample)) << 15;
 
-        // Actual media sample value (Q15 number stored in an int32 for future division)
+        // Actual secondary sample value (Q15 number stored in an int32 for future division)
         int32_t absolute_secondary_sample_value = abs(secondary_sample);
 
         // Calculation to perform the Q15 division for secondary_sample_safe_max/secondary_sample_value

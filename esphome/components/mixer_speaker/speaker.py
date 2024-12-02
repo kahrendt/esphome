@@ -11,9 +11,9 @@ mixer_speaker_ns = cg.esphome_ns.namespace("mixer_speaker")
 MixerSpeaker = mixer_speaker_ns.class_("MixerSpeaker", cg.Component, speaker.Speaker)
 InputSpeaker = mixer_speaker_ns.class_("InputSpeaker", cg.Component, speaker.Speaker)
 
-CONF_MEDIA_SPEAKER = "media_speaker"
-CONF_ANNOUNCEMENT_SPEAKER = "announcement_speaker"
+CONF_PRIMARY_SPEAKER = "primary_speaker"
 CONF_OUTPUT_SPEAKER = "output_speaker"
+CONF_SECONDARY_SPEAKER = "secondary_speaker"
 
 INPUT_SPEAKER_SCHEMA = speaker.SPEAKER_SCHEMA.extend(
     {cv.GenerateID(): cv.declare_id(InputSpeaker)}
@@ -23,8 +23,8 @@ CONFIG_SCHEMA = cv.All(
     {
         cv.GenerateID(): cv.declare_id(MixerSpeaker),
         cv.Required(CONF_OUTPUT_SPEAKER): cv.use_id(speaker.Speaker),
-        cv.Required(CONF_ANNOUNCEMENT_SPEAKER): INPUT_SPEAKER_SCHEMA,
-        cv.Required(CONF_MEDIA_SPEAKER): INPUT_SPEAKER_SCHEMA,
+        cv.Required(CONF_PRIMARY_SPEAKER): INPUT_SPEAKER_SCHEMA,
+        cv.Required(CONF_SECONDARY_SPEAKER): INPUT_SPEAKER_SCHEMA,
     }
 )
 
@@ -36,16 +36,16 @@ async def to_code(config):
     spkr = await cg.get_variable(config[CONF_OUTPUT_SPEAKER])
     cg.add(var.set_output_speaker(spkr))
 
-    announcement_speaker_config = config[CONF_ANNOUNCEMENT_SPEAKER]
-    announce_speaker = cg.new_Pvariable(announcement_speaker_config[CONF_ID])
-    await cg.register_component(announce_speaker, announcement_speaker_config)
+    primary_speaker_config = config[CONF_PRIMARY_SPEAKER]
+    announce_speaker = cg.new_Pvariable(primary_speaker_config[CONF_ID])
+    await cg.register_component(announce_speaker, primary_speaker_config)
     await cg.register_parented(announce_speaker, config[CONF_ID])
-    await speaker.register_speaker(announce_speaker, announcement_speaker_config)
-    cg.add(var.set_announcement_speaker(announce_speaker))
+    await speaker.register_speaker(announce_speaker, primary_speaker_config)
+    cg.add(var.set_primary_speaker(announce_speaker))
 
-    media_speaker_config = config[CONF_MEDIA_SPEAKER]
-    media_speaker = cg.new_Pvariable(media_speaker_config[CONF_ID])
-    await cg.register_component(media_speaker, media_speaker_config)
-    await cg.register_parented(media_speaker, config[CONF_ID])
-    await speaker.register_speaker(media_speaker, media_speaker_config)
-    cg.add(var.set_media_speaker(media_speaker))
+    secondary_speaker_config = config[CONF_SECONDARY_SPEAKER]
+    secondary_speaker = cg.new_Pvariable(secondary_speaker_config[CONF_ID])
+    await cg.register_component(secondary_speaker, secondary_speaker_config)
+    await cg.register_parented(secondary_speaker, config[CONF_ID])
+    await speaker.register_speaker(secondary_speaker, secondary_speaker_config)
+    cg.add(var.set_secondary_speaker(secondary_speaker))
