@@ -292,8 +292,8 @@ void MixerSpeaker::audio_mixer_task(void *params) {
         uint32_t frames_to_transfer = std::min(media_frames_available, announcement_frames_available);
 
         this_mixer->mix_audio_samples_without_clipping_(
-            reinterpret_cast<int16_t *>(media_transfer_buffer->get_buffer_start()), media_stream_info,
             reinterpret_cast<int16_t *>(announcement_transfer_buffer->get_buffer_start()), announcement_stream_info,
+            reinterpret_cast<int16_t *>(media_transfer_buffer->get_buffer_start()), media_stream_info,
             reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
             this_mixer->audio_stream_info_.value(), frames_to_transfer);
 
@@ -433,12 +433,10 @@ void MixerSpeaker::copy_frames_(int16_t *input_buffer, audio::AudioStreamInfo in
   bytes_written = frames_to_transfer * output_stream_info.get_bytes_per_frame();
 }
 
-void MixerSpeaker::mix_audio_samples_without_clipping_(int16_t *media_buffer, audio::AudioStreamInfo media_stream_info,
-                                                       int16_t *announcement_buffer,
-                                                       audio::AudioStreamInfo announcement_stream_info,
-                                                       int16_t *output_buffer,
-                                                       audio::AudioStreamInfo output_stream_info,
-                                                       size_t frames_to_mix) {
+void MixerSpeaker::mix_audio_samples_without_clipping_(
+    int16_t *primary_buffer, audio::AudioStreamInfo primary_stream_info, int16_t *secondary_buffer,
+    audio::AudioStreamInfo secondary_stream_info, int16_t *output_buffer, audio::AudioStreamInfo output_stream_info,
+    size_t frames_to_mix) {
   // We first test adding the two clips samples together and check for any clipping
   // We want the announcement volume to be consistent, regardless if media is playing or not
   // If there is clipping, we determine what factor we need to multiply that media sample by to avoid it
@@ -448,38 +446,39 @@ void MixerSpeaker::mix_audio_samples_without_clipping_(int16_t *media_buffer, au
   // we are not clipping. As a result, the mixed announcement will sound louder (by around 3dB if the audio
   // streams are independent?) than if it were by itself.
 
-  const uint8_t announcement_channels = announcement_stream_info.channels;
-  const uint8_t media_channels = media_stream_info.channels;
+  const uint8_t primary_channels = primary_stream_info.channels;
+  const uint8_t secondary_channels = secondary_stream_info.channels;
   const uint8_t output_channels = output_stream_info.channels;
 
-  const uint8_t max_announcement_channel_index = announcement_channels - 1;
-  const uint8_t max_media_channel_index = media_channels - 1;
+  const uint8_t max_primary_channel_index = primary_channels - 1;
+  const uint8_t max_secondary_channel_index = secondary_channels - 1;
 
   int16_t q15_scaling_factor = MAX_AUDIO_SAMPLE_VALUE;
 
   for (uint32_t frames_index = 0; frames_index < frames_to_mix; ++frames_index) {
     for (uint8_t output_channel_index = 0; output_channel_index < output_channels; ++output_channel_index) {
-      const ssize_t media_channel_index = std::min(output_channel_index, max_media_channel_index);
-      const int32_t media_sample = media_buffer[frames_index * media_channels + media_channel_index];
+      const ssize_t secondary_channel_index = std::min(output_channel_index, max_secondary_channel_index);
+      const int32_t secondary_sample = secondary_buffer[frames_index * secondary_channels + secondary_channel_index];
 
-      const ssize_t announcement_channel_index = std::min(output_channel_index, max_announcement_channel_index);
-      const int32_t announcement_sample =
-          static_cast<int32_t>(announcement_buffer[frames_index * announcement_channels + announcement_channel_index]);
+      const ssize_t primary_channel_index = std::min(output_channel_index, max_primary_channel_index);
+      const int32_t primary_sample =
+          static_cast<int32_t>(primary_buffer[frames_index * primary_channels + primary_channel_index]);
 
-      const int32_t added_sample = media_sample + announcement_sample;
+      const int32_t added_sample = secondary_sample + primary_sample;
 
       if ((added_sample > MAX_AUDIO_SAMPLE_VALUE) || (added_sample < MIN_AUDIO_SAMPLE_VALUE)) {
         // The largest magnitude the media sample can be to avoid clipping (converted to Q30 fixed point)
-        int32_t q30_media_sample_safe_max =
-            static_cast<int32_t>(std::abs(MIN_AUDIO_SAMPLE_VALUE) - std::abs(announcement_sample)) << 15;
+        int32_t q30_secondary_sample_safe_max =
+            static_cast<int32_t>(std::abs(MIN_AUDIO_SAMPLE_VALUE) - std::abs(primary_sample)) << 15;
 
         // Actual media sample value (Q15 number stored in an int32 for future division)
-        int32_t absolute_media_sample_value = abs(media_sample);
+        int32_t absolute_secondary_sample_value = abs(secondary_sample);
 
-        // Calculation to perform the Q15 division for media_sample_safe_max/media_sample_value
+        // Calculation to perform the Q15 division for secondary_sample_safe_max/secondary_sample_value
         // Reference: https://sestevenson.wordpress.com/2010/09/20/fixed-point-division-2/ (accessed August 15,
         // 2024)
-        int16_t necessary_q15_factor = static_cast<int16_t>(q30_media_sample_safe_max / absolute_media_sample_value);
+        int16_t necessary_q15_factor =
+            static_cast<int16_t>(q30_secondary_sample_safe_max / absolute_secondary_sample_value);
         // Take the minimum scaling factor (the smaller the factor, the more it needs to be scaled down)
         q15_scaling_factor = std::min(necessary_q15_factor, q15_scaling_factor);
       } else {
@@ -492,15 +491,16 @@ void MixerSpeaker::mix_audio_samples_without_clipping_(int16_t *media_buffer, au
 
   if (q15_scaling_factor < MAX_AUDIO_SAMPLE_VALUE) {
     // Need to scale to avoid clipping
-    this->scale_audio_samples_(media_buffer, media_buffer, q15_scaling_factor, frames_to_mix * media_channels);
+    this->scale_audio_samples_(secondary_buffer, secondary_buffer, q15_scaling_factor,
+                               frames_to_mix * secondary_channels);
 
     for (uint8_t output_channel_index = 0; output_channel_index < output_channels; ++output_channel_index) {
-      const ssize_t media_channel_index = std::min(output_channel_index, max_media_channel_index);
-      const ssize_t announcement_channel_index = std::min(output_channel_index, max_announcement_channel_index);
+      const ssize_t secondary_channel_index = std::min(output_channel_index, max_secondary_channel_index);
+      const ssize_t primary_channel_index = std::min(output_channel_index, max_primary_channel_index);
       const ssize_t output_channel_index_offset = output_channel_index * frames_to_mix;
 
-      dsps_add_s16(media_buffer + media_channel_index, announcement_buffer + announcement_channel_index,
-                   output_buffer + output_channel_index_offset, frames_to_mix, media_channels, announcement_channels,
+      dsps_add_s16(secondary_buffer + secondary_channel_index, primary_buffer + primary_channel_index,
+                   output_buffer + output_channel_index_offset, frames_to_mix, secondary_channels, primary_channels,
                    output_channels, 0);
     }
   }

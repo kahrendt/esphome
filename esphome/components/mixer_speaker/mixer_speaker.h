@@ -131,19 +131,19 @@ class MixerSpeaker : public Component {
   /// @return pdTRUE if successful, pdFALSE otherwises
   BaseType_t send_command_(CommandEvent *command, TickType_t ticks_to_wait = portMAX_DELAY);
 
-  /// @brief Mixes the media and announcement samples. If the resulting audio clips, the media samples are first
+  /// @brief Mixes the primary and secondary streams. If the resulting audio clips, the secondary samples are first
   /// scaled.
-  /// @param media_buffer buffer for media samples
-  /// @param media_stream_info stream info for the media samples
-  /// @param announcement_buffer buffer for announcement samples
-  /// @param announcement_stream_info stream info for the announcement samples
+  /// @param primary_buffer samples buffer for the primary stream
+  /// @param primary_stream_info stream info for the primary stream
+  /// @param secondary_buffer samples buffer for secondary stream
+  /// @param secondary_stream_info stream info for the secondary stream
   /// @param output_buffer buffer for the mixed samples
   /// @param output_stream_info stream info for the output buffer
-  /// @param frames_to_mix number of frames in the media and annoucnement buffers to mix together
-  void mix_audio_samples_without_clipping_(int16_t *media_buffer, audio::AudioStreamInfo media_stream_info,
-                                           int16_t *announcement_buffer,
-                                           audio::AudioStreamInfo announcement_stream_info, int16_t *output_buffer,
-                                           audio::AudioStreamInfo output_stream_info, size_t frames_to_mix);
+  /// @param frames_to_mix number of frames in the primary and secondary buffers to mix together
+  void mix_audio_samples_without_clipping_(int16_t *primary_buffer, audio::AudioStreamInfo primary_stream_info,
+                                           int16_t *secondary_buffer, audio::AudioStreamInfo secondary_stream_info,
+                                           int16_t *output_buffer, audio::AudioStreamInfo output_stream_info,
+                                           size_t frames_to_mix);
 
   /// @brief Scales audio samples. Scales in place when audio_samples == output_buffer.
   /// @param audio_samples PCM int16 audio samples
