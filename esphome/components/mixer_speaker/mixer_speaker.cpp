@@ -46,9 +46,14 @@ size_t InputSpeaker::play(const uint8_t *data, size_t length, TickType_t ticks_t
 }
 
 void InputSpeaker::start() {
-  this->parent_->start(this->audio_stream_info_);
-  this->state_ = speaker::STATE_RUNNING;
-  this->stop_gracefully_ = false;
+  if (this->parent_->start(this->audio_stream_info_) == ESP_OK) {
+    this->state_ = speaker::STATE_RUNNING;
+    this->stop_gracefully_ = false;
+    this->status_clear_error();
+  } else {
+    this->state_ = speaker::STATE_STOPPED;
+    this->status_set_error();
+  }
 }
 
 void InputSpeaker::stop() {
@@ -99,49 +104,51 @@ void MixerSpeaker::set_ducking_reduction(uint8_t decibel_reduction, uint32_t dur
   }
 }
 
-void MixerSpeaker::start(audio::AudioStreamInfo &stream_info) {
+esp_err_t MixerSpeaker::start(audio::AudioStreamInfo &stream_info) {
   if (!this->audio_stream_info_.has_value()) {
-    if (stream_info.channels > 2) {
-      printf("unsupported number of channels\n");
-    }
-    if (stream_info.bits_per_sample != 16) {
-      printf("unsupported bits per sample\n");
+    if ((stream_info.channels > 2) || (stream_info.bits_per_sample != 16)) {
+      // Audio streams with more than 2 channels or bits per sample not 16 bits are not supported
+      return ESP_ERR_NOT_SUPPORTED;
     }
 
     this->audio_stream_info_ = stream_info;
     // The mixing speaker will always output 2 channels.
     this->audio_stream_info_.value().channels = 2;
     this->output_speaker_->set_audio_stream_info(this->audio_stream_info_.value());
+
+    this->ring_buffer_size_ = MIXER_INPUT_RING_BUFFER_DURATION_MS * this->audio_stream_info_.value().get_bytes_per_ms();
   } else {
     if (stream_info.sample_rate != this->audio_stream_info_.value().sample_rate) {
-      printf("mismatching sample rates, can't mix the two streams\n");
-    } else if (stream_info.bits_per_sample != this->audio_stream_info_.value().bits_per_sample) {
-      printf("mismatching bits per sample, can't mix the two streams\n");
+      // The two audio streams must have the same sample rate to mix properly
+      return ESP_ERR_INVALID_ARG;
     }
   }
-
-  this->ring_buffer_size_ = MIXER_INPUT_RING_BUFFER_DURATION_MS * stream_info.get_bytes_per_ms();
 
   if (this->task_handle_ == nullptr) {
     xTaskCreate(this->audio_mixer_task, "mixer", TASK_STACK_SIZE, (void *) this, MIXER_TASK_PRIORITY,
                 &this->task_handle_);
-  }
 
-  // TODO: Test that the task actually started
-
-  this->set_retry(50, 2, [this](const uint8_t remaining_setup_attempts) {
-    if ((this->primary_ring_buffer_.use_count() == 0) || (this->secondary_ring_buffer_.use_count() == 0)) {
-      if (remaining_setup_attempts == 0) {
-        this->status_set_error("Error starting the audio pipeline since the mixer hasn't finished allocating buffers");
-      }
-      return RetryResult::RETRY;
+    if (this->task_handle_ == nullptr) {
+      return ESP_ERR_INVALID_STATE;
     }
 
-    this->primary_speaker_->set_sink(this->primary_ring_buffer_);
-    this->secondary_speaker_->set_sink(this->secondary_ring_buffer_);
+    this->set_retry(50, 2, [this](const uint8_t remaining_setup_attempts) {
+      if ((this->primary_ring_buffer_.use_count() == 0) || (this->secondary_ring_buffer_.use_count() == 0)) {
+        if (remaining_setup_attempts == 0) {
+          this->status_set_error(
+              "Error starting the audio pipeline since the mixer task hasn't finished allocating buffers");
+        }
+        return RetryResult::RETRY;
+      }
 
-    return RetryResult::DONE;
-  });
+      this->primary_speaker_->set_sink(this->primary_ring_buffer_);
+      this->secondary_speaker_->set_sink(this->secondary_ring_buffer_);
+
+      return RetryResult::DONE;
+    });
+  }
+
+  return ESP_OK;
 }
 
 void MixerSpeaker::audio_mixer_task(void *params) {

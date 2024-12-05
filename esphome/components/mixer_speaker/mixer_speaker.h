@@ -88,7 +88,7 @@ class MixerSpeaker : public Component {
  public:
   void setup() override;
 
-  void start(audio::AudioStreamInfo &stream_info);
+  esp_err_t start(audio::AudioStreamInfo &stream_info);
 
   void set_primary_speaker(InputSpeaker *primary_speaker) { this->primary_speaker_ = primary_speaker; }
   void set_secondary_speaker(InputSpeaker *secondary_speaker) { this->secondary_speaker_ = secondary_speaker; }
