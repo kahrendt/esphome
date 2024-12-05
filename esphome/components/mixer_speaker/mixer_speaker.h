@@ -96,11 +96,6 @@ class MixerSpeaker : public Component {
   void set_output_speaker(speaker::Speaker *speaker) { this->output_speaker_ = speaker; }
   speaker::Speaker *get_output_speaker() { return this->output_speaker_; }
 
-  /// @brief Suspends the mixer task
-  void suspend_task();
-  /// @brief Resumes the mixer task
-  void resume_task();
-
   /// @brief Sets the ducking level for the secondary stream in the mixer
   /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by 10 dB
   /// @param duration (uint32_t) The number of milliseconds to transition from the current level to the new level
