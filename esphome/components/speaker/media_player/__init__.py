@@ -6,14 +6,11 @@ from pathlib import Path
 
 from esphome import automation, external_files
 import esphome.codegen as cg
-
-# from esphome.components import media_player, speaker
 from esphome.components import esp32, media_player, speaker
 from esphome.components.audio import AUDIO_FILE_TYPE_ENUM, AudioFile
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_BUFFER_SIZE,
-    CONF_DURATION,
     CONF_FILE,
     CONF_FILES,
     CONF_ID,
@@ -38,7 +35,6 @@ DOMAIN = "file"
 TYPE_LOCAL = "local"
 TYPE_WEB = "web"
 
-CONF_DECIBEL_REDUCTION = "decibel_reduction"
 
 CONF_ANNOUNCEMENT = "announcement"
 CONF_MEDIA_FILE = "media_file"
@@ -73,9 +69,6 @@ PlayLocalMediaAction = speaker_ns.class_(
 )
 StopStreamAction = speaker_ns.class_(
     "StopStreamAction", automation.Action, cg.Parented.template(SpeakerMediaPlayer)
-)
-DuckingSetAction = speaker_ns.class_(
-    "DuckingSetAction", automation.Action, cg.Parented.template(SpeakerMediaPlayer)
 )
 
 
@@ -232,7 +225,7 @@ async def to_code(config):
     )
 
     cg.add_define("USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE")
-    # cg.add_define("USE_SPEAKER_MEDIA_PLAYER_RESAMPLER")
+    cg.add_define("USE_SPEAKER_MEDIA_PLAYER_RESAMPLER")
     cg.add_define("USE_AUDIO_FLAC_SUPPORT", True)
     cg.add_define("USE_AUDIO_MP3_SUPPORT", True)
 
@@ -371,31 +364,4 @@ async def stop_stream_action(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
     cg.add(var.set_pipeline_type(config[CONF_STREAM]))
-    return var
-
-
-@automation.register_action(
-    "speaker_media_player.set_ducking",
-    DuckingSetAction,
-    cv.Schema(
-        {
-            cv.GenerateID(): cv.use_id(SpeakerMediaPlayer),
-            cv.Required(CONF_DECIBEL_REDUCTION): cv.templatable(
-                cv.int_range(min=0, max=51)
-            ),
-            cv.Optional(CONF_DURATION, default="0.0s"): cv.templatable(
-                cv.positive_time_period_seconds
-            ),
-        }
-    ),
-)
-async def ducking_set_to_code(config, action_id, template_arg, args):
-    var = cg.new_Pvariable(action_id, template_arg)
-    await cg.register_parented(var, config[CONF_ID])
-    decibel_reduction = await cg.templatable(
-        config[CONF_DECIBEL_REDUCTION], args, cg.uint8
-    )
-    cg.add(var.set_decibel_reduction(decibel_reduction))
-    duration = await cg.templatable(config[CONF_DURATION], args, cg.float_)
-    cg.add(var.set_duration(duration))
     return var

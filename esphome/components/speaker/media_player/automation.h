@@ -9,16 +9,6 @@
 namespace esphome {
 namespace speaker {
 
-// #if !defined(SIMPLE_MEDIA_PLAYER)
-// template<typename... Ts> class DuckingSetAction : public Action<Ts...>, public Parented<SpeakerMediaPlayer> {
-//   TEMPLATABLE_VALUE(uint8_t, decibel_reduction)
-//   TEMPLATABLE_VALUE(float, duration)
-//   void play(Ts... x) override {
-//     this->parent_->set_ducking_reduction(this->decibel_reduction_.value(x...), this->duration_.value(x...));
-//   }
-// };
-// #endif
-
 template<typename... Ts> class PlayLocalMediaAction : public Action<Ts...>, public Parented<SpeakerMediaPlayer> {
   TEMPLATABLE_VALUE(audio::AudioFile *, audio_file)
   TEMPLATABLE_VALUE(bool, announcement)
