@@ -85,8 +85,8 @@ class AudioTransferBuffer {
   uint8_t *buffer_{nullptr};
   uint8_t *data_start_{nullptr};
 
-  size_t buffer_size_;
-  size_t buffer_length_;
+  size_t buffer_size_{0};
+  size_t buffer_length_{0};
 };
 
 class AudioSinkTransferBuffer : public AudioTransferBuffer {
