@@ -49,7 +49,7 @@ static const std::vector<int16_t> DECIBEL_REDUCTION_TABLE = {
 
 class MixerSpeaker;
 
-class InputSpeaker : public speaker::Speaker, public Component {
+class InputSpeaker : public speaker::Speaker, public Component, public audio::AudioSourceTransferBuffer {
  public:
   void setup() override {}
 
@@ -69,14 +69,11 @@ class InputSpeaker : public speaker::Speaker, public Component {
 
   void set_volume(float volume) override;
 
-  void set_sink(std::weak_ptr<RingBuffer> ring_buffer_) { this->ring_buffer_ = ring_buffer_.lock(); }
-
   audio::AudioStreamInfo get_audio_stream_info() { return this->audio_stream_info_; }
 
   void set_parent(MixerSpeaker *parent) { this->parent_ = parent; }
 
  protected:
-  std::shared_ptr<RingBuffer> ring_buffer_;
   MixerSpeaker *parent_;
 
   uint32_t last_seen_data_ms_;
@@ -178,9 +175,6 @@ class MixerSpeaker : public Component {
 
   // Stores commands to send the mixer task
   QueueHandle_t command_queue_{nullptr};
-
-  std::weak_ptr<RingBuffer> secondary_ring_buffer_;
-  std::weak_ptr<RingBuffer> primary_ring_buffer_;
 
   size_t ring_buffer_size_;
   size_t transfer_buffer_size_;
