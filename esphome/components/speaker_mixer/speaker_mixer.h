@@ -78,6 +78,12 @@ class SpeakerMixer : public Component {
   void setup() override;
   void loop() override;
 
+  /// @brief Starts the mixer task. Called by a source speaker giving the current audio stream information
+  /// @param stream_info The calling source speakers audio stream information
+  /// @return ESP_ERR_NOT_SUPPORTED if the incoming stream is incomptabile due to unsupported bits per sample
+  ///         ESP_ERR_INVALID_ARG if the incoming stream is incompatible to be mixed with the other input audio stream
+  ///         ESP_ERR_INVALID_STATE if the mixer task fails to start
+  ///         ESP_OK if the incoming stream is compatible and the mixer task starts
   esp_err_t start(audio::AudioStreamInfo &stream_info);
 
   void set_primary_speaker(SourceSpeaker *primary_speaker) { this->primary_speaker_ = primary_speaker; }

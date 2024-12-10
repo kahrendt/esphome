@@ -174,8 +174,8 @@ void SpeakerMixer::setup() {
 esp_err_t SpeakerMixer::start(audio::AudioStreamInfo &stream_info) {
   ESP_LOGD(TAG, "Starting mixing speaker");
   if (!this->audio_stream_info_.has_value()) {
-    if ((stream_info.channels > 2) || (stream_info.bits_per_sample != 16)) {
-      // Audio streams with more than 2 channels or bits per sample not 16 bits are not supported
+    if (stream_info.bits_per_sample != 16) {
+      // Audio streams that don't have 16 bits per sample are not supported
       return ESP_ERR_NOT_SUPPORTED;
     }
 
