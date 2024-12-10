@@ -48,9 +48,12 @@ class SourceSpeaker : public speaker::Speaker, public Component, public audio::A
 
   void set_parent(SpeakerMixer *parent) { this->parent_ = parent; }
 
+  /// @brief Transfers audio from the ring buffer into the transfer buffer. Ducks audio while transferring.
+  /// @param ticks_to_wait FreeRTOS ticks to wait while waiting to read from the ring buffer.
+  /// @return Number of bytes transferred from the ring buffer.
   size_t transfer_data_from_source(TickType_t ticks_to_wait) override;
 
-  /// @brief Sets the ducking level for the secondary stream in the mixer
+  /// @brief Sets the ducking level for this source speaker.
   /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by 10 dB
   /// @param duration (uint32_t) The number of milliseconds to transition from the current level to the new level
   void set_ducking_reduction(uint8_t decibel_reduction, uint32_t duration);
