@@ -8,33 +8,11 @@
 
 #include "esphome/core/component.h"
 
+#include <freertos/event_groups.h>
+#include <freertos/FreeRTOS.h>
+
 namespace esphome {
 namespace mixer_speaker {
-
-enum class EventType : uint8_t {
-  STARTING = 0,
-  STARTED,
-  RUNNING,
-  IDLE,
-  STOPPING,
-  STOPPED,
-  WARNING = 255,
-};
-
-// Used for reporting the state of the mixer task
-struct TaskEvent {
-  EventType type;
-  esp_err_t err;
-};
-
-enum class CommandEventType : uint8_t {
-  STOP,  // Stop mixing to prepare for stopping the mixing task
-};
-
-// Used to send commands to the mixer task
-struct CommandEvent {
-  CommandEventType command;
-};
 
 // Gives the Q15 fixed point scaling factor to reduce by 0 dB, 1dB, ..., 50 dB
 // dB to PCM scaling factor formula: floating_point_scale_factor = 2^(-db/6.014)
@@ -94,6 +72,7 @@ class InputSpeaker : public speaker::Speaker, public Component, public audio::Au
 class MixerSpeaker : public Component {
  public:
   void setup() override;
+  void loop() override;
 
   esp_err_t start(audio::AudioStreamInfo &stream_info);
 
@@ -103,33 +82,11 @@ class MixerSpeaker : public Component {
   void set_output_speaker(speaker::Speaker *speaker) { this->output_speaker_ = speaker; }
   speaker::Speaker *get_output_speaker() { return this->output_speaker_; }
 
-  void get_state() {
-    TaskEvent event;
-    while (this->read_event_(&event)) {
-      if (event.type == EventType::WARNING) {
-        // ESP_LOGD(TAG, "Mixer encountered an error: %s", esp_err_to_name(event.err));
-        // this->status_set_error();
-      }
-    }
-  }
-
   void duck_samples(int16_t *input_buffer, uint32_t input_samples_to_duck, int8_t &current_ducking_db_reduction,
                     size_t &ducking_transition_samples_remaining, size_t samples_per_ducking_step,
                     int8_t db_change_per_ducking_step);
 
  protected:
-  /// @brief Reads a TaskEvent from the event queue indicating its current status
-  /// @param event Pointer to TaskEvent object to store the event in
-  /// @param ticks_to_wait The number of FreeRTOS ticks to wait for an event to appear on the queue. Defaults to 0.
-  /// @return pdTRUE if successful, pdFALSE otherwise
-  BaseType_t read_event_(TaskEvent *event, TickType_t ticks_to_wait = 0);
-
-  /// @brief Sends a CommandEvent to the command queue
-  /// @param command Pointer to CommandEvent object to be sent
-  /// @param ticks_to_wait The number of FreeRTOS ticks to wait for an event to appear on the queue. Defaults to 0.
-  /// @return pdTRUE if successful, pdFALSE otherwises
-  BaseType_t send_command_(CommandEvent *command, TickType_t ticks_to_wait = portMAX_DELAY);
-
   /// @brief Mixes the primary and secondary streams. If the resulting audio clips, the secondary samples are first
   /// scaled.
   /// @param primary_buffer samples buffer for the primary stream
@@ -167,19 +124,16 @@ class MixerSpeaker : public Component {
                     size_t &bytes_written);
 
   static void audio_mixer_task(void *params);
+
   TaskHandle_t task_handle_{nullptr};
+  EventGroupHandle_t event_group_{nullptr};
 
   InputSpeaker *primary_speaker_{nullptr};
   InputSpeaker *secondary_speaker_{nullptr};
   speaker::Speaker *output_speaker_{nullptr};
 
+  bool task_created_{false};
   optional<audio::AudioStreamInfo> audio_stream_info_;
-
-  // Reports events from the mixer task
-  QueueHandle_t event_queue_{nullptr};
-
-  // Stores commands to send the mixer task
-  QueueHandle_t command_queue_{nullptr};
 
   size_t ring_buffer_size_;
   size_t transfer_buffer_size_;

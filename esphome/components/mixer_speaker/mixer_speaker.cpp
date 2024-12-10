@@ -14,8 +14,6 @@ static const UBaseType_t MIXER_TASK_PRIORITY = 10;
 static const uint32_t MIXER_INPUT_RING_BUFFER_DURATION_MS = 50;
 static const size_t TRANSFER_BUFFER_SIZE = 8192;
 
-static const size_t QUEUE_COUNT = 20;
-
 static const uint32_t TASK_STACK_SIZE = 3072;
 static const size_t TASK_DELAY_MS = 25;
 
@@ -23,6 +21,16 @@ static const int16_t MAX_AUDIO_SAMPLE_VALUE = INT16_MAX;
 static const int16_t MIN_AUDIO_SAMPLE_VALUE = INT16_MIN;
 
 static const char *const TAG = "mixing_speaker";
+
+enum MixerEventGroupBits : uint32_t {
+  COMMAND_STOP = (1 << 0),  // stops the mixer task
+  STATE_STARTING = (1 << 10),
+  STATE_RUNNING = (1 << 11),
+  STATE_STOPPING = (1 << 12),
+  STATE_STOPPED = (1 << 13),
+  ERR_ESP_NO_MEM = (1 << 19),
+  ALL_BITS = 0x00FFFFFF,  // All valid FreeRTOS event group bits
+};
 
 void InputSpeaker::loop() {
   if (this->state_ == speaker::STATE_RUNNING) {
@@ -155,12 +163,12 @@ size_t InputSpeaker::transfer_data_from_source(TickType_t ticks_to_wait) {
 }
 
 void MixerSpeaker::setup() {
-  this->event_queue_ = xQueueCreate(QUEUE_COUNT, sizeof(TaskEvent));
+  this->event_group_ = xEventGroupCreate();
 
-  this->command_queue_ = xQueueCreate(QUEUE_COUNT, sizeof(CommandEvent));
-
-  if ((this->event_queue_ == nullptr) || (this->command_queue_ == nullptr)) {
+  if (this->event_group_ == nullptr) {
+    ESP_LOGE(TAG, "Failed to create event group");
     this->mark_failed();
+    return;
   }
 }
 
@@ -192,45 +200,65 @@ esp_err_t MixerSpeaker::start(audio::AudioStreamInfo &stream_info) {
     if (this->task_handle_ == nullptr) {
       return ESP_ERR_INVALID_STATE;
     }
+
+    this->task_created_ = true;
   }
 
   return ESP_OK;
 }
 
+void MixerSpeaker::loop() {
+  uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
+
+  if (event_group_bits & MixerEventGroupBits::STATE_STARTING) {
+    ESP_LOGD(TAG, "Starting Mixer");
+    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_STARTING);
+  }
+  if (event_group_bits & MixerEventGroupBits::ERR_ESP_NO_MEM) {
+    this->status_set_error("Failed to allocate the mixer's internal buffer");
+  }
+  if (event_group_bits & MixerEventGroupBits::STATE_RUNNING) {
+    ESP_LOGD(TAG, "Started Mixer");
+    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_RUNNING);
+    this->status_clear_error();
+  }
+  if (event_group_bits & MixerEventGroupBits::STATE_STOPPING) {
+    ESP_LOGD(TAG, "Stopping Mixer");
+    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_STOPPING);
+  }
+  if (event_group_bits & MixerEventGroupBits::STATE_STOPPED) {
+    if (!this->task_created_) {
+      ESP_LOGD(TAG, "Stopped Mixer");
+      xEventGroupClearBits(this->event_group_, MixerEventGroupBits::ALL_BITS);
+      this->task_handle_ = nullptr;
+    }
+  }
+}
+
 void MixerSpeaker::audio_mixer_task(void *params) {
   MixerSpeaker *this_mixer = (MixerSpeaker *) params;
 
-  TaskEvent event;
-  CommandEvent command_event;
-
-  esp_err_t err = ESP_OK;
+  xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STARTING);
 
   std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
       audio::AudioSinkTransferBuffer::create(TRANSFER_BUFFER_SIZE);
-  output_transfer_buffer->set_sink(this_mixer->output_speaker_);
 
   if (output_transfer_buffer == nullptr) {
-    event.type = EventType::WARNING;
-    event.err = ESP_ERR_NO_MEM;
-    xQueueSend(this_mixer->event_queue_, &event, portMAX_DELAY);
+    xEventGroupSetBits(this_mixer->event_group_,
+                       MixerEventGroupBits::STATE_STOPPED | MixerEventGroupBits::ERR_ESP_NO_MEM);
 
-    event.type = EventType::STOPPED;
-    event.err = ESP_OK;
-    xQueueSend(this_mixer->event_queue_, &event, portMAX_DELAY);
-
-    while (true) {
-      delay(TASK_DELAY_MS);
-    }
+    this_mixer->task_created_ = false;
+    vTaskDelete(nullptr);
   }
 
-  event.type = EventType::STARTED;
-  xQueueSend(this_mixer->event_queue_, &event, portMAX_DELAY);
+  output_transfer_buffer->set_sink(this_mixer->output_speaker_);
+
+  xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_RUNNING);
 
   while (true) {
-    if (xQueueReceive(this_mixer->command_queue_, &command_event, 0) == pdTRUE) {
-      if (command_event.command == CommandEventType::STOP) {
-        break;
-      }
+    uint32_t event_group_bits = xEventGroupGetBits(this_mixer->event_group_);
+    if (event_group_bits & MixerEventGroupBits::COMMAND_STOP) {
+      break;
     }
 
     output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(TASK_DELAY_MS));
@@ -298,33 +326,13 @@ void MixerSpeaker::audio_mixer_task(void *params) {
     }
   }
 
-  event.type = EventType::STOPPING;
-  xQueueSend(this_mixer->event_queue_, &event, portMAX_DELAY);
+  xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STOPPING);
 
-  // secondary_transfer_buffer.reset();
-  // primary_transfer_buffer.reset();
   output_transfer_buffer.reset();
 
-  event.type = EventType::STOPPED;
-  xQueueSend(this_mixer->event_queue_, &event, portMAX_DELAY);
-
-  while (true) {
-    delay(TASK_DELAY_MS);
-  }
-}
-
-BaseType_t MixerSpeaker::read_event_(TaskEvent *event, TickType_t ticks_to_wait) {
-  if (this->event_queue_ != nullptr) {
-    return xQueueReceive(this->event_queue_, event, ticks_to_wait);
-  }
-  return pdFALSE;
-}
-
-BaseType_t MixerSpeaker::send_command_(CommandEvent *command, TickType_t ticks_to_wait) {
-  if (this->command_queue_ != nullptr) {
-    return xQueueSend(this->command_queue_, command, ticks_to_wait);
-  }
-  return pdFALSE;
+  xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STOPPED);
+  this_mixer->task_created_ = false;
+  vTaskDelete(nullptr);
 }
 
 void MixerSpeaker::duck_samples(int16_t *input_buffer, uint32_t input_samples_to_duck,
