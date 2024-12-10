@@ -31,7 +31,7 @@ enum MixerEventGroupBits : uint32_t {
   ERR_ESP_NO_MEM = (1 << 19),
 };
 
-void InputSpeaker::loop() {
+void SourceSpeaker::loop() {
   if (this->state_ == speaker::STATE_RUNNING) {
     if (((millis() - this->last_seen_data_ms_) > this->timeout_ms_) && !this->has_buffered_data()) {
       this->state_ = speaker::STATE_STOPPED;
@@ -44,7 +44,7 @@ void InputSpeaker::loop() {
   }
 }
 
-size_t InputSpeaker::play(const uint8_t *data, size_t length, TickType_t ticks_to_wait) {
+size_t SourceSpeaker::play(const uint8_t *data, size_t length, TickType_t ticks_to_wait) {
   this->last_seen_data_ms_ = millis();
   if (this->is_stopped()) {
     this->start();
@@ -56,7 +56,7 @@ size_t InputSpeaker::play(const uint8_t *data, size_t length, TickType_t ticks_t
   return bytes_written;
 }
 
-void InputSpeaker::start() {
+void SourceSpeaker::start() {
   const size_t ring_buffer_size = MIXER_INPUT_RING_BUFFER_DURATION_MS * this->audio_stream_info_.get_bytes_per_ms();
   this->ring_buffer_ = RingBuffer::create(ring_buffer_size);
 
@@ -74,7 +74,7 @@ void InputSpeaker::start() {
   }
 }
 
-void InputSpeaker::stop() {
+void SourceSpeaker::stop() {
   if (this->ring_buffer_.use_count() > 0) {
     this->ring_buffer_->reset();
   }
@@ -82,24 +82,24 @@ void InputSpeaker::stop() {
   this->state_ = speaker::STATE_STOPPED;
 }
 
-void InputSpeaker::set_mute_state(bool mute_state) {
+void SourceSpeaker::set_mute_state(bool mute_state) {
   this->mute_state_ = mute_state;
   this->parent_->get_output_speaker()->set_mute_state(mute_state);
 }
 
-void InputSpeaker::set_volume(float volume) {
+void SourceSpeaker::set_volume(float volume) {
   this->volume_ = volume;
   this->parent_->get_output_speaker()->set_volume(volume);
 }
 
-bool InputSpeaker::has_buffered_data() const {
+bool SourceSpeaker::has_buffered_data() const {
   if (this->ring_buffer_.use_count() > 0) {
     return (this->ring_buffer_->available() > 0);
   }
   return false;
 }
 
-void InputSpeaker::set_ducking_reduction(uint8_t decibel_reduction, uint32_t duration) {
+void SourceSpeaker::set_ducking_reduction(uint8_t decibel_reduction, uint32_t duration) {
   if (this->target_ducking_db_reduction_ != decibel_reduction) {
     this->current_ducking_db_reduction_ = this->target_ducking_db_reduction_;
 
@@ -130,7 +130,7 @@ void InputSpeaker::set_ducking_reduction(uint8_t decibel_reduction, uint32_t dur
   }
 }
 
-size_t InputSpeaker::transfer_data_from_source(TickType_t ticks_to_wait) {
+size_t SourceSpeaker::transfer_data_from_source(TickType_t ticks_to_wait) {
   // Shift data in buffer to start
   if (this->buffer_length_ > 0) {
     memmove(this->buffer_, this->data_start_, this->buffer_length_);
@@ -335,9 +335,9 @@ void MixerSpeaker::audio_mixer_task(void *params) {
   vTaskDelete(nullptr);
 }
 
-void InputSpeaker::duck_samples_(int16_t *input_buffer, uint32_t input_samples_to_duck,
-                                 int8_t &current_ducking_db_reduction, size_t &ducking_transition_samples_remaining,
-                                 size_t samples_per_ducking_step, int8_t db_change_per_ducking_step) {
+void SourceSpeaker::duck_samples_(int16_t *input_buffer, uint32_t input_samples_to_duck,
+                                  int8_t &current_ducking_db_reduction, size_t &ducking_transition_samples_remaining,
+                                  size_t samples_per_ducking_step, int8_t db_change_per_ducking_step) {
   if (ducking_transition_samples_remaining > 0) {
     // Ducking level is still transitioning
 

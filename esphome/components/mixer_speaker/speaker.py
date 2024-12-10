@@ -10,7 +10,7 @@ DEPENDENCIES = ["speaker"]
 
 mixer_speaker_ns = cg.esphome_ns.namespace("mixer_speaker")
 MixerSpeaker = mixer_speaker_ns.class_("MixerSpeaker", cg.Component, speaker.Speaker)
-InputSpeaker = mixer_speaker_ns.class_("InputSpeaker", cg.Component, speaker.Speaker)
+SourceSpeaker = mixer_speaker_ns.class_("SourceSpeaker", cg.Component, speaker.Speaker)
 
 CONF_DECIBEL_REDUCTION = "decibel_reduction"
 CONF_PRIMARY_SPEAKER = "primary_speaker"
@@ -18,12 +18,12 @@ CONF_OUTPUT_SPEAKER = "output_speaker"
 CONF_SECONDARY_SPEAKER = "secondary_speaker"
 
 DuckingSetAction = mixer_speaker_ns.class_(
-    "DuckingSetAction", automation.Action, cg.Parented.template(InputSpeaker)
+    "DuckingSetAction", automation.Action, cg.Parented.template(SourceSpeaker)
 )
 
 
 INPUT_SPEAKER_SCHEMA = speaker.SPEAKER_SCHEMA.extend(
-    {cv.GenerateID(): cv.declare_id(InputSpeaker)}
+    {cv.GenerateID(): cv.declare_id(SourceSpeaker)}
 )
 
 CONFIG_SCHEMA = cv.All(
@@ -63,7 +63,7 @@ async def to_code(config):
     DuckingSetAction,
     cv.Schema(
         {
-            cv.GenerateID(): cv.use_id(InputSpeaker),
+            cv.GenerateID(): cv.use_id(SourceSpeaker),
             cv.Required(CONF_DECIBEL_REDUCTION): cv.templatable(
                 cv.int_range(min=0, max=51)
             ),

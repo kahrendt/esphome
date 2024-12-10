@@ -24,7 +24,7 @@ static const std::vector<int16_t> DECIBEL_REDUCTION_TABLE = {
 
 class MixerSpeaker;
 
-class InputSpeaker : public speaker::Speaker, public Component, public audio::AudioSourceTransferBuffer {
+class SourceSpeaker : public speaker::Speaker, public Component, public audio::AudioSourceTransferBuffer {
  public:
   void setup() override {}
 
@@ -80,8 +80,8 @@ class MixerSpeaker : public Component {
 
   esp_err_t start(audio::AudioStreamInfo &stream_info);
 
-  void set_primary_speaker(InputSpeaker *primary_speaker) { this->primary_speaker_ = primary_speaker; }
-  void set_secondary_speaker(InputSpeaker *secondary_speaker) { this->secondary_speaker_ = secondary_speaker; }
+  void set_primary_speaker(SourceSpeaker *primary_speaker) { this->primary_speaker_ = primary_speaker; }
+  void set_secondary_speaker(SourceSpeaker *secondary_speaker) { this->secondary_speaker_ = secondary_speaker; }
 
   void set_output_speaker(speaker::Speaker *speaker) { this->output_speaker_ = speaker; }
   speaker::Speaker *get_output_speaker() { return this->output_speaker_; }
@@ -120,8 +120,8 @@ class MixerSpeaker : public Component {
   TaskHandle_t task_handle_{nullptr};
   EventGroupHandle_t event_group_{nullptr};
 
-  InputSpeaker *primary_speaker_{nullptr};
-  InputSpeaker *secondary_speaker_{nullptr};
+  SourceSpeaker *primary_speaker_{nullptr};
+  SourceSpeaker *secondary_speaker_{nullptr};
   speaker::Speaker *output_speaker_{nullptr};
 
   bool task_created_{false};
