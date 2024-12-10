@@ -8,16 +8,16 @@ AUTO_LOAD = ["audio"]
 CODEOWNERS = ["kahrendt"]
 DEPENDENCIES = ["speaker"]
 
-mixer_speaker_ns = cg.esphome_ns.namespace("mixer_speaker")
-MixerSpeaker = mixer_speaker_ns.class_("MixerSpeaker", cg.Component, speaker.Speaker)
-SourceSpeaker = mixer_speaker_ns.class_("SourceSpeaker", cg.Component, speaker.Speaker)
+speaker_mixer_ns = cg.esphome_ns.namespace("speaker_mixer")
+SpeakerMixer = speaker_mixer_ns.class_("SpeakerMixer", cg.Component, speaker.Speaker)
+SourceSpeaker = speaker_mixer_ns.class_("SourceSpeaker", cg.Component, speaker.Speaker)
 
 CONF_DECIBEL_REDUCTION = "decibel_reduction"
 CONF_PRIMARY_SPEAKER = "primary_speaker"
 CONF_OUTPUT_SPEAKER = "output_speaker"
 CONF_SECONDARY_SPEAKER = "secondary_speaker"
 
-DuckingSetAction = mixer_speaker_ns.class_(
+DuckingSetAction = speaker_mixer_ns.class_(
     "DuckingSetAction", automation.Action, cg.Parented.template(SourceSpeaker)
 )
 
@@ -28,7 +28,7 @@ INPUT_SPEAKER_SCHEMA = speaker.SPEAKER_SCHEMA.extend(
 
 CONFIG_SCHEMA = cv.All(
     {
-        cv.GenerateID(): cv.declare_id(MixerSpeaker),
+        cv.GenerateID(): cv.declare_id(SpeakerMixer),
         cv.Required(CONF_OUTPUT_SPEAKER): cv.use_id(speaker.Speaker),
         cv.Required(CONF_PRIMARY_SPEAKER): INPUT_SPEAKER_SCHEMA,
         cv.Required(CONF_SECONDARY_SPEAKER): INPUT_SPEAKER_SCHEMA,

@@ -12,7 +12,7 @@
 #include <freertos/FreeRTOS.h>
 
 namespace esphome {
-namespace mixer_speaker {
+namespace speaker_mixer {
 
 // Gives the Q15 fixed point scaling factor to reduce by 0 dB, 1dB, ..., 50 dB
 // dB to PCM scaling factor formula: floating_point_scale_factor = 2^(-db/6.014)
@@ -22,7 +22,7 @@ static const std::vector<int16_t> DECIBEL_REDUCTION_TABLE = {
     4619,  4116,  3668,  3269,  2913,  2596,  2313,  2061,  1837,  1637,  1459,  1300, 1158, 1032, 920,  820,  731,
     651,   580,   517,   461,   411,   366,   326,   291,   259,   231,   206,   183,  163,  146,  130,  116,  103};
 
-class MixerSpeaker;
+class SpeakerMixer;
 
 class SourceSpeaker : public speaker::Speaker, public Component, public audio::AudioSourceTransferBuffer {
  public:
@@ -46,7 +46,7 @@ class SourceSpeaker : public speaker::Speaker, public Component, public audio::A
 
   audio::AudioStreamInfo get_audio_stream_info() { return this->audio_stream_info_; }
 
-  void set_parent(MixerSpeaker *parent) { this->parent_ = parent; }
+  void set_parent(SpeakerMixer *parent) { this->parent_ = parent; }
 
   size_t transfer_data_from_source(TickType_t ticks_to_wait) override;
 
@@ -60,7 +60,7 @@ class SourceSpeaker : public speaker::Speaker, public Component, public audio::A
                      size_t &ducking_transition_samples_remaining, size_t samples_per_ducking_step,
                      int8_t db_change_per_ducking_step);
 
-  MixerSpeaker *parent_;
+  SpeakerMixer *parent_;
 
   uint32_t last_seen_data_ms_;
   uint32_t timeout_ms_{1000};
@@ -73,7 +73,7 @@ class SourceSpeaker : public speaker::Speaker, public Component, public audio::A
   size_t samples_per_ducking_step_{0};
 };
 
-class MixerSpeaker : public Component {
+class SpeakerMixer : public Component {
  public:
   void setup() override;
   void loop() override;
@@ -131,7 +131,7 @@ class MixerSpeaker : public Component {
   size_t transfer_buffer_size_;
 };
 
-}  // namespace mixer_speaker
+}  // namespace speaker_mixer
 }  // namespace esphome
 
 #endif

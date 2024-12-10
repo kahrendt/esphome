@@ -1,13 +1,13 @@
 #ifdef USE_ESP32
 
-#include "mixer_speaker.h"
+#include "speaker_mixer.h"
 
 #include "esphome/core/log.h"
 
 #include <dsp.h>  // esp_audio_libs
 
 namespace esphome {
-namespace mixer_speaker {
+namespace speaker_mixer {
 
 static const UBaseType_t MIXER_TASK_PRIORITY = 10;
 
@@ -161,7 +161,7 @@ size_t SourceSpeaker::transfer_data_from_source(TickType_t ticks_to_wait) {
   return bytes_read;
 }
 
-void MixerSpeaker::setup() {
+void SpeakerMixer::setup() {
   this->event_group_ = xEventGroupCreate();
 
   if (this->event_group_ == nullptr) {
@@ -171,7 +171,7 @@ void MixerSpeaker::setup() {
   }
 }
 
-esp_err_t MixerSpeaker::start(audio::AudioStreamInfo &stream_info) {
+esp_err_t SpeakerMixer::start(audio::AudioStreamInfo &stream_info) {
   ESP_LOGD(TAG, "Starting mixing speaker");
   if (!this->audio_stream_info_.has_value()) {
     if ((stream_info.channels > 2) || (stream_info.bits_per_sample != 16)) {
@@ -206,7 +206,7 @@ esp_err_t MixerSpeaker::start(audio::AudioStreamInfo &stream_info) {
   return ESP_OK;
 }
 
-void MixerSpeaker::loop() {
+void SpeakerMixer::loop() {
   uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
 
   if (event_group_bits & MixerEventGroupBits::STATE_STARTING) {
@@ -235,8 +235,8 @@ void MixerSpeaker::loop() {
   }
 }
 
-void MixerSpeaker::audio_mixer_task(void *params) {
-  MixerSpeaker *this_mixer = (MixerSpeaker *) params;
+void SpeakerMixer::audio_mixer_task(void *params) {
+  SpeakerMixer *this_mixer = (SpeakerMixer *) params;
 
   xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STARTING);
 
@@ -384,7 +384,7 @@ void SourceSpeaker::duck_samples_(int16_t *input_buffer, uint32_t input_samples_
   }
 }
 
-void MixerSpeaker::copy_frames_(int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
+void SpeakerMixer::copy_frames_(int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
                                 audio::AudioStreamInfo output_stream_info, uint32_t frames_to_transfer,
                                 size_t &bytes_read, size_t &bytes_written) {
   uint8_t input_channels = input_stream_info.channels;
@@ -411,7 +411,7 @@ void MixerSpeaker::copy_frames_(int16_t *input_buffer, audio::AudioStreamInfo in
   bytes_written = frames_to_transfer * output_stream_info.get_bytes_per_frame();
 }
 
-void MixerSpeaker::mix_audio_samples_without_clipping_(
+void SpeakerMixer::mix_audio_samples_without_clipping_(
     int16_t *primary_buffer, audio::AudioStreamInfo primary_stream_info, int16_t *secondary_buffer,
     audio::AudioStreamInfo secondary_stream_info, int16_t *output_buffer, audio::AudioStreamInfo output_stream_info,
     size_t frames_to_mix) {
@@ -484,7 +484,7 @@ void MixerSpeaker::mix_audio_samples_without_clipping_(
   }
 }
 
-}  // namespace mixer_speaker
+}  // namespace speaker_mixer
 }  // namespace esphome
 
 #endif

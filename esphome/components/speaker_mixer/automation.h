@@ -2,10 +2,10 @@
 
 #ifdef USE_ESP32
 
-#include "mixer_speaker.h"
+#include "speaker_mixer.h"
 
 namespace esphome {
-namespace mixer_speaker {
+namespace speaker_mixer {
 template<typename... Ts> class DuckingSetAction : public Action<Ts...>, public Parented<SourceSpeaker> {
   TEMPLATABLE_VALUE(uint8_t, decibel_reduction)
   TEMPLATABLE_VALUE(uint32_t, duration)
@@ -13,7 +13,7 @@ template<typename... Ts> class DuckingSetAction : public Action<Ts...>, public P
     this->parent_->set_ducking_reduction(this->decibel_reduction_.value(x...), this->duration_.value(x...));
   }
 };
-}  // namespace mixer_speaker
+}  // namespace speaker_mixer
 }  // namespace esphome
 
 #endif
