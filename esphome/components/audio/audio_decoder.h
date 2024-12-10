@@ -7,7 +7,6 @@
 #include "esphome/core/ring_buffer.h"
 
 #include "audio.h"
-#include "audio_files.h"
 #include "audio_transfer_buffer.h"
 
 #ifdef USE_SPEAKER

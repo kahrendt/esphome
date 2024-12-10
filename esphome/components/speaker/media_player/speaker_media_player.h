@@ -4,7 +4,7 @@
 
 #include "audio_pipeline.h"
 
-#include "esphome/components/audio/audio_files.h"
+#include "esphome/components/audio/audio.h"
 
 #include "esphome/components/media_player/media_player.h"
 #include "esphome/components/speaker/speaker.h"

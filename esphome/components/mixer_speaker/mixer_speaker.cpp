@@ -2,8 +2,6 @@
 
 #include "mixer_speaker.h"
 
-#include "esphome/components/audio/audio_helpers.h"
-
 #include "esphome/core/log.h"
 
 #include <dsp.h>  // esp_audio_libs
@@ -31,7 +29,6 @@ enum MixerEventGroupBits : uint32_t {
   STATE_STOPPING = (1 << 12),
   STATE_STOPPED = (1 << 13),
   ERR_ESP_NO_MEM = (1 << 19),
-  ALL_BITS = 0x00FFFFFF,  // All valid FreeRTOS event group bits
 };
 
 void InputSpeaker::loop() {
@@ -218,11 +215,12 @@ void MixerSpeaker::loop() {
   }
   if (event_group_bits & MixerEventGroupBits::ERR_ESP_NO_MEM) {
     this->status_set_error("Failed to allocate the mixer's internal buffer");
+    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::ERR_ESP_NO_MEM);
   }
   if (event_group_bits & MixerEventGroupBits::STATE_RUNNING) {
     ESP_LOGD(TAG, "Started Mixer");
-    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_RUNNING);
     this->status_clear_error();
+    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_RUNNING);
   }
   if (event_group_bits & MixerEventGroupBits::STATE_STOPPING) {
     ESP_LOGD(TAG, "Stopping Mixer");
@@ -231,7 +229,7 @@ void MixerSpeaker::loop() {
   if (event_group_bits & MixerEventGroupBits::STATE_STOPPED) {
     if (!this->task_created_) {
       ESP_LOGD(TAG, "Stopped Mixer");
-      xEventGroupClearBits(this->event_group_, MixerEventGroupBits::ALL_BITS);
+      xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_STOPPED);
       this->task_handle_ = nullptr;
     }
   }

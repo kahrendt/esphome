@@ -2,7 +2,7 @@
 
 #ifdef USE_ESP32
 
-#include "audio_files.h"
+#include "audio.h"
 #include "audio_transfer_buffer.h"
 
 #include "esphome/core/ring_buffer.h"

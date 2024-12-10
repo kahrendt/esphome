@@ -3,7 +3,6 @@
 #ifdef USE_ESP32
 
 #include "esphome/components/audio/audio.h"
-#include "esphome/components/audio/audio_files.h"
 #include "esphome/components/audio/audio_reader.h"
 #include "esphome/components/audio/audio_decoder.h"
 #include "esphome/components/audio/audio_resampler.h"
