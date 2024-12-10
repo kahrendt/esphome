@@ -139,7 +139,7 @@ class AudioSourceTransferBuffer : public AudioTransferBuffer {
   /// @brief Reads any available data from the sink into the transfer buffer.
   /// @param ticks_to_wait FreeRTOS ticks to block while waiting for the source to have enough data
   /// @return Number of bytes read
-  size_t transfer_data_from_source(TickType_t ticks_to_wait);
+  virtual size_t transfer_data_from_source(TickType_t ticks_to_wait);
 
   /// @brief Adds a ring buffer as the transfer buffer's source.
   /// @param ring_buffer weak_ptr to the allocated ring buffer

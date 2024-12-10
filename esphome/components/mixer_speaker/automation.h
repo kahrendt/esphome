@@ -6,7 +6,7 @@
 
 namespace esphome {
 namespace mixer_speaker {
-template<typename... Ts> class DuckingSetAction : public Action<Ts...>, public Parented<MixerSpeaker> {
+template<typename... Ts> class DuckingSetAction : public Action<Ts...>, public Parented<InputSpeaker> {
   TEMPLATABLE_VALUE(uint8_t, decibel_reduction)
   TEMPLATABLE_VALUE(uint32_t, duration)
   void play(Ts... x) override {

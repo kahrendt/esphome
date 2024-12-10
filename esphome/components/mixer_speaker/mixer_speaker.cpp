@@ -92,6 +92,68 @@ bool InputSpeaker::has_buffered_data() const {
   return false;
 }
 
+void InputSpeaker::set_ducking_reduction(uint8_t decibel_reduction, uint32_t duration) {
+  if (this->target_ducking_db_reduction_ != decibel_reduction) {
+    this->current_ducking_db_reduction_ = this->target_ducking_db_reduction_;
+
+    this->target_ducking_db_reduction_ = decibel_reduction;
+
+    uint8_t total_ducking_steps = 0;
+    if (this->target_ducking_db_reduction_ > this->current_ducking_db_reduction_) {
+      // The dB reduction level is increasing (which results in quieter audio)
+      total_ducking_steps = this->target_ducking_db_reduction_ - this->current_ducking_db_reduction_ - 1;
+      this->db_change_per_ducking_step_ = 1;
+    } else {
+      // The dB reduction level is decreasing (which results in louder audio)
+      total_ducking_steps = this->current_ducking_db_reduction_ - this->target_ducking_db_reduction_ - 1;
+      this->db_change_per_ducking_step_ = -1;
+    }
+    if (total_ducking_steps > 0) {
+      this->ducking_transition_samples_remaining_ = duration * this->audio_stream_info_.get_samples_per_ms();
+
+      this->samples_per_ducking_step_ = this->ducking_transition_samples_remaining_ / total_ducking_steps;
+      this->ducking_transition_samples_remaining_ =
+          this->samples_per_ducking_step_ * total_ducking_steps;  // Adjust for integer division rounding
+
+      this->current_ducking_db_reduction_ += this->db_change_per_ducking_step_;
+    } else {
+      this->ducking_transition_samples_remaining_ = 0;
+      this->current_ducking_db_reduction_ = this->target_ducking_db_reduction_;
+    }
+  }
+}
+
+size_t InputSpeaker::transfer_data_from_source(TickType_t ticks_to_wait) {
+  // Shift data in buffer to start
+  if (this->buffer_length_ > 0) {
+    memmove(this->buffer_, this->data_start_, this->buffer_length_);
+  }
+  this->data_start_ = this->buffer_;
+
+  uint8_t *data_end = this->get_buffer_end();
+
+  size_t bytes_to_read = this->free();
+  size_t bytes_read = 0;
+  if (bytes_to_read > 0) {
+    if (this->ring_buffer_.use_count() > 0) {
+      bytes_read = this->ring_buffer_->read((void *) data_end, bytes_to_read, ticks_to_wait);
+    }
+
+    size_t samples_to_duck = bytes_read / this->audio_stream_info_.get_bytes_per_sample();
+
+    if (samples_to_duck > 0) {
+      int16_t *current_buffer = reinterpret_cast<int16_t *>(data_end);
+
+      this->parent_->duck_samples(current_buffer, samples_to_duck, this->current_ducking_db_reduction_,
+                                  this->ducking_transition_samples_remaining_, this->samples_per_ducking_step_,
+                                  this->db_change_per_ducking_step_);
+    }
+
+    this->increase_buffer_length(bytes_read);
+  }
+  return bytes_read;
+}
+
 void MixerSpeaker::setup() {
   this->event_queue_ = xQueueCreate(QUEUE_COUNT, sizeof(TaskEvent));
 
@@ -99,19 +161,6 @@ void MixerSpeaker::setup() {
 
   if ((this->event_queue_ == nullptr) || (this->command_queue_ == nullptr)) {
     this->mark_failed();
-  }
-}
-
-void MixerSpeaker::set_ducking_reduction(uint8_t decibel_reduction, uint32_t duration) {
-  if (this->command_queue_ != nullptr) {
-    CommandEvent command_event;
-    command_event.command = CommandEventType::DUCK;
-    command_event.decibel_reduction = decibel_reduction;
-
-    // Convert the duration in seconds to number of samples, accounting for the sample rate and number of channels
-    command_event.transition_samples =
-        duration * this->secondary_speaker_->get_audio_stream_info().get_samples_per_ms();
-    this->send_command_(&command_event);
   }
 }
 
@@ -174,18 +223,6 @@ void MixerSpeaker::audio_mixer_task(void *params) {
     }
   }
 
-  // Parameters to control the ducking dB reduction and its transitions
-  // There is a built in negative sign; e.g., reducing by 5 dB is changing the gain by -5 dB
-  int8_t target_ducking_db_reduction = 0;
-  int8_t current_ducking_db_reduction = 0;
-
-  // Each step represents a change in 1 dB. Positive 1 means the dB reduction is increasing. Negative 1 means the dB
-  // reduction is decreasing.
-  int8_t db_change_per_ducking_step = 1;
-
-  size_t ducking_transition_samples_remaining = 0;
-  size_t samples_per_ducking_step = 0;
-
   event.type = EventType::STARTED;
   xQueueSend(this_mixer->event_queue_, &event, portMAX_DELAY);
 
@@ -193,35 +230,6 @@ void MixerSpeaker::audio_mixer_task(void *params) {
     if (xQueueReceive(this_mixer->command_queue_, &command_event, 0) == pdTRUE) {
       if (command_event.command == CommandEventType::STOP) {
         break;
-      } else if (command_event.command == CommandEventType::DUCK) {
-        if (target_ducking_db_reduction != command_event.decibel_reduction) {
-          current_ducking_db_reduction = target_ducking_db_reduction;
-
-          target_ducking_db_reduction = command_event.decibel_reduction;
-
-          uint8_t total_ducking_steps = 0;
-          if (target_ducking_db_reduction > current_ducking_db_reduction) {
-            // The dB reduction level is increasing (which results in quieter audio)
-            total_ducking_steps = target_ducking_db_reduction - current_ducking_db_reduction - 1;
-            db_change_per_ducking_step = 1;
-          } else {
-            // The dB reduction level is decreasing (which results in louder audio)
-            total_ducking_steps = current_ducking_db_reduction - target_ducking_db_reduction - 1;
-            db_change_per_ducking_step = -1;
-          }
-          if (total_ducking_steps > 0) {
-            ducking_transition_samples_remaining = command_event.transition_samples;
-
-            samples_per_ducking_step = ducking_transition_samples_remaining / total_ducking_steps;
-            ducking_transition_samples_remaining =
-                samples_per_ducking_step * total_ducking_steps;  // Adjust for integer division rounding
-
-            current_ducking_db_reduction += db_change_per_ducking_step;
-          } else {
-            ducking_transition_samples_remaining = 0;
-            current_ducking_db_reduction = target_ducking_db_reduction;
-          }
-        }
       }
     }
 
@@ -240,17 +248,6 @@ void MixerSpeaker::audio_mixer_task(void *params) {
     this_mixer->secondary_speaker_->transfer_data_from_source(0);
     uint32_t secondary_frames_available =
         this_mixer->secondary_speaker_->available() / secondary_stream_info.get_bytes_per_frame();
-    size_t secondary_samples_to_duck = (this_mixer->secondary_speaker_->available() - secondary_bytes_ducked) /
-                                       secondary_stream_info.get_bytes_per_sample();
-
-    if (secondary_samples_to_duck > 0) {
-      int16_t *current_secondary_buffer =
-          reinterpret_cast<int16_t *>(this_mixer->secondary_speaker_->get_buffer_start() + secondary_bytes_ducked);
-
-      this_mixer->duck_samples_(current_secondary_buffer, secondary_samples_to_duck, current_ducking_db_reduction,
-                                ducking_transition_samples_remaining, samples_per_ducking_step,
-                                db_change_per_ducking_step);
-    }
 
     // Restrict the number of frames available to the amount that the output transfer buffer can store
     primary_frames_available = std::min(primary_frames_available, output_frames_free);
@@ -330,9 +327,9 @@ BaseType_t MixerSpeaker::send_command_(CommandEvent *command, TickType_t ticks_t
   return pdFALSE;
 }
 
-void MixerSpeaker::duck_samples_(int16_t *input_buffer, uint32_t input_samples_to_duck,
-                                 int8_t &current_ducking_db_reduction, size_t &ducking_transition_samples_remaining,
-                                 size_t samples_per_ducking_step, int8_t db_change_per_ducking_step) {
+void MixerSpeaker::duck_samples(int16_t *input_buffer, uint32_t input_samples_to_duck,
+                                int8_t &current_ducking_db_reduction, size_t &ducking_transition_samples_remaining,
+                                size_t samples_per_ducking_step, int8_t db_change_per_ducking_step) {
   if (ducking_transition_samples_remaining > 0) {
     // Ducking level is still transitioning
 

@@ -18,7 +18,7 @@ CONF_OUTPUT_SPEAKER = "output_speaker"
 CONF_SECONDARY_SPEAKER = "secondary_speaker"
 
 DuckingSetAction = mixer_speaker_ns.class_(
-    "DuckingSetAction", automation.Action, cg.Parented.template(MixerSpeaker)
+    "DuckingSetAction", automation.Action, cg.Parented.template(InputSpeaker)
 )
 
 
@@ -59,11 +59,11 @@ async def to_code(config):
 
 
 @automation.register_action(
-    "mixer_speaker.set_ducking",
+    "mixer_input_speaker.set_ducking",
     DuckingSetAction,
     cv.Schema(
         {
-            cv.GenerateID(): cv.use_id(MixerSpeaker),
+            cv.GenerateID(): cv.use_id(InputSpeaker),
             cv.Required(CONF_DECIBEL_REDUCTION): cv.templatable(
                 cv.int_range(min=0, max=51)
             ),

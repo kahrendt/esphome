@@ -29,14 +29,11 @@ struct TaskEvent {
 
 enum class CommandEventType : uint8_t {
   STOP,  // Stop mixing to prepare for stopping the mixing task
-  DUCK,  // Duck the secondary audio
 };
 
 // Used to send commands to the mixer task
 struct CommandEvent {
   CommandEventType command;
-  uint8_t decibel_reduction;
-  size_t transition_samples = 0;
 };
 
 // Gives the Q15 fixed point scaling factor to reduce by 0 dB, 1dB, ..., 50 dB
@@ -73,12 +70,25 @@ class InputSpeaker : public speaker::Speaker, public Component, public audio::Au
 
   void set_parent(MixerSpeaker *parent) { this->parent_ = parent; }
 
+  size_t transfer_data_from_source(TickType_t ticks_to_wait) override;
+
+  /// @brief Sets the ducking level for the secondary stream in the mixer
+  /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by 10 dB
+  /// @param duration (uint32_t) The number of milliseconds to transition from the current level to the new level
+  void set_ducking_reduction(uint8_t decibel_reduction, uint32_t duration);
+
  protected:
   MixerSpeaker *parent_;
 
   uint32_t last_seen_data_ms_;
   uint32_t timeout_ms_{1000};
   bool stop_gracefully_{false};
+
+  int8_t target_ducking_db_reduction_{0};
+  int8_t current_ducking_db_reduction_{0};
+  int8_t db_change_per_ducking_step_{1};
+  size_t ducking_transition_samples_remaining_{0};
+  size_t samples_per_ducking_step_{0};
 };
 
 class MixerSpeaker : public Component {
@@ -93,11 +103,6 @@ class MixerSpeaker : public Component {
   void set_output_speaker(speaker::Speaker *speaker) { this->output_speaker_ = speaker; }
   speaker::Speaker *get_output_speaker() { return this->output_speaker_; }
 
-  /// @brief Sets the ducking level for the secondary stream in the mixer
-  /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by 10 dB
-  /// @param duration (uint32_t) The number of milliseconds to transition from the current level to the new level
-  void set_ducking_reduction(uint8_t decibel_reduction, uint32_t duration);
-
   void get_state() {
     TaskEvent event;
     while (this->read_event_(&event)) {
@@ -107,6 +112,10 @@ class MixerSpeaker : public Component {
       }
     }
   }
+
+  void duck_samples(int16_t *input_buffer, uint32_t input_samples_to_duck, int8_t &current_ducking_db_reduction,
+                    size_t &ducking_transition_samples_remaining, size_t samples_per_ducking_step,
+                    int8_t db_change_per_ducking_step);
 
  protected:
   /// @brief Reads a TaskEvent from the event queue indicating its current status
@@ -156,10 +165,6 @@ class MixerSpeaker : public Component {
   void copy_frames_(int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
                     audio::AudioStreamInfo output_stream_info, uint32_t frames_to_transfer, size_t &bytes_read,
                     size_t &bytes_written);
-
-  void duck_samples_(int16_t *input_buffer, uint32_t input_samples_to_duck, int8_t &current_ducking_db_reduction,
-                     size_t &ducking_transition_samples_remaining, size_t samples_per_ducking_step,
-                     int8_t db_change_per_ducking_step);
 
   static void audio_mixer_task(void *params);
   TaskHandle_t task_handle_{nullptr};
