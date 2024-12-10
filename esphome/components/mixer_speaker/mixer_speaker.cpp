@@ -2,6 +2,8 @@
 
 #include "mixer_speaker.h"
 
+#include "esphome/components/audio/audio_helpers.h"
+
 #include "esphome/core/log.h"
 
 #include <dsp.h>  // esp_audio_libs
@@ -152,9 +154,9 @@ size_t InputSpeaker::transfer_data_from_source(TickType_t ticks_to_wait) {
     if (samples_to_duck > 0) {
       int16_t *current_buffer = reinterpret_cast<int16_t *>(data_end);
 
-      this->parent_->duck_samples(current_buffer, samples_to_duck, this->current_ducking_db_reduction_,
-                                  this->ducking_transition_samples_remaining_, this->samples_per_ducking_step_,
-                                  this->db_change_per_ducking_step_);
+      this->duck_samples_(current_buffer, samples_to_duck, this->current_ducking_db_reduction_,
+                          this->ducking_transition_samples_remaining_, this->samples_per_ducking_step_,
+                          this->db_change_per_ducking_step_);
     }
 
     this->increase_buffer_length(bytes_read);
@@ -335,9 +337,9 @@ void MixerSpeaker::audio_mixer_task(void *params) {
   vTaskDelete(nullptr);
 }
 
-void MixerSpeaker::duck_samples(int16_t *input_buffer, uint32_t input_samples_to_duck,
-                                int8_t &current_ducking_db_reduction, size_t &ducking_transition_samples_remaining,
-                                size_t samples_per_ducking_step, int8_t db_change_per_ducking_step) {
+void InputSpeaker::duck_samples_(int16_t *input_buffer, uint32_t input_samples_to_duck,
+                                 int8_t &current_ducking_db_reduction, size_t &ducking_transition_samples_remaining,
+                                 size_t samples_per_ducking_step, int8_t db_change_per_ducking_step) {
   if (ducking_transition_samples_remaining > 0) {
     // Ducking level is still transitioning
 
@@ -360,7 +362,7 @@ void MixerSpeaker::duck_samples(int16_t *input_buffer, uint32_t input_samples_to
           clamp<uint8_t>(current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
       int16_t q15_scale_factor = DECIBEL_REDUCTION_TABLE[safe_db_reduction_index];
 
-      this->scale_audio_samples_(input_buffer, input_buffer, q15_scale_factor, samples_to_duck);
+      audio::scale_audio_samples(input_buffer, input_buffer, q15_scale_factor, samples_to_duck);
 
       if (samples_left_in_step - samples_to_duck == 0) {
         // After scaling the current samples, we are ready to transition to the next step
@@ -380,7 +382,7 @@ void MixerSpeaker::duck_samples(int16_t *input_buffer, uint32_t input_samples_to
         clamp<uint8_t>(current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
     int16_t q15_scale_factor = DECIBEL_REDUCTION_TABLE[safe_db_reduction_index];
 
-    this->scale_audio_samples_(input_buffer, input_buffer, q15_scale_factor, input_samples_to_duck);
+    audio::scale_audio_samples(input_buffer, input_buffer, q15_scale_factor, input_samples_to_duck);
   }
 }
 
@@ -469,7 +471,7 @@ void MixerSpeaker::mix_audio_samples_without_clipping_(
 
   if (q15_scaling_factor < MAX_AUDIO_SAMPLE_VALUE) {
     // Need to scale to avoid clipping
-    this->scale_audio_samples_(secondary_buffer, secondary_buffer, q15_scaling_factor,
+    audio::scale_audio_samples(secondary_buffer, secondary_buffer, q15_scaling_factor,
                                frames_to_mix * secondary_channels);
 
     for (uint8_t output_channel_index = 0; output_channel_index < output_channels; ++output_channel_index) {
@@ -481,15 +483,6 @@ void MixerSpeaker::mix_audio_samples_without_clipping_(
                    output_buffer + output_channel_index_offset, frames_to_mix, secondary_channels, primary_channels,
                    output_channels, 0);
     }
-  }
-}
-
-void MixerSpeaker::scale_audio_samples_(int16_t *audio_samples, int16_t *output_buffer, int16_t scale_factor,
-                                        size_t samples_to_scale) {
-  // Note the assembly dsps_mulc function has audio glitches if the input and output buffers are the same.
-  for (int i = 0; i < samples_to_scale; i++) {
-    int32_t acc = (int32_t) audio_samples[i] * (int32_t) scale_factor;
-    output_buffer[i] = (int16_t) (acc >> 15);
   }
 }
 

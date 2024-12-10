@@ -56,6 +56,10 @@ class InputSpeaker : public speaker::Speaker, public Component, public audio::Au
   void set_ducking_reduction(uint8_t decibel_reduction, uint32_t duration);
 
  protected:
+  void duck_samples_(int16_t *input_buffer, uint32_t input_samples_to_duck, int8_t &current_ducking_db_reduction,
+                     size_t &ducking_transition_samples_remaining, size_t samples_per_ducking_step,
+                     int8_t db_change_per_ducking_step);
+
   MixerSpeaker *parent_;
 
   uint32_t last_seen_data_ms_;
@@ -82,10 +86,6 @@ class MixerSpeaker : public Component {
   void set_output_speaker(speaker::Speaker *speaker) { this->output_speaker_ = speaker; }
   speaker::Speaker *get_output_speaker() { return this->output_speaker_; }
 
-  void duck_samples(int16_t *input_buffer, uint32_t input_samples_to_duck, int8_t &current_ducking_db_reduction,
-                    size_t &ducking_transition_samples_remaining, size_t samples_per_ducking_step,
-                    int8_t db_change_per_ducking_step);
-
  protected:
   /// @brief Mixes the primary and secondary streams. If the resulting audio clips, the secondary samples are first
   /// scaled.
@@ -100,14 +100,6 @@ class MixerSpeaker : public Component {
                                            int16_t *secondary_buffer, audio::AudioStreamInfo secondary_stream_info,
                                            int16_t *output_buffer, audio::AudioStreamInfo output_stream_info,
                                            size_t frames_to_mix);
-
-  /// @brief Scales audio samples. Scales in place when audio_samples == output_buffer.
-  /// @param audio_samples PCM int16 audio samples
-  /// @param output_buffer Buffer to store the scaled samples
-  /// @param scale_factor Q15 fixed point scaling factor
-  /// @param samples_to_scale Number of samples to scale
-  void scale_audio_samples_(int16_t *audio_samples, int16_t *output_buffer, int16_t scale_factor,
-                            size_t samples_to_scale);
 
   /// @brief Copies audio frames from the input buffer to the output buffer taking into account the number of channels
   /// in each stream. If the output stream has more channels, the input samples are duplicated. If the output stream has
