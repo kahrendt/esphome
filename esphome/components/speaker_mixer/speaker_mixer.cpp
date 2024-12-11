@@ -20,6 +20,8 @@ static const size_t TASK_DELAY_MS = 25;
 static const int16_t MAX_AUDIO_SAMPLE_VALUE = INT16_MAX;
 static const int16_t MIN_AUDIO_SAMPLE_VALUE = INT16_MIN;
 
+static const uint8_t OUTPUT_CHANNELS = 2;
+
 static const char *const TAG = "mixing_speaker";
 
 enum MixerEventGroupBits : uint32_t {
@@ -181,8 +183,7 @@ esp_err_t SpeakerMixer::start(audio::AudioStreamInfo &stream_info) {
     }
 
     this->audio_stream_info_ = stream_info;
-    // The mixing speaker will always output 2 channels.
-    this->audio_stream_info_.value().channels = 2;
+    this->audio_stream_info_.value().channels = OUTPUT_CHANNELS;
     this->output_speaker_->set_audio_stream_info(this->audio_stream_info_.value());
 
     this->ring_buffer_size_ = MIXER_INPUT_RING_BUFFER_DURATION_MS * this->audio_stream_info_.value().get_bytes_per_ms();
