@@ -13,16 +13,15 @@ SpeakerMixer = speaker_mixer_ns.class_("SpeakerMixer", cg.Component, speaker.Spe
 SourceSpeaker = speaker_mixer_ns.class_("SourceSpeaker", cg.Component, speaker.Speaker)
 
 CONF_DECIBEL_REDUCTION = "decibel_reduction"
-CONF_PRIMARY_SPEAKER = "primary_speaker"
 CONF_OUTPUT_SPEAKER = "output_speaker"
-CONF_SECONDARY_SPEAKER = "secondary_speaker"
+CONF_SOURCE_SPEAKERS = "source_speakers"
 
 DuckingSetAction = speaker_mixer_ns.class_(
     "DuckingSetAction", automation.Action, cg.Parented.template(SourceSpeaker)
 )
 
 
-INPUT_SPEAKER_SCHEMA = speaker.SPEAKER_SCHEMA.extend(
+SOURCE_SPEAKER_SCHEMA = speaker.SPEAKER_SCHEMA.extend(
     {cv.GenerateID(): cv.declare_id(SourceSpeaker)}
 )
 
@@ -30,8 +29,9 @@ CONFIG_SCHEMA = cv.All(
     {
         cv.GenerateID(): cv.declare_id(SpeakerMixer),
         cv.Required(CONF_OUTPUT_SPEAKER): cv.use_id(speaker.Speaker),
-        cv.Required(CONF_PRIMARY_SPEAKER): INPUT_SPEAKER_SCHEMA,
-        cv.Required(CONF_SECONDARY_SPEAKER): INPUT_SPEAKER_SCHEMA,
+        cv.Required(CONF_SOURCE_SPEAKERS): cv.All(
+            cv.ensure_list(SOURCE_SPEAKER_SCHEMA), cv.Length(min=2, max=2)
+        ),
     }
 )
 
@@ -43,14 +43,14 @@ async def to_code(config):
     spkr = await cg.get_variable(config[CONF_OUTPUT_SPEAKER])
     cg.add(var.set_output_speaker(spkr))
 
-    primary_speaker_config = config[CONF_PRIMARY_SPEAKER]
+    primary_speaker_config = config[CONF_SOURCE_SPEAKERS][0]
     announce_speaker = cg.new_Pvariable(primary_speaker_config[CONF_ID])
     await cg.register_component(announce_speaker, primary_speaker_config)
     await cg.register_parented(announce_speaker, config[CONF_ID])
     await speaker.register_speaker(announce_speaker, primary_speaker_config)
     cg.add(var.set_primary_speaker(announce_speaker))
 
-    secondary_speaker_config = config[CONF_SECONDARY_SPEAKER]
+    secondary_speaker_config = config[CONF_SOURCE_SPEAKERS][1]
     secondary_speaker = cg.new_Pvariable(secondary_speaker_config[CONF_ID])
     await cg.register_component(secondary_speaker, secondary_speaker_config)
     await cg.register_parented(secondary_speaker, config[CONF_ID])
