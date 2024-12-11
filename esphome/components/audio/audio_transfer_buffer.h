@@ -42,14 +42,19 @@ class AudioTransferBuffer {
   /// @param bytes The number of bytes written
   void increase_buffer_length(size_t bytes);
 
-  /// @brief Returns the transfer buffer's currently available bytes that can be read
+  /// @brief Returns the transfer buffer's currently available bytes to read
   size_t available() const { return this->buffer_length_; }
 
   /// @brief Returns the transfer buffers allocated bytes
   size_t capacity() const { return this->buffer_size_; }
 
-  /// @brief Returns the transfer buffer's currrently free bytes that can be written
-  size_t free() const { return this->buffer_size_ - (this->buffer_length_ - (this->data_start_ - this->buffer_)); }
+  /// @brief Returns the transfer buffer's currrently free bytes available to write
+  size_t free() const {
+    if (this->buffer_size_ == 0) {
+      return 0;
+    }
+    return this->buffer_size_ - (this->buffer_length_ - (this->data_start_ - this->buffer_));
+  }
 
   /// @brief Clears data in the transfer buffer and, if possible, the source/sink.
   virtual void clear_buffered_data();
