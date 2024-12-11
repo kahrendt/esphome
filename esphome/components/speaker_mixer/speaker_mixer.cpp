@@ -22,7 +22,15 @@ static const int16_t MIN_AUDIO_SAMPLE_VALUE = INT16_MIN;
 
 static const uint8_t OUTPUT_CHANNELS = 2;
 
-static const char *const TAG = "mixing_speaker";
+static const char *const TAG = "speaker_mixer";
+
+// Gives the Q15 fixed point scaling factor to reduce by 0 dB, 1dB, ..., 50 dB
+// dB to PCM scaling factor formula: floating_point_scale_factor = 2^(-db/6.014)
+// float to Q15 fixed point formula: q15_scale_factor = floating_point_scale_factor * 2^(15)
+static const std::vector<int16_t> DECIBEL_REDUCTION_TABLE = {
+    32767, 29201, 26022, 23189, 20665, 18415, 16410, 14624, 13032, 11613, 10349, 9222, 8218, 7324, 6527, 5816, 5183,
+    4619,  4116,  3668,  3269,  2913,  2596,  2313,  2061,  1837,  1637,  1459,  1300, 1158, 1032, 920,  820,  731,
+    651,   580,   517,   461,   411,   366,   326,   291,   259,   231,   206,   183,  163,  146,  130,  116,  103};
 
 enum MixerEventGroupBits : uint32_t {
   COMMAND_STOP = (1 << 0),  // stops the mixer task
@@ -85,6 +93,10 @@ void SourceSpeaker::stop() {
   this->state_ = speaker::STATE_STOPPED;
 }
 
+void SourceSpeaker::finish() { this->stop_gracefully_ = true; }
+
+bool SourceSpeaker::has_buffered_data() const { return this->audio::AudioSourceTransferBuffer::has_buffered_data(); }
+
 void SourceSpeaker::set_mute_state(bool mute_state) {
   this->mute_state_ = mute_state;
   this->parent_->get_output_speaker()->set_mute_state(mute_state);
@@ -93,44 +105,6 @@ void SourceSpeaker::set_mute_state(bool mute_state) {
 void SourceSpeaker::set_volume(float volume) {
   this->volume_ = volume;
   this->parent_->get_output_speaker()->set_volume(volume);
-}
-
-bool SourceSpeaker::has_buffered_data() const {
-  if (this->ring_buffer_.use_count() > 0) {
-    return (this->ring_buffer_->available() > 0);
-  }
-  return false;
-}
-
-void SourceSpeaker::set_ducking_reduction(uint8_t decibel_reduction, uint32_t duration) {
-  if (this->target_ducking_db_reduction_ != decibel_reduction) {
-    this->current_ducking_db_reduction_ = this->target_ducking_db_reduction_;
-
-    this->target_ducking_db_reduction_ = decibel_reduction;
-
-    uint8_t total_ducking_steps = 0;
-    if (this->target_ducking_db_reduction_ > this->current_ducking_db_reduction_) {
-      // The dB reduction level is increasing (which results in quieter audio)
-      total_ducking_steps = this->target_ducking_db_reduction_ - this->current_ducking_db_reduction_ - 1;
-      this->db_change_per_ducking_step_ = 1;
-    } else {
-      // The dB reduction level is decreasing (which results in louder audio)
-      total_ducking_steps = this->current_ducking_db_reduction_ - this->target_ducking_db_reduction_ - 1;
-      this->db_change_per_ducking_step_ = -1;
-    }
-    if (total_ducking_steps > 0) {
-      this->ducking_transition_samples_remaining_ = duration * this->audio_stream_info_.get_samples_per_ms();
-
-      this->samples_per_ducking_step_ = this->ducking_transition_samples_remaining_ / total_ducking_steps;
-      this->ducking_transition_samples_remaining_ =
-          this->samples_per_ducking_step_ * total_ducking_steps;  // Adjust for integer division rounding
-
-      this->current_ducking_db_reduction_ += this->db_change_per_ducking_step_;
-    } else {
-      this->ducking_transition_samples_remaining_ = 0;
-      this->current_ducking_db_reduction_ = this->target_ducking_db_reduction_;
-    }
-  }
 }
 
 size_t SourceSpeaker::transfer_data_from_source(TickType_t ticks_to_wait) {
@@ -164,177 +138,35 @@ size_t SourceSpeaker::transfer_data_from_source(TickType_t ticks_to_wait) {
   return bytes_read;
 }
 
-void SpeakerMixer::setup() {
-  this->event_group_ = xEventGroupCreate();
+void SourceSpeaker::apply_ducking(uint8_t decibel_reduction, uint32_t duration) {
+  if (this->target_ducking_db_reduction_ != decibel_reduction) {
+    this->current_ducking_db_reduction_ = this->target_ducking_db_reduction_;
 
-  if (this->event_group_ == nullptr) {
-    ESP_LOGE(TAG, "Failed to create event group");
-    this->mark_failed();
-    return;
-  }
-}
+    this->target_ducking_db_reduction_ = decibel_reduction;
 
-esp_err_t SpeakerMixer::start(audio::AudioStreamInfo &stream_info) {
-  ESP_LOGD(TAG, "Starting mixing speaker");
-  if (!this->audio_stream_info_.has_value()) {
-    if (stream_info.bits_per_sample != 16) {
-      // Audio streams that don't have 16 bits per sample are not supported
-      return ESP_ERR_NOT_SUPPORTED;
-    }
-
-    this->audio_stream_info_ = stream_info;
-    this->audio_stream_info_.value().channels = OUTPUT_CHANNELS;
-    this->output_speaker_->set_audio_stream_info(this->audio_stream_info_.value());
-
-    this->ring_buffer_size_ = MIXER_INPUT_RING_BUFFER_DURATION_MS * this->audio_stream_info_.value().get_bytes_per_ms();
-  } else {
-    if (stream_info.sample_rate != this->audio_stream_info_.value().sample_rate) {
-      // The two audio streams must have the same sample rate to mix properly
-      return ESP_ERR_INVALID_ARG;
-    }
-  }
-
-  if (this->task_handle_ == nullptr) {
-    xTaskCreate(this->audio_mixer_task, "mixer", TASK_STACK_SIZE, (void *) this, MIXER_TASK_PRIORITY,
-                &this->task_handle_);
-
-    if (this->task_handle_ == nullptr) {
-      return ESP_ERR_INVALID_STATE;
-    }
-
-    this->task_created_ = true;
-  }
-
-  return ESP_OK;
-}
-
-void SpeakerMixer::loop() {
-  uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
-
-  if (event_group_bits & MixerEventGroupBits::STATE_STARTING) {
-    ESP_LOGD(TAG, "Starting Mixer");
-    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_STARTING);
-  }
-  if (event_group_bits & MixerEventGroupBits::ERR_ESP_NO_MEM) {
-    this->status_set_error("Failed to allocate the mixer's internal buffer");
-    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::ERR_ESP_NO_MEM);
-  }
-  if (event_group_bits & MixerEventGroupBits::STATE_RUNNING) {
-    ESP_LOGD(TAG, "Started Mixer");
-    this->status_clear_error();
-    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_RUNNING);
-  }
-  if (event_group_bits & MixerEventGroupBits::STATE_STOPPING) {
-    ESP_LOGD(TAG, "Stopping Mixer");
-    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_STOPPING);
-  }
-  if (event_group_bits & MixerEventGroupBits::STATE_STOPPED) {
-    if (!this->task_created_) {
-      ESP_LOGD(TAG, "Stopped Mixer");
-      xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_STOPPED);
-      this->task_handle_ = nullptr;
-    }
-  }
-}
-
-void SpeakerMixer::audio_mixer_task(void *params) {
-  SpeakerMixer *this_mixer = (SpeakerMixer *) params;
-
-  xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STARTING);
-
-  std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
-      audio::AudioSinkTransferBuffer::create(TRANSFER_BUFFER_SIZE);
-
-  if (output_transfer_buffer == nullptr) {
-    xEventGroupSetBits(this_mixer->event_group_,
-                       MixerEventGroupBits::STATE_STOPPED | MixerEventGroupBits::ERR_ESP_NO_MEM);
-
-    this_mixer->task_created_ = false;
-    vTaskDelete(nullptr);
-  }
-
-  output_transfer_buffer->set_sink(this_mixer->output_speaker_);
-
-  xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_RUNNING);
-
-  while (true) {
-    uint32_t event_group_bits = xEventGroupGetBits(this_mixer->event_group_);
-    if (event_group_bits & MixerEventGroupBits::COMMAND_STOP) {
-      break;
-    }
-
-    output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(TASK_DELAY_MS));
-
-    const uint32_t output_frames_free =
-        output_transfer_buffer->free() / this_mixer->audio_stream_info_.value().get_bytes_per_frame();
-
-    audio::AudioStreamInfo primary_stream_info = this_mixer->primary_speaker_->get_audio_stream_info();
-    this_mixer->primary_speaker_->transfer_data_from_source(0);
-    uint32_t primary_frames_available =
-        this_mixer->primary_speaker_->available() / primary_stream_info.get_bytes_per_frame();
-
-    const size_t secondary_bytes_ducked = this_mixer->secondary_speaker_->available();
-    audio::AudioStreamInfo secondary_stream_info = this_mixer->secondary_speaker_->get_audio_stream_info();
-    this_mixer->secondary_speaker_->transfer_data_from_source(0);
-    uint32_t secondary_frames_available =
-        this_mixer->secondary_speaker_->available() / secondary_stream_info.get_bytes_per_frame();
-
-    // Restrict the number of frames available to the amount that the output transfer buffer can store
-    primary_frames_available = std::min(primary_frames_available, output_frames_free);
-    secondary_frames_available = std::min(secondary_frames_available, output_frames_free);
-
-    if (secondary_frames_available + primary_frames_available > 0) {
-      // Copies audio based on frames instead of bytes to avoid ever transferring half a sample or frame
-
-      size_t bytes_written = 0;
-      if ((secondary_frames_available > 0) && (primary_frames_available > 0)) {
-        // Mix the audio
-        uint32_t frames_to_transfer = std::min(secondary_frames_available, primary_frames_available);
-
-        this_mixer->mix_audio_samples_without_clipping_(
-            reinterpret_cast<int16_t *>(this_mixer->primary_speaker_->get_buffer_start()), primary_stream_info,
-            reinterpret_cast<int16_t *>(this_mixer->secondary_speaker_->get_buffer_start()), secondary_stream_info,
-            reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
-            this_mixer->audio_stream_info_.value(), frames_to_transfer);
-
-        size_t primary_bytes_read = frames_to_transfer * primary_stream_info.get_bytes_per_frame();
-        size_t secondary_bytes_read = frames_to_transfer * secondary_stream_info.get_bytes_per_frame();
-        bytes_written = frames_to_transfer * this_mixer->audio_stream_info_.value().get_bytes_per_frame();
-
-        this_mixer->primary_speaker_->decrease_buffer_length(primary_bytes_read);
-        this_mixer->secondary_speaker_->decrease_buffer_length(secondary_bytes_read);
-      } else if (primary_frames_available > 0) {
-        size_t bytes_read = 0;
-        this_mixer->copy_frames_(
-            reinterpret_cast<int16_t *>(this_mixer->primary_speaker_->get_buffer_start()), primary_stream_info,
-            reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
-            this_mixer->audio_stream_info_.value(), primary_frames_available, bytes_read, bytes_written);
-
-        this_mixer->primary_speaker_->decrease_buffer_length(bytes_read);
-      } else if (secondary_frames_available > 0) {
-        size_t bytes_read = 0;
-        this_mixer->copy_frames_(
-            reinterpret_cast<int16_t *>(this_mixer->secondary_speaker_->get_buffer_start()), secondary_stream_info,
-            reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
-            this_mixer->audio_stream_info_.value(), secondary_frames_available, bytes_read, bytes_written);
-
-        this_mixer->secondary_speaker_->decrease_buffer_length(bytes_read);
-      }
-
-      output_transfer_buffer->increase_buffer_length(bytes_written);
+    uint8_t total_ducking_steps = 0;
+    if (this->target_ducking_db_reduction_ > this->current_ducking_db_reduction_) {
+      // The dB reduction level is increasing (which results in quieter audio)
+      total_ducking_steps = this->target_ducking_db_reduction_ - this->current_ducking_db_reduction_ - 1;
+      this->db_change_per_ducking_step_ = 1;
     } else {
-      // No audio data available in either buffer
-      delay(TASK_DELAY_MS);
+      // The dB reduction level is decreasing (which results in louder audio)
+      total_ducking_steps = this->current_ducking_db_reduction_ - this->target_ducking_db_reduction_ - 1;
+      this->db_change_per_ducking_step_ = -1;
+    }
+    if (total_ducking_steps > 0) {
+      this->ducking_transition_samples_remaining_ = duration * this->audio_stream_info_.get_samples_per_ms();
+
+      this->samples_per_ducking_step_ = this->ducking_transition_samples_remaining_ / total_ducking_steps;
+      this->ducking_transition_samples_remaining_ =
+          this->samples_per_ducking_step_ * total_ducking_steps;  // Adjust for integer division rounding
+
+      this->current_ducking_db_reduction_ += this->db_change_per_ducking_step_;
+    } else {
+      this->ducking_transition_samples_remaining_ = 0;
+      this->current_ducking_db_reduction_ = this->target_ducking_db_reduction_;
     }
   }
-
-  xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STOPPING);
-
-  output_transfer_buffer.reset();
-
-  xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STOPPED);
-  this_mixer->task_created_ = false;
-  vTaskDelete(nullptr);
 }
 
 void SourceSpeaker::duck_samples(int16_t *input_buffer, uint32_t input_samples_to_duck,
@@ -386,9 +218,81 @@ void SourceSpeaker::duck_samples(int16_t *input_buffer, uint32_t input_samples_t
   }
 }
 
-void SpeakerMixer::copy_frames_(int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
-                                audio::AudioStreamInfo output_stream_info, uint32_t frames_to_transfer,
-                                size_t &bytes_read, size_t &bytes_written) {
+void SpeakerMixer::setup() {
+  this->event_group_ = xEventGroupCreate();
+
+  if (this->event_group_ == nullptr) {
+    ESP_LOGE(TAG, "Failed to create event group");
+    this->mark_failed();
+    return;
+  }
+}
+
+void SpeakerMixer::loop() {
+  uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
+
+  if (event_group_bits & MixerEventGroupBits::STATE_STARTING) {
+    ESP_LOGD(TAG, "Starting Mixer");
+    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_STARTING);
+  }
+  if (event_group_bits & MixerEventGroupBits::ERR_ESP_NO_MEM) {
+    this->status_set_error("Failed to allocate the mixer's internal buffer");
+    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::ERR_ESP_NO_MEM);
+  }
+  if (event_group_bits & MixerEventGroupBits::STATE_RUNNING) {
+    ESP_LOGD(TAG, "Started Mixer");
+    this->status_clear_error();
+    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_RUNNING);
+  }
+  if (event_group_bits & MixerEventGroupBits::STATE_STOPPING) {
+    ESP_LOGD(TAG, "Stopping Mixer");
+    xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_STOPPING);
+  }
+  if (event_group_bits & MixerEventGroupBits::STATE_STOPPED) {
+    if (!this->task_created_) {
+      ESP_LOGD(TAG, "Stopped Mixer");
+      xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_STOPPED);
+      this->task_handle_ = nullptr;
+    }
+  }
+}
+
+esp_err_t SpeakerMixer::start(audio::AudioStreamInfo &stream_info) {
+  if (!this->audio_stream_info_.has_value()) {
+    if (stream_info.bits_per_sample != 16) {
+      // Audio streams that don't have 16 bits per sample are not supported
+      return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    this->audio_stream_info_ = stream_info;
+    this->audio_stream_info_.value().channels = OUTPUT_CHANNELS;
+    this->output_speaker_->set_audio_stream_info(this->audio_stream_info_.value());
+
+    this->ring_buffer_size_ = MIXER_INPUT_RING_BUFFER_DURATION_MS * this->audio_stream_info_.value().get_bytes_per_ms();
+  } else {
+    if (stream_info.sample_rate != this->audio_stream_info_.value().sample_rate) {
+      // The two audio streams must have the same sample rate to mix properly
+      return ESP_ERR_INVALID_ARG;
+    }
+  }
+
+  if (this->task_handle_ == nullptr) {
+    xTaskCreate(this->audio_mixer_task, "mixer", TASK_STACK_SIZE, (void *) this, MIXER_TASK_PRIORITY,
+                &this->task_handle_);
+
+    if (this->task_handle_ == nullptr) {
+      return ESP_ERR_INVALID_STATE;
+    }
+
+    this->task_created_ = true;
+  }
+
+  return ESP_OK;
+}
+
+void SpeakerMixer::copy_frames(int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
+                               audio::AudioStreamInfo output_stream_info, uint32_t frames_to_transfer,
+                               size_t &bytes_read, size_t &bytes_written) {
   uint8_t input_channels = input_stream_info.channels;
   uint8_t output_channels = output_stream_info.channels;
   const uint8_t max_input_channel_index = input_channels - 1;
@@ -413,10 +317,12 @@ void SpeakerMixer::copy_frames_(int16_t *input_buffer, audio::AudioStreamInfo in
   bytes_written = frames_to_transfer * output_stream_info.get_bytes_per_frame();
 }
 
-void SpeakerMixer::mix_audio_samples_without_clipping_(
-    int16_t *primary_buffer, audio::AudioStreamInfo primary_stream_info, int16_t *secondary_buffer,
-    audio::AudioStreamInfo secondary_stream_info, int16_t *output_buffer, audio::AudioStreamInfo output_stream_info,
-    size_t frames_to_mix) {
+void SpeakerMixer::mix_audio_samples_without_clipping(int16_t *primary_buffer,
+                                                      audio::AudioStreamInfo primary_stream_info,
+                                                      int16_t *secondary_buffer,
+                                                      audio::AudioStreamInfo secondary_stream_info,
+                                                      int16_t *output_buffer, audio::AudioStreamInfo output_stream_info,
+                                                      size_t frames_to_mix) {
   // We first test adding the two clips samples together and check for any clipping
   // We want the primary volume to be consistent, regardless if secondary is playing or not
   // If there is clipping, we determine what factor we need to multiply that secondary sample by to avoid it
@@ -484,6 +390,106 @@ void SpeakerMixer::mix_audio_samples_without_clipping_(
                    output_channels, 0);
     }
   }
+}
+
+void SpeakerMixer::audio_mixer_task(void *params) {
+  SpeakerMixer *this_mixer = (SpeakerMixer *) params;
+
+  xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STARTING);
+
+  std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
+      audio::AudioSinkTransferBuffer::create(TRANSFER_BUFFER_SIZE);
+
+  if (output_transfer_buffer == nullptr) {
+    xEventGroupSetBits(this_mixer->event_group_,
+                       MixerEventGroupBits::STATE_STOPPED | MixerEventGroupBits::ERR_ESP_NO_MEM);
+
+    this_mixer->task_created_ = false;
+    vTaskDelete(nullptr);
+  }
+
+  output_transfer_buffer->set_sink(this_mixer->output_speaker_);
+
+  xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_RUNNING);
+
+  while (true) {
+    uint32_t event_group_bits = xEventGroupGetBits(this_mixer->event_group_);
+    if (event_group_bits & MixerEventGroupBits::COMMAND_STOP) {
+      break;
+    }
+
+    output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(TASK_DELAY_MS));
+
+    const uint32_t output_frames_free =
+        output_transfer_buffer->free() / this_mixer->audio_stream_info_.value().get_bytes_per_frame();
+
+    audio::AudioStreamInfo primary_stream_info = this_mixer->primary_speaker_->get_audio_stream_info();
+    this_mixer->primary_speaker_->transfer_data_from_source(0);
+    uint32_t primary_frames_available =
+        this_mixer->primary_speaker_->available() / primary_stream_info.get_bytes_per_frame();
+
+    const size_t secondary_bytes_ducked = this_mixer->secondary_speaker_->available();
+    audio::AudioStreamInfo secondary_stream_info = this_mixer->secondary_speaker_->get_audio_stream_info();
+    this_mixer->secondary_speaker_->transfer_data_from_source(0);
+    uint32_t secondary_frames_available =
+        this_mixer->secondary_speaker_->available() / secondary_stream_info.get_bytes_per_frame();
+
+    // Restrict the number of frames available to the amount that the output transfer buffer can store
+    primary_frames_available = std::min(primary_frames_available, output_frames_free);
+    secondary_frames_available = std::min(secondary_frames_available, output_frames_free);
+
+    if (secondary_frames_available + primary_frames_available > 0) {
+      // Copies audio based on frames instead of bytes to avoid ever transferring half a sample or frame
+
+      size_t bytes_written = 0;
+      if ((secondary_frames_available > 0) && (primary_frames_available > 0)) {
+        // Mix the audio
+        uint32_t frames_to_transfer = std::min(secondary_frames_available, primary_frames_available);
+
+        this_mixer->mix_audio_samples_without_clipping(
+            reinterpret_cast<int16_t *>(this_mixer->primary_speaker_->get_buffer_start()), primary_stream_info,
+            reinterpret_cast<int16_t *>(this_mixer->secondary_speaker_->get_buffer_start()), secondary_stream_info,
+            reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
+            this_mixer->audio_stream_info_.value(), frames_to_transfer);
+
+        size_t primary_bytes_read = frames_to_transfer * primary_stream_info.get_bytes_per_frame();
+        size_t secondary_bytes_read = frames_to_transfer * secondary_stream_info.get_bytes_per_frame();
+        bytes_written = frames_to_transfer * this_mixer->audio_stream_info_.value().get_bytes_per_frame();
+
+        this_mixer->primary_speaker_->decrease_buffer_length(primary_bytes_read);
+        this_mixer->secondary_speaker_->decrease_buffer_length(secondary_bytes_read);
+      } else if (primary_frames_available > 0) {
+        size_t bytes_read = 0;
+        this_mixer->copy_frames(
+            reinterpret_cast<int16_t *>(this_mixer->primary_speaker_->get_buffer_start()), primary_stream_info,
+            reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
+            this_mixer->audio_stream_info_.value(), primary_frames_available, bytes_read, bytes_written);
+
+        this_mixer->primary_speaker_->decrease_buffer_length(bytes_read);
+      } else if (secondary_frames_available > 0) {
+        size_t bytes_read = 0;
+        this_mixer->copy_frames(
+            reinterpret_cast<int16_t *>(this_mixer->secondary_speaker_->get_buffer_start()), secondary_stream_info,
+            reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
+            this_mixer->audio_stream_info_.value(), secondary_frames_available, bytes_read, bytes_written);
+
+        this_mixer->secondary_speaker_->decrease_buffer_length(bytes_read);
+      }
+
+      output_transfer_buffer->increase_buffer_length(bytes_written);
+    } else {
+      // No audio data available in either buffer
+      delay(TASK_DELAY_MS);
+    }
+  }
+
+  xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STOPPING);
+
+  output_transfer_buffer.reset();
+
+  xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STOPPED);
+  this_mixer->task_created_ = false;
+  vTaskDelete(nullptr);
 }
 
 }  // namespace speaker_mixer

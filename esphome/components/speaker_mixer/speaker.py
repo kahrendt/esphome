@@ -16,8 +16,8 @@ CONF_DECIBEL_REDUCTION = "decibel_reduction"
 CONF_OUTPUT_SPEAKER = "output_speaker"
 CONF_SOURCE_SPEAKERS = "source_speakers"
 
-DuckingSetAction = speaker_mixer_ns.class_(
-    "DuckingSetAction", automation.Action, cg.Parented.template(SourceSpeaker)
+DuckingApplyAction = speaker_mixer_ns.class_(
+    "DuckingApplyAction", automation.Action, cg.Parented.template(SourceSpeaker)
 )
 
 
@@ -59,8 +59,8 @@ async def to_code(config):
 
 
 @automation.register_action(
-    "mixer_input_speaker.set_ducking",
-    DuckingSetAction,
+    "speaker_mixer.apply_ducking",
+    DuckingApplyAction,
     cv.Schema(
         {
             cv.GenerateID(): cv.use_id(SourceSpeaker),
