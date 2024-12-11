@@ -60,7 +60,8 @@ void SourceSpeaker::start() {
   const size_t ring_buffer_size = MIXER_INPUT_RING_BUFFER_DURATION_MS * this->audio_stream_info_.get_bytes_per_ms();
   this->ring_buffer_ = RingBuffer::create(ring_buffer_size);
 
-  if ((this->ring_buffer_.use_count() == 0) || !this->allocate_buffer_(TRANSFER_BUFFER_SIZE)) {
+  if ((this->ring_buffer_.use_count() == 0) ||
+      !this->allocate_buffer_(std::min(TRANSFER_BUFFER_SIZE, ring_buffer_size))) {
     // Error state, wasn't able to allocate a buffer
   }
 
