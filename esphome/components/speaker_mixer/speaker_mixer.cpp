@@ -151,9 +151,9 @@ size_t SourceSpeaker::transfer_data_from_source(TickType_t ticks_to_wait) {
     if (samples_to_duck > 0) {
       int16_t *current_buffer = reinterpret_cast<int16_t *>(data_end);
 
-      this->duck_samples_(current_buffer, samples_to_duck, this->current_ducking_db_reduction_,
-                          this->ducking_transition_samples_remaining_, this->samples_per_ducking_step_,
-                          this->db_change_per_ducking_step_);
+      this->duck_samples(current_buffer, samples_to_duck, this->current_ducking_db_reduction_,
+                         this->ducking_transition_samples_remaining_, this->samples_per_ducking_step_,
+                         this->db_change_per_ducking_step_);
     }
 
     this->increase_buffer_length(bytes_read);
@@ -335,9 +335,9 @@ void SpeakerMixer::audio_mixer_task(void *params) {
   vTaskDelete(nullptr);
 }
 
-void SourceSpeaker::duck_samples_(int16_t *input_buffer, uint32_t input_samples_to_duck,
-                                  int8_t &current_ducking_db_reduction, size_t &ducking_transition_samples_remaining,
-                                  size_t samples_per_ducking_step, int8_t db_change_per_ducking_step) {
+void SourceSpeaker::duck_samples(int16_t *input_buffer, uint32_t input_samples_to_duck,
+                                 int8_t &current_ducking_db_reduction, size_t &ducking_transition_samples_remaining,
+                                 size_t samples_per_ducking_step, int8_t db_change_per_ducking_step) {
   if (ducking_transition_samples_remaining > 0) {
     // Ducking level is still transitioning
 

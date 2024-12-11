@@ -59,9 +59,9 @@ class SourceSpeaker : public speaker::Speaker, public Component, public audio::A
   void set_ducking_reduction(uint8_t decibel_reduction, uint32_t duration);
 
  protected:
-  void duck_samples_(int16_t *input_buffer, uint32_t input_samples_to_duck, int8_t &current_ducking_db_reduction,
-                     size_t &ducking_transition_samples_remaining, size_t samples_per_ducking_step,
-                     int8_t db_change_per_ducking_step);
+  static void duck_samples(int16_t *input_buffer, uint32_t input_samples_to_duck, int8_t &current_ducking_db_reduction,
+                           size_t &ducking_transition_samples_remaining, size_t samples_per_ducking_step,
+                           int8_t db_change_per_ducking_step);
 
   SpeakerMixer *parent_;
 
