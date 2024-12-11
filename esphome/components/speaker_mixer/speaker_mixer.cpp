@@ -43,13 +43,13 @@ enum MixerEventGroupBits : uint32_t {
 
 void SourceSpeaker::loop() {
   if (this->state_ == speaker::STATE_RUNNING) {
-    if (((millis() - this->last_seen_data_ms_) > this->timeout_ms_) && !this->has_buffered_data()) {
-      this->state_ = speaker::STATE_STOPPED;
-      this->stop_gracefully_ = false;
-    }
-    if (this->stop_gracefully_ && !this->has_buffered_data()) {
-      this->state_ = speaker::STATE_STOPPED;
-      this->stop_gracefully_ = false;
+    if (!this->has_buffered_data()) {
+      if (((millis() - this->last_seen_data_ms_) > this->timeout_ms_) || this->stop_gracefully_) {
+        this->state_ = speaker::STATE_STOPPED;
+        this->stop_gracefully_ = false;
+        this->deallocate_buffer_();  // deallocates transfer buffer
+        this->ring_buffer_.reset();  // deallocates ring buffer
+      }
     }
   }
 }
@@ -68,7 +68,9 @@ size_t SourceSpeaker::play(const uint8_t *data, size_t length, TickType_t ticks_
 
 void SourceSpeaker::start() {
   const size_t ring_buffer_size = MIXER_INPUT_RING_BUFFER_DURATION_MS * this->audio_stream_info_.get_bytes_per_ms();
-  this->ring_buffer_ = RingBuffer::create(ring_buffer_size);
+  if (this->ring_buffer_.use_count() == 0) {
+    this->ring_buffer_ = RingBuffer::create(ring_buffer_size);
+  }
 
   if ((this->ring_buffer_.use_count() == 0) ||
       !this->allocate_buffer_(std::min(TRANSFER_BUFFER_SIZE, ring_buffer_size))) {
@@ -87,7 +89,8 @@ void SourceSpeaker::start() {
 
 void SourceSpeaker::stop() {
   if (this->ring_buffer_.use_count() > 0) {
-    this->ring_buffer_->reset();
+    this->decrease_buffer_length(this->available());  // clears the transfer buffer
+    this->ring_buffer_->reset();                      // clears ring buffer
   }
 
   this->state_ = speaker::STATE_STOPPED;
