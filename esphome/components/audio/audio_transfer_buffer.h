@@ -29,10 +29,10 @@ class AudioTransferBuffer {
   ~AudioTransferBuffer() { this->deallocate_buffer_(); };
 
   /// @brief Returns a pointer to the start of the transfer buffer where available() bytes of exisiting data can be read
-  uint8_t *get_buffer_start() { return this->data_start_; }
+  uint8_t *get_buffer_start() const { return this->data_start_; }
 
   /// @brief Returns a pointer to the end of the transfer buffer where free() bytes of new data can be written
-  uint8_t *get_buffer_end() { return this->data_start_ + this->buffer_length_; }
+  uint8_t *get_buffer_end() const { return this->data_start_ + this->buffer_length_; }
 
   /// @brief Updates the internal state of the transfer buffer. This should be called after reading data
   /// @param bytes The number of bytes consumed/read
@@ -56,7 +56,7 @@ class AudioTransferBuffer {
 
   /// @brief Tests if there is any data in the tranfer buffer or the source/sink.
   /// @return True if there is data, false otherwise.
-  virtual bool has_buffered_data();
+  virtual bool has_buffered_data() const;
 
   bool reallocate(size_t new_buffer_size) {
     if (this->buffer_length_ > 0) {
@@ -117,7 +117,7 @@ class AudioSinkTransferBuffer : public AudioTransferBuffer {
 
   void clear_buffered_data() override;
 
-  bool has_buffered_data() override;
+  bool has_buffered_data() const override;
 
  protected:
 #ifdef USE_SPEAKER

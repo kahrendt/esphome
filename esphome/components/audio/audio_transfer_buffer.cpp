@@ -51,7 +51,7 @@ void AudioSinkTransferBuffer::clear_buffered_data() {
 #endif
 }
 
-bool AudioTransferBuffer::has_buffered_data() {
+bool AudioTransferBuffer::has_buffered_data() const {
   if (this->ring_buffer_.use_count() > 0) {
     return ((this->ring_buffer_->available() > 0) || (this->available() > 0));
   }
@@ -115,7 +115,7 @@ size_t AudioSinkTransferBuffer::transfer_data_to_sink(TickType_t ticks_to_wait) 
   return bytes_written;
 }
 
-bool AudioSinkTransferBuffer::has_buffered_data() {
+bool AudioSinkTransferBuffer::has_buffered_data() const {
 #ifdef USE_SPEAKER
   if (this->speaker_ != nullptr) {
     return (this->speaker_->has_buffered_data() || (this->available() > 0));
