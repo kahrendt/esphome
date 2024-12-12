@@ -190,7 +190,7 @@ void SourceSpeaker::duck_samples(int16_t *input_buffer, uint32_t input_samples_t
         input_samples_to_duck / samples_per_ducking_step + (input_samples_to_duck % samples_per_ducking_step != 0);
 
     for (size_t i = 0; i < ducking_steps_in_batch; ++i) {
-      size_t samples_left_in_step = ducking_transition_samples_remaining % samples_per_ducking_step;
+      uint32_t samples_left_in_step = ducking_transition_samples_remaining % samples_per_ducking_step;
 
       if (samples_left_in_step == 0) {
         samples_left_in_step = samples_per_ducking_step;
