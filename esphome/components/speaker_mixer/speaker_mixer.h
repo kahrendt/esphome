@@ -146,9 +146,6 @@ class SpeakerMixer : public Component {
 
   bool task_created_{false};
   optional<audio::AudioStreamInfo> audio_stream_info_;
-
-  size_t ring_buffer_size_;
-  size_t transfer_buffer_size_;
 };
 
 }  // namespace speaker_mixer

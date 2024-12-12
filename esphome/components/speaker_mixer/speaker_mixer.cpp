@@ -12,10 +12,10 @@ namespace speaker_mixer {
 static const UBaseType_t MIXER_TASK_PRIORITY = 10;
 
 static const uint32_t MIXER_INPUT_RING_BUFFER_DURATION_MS = 50;
-static const size_t TRANSFER_BUFFER_SIZE = 8192;
+static const uint32_t TRANSFER_BUFFER_DURATION_MS = 50;
+static const size_t TASK_DELAY_MS = 25;
 
 static const uint32_t TASK_STACK_SIZE = 3072;
-static const size_t TASK_DELAY_MS = 25;
 
 static const int16_t MAX_AUDIO_SAMPLE_VALUE = INT16_MAX;
 static const int16_t MIN_AUDIO_SAMPLE_VALUE = INT16_MIN;
@@ -71,7 +71,8 @@ size_t SourceSpeaker::play(const uint8_t *data, size_t length, TickType_t ticks_
 void SourceSpeaker::start() {
   const size_t ring_buffer_size = MIXER_INPUT_RING_BUFFER_DURATION_MS * this->audio_stream_info_.get_bytes_per_ms();
   if (this->transfer_buffer_.use_count() == 0) {
-    this->transfer_buffer_ = audio::AudioSourceTransferBuffer::create(std::min(TRANSFER_BUFFER_SIZE, ring_buffer_size));
+    this->transfer_buffer_ = audio::AudioSourceTransferBuffer::create(TRANSFER_BUFFER_DURATION_MS *
+                                                                      this->audio_stream_info_.get_bytes_per_ms());
 
     if (this->transfer_buffer_ == nullptr) {
       // error state, didn't allocate transfer buffer
@@ -280,8 +281,6 @@ esp_err_t SpeakerMixer::start(audio::AudioStreamInfo &stream_info) {
     this->audio_stream_info_ = stream_info;
     this->audio_stream_info_.value().channels = OUTPUT_CHANNELS;
     this->output_speaker_->set_audio_stream_info(this->audio_stream_info_.value());
-
-    this->ring_buffer_size_ = MIXER_INPUT_RING_BUFFER_DURATION_MS * this->audio_stream_info_.value().get_bytes_per_ms();
   } else {
     if (stream_info.sample_rate != this->audio_stream_info_.value().sample_rate) {
       // The two audio streams must have the same sample rate to mix properly
@@ -412,8 +411,8 @@ void SpeakerMixer::audio_mixer_task(void *params) {
 
   xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STARTING);
 
-  std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
-      audio::AudioSinkTransferBuffer::create(TRANSFER_BUFFER_SIZE);
+  std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer = audio::AudioSinkTransferBuffer::create(
+      TRANSFER_BUFFER_DURATION_MS * this_mixer->audio_stream_info_.value().get_bytes_per_ms());
 
   if (output_transfer_buffer == nullptr) {
     xEventGroupSetBits(this_mixer->event_group_,
