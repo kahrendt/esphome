@@ -43,12 +43,11 @@ enum MixerEventGroupBits : uint32_t {
 
 void SourceSpeaker::loop() {
   if (this->state_ == speaker::STATE_RUNNING) {
-    if (!this->has_buffered_data()) {
+    if (!this->transfer_buffer_->has_buffered_data()) {
       if (((millis() - this->last_seen_data_ms_) > this->timeout_ms_) || this->stop_gracefully_) {
         this->state_ = speaker::STATE_STOPPED;
         this->stop_gracefully_ = false;
-        this->deallocate_buffer_();  // deallocates transfer buffer
-        this->ring_buffer_.reset();  // deallocates ring buffer
+        this->transfer_buffer_.reset();  // deallocates ring buffer
       }
     }
   }
@@ -60,21 +59,33 @@ size_t SourceSpeaker::play(const uint8_t *data, size_t length, TickType_t ticks_
     this->start();
   }
   size_t bytes_written = 0;
-  if (this->ring_buffer_.use_count() > 0) {
-    bytes_written = this->ring_buffer_->write_without_replacement(data, length, ticks_to_wait);
+  if (this->ring_buffer_.use_count() == 1) {
+    std::shared_ptr<RingBuffer> temp_ring_buffer = this->ring_buffer_.lock();
+    bytes_written = temp_ring_buffer->write_without_replacement(data, length, ticks_to_wait);
   }
   return bytes_written;
 }
 
 void SourceSpeaker::start() {
   const size_t ring_buffer_size = MIXER_INPUT_RING_BUFFER_DURATION_MS * this->audio_stream_info_.get_bytes_per_ms();
-  if (this->ring_buffer_.use_count() == 0) {
-    this->ring_buffer_ = RingBuffer::create(ring_buffer_size);
-  }
+  if (this->transfer_buffer_.use_count() == 0) {
+    this->transfer_buffer_ = audio::AudioSourceTransferBuffer::create(std::min(TRANSFER_BUFFER_SIZE, ring_buffer_size));
 
-  if ((this->ring_buffer_.use_count() == 0) ||
-      !this->allocate_buffer_(std::min(TRANSFER_BUFFER_SIZE, ring_buffer_size))) {
-    // Error state, wasn't able to allocate a buffer
+    if (this->transfer_buffer_ == nullptr) {
+      // error state, didn't allocate transfer buffer
+    }
+    std::shared_ptr<RingBuffer> temp_ring_buffer;
+
+    if (!this->ring_buffer_.use_count()) {
+      temp_ring_buffer = RingBuffer::create(ring_buffer_size);
+      this->ring_buffer_ = temp_ring_buffer;
+    }
+
+    if (!this->ring_buffer_.use_count()) {
+      // error state, didn't allocate ring buffer
+    } else {
+      this->transfer_buffer_->set_source(temp_ring_buffer);
+    }
   }
 
   if (this->parent_->start(this->audio_stream_info_) == ESP_OK) {
@@ -88,17 +99,14 @@ void SourceSpeaker::start() {
 }
 
 void SourceSpeaker::stop() {
-  if (this->ring_buffer_.use_count() > 0) {
-    this->decrease_buffer_length(this->available());  // clears the transfer buffer
-    this->ring_buffer_->reset();                      // clears ring buffer
-  }
+  this->transfer_buffer_->clear_buffered_data();  // TODO: Is this safe...?
 
   this->state_ = speaker::STATE_STOPPED;
 }
 
 void SourceSpeaker::finish() { this->stop_gracefully_ = true; }
 
-bool SourceSpeaker::has_buffered_data() const { return this->audio::AudioSourceTransferBuffer::has_buffered_data(); }
+bool SourceSpeaker::has_buffered_data() const { return this->transfer_buffer_->has_buffered_data(); }
 
 void SourceSpeaker::set_mute_state(bool mute_state) {
   this->mute_state_ = mute_state;
@@ -110,34 +118,26 @@ void SourceSpeaker::set_volume(float volume) {
   this->parent_->get_output_speaker()->set_volume(volume);
 }
 
-size_t SourceSpeaker::transfer_data_from_source(TickType_t ticks_to_wait) {
-  // Shift data in buffer to start
-  if (this->buffer_length_ > 0) {
-    memmove(this->buffer_, this->data_start_, this->buffer_length_);
+size_t SourceSpeaker::process_data_from_source(TickType_t ticks_to_wait) {
+  if (!this->transfer_buffer_.use_count()) {
+    return 0;
   }
-  this->data_start_ = this->buffer_;
+  const size_t current_length = this->transfer_buffer_->available();
 
-  uint8_t *data_end = this->get_buffer_end();
+  size_t bytes_read = this->transfer_buffer_->transfer_data_from_source(ticks_to_wait);
 
-  size_t bytes_to_read = this->free();
-  size_t bytes_read = 0;
-  if (bytes_to_read > 0) {
-    if (this->ring_buffer_.use_count() > 0) {
-      bytes_read = this->ring_buffer_->read((void *) data_end, bytes_to_read, ticks_to_wait);
-    }
-
+  if (bytes_read > 0) {
     size_t samples_to_duck = bytes_read / this->audio_stream_info_.get_bytes_per_sample();
-
     if (samples_to_duck > 0) {
-      int16_t *current_buffer = reinterpret_cast<int16_t *>(data_end);
+      int16_t *current_buffer =
+          reinterpret_cast<int16_t *>(this->transfer_buffer_->get_buffer_start() + current_length);
 
       this->duck_samples(current_buffer, samples_to_duck, this->current_ducking_db_reduction_,
                          this->ducking_transition_samples_remaining_, this->samples_per_ducking_step_,
                          this->db_change_per_ducking_step_);
     }
-
-    this->increase_buffer_length(bytes_read);
   }
+
   return bytes_read;
 }
 
@@ -416,6 +416,14 @@ void SpeakerMixer::audio_mixer_task(void *params) {
   xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_RUNNING);
 
   while (true) {
+    std::shared_ptr<audio::AudioSourceTransferBuffer> primary_transfer_buffer =
+        this_mixer->primary_speaker_->transfer_buffer_;
+    std::shared_ptr<audio::AudioSourceTransferBuffer> secondary_transfer_buffer =
+        this_mixer->secondary_speaker_->transfer_buffer_;
+
+    audio::AudioStreamInfo primary_stream_info = this_mixer->primary_speaker_->get_audio_stream_info();
+    audio::AudioStreamInfo secondary_stream_info = this_mixer->secondary_speaker_->get_audio_stream_info();
+
     uint32_t event_group_bits = xEventGroupGetBits(this_mixer->event_group_);
     if (event_group_bits & MixerEventGroupBits::COMMAND_STOP) {
       break;
@@ -426,16 +434,17 @@ void SpeakerMixer::audio_mixer_task(void *params) {
     const uint32_t output_frames_free =
         output_transfer_buffer->free() / this_mixer->audio_stream_info_.value().get_bytes_per_frame();
 
-    audio::AudioStreamInfo primary_stream_info = this_mixer->primary_speaker_->get_audio_stream_info();
-    this_mixer->primary_speaker_->transfer_data_from_source(0);
-    uint32_t primary_frames_available =
-        this_mixer->primary_speaker_->available() / primary_stream_info.get_bytes_per_frame();
+    uint32_t primary_frames_available = 0;
+    if (primary_transfer_buffer.use_count() > 0) {
+      this_mixer->primary_speaker_->process_data_from_source(0);
+      primary_frames_available = primary_transfer_buffer->available() / primary_stream_info.get_bytes_per_frame();
+    }
 
-    const size_t secondary_bytes_ducked = this_mixer->secondary_speaker_->available();
-    audio::AudioStreamInfo secondary_stream_info = this_mixer->secondary_speaker_->get_audio_stream_info();
-    this_mixer->secondary_speaker_->transfer_data_from_source(0);
-    uint32_t secondary_frames_available =
-        this_mixer->secondary_speaker_->available() / secondary_stream_info.get_bytes_per_frame();
+    uint32_t secondary_frames_available = 0;
+    if (secondary_transfer_buffer.use_count() > 0) {
+      this_mixer->secondary_speaker_->process_data_from_source(0);
+      secondary_frames_available = secondary_transfer_buffer->available() / secondary_stream_info.get_bytes_per_frame();
+    }
 
     // Restrict the number of frames available to the amount that the output transfer buffer can store
     primary_frames_available = std::min(primary_frames_available, output_frames_free);
@@ -450,8 +459,8 @@ void SpeakerMixer::audio_mixer_task(void *params) {
         uint32_t frames_to_transfer = std::min(secondary_frames_available, primary_frames_available);
 
         this_mixer->mix_audio_samples_without_clipping(
-            reinterpret_cast<int16_t *>(this_mixer->primary_speaker_->get_buffer_start()), primary_stream_info,
-            reinterpret_cast<int16_t *>(this_mixer->secondary_speaker_->get_buffer_start()), secondary_stream_info,
+            reinterpret_cast<int16_t *>(primary_transfer_buffer->get_buffer_start()), primary_stream_info,
+            reinterpret_cast<int16_t *>(secondary_transfer_buffer->get_buffer_start()), secondary_stream_info,
             reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
             this_mixer->audio_stream_info_.value(), frames_to_transfer);
 
@@ -459,24 +468,24 @@ void SpeakerMixer::audio_mixer_task(void *params) {
         size_t secondary_bytes_read = frames_to_transfer * secondary_stream_info.get_bytes_per_frame();
         bytes_written = frames_to_transfer * this_mixer->audio_stream_info_.value().get_bytes_per_frame();
 
-        this_mixer->primary_speaker_->decrease_buffer_length(primary_bytes_read);
-        this_mixer->secondary_speaker_->decrease_buffer_length(secondary_bytes_read);
+        primary_transfer_buffer->decrease_buffer_length(primary_bytes_read);
+        secondary_transfer_buffer->decrease_buffer_length(secondary_bytes_read);
       } else if (primary_frames_available > 0) {
         size_t bytes_read = 0;
         this_mixer->copy_frames(
-            reinterpret_cast<int16_t *>(this_mixer->primary_speaker_->get_buffer_start()), primary_stream_info,
+            reinterpret_cast<int16_t *>(primary_transfer_buffer->get_buffer_start()), primary_stream_info,
             reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
             this_mixer->audio_stream_info_.value(), primary_frames_available, bytes_read, bytes_written);
 
-        this_mixer->primary_speaker_->decrease_buffer_length(bytes_read);
+        primary_transfer_buffer->decrease_buffer_length(bytes_read);
       } else if (secondary_frames_available > 0) {
         size_t bytes_read = 0;
         this_mixer->copy_frames(
-            reinterpret_cast<int16_t *>(this_mixer->secondary_speaker_->get_buffer_start()), secondary_stream_info,
+            reinterpret_cast<int16_t *>(secondary_transfer_buffer->get_buffer_start()), secondary_stream_info,
             reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
             this_mixer->audio_stream_info_.value(), secondary_frames_available, bytes_read, bytes_written);
 
-        this_mixer->secondary_speaker_->decrease_buffer_length(bytes_read);
+        secondary_transfer_buffer->decrease_buffer_length(bytes_read);
       }
 
       output_transfer_buffer->increase_buffer_length(bytes_written);

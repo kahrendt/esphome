@@ -16,7 +16,7 @@ namespace speaker_mixer {
 
 class SpeakerMixer;
 
-class SourceSpeaker : public speaker::Speaker, public Component, public audio::AudioSourceTransferBuffer {
+class SourceSpeaker : public speaker::Speaker, public Component {
  public:
   void loop() override;
 
@@ -38,7 +38,7 @@ class SourceSpeaker : public speaker::Speaker, public Component, public audio::A
   /// @brief Transfers audio from the ring buffer into the transfer buffer. Ducks audio while transferring.
   /// @param ticks_to_wait FreeRTOS ticks to wait while waiting to read from the ring buffer.
   /// @return Number of bytes transferred from the ring buffer.
-  size_t transfer_data_from_source(TickType_t ticks_to_wait) override;
+  size_t process_data_from_source(TickType_t ticks_to_wait);
 
   /// @brief Sets the ducking level for the source speaker.
   /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by 10 dB
@@ -49,7 +49,10 @@ class SourceSpeaker : public speaker::Speaker, public Component, public audio::A
 
   void set_parent(SpeakerMixer *parent) { this->parent_ = parent; }
 
+  std::weak_ptr<audio::AudioSourceTransferBuffer> get_transfer_buffer() { return this->transfer_buffer_; }
+
  protected:
+  friend class SpeakerMixer;
   /// @brief Ducks audio samples by a specified amount. When changing the ducking amount, it can transition gradually
   /// over a specified amount of samples.
   /// @param input_buffer buffer with audio samples to be ducked in place
@@ -64,6 +67,9 @@ class SourceSpeaker : public speaker::Speaker, public Component, public audio::A
                            int8_t db_change_per_ducking_step);
 
   SpeakerMixer *parent_;
+
+  std::shared_ptr<audio::AudioSourceTransferBuffer> transfer_buffer_;
+  std::weak_ptr<RingBuffer> ring_buffer_;
 
   uint32_t last_seen_data_ms_{0};
   uint32_t timeout_ms_{1000};
@@ -96,6 +102,8 @@ class SpeakerMixer : public Component {
   speaker::Speaker *get_output_speaker() const { return this->output_speaker_; }
 
  protected:
+  // friend class SourceSpeaker;
+
   /// @brief Copies audio frames from the input buffer to the output buffer taking into account the number of channels
   /// in each stream. If the output stream has more channels, the input samples are duplicated. If the output stream has
   /// less channels, the extra channel input samples are dropped.
