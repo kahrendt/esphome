@@ -45,10 +45,11 @@ enum MixerEventGroupBits : uint32_t {
 void SourceSpeaker::loop() {
   if (this->state_ == speaker::STATE_RUNNING) {
     if (!this->transfer_buffer_->has_buffered_data()) {
-      if (((millis() - this->last_seen_data_ms_) > this->timeout_ms_) || this->stop_gracefully_) {
+      if ((this->timeout_ms_.has_value() && ((millis() - this->last_seen_data_ms_) > this->timeout_ms_.value())) ||
+          this->stop_gracefully_) {
         this->state_ = speaker::STATE_STOPPED;
         this->stop_gracefully_ = false;
-        this->transfer_buffer_.reset();  // deallocates ring buffer
+        this->transfer_buffer_.reset();  // releases ownership of transfer buffer
       }
     }
   }

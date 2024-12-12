@@ -48,6 +48,7 @@ class SourceSpeaker : public speaker::Speaker, public Component {
   audio::AudioStreamInfo get_audio_stream_info() const { return this->audio_stream_info_; }
 
   void set_parent(SpeakerMixer *parent) { this->parent_ = parent; }
+  void set_timeout(uint32_t ms) { this->timeout_ms_ = ms; }
 
   std::weak_ptr<audio::AudioSourceTransferBuffer> get_transfer_buffer() { return this->transfer_buffer_; }
 
@@ -72,7 +73,7 @@ class SourceSpeaker : public speaker::Speaker, public Component {
   std::weak_ptr<RingBuffer> ring_buffer_;
 
   uint32_t last_seen_data_ms_{0};
-  uint32_t timeout_ms_{1000};
+  optional<uint32_t> timeout_ms_;
   bool stop_gracefully_{false};
 
   int8_t target_ducking_db_reduction_{0};
