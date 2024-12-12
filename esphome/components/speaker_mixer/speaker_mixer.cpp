@@ -49,14 +49,13 @@ void SourceSpeaker::loop() {
           this->stop_gracefully_) {
         this->state_ = speaker::STATE_STOPPED;
         this->stop_gracefully_ = false;
-        this->transfer_buffer_.reset();  // releases ownership of transfer buffer
+        this->transfer_buffer_.reset();  // release ownership of transfer buffer
       }
     }
   }
 }
 
 size_t SourceSpeaker::play(const uint8_t *data, size_t length, TickType_t ticks_to_wait) {
-  this->last_seen_data_ms_ = millis();
   if (this->is_stopped()) {
     this->start();
   }
@@ -64,6 +63,9 @@ size_t SourceSpeaker::play(const uint8_t *data, size_t length, TickType_t ticks_
   if (this->ring_buffer_.use_count() == 1) {
     std::shared_ptr<RingBuffer> temp_ring_buffer = this->ring_buffer_.lock();
     bytes_written = temp_ring_buffer->write_without_replacement(data, length, ticks_to_wait);
+    if (bytes_written > 0) {
+      this->last_seen_data_ms_ = millis();
+    }
   }
   return bytes_written;
 }
