@@ -98,6 +98,8 @@ class SpeakerMixer : public Component {
   ///         ESP_OK if the incoming stream is compatible and the mixer task starts
   esp_err_t start(audio::AudioStreamInfo &stream_info);
 
+  void stop();
+
   void set_output_speaker(speaker::Speaker *speaker) { this->output_speaker_ = speaker; }
   speaker::Speaker *get_output_speaker() const { return this->output_speaker_; }
 

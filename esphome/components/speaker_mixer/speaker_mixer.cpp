@@ -39,6 +39,7 @@ enum MixerEventGroupBits : uint32_t {
   STATE_STOPPING = (1 << 12),
   STATE_STOPPED = (1 << 13),
   ERR_ESP_NO_MEM = (1 << 19),
+  ALL_BITS = 0x00FFFFFF,  // All valid FreeRTOS event group bits
 };
 
 void SourceSpeaker::loop() {
@@ -99,7 +100,9 @@ void SourceSpeaker::start() {
 }
 
 void SourceSpeaker::stop() {
-  this->transfer_buffer_->clear_buffered_data();  // TODO: Is this safe...?
+  if (this->transfer_buffer_.unique()) {
+    this->transfer_buffer_->clear_buffered_data();  // TODO: Is this safe...?
+  }
 
   this->state_ = speaker::STATE_STOPPED;
 }
@@ -254,8 +257,14 @@ void SpeakerMixer::loop() {
   if (event_group_bits & MixerEventGroupBits::STATE_STOPPED) {
     if (!this->task_created_) {
       ESP_LOGD(TAG, "Stopped Mixer");
-      xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_STOPPED);
+      xEventGroupClearBits(this->event_group_, MixerEventGroupBits::ALL_BITS);
       this->task_handle_ = nullptr;
+    }
+  }
+
+  if (this->task_handle_ != nullptr) {
+    if (this->primary_speaker_->is_stopped() && this->secondary_speaker_->is_stopped()) {
+      this->stop();
     }
   }
 }
@@ -292,6 +301,8 @@ esp_err_t SpeakerMixer::start(audio::AudioStreamInfo &stream_info) {
 
   return ESP_OK;
 }
+
+void SpeakerMixer::stop() { xEventGroupSetBits(this->event_group_, MixerEventGroupBits::COMMAND_STOP); }
 
 void SpeakerMixer::copy_frames(int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
                                audio::AudioStreamInfo output_stream_info, uint32_t frames_to_transfer,
