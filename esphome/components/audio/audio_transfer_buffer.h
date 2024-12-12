@@ -81,7 +81,12 @@ class AudioTransferBuffer {
     if (this->buffer_ != nullptr) {
       ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
       allocator.deallocate(this->buffer_, this->buffer_size_);
+      this->buffer_ = nullptr;
+      this->data_start_ = nullptr;
     }
+
+    this->buffer_size_ = 0;
+    this->buffer_length_ = 0;
   }
 
   // A possible source or sink for the transfer buffer
@@ -144,7 +149,7 @@ class AudioSourceTransferBuffer : public AudioTransferBuffer {
   /// @brief Reads any available data from the sink into the transfer buffer.
   /// @param ticks_to_wait FreeRTOS ticks to block while waiting for the source to have enough data
   /// @return Number of bytes read
-  virtual size_t transfer_data_from_source(TickType_t ticks_to_wait);
+  size_t transfer_data_from_source(TickType_t ticks_to_wait);
 
   /// @brief Adds a ring buffer as the transfer buffer's source.
   /// @param ring_buffer weak_ptr to the allocated ring buffer
