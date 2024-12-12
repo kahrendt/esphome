@@ -164,7 +164,7 @@ void SourceSpeaker::apply_ducking(uint8_t decibel_reduction, uint32_t duration) 
       total_ducking_steps = this->current_ducking_db_reduction_ - this->target_ducking_db_reduction_ - 1;
       this->db_change_per_ducking_step_ = -1;
     }
-    if (total_ducking_steps > 0) {
+    if ((duration > 0) && (total_ducking_steps > 0)) {
       this->ducking_transition_samples_remaining_ = duration * this->audio_stream_info_.get_samples_per_ms();
 
       this->samples_per_ducking_step_ = this->ducking_transition_samples_remaining_ / total_ducking_steps;
