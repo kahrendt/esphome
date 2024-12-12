@@ -163,10 +163,10 @@ void SpeakerMediaPlayer::watch_media_commands_() {
       } else {
 #endif
         err = this->start_pipeline_(AudioPipelineType::MEDIA, true);
+        this->is_paused_ = false;
 #ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
       }
 #endif
-      this->is_paused_ = false;
     }
 
     if (media_command.new_file.has_value() && media_command.new_file.value()) {
@@ -176,10 +176,10 @@ void SpeakerMediaPlayer::watch_media_commands_() {
       } else {
 #endif
         err = this->start_pipeline_(AudioPipelineType::MEDIA, false);
+        this->is_paused_ = false;
 #ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
       }
 #endif
-      this->is_paused_ = false;
     }
 
     if (err != ESP_OK) {
