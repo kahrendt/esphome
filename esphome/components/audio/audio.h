@@ -2,6 +2,7 @@
 
 #include "esphome/core/defines.h"
 
+#include <cstddef>
 #include <cstdint>
 
 namespace esphome {
