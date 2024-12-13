@@ -2,8 +2,12 @@
 
 #include "audio_transfer_buffer.h"
 
+#include "esphome/core/helpers.h"
+
 namespace esphome {
 namespace audio {
+
+AudioTransferBuffer::~AudioTransferBuffer() { this->deallocate_buffer_(); };
 
 std::unique_ptr<AudioSinkTransferBuffer> AudioSinkTransferBuffer::create(size_t buffer_size) {
   std::unique_ptr<AudioSinkTransferBuffer> sink_buffer = make_unique<AudioSinkTransferBuffer>();
@@ -23,6 +27,13 @@ std::unique_ptr<AudioSourceTransferBuffer> AudioSourceTransferBuffer::create(siz
   }
 
   return source_buffer;
+}
+
+size_t AudioTransferBuffer::free() const {
+  if (this->buffer_size_ == 0) {
+    return 0;
+  }
+  return this->buffer_size_ - (this->buffer_length_ - (this->data_start_ - this->buffer_));
 }
 
 void AudioTransferBuffer::decrease_buffer_length(size_t bytes) {
@@ -58,10 +69,19 @@ bool AudioTransferBuffer::has_buffered_data() const {
   return (this->available() > 0);
 }
 
+bool AudioTransferBuffer::reallocate(size_t new_buffer_size) {
+  if (this->buffer_length_ > 0) {
+    // Already has data in the buffer, fail
+    return false;
+  }
+  this->deallocate_buffer_();
+  return this->allocate_buffer_(new_buffer_size);
+}
+
 bool AudioTransferBuffer::allocate_buffer_(size_t buffer_size) {
   this->buffer_size_ = buffer_size;
 
-  ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
+  RAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
 
   this->buffer_ = allocator.allocate(this->buffer_size_);
   if (this->buffer_ == nullptr) {
@@ -72,6 +92,18 @@ bool AudioTransferBuffer::allocate_buffer_(size_t buffer_size) {
   this->buffer_length_ = 0;
 
   return true;
+}
+
+void AudioTransferBuffer::deallocate_buffer_() {
+  if (this->buffer_ != nullptr) {
+    RAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
+    allocator.deallocate(this->buffer_, this->buffer_size_);
+    this->buffer_ = nullptr;
+    this->data_start_ = nullptr;
+  }
+
+  this->buffer_size_ = 0;
+  this->buffer_length_ = 0;
 }
 
 size_t AudioSourceTransferBuffer::transfer_data_from_source(TickType_t ticks_to_wait) {

@@ -3,7 +3,6 @@
 
 #ifdef USE_ESP32
 #include "esphome/core/defines.h"
-#include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
 
 #ifdef USE_SPEAKER
@@ -26,7 +25,7 @@ class AudioTransferBuffer {
    */
  public:
   /// @brief Destructor that deallocates the transfer buffer
-  ~AudioTransferBuffer() { this->deallocate_buffer_(); };
+  ~AudioTransferBuffer();
 
   /// @brief Returns a pointer to the start of the transfer buffer where available() bytes of exisiting data can be read
   uint8_t *get_buffer_start() const { return this->data_start_; }
@@ -49,12 +48,7 @@ class AudioTransferBuffer {
   size_t capacity() const { return this->buffer_size_; }
 
   /// @brief Returns the transfer buffer's currrently free bytes available to write
-  size_t free() const {
-    if (this->buffer_size_ == 0) {
-      return 0;
-    }
-    return this->buffer_size_ - (this->buffer_length_ - (this->data_start_ - this->buffer_));
-  }
+  size_t free() const;
 
   /// @brief Clears data in the transfer buffer and, if possible, the source/sink.
   virtual void clear_buffered_data();
@@ -63,31 +57,15 @@ class AudioTransferBuffer {
   /// @return True if there is data, false otherwise.
   virtual bool has_buffered_data() const;
 
-  bool reallocate(size_t new_buffer_size) {
-    if (this->buffer_length_ > 0) {
-      // Already has data in the buffer, fail
-      return false;
-    }
-    this->deallocate_buffer_();
-    return this->allocate_buffer_(new_buffer_size);
-  }
+  bool reallocate(size_t new_buffer_size);
 
  protected:
   /// @brief Allocates the transfer buffer in external memory, if available.
   /// @return True is successful, false otherwise.
   bool allocate_buffer_(size_t buffer_size);
 
-  void deallocate_buffer_() {
-    if (this->buffer_ != nullptr) {
-      ExternalRAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
-      allocator.deallocate(this->buffer_, this->buffer_size_);
-      this->buffer_ = nullptr;
-      this->data_start_ = nullptr;
-    }
-
-    this->buffer_size_ = 0;
-    this->buffer_length_ = 0;
-  }
+  /// @brief Deallocates the buffer and resets the class variables.
+  void deallocate_buffer_();
 
   // A possible source or sink for the transfer buffer
   std::shared_ptr<RingBuffer> ring_buffer_;
