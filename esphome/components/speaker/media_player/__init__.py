@@ -217,13 +217,6 @@ FINAL_VALIDATE_SCHEMA = _supported_local_file_validate
 
 
 async def to_code(config):
-    # cg.add_library("esphome/esp-audio-libs", "1.0.0")
-    cg.add_library(
-        None,
-        None,
-        "https://github.com/kahrendt/esp-audio-libs.git",
-    )
-
     cg.add_define("USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE")
     cg.add_define("USE_SPEAKER_MEDIA_PLAYER_RESAMPLER")
     cg.add_define("USE_AUDIO_FLAC_SUPPORT", True)
