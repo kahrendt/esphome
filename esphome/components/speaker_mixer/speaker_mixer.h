@@ -87,8 +87,7 @@ class SpeakerMixer : public Component {
   void setup() override;
   void loop() override;
 
-  void set_primary_speaker(SourceSpeaker *primary_speaker) { this->primary_speaker_ = primary_speaker; }
-  void set_secondary_speaker(SourceSpeaker *secondary_speaker) { this->secondary_speaker_ = secondary_speaker; }
+  void add_source_speaker(SourceSpeaker *source_speaker) { this->source_speakers_.push_back(source_speaker); }
 
   /// @brief Starts the mixer task. Called by a source speaker giving the current audio stream information
   /// @param stream_info The calling source speakers audio stream information
@@ -137,8 +136,7 @@ class SpeakerMixer : public Component {
   TaskHandle_t task_handle_{nullptr};
   EventGroupHandle_t event_group_{nullptr};
 
-  SourceSpeaker *primary_speaker_{nullptr};
-  SourceSpeaker *secondary_speaker_{nullptr};
+  std::vector<SourceSpeaker *> source_speakers_;
   speaker::Speaker *output_speaker_{nullptr};
 
   bool task_created_{false};

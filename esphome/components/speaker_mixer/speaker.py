@@ -50,25 +50,17 @@ async def to_code(config):
     spkr = await cg.get_variable(config[CONF_OUTPUT_SPEAKER])
     cg.add(var.set_output_speaker(spkr))
 
-    primary_speaker_config = config[CONF_SOURCE_SPEAKERS][0]
-    primary_speaker = cg.new_Pvariable(primary_speaker_config[CONF_ID])
-    if primary_speaker_config[CONF_TIMEOUT] != CONF_NEVER:
-        cg.add(primary_speaker.set_timeout(primary_speaker_config[CONF_TIMEOUT]))
+    for speaker_config in config[CONF_SOURCE_SPEAKERS]:
+        source_speaker = cg.new_Pvariable(speaker_config[CONF_ID])
 
-    await cg.register_component(primary_speaker, primary_speaker_config)
-    await cg.register_parented(primary_speaker, config[CONF_ID])
-    await speaker.register_speaker(primary_speaker, primary_speaker_config)
-    cg.add(var.set_primary_speaker(primary_speaker))
+        if speaker_config[CONF_TIMEOUT] != CONF_NEVER:
+            cg.add(source_speaker.set_timeout(speaker_config[CONF_TIMEOUT]))
 
-    secondary_speaker_config = config[CONF_SOURCE_SPEAKERS][1]
-    secondary_speaker = cg.new_Pvariable(secondary_speaker_config[CONF_ID])
-    if secondary_speaker_config[CONF_TIMEOUT] != CONF_NEVER:
-        cg.add(secondary_speaker.set_timeout(secondary_speaker_config[CONF_TIMEOUT]))
+        await cg.register_component(source_speaker, speaker_config)
+        await cg.register_parented(source_speaker, config[CONF_ID])
+        await speaker.register_speaker(source_speaker, speaker_config)
 
-    await cg.register_component(secondary_speaker, secondary_speaker_config)
-    await cg.register_parented(secondary_speaker, config[CONF_ID])
-    await speaker.register_speaker(secondary_speaker, secondary_speaker_config)
-    cg.add(var.set_secondary_speaker(secondary_speaker))
+        cg.add(var.add_source_speaker(source_speaker))
 
 
 @automation.register_action(

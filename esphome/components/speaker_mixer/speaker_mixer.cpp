@@ -269,7 +269,7 @@ void SpeakerMixer::loop() {
   }
 
   if (this->task_handle_ != nullptr) {
-    if (this->primary_speaker_->is_stopped() && this->secondary_speaker_->is_stopped()) {
+    if (this->source_speakers_[0]->is_stopped() && this->source_speakers_[1]->is_stopped()) {
       this->stop();
     }
   }
@@ -432,12 +432,12 @@ void SpeakerMixer::audio_mixer_task(void *params) {
 
   while (true) {
     std::shared_ptr<audio::AudioSourceTransferBuffer> primary_transfer_buffer =
-        this_mixer->primary_speaker_->get_transfer_buffer().lock();
+        this_mixer->source_speakers_[0]->get_transfer_buffer().lock();
     std::shared_ptr<audio::AudioSourceTransferBuffer> secondary_transfer_buffer =
-        this_mixer->secondary_speaker_->get_transfer_buffer().lock();
+        this_mixer->source_speakers_[1]->get_transfer_buffer().lock();
 
-    audio::AudioStreamInfo primary_stream_info = this_mixer->primary_speaker_->get_audio_stream_info();
-    audio::AudioStreamInfo secondary_stream_info = this_mixer->secondary_speaker_->get_audio_stream_info();
+    audio::AudioStreamInfo primary_stream_info = this_mixer->source_speakers_[0]->get_audio_stream_info();
+    audio::AudioStreamInfo secondary_stream_info = this_mixer->source_speakers_[1]->get_audio_stream_info();
 
     uint32_t event_group_bits = xEventGroupGetBits(this_mixer->event_group_);
     if (event_group_bits & MixerEventGroupBits::COMMAND_STOP) {
@@ -451,13 +451,13 @@ void SpeakerMixer::audio_mixer_task(void *params) {
 
     uint32_t primary_frames_available = 0;
     if (primary_transfer_buffer.use_count() > 0) {
-      this_mixer->primary_speaker_->process_data_from_source(0);
+      this_mixer->source_speakers_[0]->process_data_from_source(0);
       primary_frames_available = primary_transfer_buffer->available() / primary_stream_info.get_bytes_per_frame();
     }
 
     uint32_t secondary_frames_available = 0;
     if (secondary_transfer_buffer.use_count() > 0) {
-      this_mixer->secondary_speaker_->process_data_from_source(0);
+      this_mixer->source_speakers_[1]->process_data_from_source(0);
       secondary_frames_available = secondary_transfer_buffer->available() / secondary_stream_info.get_bytes_per_frame();
     }
 
