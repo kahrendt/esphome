@@ -53,7 +53,6 @@ class SourceSpeaker : public speaker::Speaker, public Component {
   std::weak_ptr<audio::AudioSourceTransferBuffer> get_transfer_buffer() { return this->transfer_buffer_; }
 
  protected:
-  friend class SpeakerMixer;
   /// @brief Ducks audio samples by a specified amount. When changing the ducking amount, it can transition gradually
   /// over a specified amount of samples.
   /// @param input_buffer buffer with audio samples to be ducked in place
@@ -105,8 +104,6 @@ class SpeakerMixer : public Component {
   speaker::Speaker *get_output_speaker() const { return this->output_speaker_; }
 
  protected:
-  // friend class SourceSpeaker;
-
   /// @brief Copies audio frames from the input buffer to the output buffer taking into account the number of channels
   /// in each stream. If the output stream has more channels, the input samples are duplicated. If the output stream has
   /// less channels, the extra channel input samples are dropped.

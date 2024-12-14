@@ -432,9 +432,9 @@ void SpeakerMixer::audio_mixer_task(void *params) {
 
   while (true) {
     std::shared_ptr<audio::AudioSourceTransferBuffer> primary_transfer_buffer =
-        this_mixer->primary_speaker_->transfer_buffer_;
+        this_mixer->primary_speaker_->get_transfer_buffer().lock();
     std::shared_ptr<audio::AudioSourceTransferBuffer> secondary_transfer_buffer =
-        this_mixer->secondary_speaker_->transfer_buffer_;
+        this_mixer->secondary_speaker_->get_transfer_buffer().lock();
 
     audio::AudioStreamInfo primary_stream_info = this_mixer->primary_speaker_->get_audio_stream_info();
     audio::AudioStreamInfo secondary_stream_info = this_mixer->secondary_speaker_->get_audio_stream_info();
