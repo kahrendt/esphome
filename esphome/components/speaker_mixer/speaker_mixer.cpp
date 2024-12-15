@@ -51,6 +51,7 @@ void SourceSpeaker::loop() {
       if (err == ESP_OK) {
         this->state_ = speaker::STATE_RUNNING;
         this->stop_gracefully_ = false;
+        this->last_seen_data_ms_ = millis();
         this->status_clear_error();
       } else {
         switch (err) {
