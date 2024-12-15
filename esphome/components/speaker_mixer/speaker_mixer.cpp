@@ -45,15 +45,51 @@ enum MixerEventGroupBits : uint32_t {
 };
 
 void SourceSpeaker::loop() {
-  if (this->state_ == speaker::STATE_RUNNING) {
-    if (!this->transfer_buffer_->has_buffered_data()) {
-      if ((this->timeout_ms_.has_value() && ((millis() - this->last_seen_data_ms_) > this->timeout_ms_.value())) ||
-          this->stop_gracefully_) {
-        this->state_ = speaker::STATE_STOPPED;
+  switch (this->state_) {
+    case speaker::STATE_STARTING: {
+      esp_err_t err = this->start_();
+      if (err == ESP_OK) {
+        this->state_ = speaker::STATE_RUNNING;
         this->stop_gracefully_ = false;
-        this->transfer_buffer_.reset();  // release ownership of transfer buffer
+        this->status_clear_error();
+      } else {
+        switch (err) {
+          case ESP_ERR_NO_MEM:
+            this->status_set_error("Failed to start mixer: not enough memory");
+            break;
+          case ESP_ERR_NOT_SUPPORTED:
+            this->status_set_error("Failed to start mixer: unsupported bits per sample");
+            break;
+          case ESP_ERR_INVALID_ARG:
+            this->status_set_error("Failed to start mixer: audio stream isn't compatable with the other audio stream");
+            break;
+          case ESP_ERR_INVALID_STATE:
+            this->status_set_error("Failed to start mixer: mixer task failed to start");
+            break;
+          default:
+            this->status_set_error("Failed to start mixer");
+            break;
+        }
+
+        this->state_ = speaker::STATE_STOPPING;
       }
+      break;
     }
+    case speaker::STATE_RUNNING:
+      if (!this->transfer_buffer_->has_buffered_data()) {
+        if ((this->timeout_ms_.has_value() && ((millis() - this->last_seen_data_ms_) > this->timeout_ms_.value())) ||
+            this->stop_gracefully_) {
+          this->state_ = speaker::STATE_STOPPING;
+        }
+      }
+      break;
+    case speaker::STATE_STOPPING:
+      this->stop_();
+      this->stop_gracefully_ = false;
+      this->state_ = speaker::STATE_STOPPED;
+      break;
+    case speaker::STATE_STOPPED:
+      break;
   }
 }
 
@@ -72,14 +108,16 @@ size_t SourceSpeaker::play(const uint8_t *data, size_t length, TickType_t ticks_
   return bytes_written;
 }
 
-void SourceSpeaker::start() {
+void SourceSpeaker::start() { this->state_ = speaker::STATE_STARTING; }
+
+esp_err_t SourceSpeaker::start_() {
   const size_t ring_buffer_size = MIXER_INPUT_RING_BUFFER_DURATION_MS * this->audio_stream_info_.get_bytes_per_ms();
   if (this->transfer_buffer_.use_count() == 0) {
     this->transfer_buffer_ = audio::AudioSourceTransferBuffer::create(TRANSFER_BUFFER_DURATION_MS *
                                                                       this->audio_stream_info_.get_bytes_per_ms());
 
     if (this->transfer_buffer_ == nullptr) {
-      // error state, didn't allocate transfer buffer
+      return ESP_ERR_NO_MEM;
     }
     std::shared_ptr<RingBuffer> temp_ring_buffer;
 
@@ -89,28 +127,19 @@ void SourceSpeaker::start() {
     }
 
     if (!this->ring_buffer_.use_count()) {
-      // error state, didn't allocate ring buffer
+      return ESP_ERR_NO_MEM;
     } else {
       this->transfer_buffer_->set_source(temp_ring_buffer);
     }
   }
 
-  if (this->parent_->start(this->audio_stream_info_) == ESP_OK) {
-    this->state_ = speaker::STATE_RUNNING;
-    this->stop_gracefully_ = false;
-    this->status_clear_error();
-  } else {
-    this->state_ = speaker::STATE_STOPPED;
-    this->status_set_error();
-  }
+  return this->parent_->start(this->audio_stream_info_);
 }
 
-void SourceSpeaker::stop() {
-  if (this->transfer_buffer_.unique()) {
-    this->transfer_buffer_->clear_buffered_data();  // TODO: Is this safe...?
-  }
+void SourceSpeaker::stop() { this->state_ = speaker::STATE_STOPPING; }
 
-  this->state_ = speaker::STATE_STOPPED;
+void SourceSpeaker::stop_() {
+  this->transfer_buffer_.reset();  // deallocates the transfer buffer
 }
 
 void SourceSpeaker::finish() { this->stop_gracefully_ = true; }
