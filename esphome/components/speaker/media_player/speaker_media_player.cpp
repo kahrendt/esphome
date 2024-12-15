@@ -458,6 +458,13 @@ void SpeakerMediaPlayer::set_volume_(float volume, bool publish) {
     this->save_volume_restore_state_();
   }
 
+  // Turn on the mute state if the volume is effectively zero, off otherwise
+  if (volume < 0.001) {
+    this->set_mute_state_(true);
+  } else {
+    this->set_mute_state_(false);
+  }
+
   this->defer([this, volume]() { this->volume_trigger_->trigger(volume); });
 }
 
