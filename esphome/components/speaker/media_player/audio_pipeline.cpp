@@ -235,7 +235,8 @@ AudioPipelineState AudioPipeline::get_state() {
   }
 #endif
 
-  if ((event_bits & READER_MESSAGE_FINISHED) && (event_bits & DECODER_MESSAGE_FINISHED)
+  if ((event_bits & READER_MESSAGE_FINISHED) &&
+      (!(event_bits & READER_MESSAGE_LOADED_MEDIA_TYPE) && (event_bits & DECODER_MESSAGE_FINISHED))
 #ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
       && (event_bits & RESAMPLER_MESSAGE_FINISHED)
 #endif
@@ -383,8 +384,6 @@ void AudioPipeline::read_task(void *params) {
       xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE);
     }
 
-    bool started_playback = false;
-
     while (true) {
       event_bits = xEventGroupGetBits(this_pipeline->event_group_);
 
@@ -401,6 +400,12 @@ void AudioPipeline::read_task(void *params) {
                            EventGroupBits::READER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
         break;
       }
+    }
+    event_bits = xEventGroupGetBits(this_pipeline->event_group_);
+    if ((event_bits & EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE) ||
+        (this_pipeline->raw_file_ring_buffer_.use_count() == 1)) {
+      // Decoder task hasn't started yet, so delay a bit before releasing ownership of the ring buffer
+      delay(10);
     }
   }
 
