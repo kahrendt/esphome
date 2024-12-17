@@ -50,7 +50,7 @@ size_t RingBuffer::read(void *data, size_t len, TickType_t ticks_to_wait) {
   vRingbufferReturnItem(this->handle_, buffer_data);
 
   if (bytes_read < len) {
-    // data may have wrapped around, so read again to get the remaining bytes
+    // Data may have wrapped around, so read a second time to receive the remainder
     size_t follow_up_bytes_read = 0;
     size_t bytes_remaining = len - bytes_read;
 
@@ -112,7 +112,7 @@ bool RingBuffer::discard_bytes_(size_t discard_bytes) {
 
   if (bytes_read < discard_bytes) {
     size_t wrapped_bytes_read = 0;
-    void *buffer_data = xRingbufferReceiveUpTo(this->handle_, &wrapped_bytes_read, 0, discard_bytes - bytes_read);
+    buffer_data = xRingbufferReceiveUpTo(this->handle_, &wrapped_bytes_read, 0, discard_bytes - bytes_read);
     if (buffer_data != nullptr) {
       vRingbufferReturnItem(this->handle_, buffer_data);
       bytes_read += wrapped_bytes_read;
