@@ -134,7 +134,7 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
 
     // Decode more data
 
-    size_t bytes_read = this->input_transfer_buffer_->transfer_data_from_source(pdMS_TO_TICKS(0));
+    size_t bytes_read = this->input_transfer_buffer_->transfer_data_from_source(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
     if ((this->potentially_failed_count_ > 0) && (bytes_read == 0)) {
       // Failed to decode in last attempt and there is no new data
@@ -179,8 +179,6 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
       return AudioDecoderState::FAILED;
     } else if (state == FileDecoderState::MORE_TO_PROCESS) {
       this->potentially_failed_count_ = 0;
-    } else if (state == FileDecoderState::IDLE) {
-      delay(READ_WRITE_TIMEOUT_MS);
     }
   }
   return AudioDecoderState::DECODING;

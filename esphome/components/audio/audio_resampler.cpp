@@ -108,11 +108,10 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
     // If paused, block to avoid wasting CPU resources
     delay(READ_WRITE_TIMEOUT_MS);
   }
-  this->input_transfer_buffer_->transfer_data_from_source(0);
+  this->input_transfer_buffer_->transfer_data_from_source(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
 
   if (this->input_transfer_buffer_->available() == 0) {
     // No samples available to process
-    delay(READ_WRITE_TIMEOUT_MS);
     return AudioResamplerState::RESAMPLING;
   }
 
