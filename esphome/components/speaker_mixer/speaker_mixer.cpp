@@ -145,7 +145,9 @@ void SourceSpeaker::stop_() {
 
 void SourceSpeaker::finish() { this->stop_gracefully_ = true; }
 
-bool SourceSpeaker::has_buffered_data() const { return this->transfer_buffer_->has_buffered_data(); }
+bool SourceSpeaker::has_buffered_data() const {
+  return ((this->transfer_buffer_.use_count() > 0) && this->transfer_buffer_->has_buffered_data());
+}
 
 void SourceSpeaker::set_mute_state(bool mute_state) {
   this->mute_state_ = mute_state;
