@@ -47,7 +47,6 @@ class ResamplingSpeaker : public Component, public speaker::Speaker {
   TaskHandle_t task_handle_{nullptr};
   EventGroupHandle_t event_group_{nullptr};
 
-  std::shared_ptr<audio::AudioSourceTransferBuffer> transfer_buffer_;
   std::weak_ptr<RingBuffer> ring_buffer_;
 
   speaker::Speaker *output_speaker_{nullptr};
