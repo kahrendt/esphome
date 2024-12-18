@@ -35,6 +35,9 @@ class SourceSpeaker : public speaker::Speaker, public Component {
   /// @brief Volume state changes are passed to the parent's output speaker
   void set_volume(float volume) override;
 
+  void set_pause_state(bool pause_state) override { this->pause_state_ = pause_state; }
+  bool get_pause_state() const override { return this->pause_state_; }
+
   /// @brief Transfers audio from the ring buffer into the transfer buffer. Ducks audio while transferring.
   /// @param ticks_to_wait FreeRTOS ticks to wait while waiting to read from the ring buffer.
   /// @return Number of bytes transferred from the ring buffer.
@@ -77,6 +80,8 @@ class SourceSpeaker : public speaker::Speaker, public Component {
   uint32_t last_seen_data_ms_{0};
   optional<uint32_t> timeout_ms_;
   bool stop_gracefully_{false};
+
+  bool pause_state_{false};
 
   int8_t target_ducking_db_reduction_{0};
   int8_t current_ducking_db_reduction_{0};

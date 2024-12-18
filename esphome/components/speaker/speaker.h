@@ -56,6 +56,10 @@ class Speaker {
   // When finish() is not implemented on the platform component it should just do a normal stop.
   virtual void finish() { this->stop(); }
 
+  // Pauses processing incoming audio. Needs to be implemented specifically per speaker component
+  virtual void set_pause_state(bool pause_state) {}
+  virtual bool get_pause_state() const { return false; }
+
   virtual bool has_buffered_data() const = 0;
 
   bool is_running() const { return this->state_ == STATE_RUNNING; }

@@ -27,8 +27,6 @@ enum EventGroupBits : uint32_t {
 
   // Stops all activity in the pipeline elements and set by stop() or by each task
   PIPELINE_COMMAND_STOP = (1 << 0),
-  // Stops transferring processed audio in the decoder or resampler to their outputs
-  PIPELINE_COMMAND_PAUSE = (1 << 1),
 
   // Read audio from an HTTP source; cleared by reader task and set by start(uri,...)
   READER_COMMAND_INIT_HTTP = (1 << 4),
@@ -90,13 +88,7 @@ esp_err_t AudioPipeline::start(audio::AudioFile *audio_file, uint32_t target_sam
   return err;
 }
 
-void AudioPipeline::set_pause_state(bool pause_state) {
-  if (pause_state) {
-    xEventGroupSetBits(this->event_group_, PIPELINE_COMMAND_PAUSE);
-  } else {
-    xEventGroupClearBits(this->event_group_, PIPELINE_COMMAND_PAUSE);
-  }
-}
+void AudioPipeline::set_pause_state(bool pause_state) { this->speaker_->set_pause_state(pause_state); }
 
 esp_err_t AudioPipeline::allocate_buffers_() {
   if (this->event_group_ == nullptr)
@@ -466,7 +458,7 @@ void AudioPipeline::decode_task(void *params) {
           started_playback = true;
         }
       } else {
-        decoder->set_pause_output_state(event_bits & EventGroupBits::PIPELINE_COMMAND_PAUSE);
+        decoder->set_pause_output_state(false);
       }
 
       // Stop gracefully if the reader has finished
@@ -631,7 +623,7 @@ void AudioPipeline::resample_task(void *params) {
       }
 
       // Update pause state
-      resampler->set_pause_output_state(event_bits & EventGroupBits::PIPELINE_COMMAND_PAUSE);
+      resampler->set_pause_output_state(false);
 
       // Stop gracefully if the decoder is done
       audio::AudioResamplerState resampler_state = resampler->resample(event_bits & DECODER_MESSAGE_FINISHED);

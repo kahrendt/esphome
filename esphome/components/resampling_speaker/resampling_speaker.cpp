@@ -110,9 +110,7 @@ size_t ResamplingSpeaker::play(const uint8_t *data, size_t length, TickType_t ti
     }
   }
 
-  if (bytes_written > 0) {
-    this->last_seen_data_ms_ = millis();
-  }
+  this->last_seen_data_ms_ = millis();
   return bytes_written;
 }
 

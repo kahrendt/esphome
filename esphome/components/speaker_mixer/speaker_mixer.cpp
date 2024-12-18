@@ -487,11 +487,15 @@ void SpeakerMixer::audio_mixer_task(void *params) {
       primary_frames_available = primary_transfer_buffer->available() / primary_stream_info.get_bytes_per_frame();
     }
 
+    primary_frames_available *= !this_mixer->source_speakers_[0]->get_pause_state();
+
     uint32_t secondary_frames_available = 0;
     if (secondary_transfer_buffer.use_count() > 0) {
       this_mixer->source_speakers_[1]->process_data_from_source(0);
       secondary_frames_available = secondary_transfer_buffer->available() / secondary_stream_info.get_bytes_per_frame();
     }
+
+    secondary_frames_available *= !this_mixer->source_speakers_[1]->get_pause_state();
 
     // Restrict the number of frames available to the amount that the output transfer buffer can store
     primary_frames_available = std::min(primary_frames_available, output_frames_free);

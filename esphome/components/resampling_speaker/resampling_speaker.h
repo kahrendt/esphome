@@ -26,6 +26,9 @@ class ResamplingSpeaker : public Component, public speaker::Speaker {
   void stop() override;
   void finish() override;
 
+  void set_pause_state(bool pause_state) override { this->output_speaker_->set_pause_state(pause_state); }
+  bool get_pause_state() const override { this->output_speaker_->get_pause_state(); }
+
   bool has_buffered_data() const override;
 
   /// @brief Mute state changes are passed to the parent's output speaker
