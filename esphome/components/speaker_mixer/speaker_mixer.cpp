@@ -13,7 +13,7 @@ namespace speaker_mixer {
 
 static const UBaseType_t MIXER_TASK_PRIORITY = 10;
 
-static const uint32_t MIXER_INPUT_RING_BUFFER_DURATION_MS = 50;
+static const uint32_t MIXER_INPUT_RING_BUFFER_DURATION_MS = 100;
 static const uint32_t TRANSFER_BUFFER_DURATION_MS = 50;
 static const size_t TASK_DELAY_MS = 25;
 

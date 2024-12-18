@@ -15,7 +15,7 @@ namespace resampling_speaker {
 static const UBaseType_t RESAMPLER_TASK_PRIORITY = 1;
 
 static const uint32_t MIXER_INPUT_RING_BUFFER_DURATION_MS = 100;
-static const uint32_t TRANSFER_BUFFER_DURATION_MS = 100;
+static const uint32_t TRANSFER_BUFFER_DURATION_MS = 50;
 static const size_t TASK_DELAY_MS = 25;
 
 static const uint32_t TASK_STACK_SIZE = 3072;
