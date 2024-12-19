@@ -45,6 +45,8 @@ class ResamplingSpeaker : public Component, public speaker::Speaker {
   esp_err_t start_();
   void stop_();
 
+  inline bool requires_resampling_() { return (this->audio_stream_info_.sample_rate != this->target_sample_rate_); }
+
   static void resample_task(void *params);
 
   TaskHandle_t task_handle_{nullptr};

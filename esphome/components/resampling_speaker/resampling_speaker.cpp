@@ -48,15 +48,12 @@ void ResamplingSpeaker::loop() {
     case speaker::STATE_STARTING: {
       esp_err_t err = this->start_();
       if (err == ESP_OK) {
-        this->state_ = speaker::STATE_RUNNING;
         this->stop_gracefully_ = false;
         this->last_seen_data_ms_ = millis();
         this->status_clear_error();
+        this->state_ = speaker::STATE_RUNNING;
       } else {
         switch (err) {
-          case ESP_ERR_NO_MEM:
-            this->status_set_error("Failed to start resampler: not enough memory");
-            break;
           case ESP_ERR_INVALID_STATE:
             this->status_set_error("Failed to start resampler: resampler task failed to start");
             break;
@@ -70,7 +67,7 @@ void ResamplingSpeaker::loop() {
       break;
     }
     case speaker::STATE_RUNNING:
-      if (this->audio_stream_info_.sample_rate != this->target_sample_rate_) {
+      if (this->requires_resampling_()) {
         if ((this->timeout_ms_.has_value() && ((millis() - this->last_seen_data_ms_) > this->timeout_ms_.value())) ||
             this->stop_gracefully_) {
           this->state_ = speaker::STATE_STOPPING;
@@ -102,7 +99,7 @@ size_t ResamplingSpeaker::play(const uint8_t *data, size_t length, TickType_t ti
   }
 
   size_t bytes_written = 0;
-  if ((this->output_speaker_->is_running()) && (this->audio_stream_info_.sample_rate == this->target_sample_rate_)) {
+  if ((this->output_speaker_->is_running()) && (!this->requires_resampling_())) {
     bytes_written = this->output_speaker_->play(data, length, ticks_to_wait);
   } else {
     if (this->ring_buffer_.use_count() == 1) {
@@ -124,7 +121,7 @@ esp_err_t ResamplingSpeaker::start_() {
   this->output_speaker_->set_audio_stream_info(resampled_stream_info);
   this->output_speaker_->start();
 
-  if (this->audio_stream_info_.sample_rate != this->target_sample_rate_) {
+  if (this->requires_resampling_()) {
     // we actually have to resample!
 
     if (this->task_handle_ == nullptr) {
@@ -145,7 +142,9 @@ esp_err_t ResamplingSpeaker::start_() {
 void ResamplingSpeaker::stop() { this->state_ = speaker::STATE_STOPPING; }
 
 void ResamplingSpeaker::stop_() {
-  this->ring_buffer_.reset();  // deallocates the transfer buffer
+  if (this->requires_resampling_()) {
+    xEventGroupSetBits(this->event_group_, ResamplingEventGroupBits::COMMAND_STOP);
+  }
 }
 
 void ResamplingSpeaker::finish() { this->stop_gracefully_ = true; }
