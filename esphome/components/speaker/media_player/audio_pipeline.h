@@ -5,7 +5,6 @@
 #include "esphome/components/audio/audio.h"
 #include "esphome/components/audio/audio_reader.h"
 #include "esphome/components/audio/audio_decoder.h"
-#include "esphome/components/audio/audio_resampler.h"
 #include "esphome/components/speaker/speaker.h"
 
 #include "esphome/core/hal.h"
@@ -20,7 +19,7 @@
 namespace esphome {
 namespace speaker {
 
-// Internal sink/source buffers for reader, decoder, and resampler
+// Internal sink/source buffers for reader and decoder
 static const size_t DEFAULT_TRANSFER_BUFFER_SIZE = 24 * 1024;
 
 enum class AudioPipelineType : uint8_t {
@@ -33,17 +32,11 @@ enum class AudioPipelineState : uint8_t {
   STOPPED,
   ERROR_READING,
   ERROR_DECODING,
-#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
-  ERROR_RESAMPLING,
-#endif
 };
 
 enum class InfoErrorSource : uint8_t {
   READER = 0,
   DECODER,
-#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
-  RESAMPLER,
-#endif
 };
 
 enum class DecodingError : uint8_t {
@@ -58,9 +51,6 @@ struct InfoErrorEvent {
   optional<esp_err_t> err;
   optional<audio::AudioFileType> file_type;
   optional<audio::AudioStreamInfo> audio_stream_info;
-#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
-  optional<bool> resampling;
-#endif
   optional<DecodingError> decoding_err;
 };
 
@@ -137,7 +127,7 @@ class AudioPipeline {
   audio::AudioStreamInfo current_audio_stream_info_;
 
   size_t buffer_size_;           // Ring buffer between reader and decoder
-  size_t transfer_buffer_size_;  // Internal source/sink buffers for the audio reader, decoder, and resampler
+  size_t transfer_buffer_size_;  // Internal source/sink buffers for the audio reader and decoder
 
   uint32_t target_sample_rate_;
 
@@ -157,12 +147,6 @@ class AudioPipeline {
   // Decodes the media file into PCM audio
   static void decode_task(void *params);
   TaskHandle_t decode_task_handle_{nullptr};
-
-#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
-  // Resamples the audio to match the specified target sample rate. Converts mono audio to stereo audio if necessary.
-  static void resample_task(void *params);
-  TaskHandle_t resample_task_handle_{nullptr};
-#endif
 };
 
 }  // namespace speaker

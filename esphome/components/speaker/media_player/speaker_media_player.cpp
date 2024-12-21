@@ -15,27 +15,18 @@ namespace speaker {
 
 // Framework:
 //  - Media player that can handle two streams; one for media and one for announcements
-//    - If played together, they are mixed with the announcement stream staying at full volume
-//    - The media audio is scaled, if necessary, to avoid clipping when mixing an announcement stream
-//    - The media audio can be further ducked via the ``set_ducking_reduction`` function
-//  - Each stream is handled by an ``AudioPipeline`` object with three parts/tasks
+//    - Each stream has an individual speaker component for output
+//  - Each stream is handled by an ``AudioPipeline`` object with two parts/tasks
 //    - ``AudioReader`` handles reading from an HTTP source or from a PROGMEM flash set at compile time
 //    - ``AudioDecoder`` handles decoding the audio file. All formats are limited to two channels and 16 bits per sample
 //      - FLAC
 //      - WAV
 //      - MP3 (based on the libhelix decoder - a random mp3 file may be incompatible)
-//    - ``AudioResampler`` handles converting the sample rate to the configured output sample rate and converting mono
-//      to stereo
 //      - The quality is not good, and it is slow! Please use audio at the configured sample rate to avoid these issues
 //    - Each task will always run once started, but they will not doing anything until they are needed
 //    - FreeRTOS Event Groups make up the inter-task communication
-//    - The ``AudioPipeline`` sets up an output ring buffer for the Reader and Decoder parts. The next part/task
-//      automatically pulls from the previous ring buffer
-//  - The streams are mixed together in the ``AudioMixer`` task
-//    - Each stream has a corresponding input buffer that the ``AudioResampler`` feeds directly
-//    - Pausing the media stream is done here
-//    - Media stream ducking is done here
-//    - The output ring buffer feeds the configured speaker the audio directly
+//    - The ``AudioPipeline`` sets up a ring buffer between the reader and decoder tasks. The decoder task outputs audio
+//      directly to a speaker component.
 //  - Generic media player commands are received by the ``control`` function. The commands are added to the
 //    ``media_control_command_queue_`` to be processed in the component's loop
 //    - Local file play back is initiatied with ``play_file`` and adds it to the ``media_control_command_queue_``
@@ -44,10 +35,10 @@ namespace speaker {
 //      component handles the implementation details.
 //      - Volume commands are ignored if the media control queue is full to avoid crashing when the track wheel is spun
 //      fast
-//    - Pausing is sent to the ``AudioMixer`` task. It only effects the media stream.
+//    - Pausing is sent to the speaker component.
 //  - The components main loop performs housekeeping:
 //    - It reads the media control queue and processes it directly
-//    - It watches the state of speaker and mixer tasks
+//    - It monitors the state of speaker
 //    - It determines the overall state of the media player by considering the state of each pipeline
 //      - announcement playback takes highest priority
 //  - All logging happens in the main loop task to reduce task stack memory usage.
@@ -275,10 +266,6 @@ void SpeakerMediaPlayer::loop() {
     ESP_LOGE(TAG, "The media pipeline's file reader encountered an error.");
   } else if (this->media_pipeline_state_ == AudioPipelineState::ERROR_DECODING) {
     ESP_LOGE(TAG, "The media pipeline's audio decoder encountered an error.");
-#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
-  } else if (this->media_pipeline_state_ == AudioPipelineState::ERROR_RESAMPLING) {
-    ESP_LOGE(TAG, "The media pipeline's audio resampler encountered an error.");
-#endif
   }
 
 #ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
@@ -289,10 +276,6 @@ void SpeakerMediaPlayer::loop() {
     ESP_LOGE(TAG, "The announcement pipeline's file reader encountered an error.");
   } else if (this->announcement_pipeline_state_ == AudioPipelineState::ERROR_DECODING) {
     ESP_LOGE(TAG, "The announcement pipeline's audio decoder encountered an error.");
-#ifdef USE_SPEAKER_MEDIA_PLAYER_RESAMPLER
-  } else if (this->announcement_pipeline_state_ == AudioPipelineState::ERROR_RESAMPLING) {
-    ESP_LOGE(TAG, "The announcement pipeline's audio resampler encountered an error.");
-#endif
   }
 
   if (this->announcement_pipeline_state_ != AudioPipelineState::STOPPED) {
