@@ -29,7 +29,8 @@ enum ResamplingEventGroupBits : uint32_t {
   STATE_STOPPING = (1 << 12),
   STATE_STOPPED = (1 << 13),
   ERR_ESP_NO_MEM = (1 << 19),
-  ERR_ESP_FAIL = (1 << 20),
+  ERR_ESP_NOT_SUPPORTED = (1 << 20),
+  ERR_ESP_FAIL = (1 << 21),
   ALL_BITS = 0x00FFFFFF,  // All valid FreeRTOS event group bits
 };
 
@@ -50,9 +51,15 @@ void ResamplingSpeaker::loop() {
     ESP_LOGD(TAG, "Starting resampler task");
     xEventGroupClearBits(this->event_group_, ResamplingEventGroupBits::STATE_STARTING);
   }
+
   if (event_group_bits & ResamplingEventGroupBits::ERR_ESP_NO_MEM) {
-    this->status_set_error("Failed to allocate the resampler's internal buffer");
+    this->status_set_error("Resampler task failed to allocate the internal buffers");
     xEventGroupClearBits(this->event_group_, ResamplingEventGroupBits::ERR_ESP_NO_MEM);
+    this->state_ = speaker::STATE_STOPPING;
+  }
+  if (event_group_bits & ResamplingEventGroupBits::ERR_ESP_NOT_SUPPORTED) {
+    this->status_set_error("Cannot resample due to an unsupported audio stream");
+    xEventGroupClearBits(this->event_group_, ResamplingEventGroupBits::ERR_ESP_NOT_SUPPORTED);
     this->state_ = speaker::STATE_STOPPING;
   }
   if (event_group_bits & ResamplingEventGroupBits::ERR_ESP_FAIL) {
@@ -60,6 +67,7 @@ void ResamplingSpeaker::loop() {
     xEventGroupClearBits(this->event_group_, ResamplingEventGroupBits::ERR_ESP_FAIL);
     this->state_ = speaker::STATE_STOPPING;
   }
+
   if (event_group_bits & ResamplingEventGroupBits::STATE_RUNNING) {
     ESP_LOGD(TAG, "Started resampler task");
     this->status_clear_error();
@@ -140,7 +148,7 @@ esp_err_t ResamplingSpeaker::start_() {
   this->output_speaker_->start();
 
   if (this->requires_resampling_()) {
-    // we actually have to resample!
+    // Start the resampler task to handle converting sample rates
 
     if (this->task_handle_ == nullptr) {
       xTaskCreate(this->resample_task, "resample", TASK_STACK_SIZE, (void *) this, RESAMPLER_TASK_PRIORITY,
@@ -149,8 +157,6 @@ esp_err_t ResamplingSpeaker::start_() {
       if (this->task_handle_ == nullptr) {
         return ESP_ERR_INVALID_STATE;
       }
-
-      this->task_created_ = true;
     }
   }
 
@@ -189,6 +195,7 @@ void ResamplingSpeaker::set_volume(float volume) {
 void ResamplingSpeaker::resample_task(void *params) {
   ResamplingSpeaker *this_resampler = (ResamplingSpeaker *) params;
 
+  this_resampler->task_created_ = true;
   xEventGroupSetBits(this_resampler->event_group_, ResamplingEventGroupBits::STATE_STARTING);
 
   audio::AudioStreamInfo resampled_stream_info = this_resampler->audio_stream_info_;
@@ -215,7 +222,13 @@ void ResamplingSpeaker::resample_task(void *params) {
     }
   }
 
-  xEventGroupSetBits(this_resampler->event_group_, ResamplingEventGroupBits::STATE_RUNNING);
+  if (err == ESP_OK) {
+    xEventGroupSetBits(this_resampler->event_group_, ResamplingEventGroupBits::STATE_RUNNING);
+  } else if (err == ESP_ERR_NO_MEM) {
+    xEventGroupSetBits(this_resampler->event_group_, ResamplingEventGroupBits::ERR_ESP_FAIL);
+  } else if (err == ESP_ERR_NOT_SUPPORTED) {
+    xEventGroupSetBits(this_resampler->event_group_, ResamplingEventGroupBits::ERR_ESP_NOT_SUPPORTED);
+  }
 
   while (err == ESP_OK) {
     uint32_t event_bits = xEventGroupGetBits(this_resampler->event_group_);
@@ -238,6 +251,7 @@ void ResamplingSpeaker::resample_task(void *params) {
   xEventGroupSetBits(this_resampler->event_group_, ResamplingEventGroupBits::STATE_STOPPING);
   resampler.reset();
   xEventGroupSetBits(this_resampler->event_group_, ResamplingEventGroupBits::STATE_STOPPED);
+  this_resampler->task_created_ = false;
   vTaskDelete(nullptr);
 }
 
