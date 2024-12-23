@@ -44,12 +44,43 @@ void ResamplingSpeaker::setup() {
 }
 
 void ResamplingSpeaker::loop() {
+  uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
+
+  if (event_group_bits & ResamplingEventGroupBits::STATE_STARTING) {
+    ESP_LOGD(TAG, "Starting resampler task");
+    xEventGroupClearBits(this->event_group_, ResamplingEventGroupBits::STATE_STARTING);
+  }
+  if (event_group_bits & ResamplingEventGroupBits::ERR_ESP_NO_MEM) {
+    this->status_set_error("Failed to allocate the resampler's internal buffer");
+    xEventGroupClearBits(this->event_group_, ResamplingEventGroupBits::ERR_ESP_NO_MEM);
+    this->state_ = speaker::STATE_STOPPING;
+  }
+  if (event_group_bits & ResamplingEventGroupBits::ERR_ESP_FAIL) {
+    this->status_set_error("Resampler task failed");
+    xEventGroupClearBits(this->event_group_, ResamplingEventGroupBits::ERR_ESP_FAIL);
+    this->state_ = speaker::STATE_STOPPING;
+  }
+  if (event_group_bits & ResamplingEventGroupBits::STATE_RUNNING) {
+    ESP_LOGD(TAG, "Started resampler task");
+    this->status_clear_error();
+    xEventGroupClearBits(this->event_group_, ResamplingEventGroupBits::STATE_RUNNING);
+  }
+  if (event_group_bits & ResamplingEventGroupBits::STATE_STOPPING) {
+    ESP_LOGD(TAG, "Stopping resampler task");
+    xEventGroupClearBits(this->event_group_, ResamplingEventGroupBits::STATE_STOPPING);
+  }
+  if (event_group_bits & ResamplingEventGroupBits::STATE_STOPPED) {
+    if (!this->task_created_) {
+      ESP_LOGD(TAG, "Stopped resampler task");
+      xEventGroupClearBits(this->event_group_, ResamplingEventGroupBits::ALL_BITS);
+      this->task_handle_ = nullptr;
+    }
+  }
+
   switch (this->state_) {
     case speaker::STATE_STARTING: {
       esp_err_t err = this->start_();
       if (err == ESP_OK) {
-        this->stop_gracefully_ = false;
-        this->last_seen_data_ms_ = millis();
         this->status_clear_error();
         this->state_ = speaker::STATE_RUNNING;
       } else {
@@ -67,25 +98,13 @@ void ResamplingSpeaker::loop() {
       break;
     }
     case speaker::STATE_RUNNING:
-      if (this->requires_resampling_()) {
-        if ((this->timeout_ms_.has_value() && ((millis() - this->last_seen_data_ms_) > this->timeout_ms_.value())) ||
-            this->stop_gracefully_) {
-          this->state_ = speaker::STATE_STOPPING;
-        }
-
-      } else {
-        if (!this->output_speaker_->has_buffered_data()) {
-          if ((this->timeout_ms_.has_value() && ((millis() - this->last_seen_data_ms_) > this->timeout_ms_.value())) ||
-              this->stop_gracefully_) {
-            this->state_ = speaker::STATE_STOPPING;
-          }
-        }
+      if (this->output_speaker_->is_stopped()) {
+        this->state_ = speaker::STATE_STOPPING;
       }
 
       break;
     case speaker::STATE_STOPPING:
       this->stop_();
-      this->stop_gracefully_ = false;
       this->state_ = speaker::STATE_STOPPED;
       break;
     case speaker::STATE_STOPPED:
@@ -108,7 +127,6 @@ size_t ResamplingSpeaker::play(const uint8_t *data, size_t length, TickType_t ti
     }
   }
 
-  this->last_seen_data_ms_ = millis();
   return bytes_written;
 }
 
@@ -142,14 +160,21 @@ esp_err_t ResamplingSpeaker::start_() {
 void ResamplingSpeaker::stop() { this->state_ = speaker::STATE_STOPPING; }
 
 void ResamplingSpeaker::stop_() {
-  if (this->requires_resampling_()) {
+  if (this->task_handle_ != nullptr) {
     xEventGroupSetBits(this->event_group_, ResamplingEventGroupBits::COMMAND_STOP);
   }
+  this->output_speaker_->stop();
 }
 
-void ResamplingSpeaker::finish() { this->stop_gracefully_ = true; }
+void ResamplingSpeaker::finish() { this->output_speaker_->finish(); }
 
-bool ResamplingSpeaker::has_buffered_data() const { return (this->ring_buffer_.lock()->available() > 0); }
+bool ResamplingSpeaker::has_buffered_data() const {
+  bool has_ring_buffer_data = false;
+  if (this->requires_resampling_() && (this->ring_buffer_.use_count() > 0)) {
+    has_ring_buffer_data = (this->ring_buffer_.lock()->available() > 0);
+  }
+  return (has_ring_buffer_data || this->output_speaker_->has_buffered_data());
+}
 
 void ResamplingSpeaker::set_mute_state(bool mute_state) {
   this->mute_state_ = mute_state;
@@ -210,6 +235,7 @@ void ResamplingSpeaker::resample_task(void *params) {
     }
   }
 
+  xEventGroupSetBits(this_resampler->event_group_, ResamplingEventGroupBits::STATE_STOPPING);
   resampler.reset();
   xEventGroupSetBits(this_resampler->event_group_, ResamplingEventGroupBits::STATE_STOPPED);
   vTaskDelete(nullptr);

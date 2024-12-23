@@ -38,14 +38,15 @@ class ResamplingSpeaker : public Component, public speaker::Speaker {
   void set_volume(float volume) override;
 
   void set_target_sample_rate(uint32_t target_sample_rate) { this->target_sample_rate_ = target_sample_rate; }
-  void set_timeout(uint32_t ms) { this->timeout_ms_ = ms; }
   void set_output_speaker(speaker::Speaker *speaker) { this->output_speaker_ = speaker; }
 
  protected:
   esp_err_t start_();
   void stop_();
 
-  inline bool requires_resampling_() { return (this->audio_stream_info_.sample_rate != this->target_sample_rate_); }
+  inline bool requires_resampling_() const {
+    return (this->audio_stream_info_.sample_rate != this->target_sample_rate_);
+  }
 
   static void resample_task(void *params);
 
@@ -59,9 +60,6 @@ class ResamplingSpeaker : public Component, public speaker::Speaker {
   bool task_created_{false};
 
   uint32_t target_sample_rate_;
-  uint32_t last_seen_data_ms_{0};
-  optional<uint32_t> timeout_ms_;
-  bool stop_gracefully_{false};
 };
 
 }  // namespace resampling_speaker
