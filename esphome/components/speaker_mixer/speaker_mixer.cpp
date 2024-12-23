@@ -137,7 +137,11 @@ esp_err_t SourceSpeaker::start_() {
   return this->parent_->start(this->audio_stream_info_);
 }
 
-void SourceSpeaker::stop() { this->state_ = speaker::STATE_STOPPING; }
+void SourceSpeaker::stop() {
+  if (this->state_ != speaker::STATE_STOPPED) {
+    this->state_ = speaker::STATE_STOPPING;
+  }
+}
 
 void SourceSpeaker::stop_() {
   this->transfer_buffer_.reset();  // deallocates the transfer buffer
@@ -276,7 +280,7 @@ void SpeakerMixer::loop() {
   uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
 
   if (event_group_bits & MixerEventGroupBits::STATE_STARTING) {
-    ESP_LOGD(TAG, "Starting Mixer");
+    ESP_LOGD(TAG, "Starting speaker mixer");
     xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_STARTING);
   }
   if (event_group_bits & MixerEventGroupBits::ERR_ESP_NO_MEM) {
@@ -284,17 +288,17 @@ void SpeakerMixer::loop() {
     xEventGroupClearBits(this->event_group_, MixerEventGroupBits::ERR_ESP_NO_MEM);
   }
   if (event_group_bits & MixerEventGroupBits::STATE_RUNNING) {
-    ESP_LOGD(TAG, "Started Mixer");
+    ESP_LOGD(TAG, "Started speaker mixer");
     this->status_clear_error();
     xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_RUNNING);
   }
   if (event_group_bits & MixerEventGroupBits::STATE_STOPPING) {
-    ESP_LOGD(TAG, "Stopping Mixer");
+    ESP_LOGD(TAG, "Stopping speaker mixer");
     xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_STOPPING);
   }
   if (event_group_bits & MixerEventGroupBits::STATE_STOPPED) {
     if (!this->task_created_) {
-      ESP_LOGD(TAG, "Stopped Mixer");
+      ESP_LOGD(TAG, "Stopped speaker mixer");
       xEventGroupClearBits(this->event_group_, MixerEventGroupBits::ALL_BITS);
       this->task_handle_ = nullptr;
     }
