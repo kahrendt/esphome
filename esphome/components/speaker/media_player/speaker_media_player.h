@@ -63,15 +63,6 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
 
   void play_file(audio::AudioFile *media_file, bool announcement);
 
-  // #if !defined(SIMPLE_MEDIA_PLAYER)
-  //   /// @brief Sets the ducking level for the media stream in the mixer
-  //   /// @param decibel_reduction (uint8_t) The dB reduction level. For example, 0 is no change, 10 is a reduction by
-  //   s10
-  //   /// dB
-  //   /// @param duration (float) The duration (in seconds) for transitioning to the new ducking level
-  //   void set_ducking_reduction(uint8_t decibel_reduction, float duration);
-  // #endif
-
  protected:
   // Receives commands from HA or from the voice assistant component
   // Sends commands to the media_control_commanda_queue_
