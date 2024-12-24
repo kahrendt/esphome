@@ -96,13 +96,13 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   // Unpauses if starting media in paused state
   esp_err_t start_pipeline_(AudioPipelineType type, bool url);
 
-  media_player::MediaPlayerSupportedFormat media_format_;
+  optional<media_player::MediaPlayerSupportedFormat> media_format_;
   AudioPipelineState media_pipeline_state_{AudioPipelineState::STOPPED};
   optional<std::string> media_url_{};          // only modified by control function
   optional<audio::AudioFile *> media_file_{};  // only modified by play_file function
 
 #ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
-  media_player::MediaPlayerSupportedFormat announcement_format_;
+  optional<media_player::MediaPlayerSupportedFormat> announcement_format_;
   AudioPipelineState announcement_pipeline_state_{AudioPipelineState::STOPPED};
   optional<std::string> announcement_url_{};          // only modified by control function
   optional<audio::AudioFile *> announcement_file_{};  // only modified by play_file function

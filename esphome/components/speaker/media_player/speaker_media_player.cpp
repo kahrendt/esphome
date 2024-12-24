@@ -372,8 +372,12 @@ void SpeakerMediaPlayer::control(const media_player::MediaPlayerCall &call) {
 media_player::MediaPlayerTraits SpeakerMediaPlayer::get_traits() {
   auto traits = media_player::MediaPlayerTraits();
   traits.set_supports_pause(true);
-  traits.get_supported_formats().push_back(this->announcement_format_);
-  traits.get_supported_formats().push_back(this->media_format_);
+  if (this->announcement_format_.has_value()) {
+    traits.get_supported_formats().push_back(this->announcement_format_.value());
+  }
+  if (this->media_format_.has_value()) {
+    traits.get_supported_formats().push_back(this->media_format_.value());
+  }
 
   return traits;
 };
