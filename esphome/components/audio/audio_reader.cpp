@@ -20,6 +20,36 @@ static const ssize_t ERROR_COUNT_NO_DATA_READ_TIMEOUT = 100;
 
 static const size_t HTTP_STREAM_BUFFER_SIZE = 2048;
 
+static const ssize_t MAX_REDIRECTION = 5;
+
+// Some common HTTP status codes - borrowed from http_request component accessed 20241224
+enum HttpStatus {
+  HTTP_STATUS_OK = 200,
+  HTTP_STATUS_NO_CONTENT = 204,
+  HTTP_STATUS_PARTIAL_CONTENT = 206,
+
+  /* 3xx - Redirection */
+  HTTP_STATUS_MULTIPLE_CHOICES = 300,
+  HTTP_STATUS_MOVED_PERMANENTLY = 301,
+  HTTP_STATUS_FOUND = 302,
+  HTTP_STATUS_SEE_OTHER = 303,
+  HTTP_STATUS_NOT_MODIFIED = 304,
+  HTTP_STATUS_TEMPORARY_REDIRECT = 307,
+  HTTP_STATUS_PERMANENT_REDIRECT = 308,
+
+  /* 4XX - CLIENT ERROR */
+  HTTP_STATUS_BAD_REQUEST = 400,
+  HTTP_STATUS_UNAUTHORIZED = 401,
+  HTTP_STATUS_FORBIDDEN = 403,
+  HTTP_STATUS_NOT_FOUND = 404,
+  HTTP_STATUS_METHOD_NOT_ALLOWED = 405,
+  HTTP_STATUS_NOT_ACCEPTABLE = 406,
+  HTTP_STATUS_LENGTH_REQUIRED = 411,
+
+  /* 5xx - Server Error */
+  HTTP_STATUS_INTERNAL_ERROR = 500
+};
+
 AudioReader::~AudioReader() { this->cleanup_connection_(); }
 
 esp_err_t AudioReader::add_sink(std::weak_ptr<RingBuffer> output_ring_buffer) {
@@ -87,7 +117,43 @@ esp_err_t AudioReader::start(const std::string &uri, AudioFileType &file_type) {
     return err;
   }
 
-  esp_http_client_fetch_headers(this->client_);
+  int64_t header_length = esp_http_client_fetch_headers(this->client_);
+  if (header_length < 0) {
+    this->cleanup_connection_();
+    return ESP_FAIL;
+  }
+
+  int status_code = esp_http_client_get_status_code(this->client_);
+
+  if ((status_code < HTTP_STATUS_OK) || (status_code > HTTP_STATUS_PERMANENT_REDIRECT)) {
+    this->cleanup_connection_();
+    return ESP_FAIL;
+  }
+
+  ssize_t redirect_count = 0;
+
+  while ((esp_http_client_set_redirection(this->client_) == ESP_OK) && (redirect_count < MAX_REDIRECTION)) {
+    err = esp_http_client_open(this->client_, 0);
+    if (err != ESP_OK) {
+      this->cleanup_connection_();
+      return ESP_FAIL;
+    }
+
+    header_length = esp_http_client_fetch_headers(this->client_);
+    if (header_length < 0) {
+      this->cleanup_connection_();
+      return ESP_FAIL;
+    }
+
+    status_code = esp_http_client_get_status_code(this->client_);
+
+    if ((status_code < HTTP_STATUS_OK) || (status_code > HTTP_STATUS_PERMANENT_REDIRECT)) {
+      this->cleanup_connection_();
+      return ESP_FAIL;
+    }
+
+    ++redirect_count;
+  }
 
   char url[500];
   err = esp_http_client_get_url(this->client_, url, 500);
