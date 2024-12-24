@@ -88,9 +88,7 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   Speaker *media_speaker_{nullptr};
   Speaker *announcement_speaker_{nullptr};
 
-#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   std::unique_ptr<AudioPipeline> announcement_pipeline_;
-#endif
 
   // Starts the ``type`` pipeline with a ``url`` or file. Starts the mixer, pipeline, and speaker tasks if necessary.
   // Unpauses if starting media in paused state
@@ -101,12 +99,10 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   optional<std::string> media_url_{};          // only modified by control function
   optional<audio::AudioFile *> media_file_{};  // only modified by play_file function
 
-#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
   optional<media_player::MediaPlayerSupportedFormat> announcement_format_;
   AudioPipelineState announcement_pipeline_state_{AudioPipelineState::STOPPED};
   optional<std::string> announcement_url_{};          // only modified by control function
   optional<audio::AudioFile *> announcement_file_{};  // only modified by play_file function
-#endif
 
   QueueHandle_t media_control_command_queue_;
 
