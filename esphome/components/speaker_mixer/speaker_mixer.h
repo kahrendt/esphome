@@ -107,6 +107,7 @@ class SpeakerMixer : public Component {
 
   void stop();
 
+  void set_output_channels(uint8_t output_channels) { this->output_channels_ = output_channels; }
   void set_output_speaker(speaker::Speaker *speaker) { this->output_speaker_ = speaker; }
   speaker::Speaker *get_output_speaker() const { return this->output_speaker_; }
 
@@ -147,6 +148,7 @@ class SpeakerMixer : public Component {
   std::vector<SourceSpeaker *> source_speakers_;
   speaker::Speaker *output_speaker_{nullptr};
 
+  uint8_t output_channels_;
   bool task_created_{false};
   optional<audio::AudioStreamInfo> audio_stream_info_;
 };

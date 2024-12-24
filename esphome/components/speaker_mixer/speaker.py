@@ -2,7 +2,7 @@ from esphome import automation
 import esphome.codegen as cg
 from esphome.components import speaker
 import esphome.config_validation as cv
-from esphome.const import CONF_DURATION, CONF_ID, CONF_TIMEOUT
+from esphome.const import CONF_DURATION, CONF_ID, CONF_NUM_CHANNELS, CONF_TIMEOUT
 
 AUTO_LOAD = ["audio"]
 CODEOWNERS = ["kahrendt"]
@@ -39,6 +39,7 @@ CONFIG_SCHEMA = cv.All(
         cv.Required(CONF_SOURCE_SPEAKERS): cv.All(
             cv.ensure_list(SOURCE_SPEAKER_SCHEMA), cv.Length(min=2, max=2)
         ),
+        cv.Optional(CONF_NUM_CHANNELS, default=2): cv.int_range(min=1, max=2),
     }
 )
 
@@ -60,6 +61,7 @@ async def to_code(config):
         await cg.register_parented(source_speaker, config[CONF_ID])
         await speaker.register_speaker(source_speaker, speaker_config)
 
+        cg.add(var.set_output_channels(config[CONF_NUM_CHANNELS]))
         cg.add(var.add_source_speaker(source_speaker))
 
 

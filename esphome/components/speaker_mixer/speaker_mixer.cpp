@@ -22,8 +22,6 @@ static const uint32_t TASK_STACK_SIZE = 3072;
 static const int16_t MAX_AUDIO_SAMPLE_VALUE = INT16_MAX;
 static const int16_t MIN_AUDIO_SAMPLE_VALUE = INT16_MIN;
 
-static const uint8_t OUTPUT_CHANNELS = 2;
-
 static const char *const TAG = "speaker_mixer";
 
 // Gives the Q15 fixed point scaling factor to reduce by 0 dB, 1dB, ..., 50 dB
@@ -319,7 +317,7 @@ esp_err_t SpeakerMixer::start(audio::AudioStreamInfo &stream_info) {
     }
 
     this->audio_stream_info_ = stream_info;
-    this->audio_stream_info_.value().channels = OUTPUT_CHANNELS;
+    this->audio_stream_info_.value().channels = this->output_channels_;
     this->output_speaker_->set_audio_stream_info(this->audio_stream_info_.value());
   } else {
     if (stream_info.sample_rate != this->audio_stream_info_.value().sample_rate) {
