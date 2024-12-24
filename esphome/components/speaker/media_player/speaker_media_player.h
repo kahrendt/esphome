@@ -55,7 +55,11 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   void set_volume_min(float volume_min) { this->volume_min_ = volume_min; }
 
   void set_announcement_speaker(Speaker *announcement_speaker) { this->announcement_speaker_ = announcement_speaker; }
+  void set_announcement_format(media_player::MediaPlayerSupportedFormat announcement_format) {
+    this->announcement_format_ = announcement_format;
+  }
   void set_media_speaker(Speaker *media_speaker) { this->media_speaker_ = media_speaker; }
+  void set_media_format(media_player::MediaPlayerSupportedFormat media_format) { this->media_format_ = media_format; }
 
   Trigger<> *get_mute_trigger() const { return this->mute_trigger_; }
   Trigger<> *get_unmute_trigger() const { return this->unmute_trigger_; }
@@ -94,11 +98,13 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   // Unpauses if starting media in paused state
   esp_err_t start_pipeline_(AudioPipelineType type, bool url);
 
+  media_player::MediaPlayerSupportedFormat media_format_;
   AudioPipelineState media_pipeline_state_{AudioPipelineState::STOPPED};
   optional<std::string> media_url_{};          // only modified by control function
   optional<audio::AudioFile *> media_file_{};  // only modified by play_file function
 
 #ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
+  media_player::MediaPlayerSupportedFormat announcement_format_;
   AudioPipelineState announcement_pipeline_state_{AudioPipelineState::STOPPED};
   optional<std::string> announcement_url_{};          // only modified by control function
   optional<audio::AudioFile *> announcement_file_{};  // only modified by play_file function

@@ -374,34 +374,8 @@ void SpeakerMediaPlayer::control(const media_player::MediaPlayerCall &call) {
 media_player::MediaPlayerTraits SpeakerMediaPlayer::get_traits() {
   auto traits = media_player::MediaPlayerTraits();
   traits.set_supports_pause(true);
-#ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
-  traits.get_supported_formats().push_back(
-      media_player::MediaPlayerSupportedFormat{.format = "flac",
-                                               .sample_rate = this->sample_rate_,
-                                               .num_channels = 2,
-                                               .purpose = media_player::MediaPlayerFormatPurpose::PURPOSE_DEFAULT,
-                                               .sample_bytes = 2});
-  traits.get_supported_formats().push_back(
-      media_player::MediaPlayerSupportedFormat{.format = "flac",
-                                               .sample_rate = this->sample_rate_,
-                                               .num_channels = 1,
-                                               .purpose = media_player::MediaPlayerFormatPurpose::PURPOSE_ANNOUNCEMENT,
-                                               .sample_bytes = 2});
-#else
-  traits.set_supports_pause(false);
-  traits.get_supported_formats().push_back(
-      media_player::MediaPlayerSupportedFormat{.format = "wav",
-                                               .sample_rate = this->sample_rate_,
-                                               .num_channels = 1,
-                                               .purpose = media_player::MediaPlayerFormatPurpose::PURPOSE_DEFAULT,
-                                               .sample_bytes = 2});
-  traits.get_supported_formats().push_back(
-      media_player::MediaPlayerSupportedFormat{.format = "wav",
-                                               .sample_rate = this->sample_rate_,
-                                               .num_channels = 1,
-                                               .purpose = media_player::MediaPlayerFormatPurpose::PURPOSE_ANNOUNCEMENT,
-                                               .sample_bytes = 2});
-#endif
+  traits.get_supported_formats().push_back(this->announcement_format_);
+  traits.get_supported_formats().push_back(this->media_format_);
 
   return traits;
 };

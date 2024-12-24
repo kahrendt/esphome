@@ -191,6 +191,11 @@ MEDIA_FILE_TYPE_SCHEMA = cv.Schema(
     }
 )
 
+# MEDIA_PLAYER_SUPPORTED_FORMAT = cv.Schema(
+#     {
+#         cv.Optional(CONF_FORMAT):
+#     }
+# )
 
 CONFIG_SCHEMA = cv.All(
     media_player.MEDIA_PLAYER_SCHEMA.extend(
@@ -271,6 +276,34 @@ async def to_code(config):
     cg.add(var.set_announcement_speaker(spkr))
     spkr = await cg.get_variable(config[CONF_MEDIA_SPEAKER])
     cg.add(var.set_media_speaker(spkr))
+
+    cg.add(
+        var.set_announcement_format(
+            cg.StructInitializer(
+                media_player.MediaPlayerSupportedFormat,
+                ("format", "flac"),
+                ("sample_rate", config[CONF_SAMPLE_RATE]),
+                ("num_channels", 1),
+                (
+                    "purpose",
+                    media_player.MEDIA_PLAYER_FORMAT_PURPOSE_ENUM["announcement"],
+                ),
+                ("sample_bytes", 2),
+            )
+        )
+    )
+    cg.add(
+        var.set_media_format(
+            cg.StructInitializer(
+                media_player.MediaPlayerSupportedFormat,
+                ("format", "flac"),
+                ("sample_rate", config[CONF_SAMPLE_RATE]),
+                ("num_channels", 2),
+                ("purpose", media_player.MEDIA_PLAYER_FORMAT_PURPOSE_ENUM["default"]),
+                ("sample_bytes", 2),
+            )
+        )
+    )
 
     if on_mute := config.get(CONF_ON_MUTE):
         await automation.build_automation(
