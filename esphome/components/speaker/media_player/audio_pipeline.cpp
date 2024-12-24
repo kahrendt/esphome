@@ -47,9 +47,8 @@ enum EventGroupBits : uint32_t {
                                                     // bits of uint32 are not set; cleared by stop()
 };
 
-esp_err_t AudioPipeline::start(const std::string &uri, uint32_t target_sample_rate, const std::string &task_name,
-                               UBaseType_t priority) {
-  esp_err_t err = this->common_start_(target_sample_rate, task_name, priority);
+esp_err_t AudioPipeline::start(const std::string &uri, const std::string &task_name, UBaseType_t priority) {
+  esp_err_t err = this->common_start_(task_name, priority);
 
   if (err == ESP_OK) {
     this->current_uri_ = uri;
@@ -59,9 +58,8 @@ esp_err_t AudioPipeline::start(const std::string &uri, uint32_t target_sample_ra
   return err;
 }
 
-esp_err_t AudioPipeline::start(audio::AudioFile *audio_file, uint32_t target_sample_rate, const std::string &task_name,
-                               UBaseType_t priority) {
-  esp_err_t err = this->common_start_(target_sample_rate, task_name, priority);
+esp_err_t AudioPipeline::start(audio::AudioFile *audio_file, const std::string &task_name, UBaseType_t priority) {
+  esp_err_t err = this->common_start_(task_name, priority);
 
   if (err == ESP_OK) {
     this->current_audio_file_ = audio_file;
@@ -90,8 +88,7 @@ esp_err_t AudioPipeline::allocate_buffers_() {
   return ESP_OK;
 }
 
-esp_err_t AudioPipeline::common_start_(uint32_t target_sample_rate, const std::string &task_name,
-                                       UBaseType_t priority) {
+esp_err_t AudioPipeline::common_start_(const std::string &task_name, UBaseType_t priority) {
   esp_err_t err = this->allocate_buffers_();
   if (err != ESP_OK) {
     return err;
@@ -114,7 +111,6 @@ esp_err_t AudioPipeline::common_start_(uint32_t target_sample_rate, const std::s
     return ESP_FAIL;
   }
 
-  this->target_sample_rate_ = target_sample_rate;
   this->playback_ms_ = 0;
 
   return err;

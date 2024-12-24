@@ -68,21 +68,17 @@ class AudioPipeline {
 
   /// @brief Starts an audio pipeline given a media url
   /// @param uri media file url
-  /// @param target_sample_rate the desired sample rate of the audio stream
   /// @param task_name FreeRTOS task names
   /// @param priority FreeRTOS task priority
   /// @return ESP_OK if successful or an appropriate error if not
-  esp_err_t start(const std::string &uri, uint32_t target_sample_rate, const std::string &task_name,
-                  UBaseType_t priority = 1);
+  esp_err_t start(const std::string &uri, const std::string &task_name, UBaseType_t priority = 1);
 
   /// @brief Starts an audio pipeline given a AudioFile pointer
   /// @param audio_file pointer to a AudioFile object
-  /// @param target_sample_rate the desired sample rate of the audio stream
   /// @param task_name FreeRTOS task name
   /// @param priority FreeRTOS task priority
   /// @return ESP_OK if successful or an appropriate error if not
-  esp_err_t start(audio::AudioFile *audio_file, uint32_t target_sample_rate, const std::string &task_name,
-                  UBaseType_t priority = 1);
+  esp_err_t start(audio::AudioFile *audio_file, const std::string &task_name, UBaseType_t priority = 1);
 
   /// @brief Stops the pipeline. Sends a stop signal to each task (if running) and clears the ring buffers.
   /// @return ESP_OK if successful or ESP_ERR_TIMEOUT if the tasks did not indicate they stopped
@@ -107,11 +103,10 @@ class AudioPipeline {
   esp_err_t allocate_buffers_();
 
   /// @brief Common start code for the pipeline, regardless if the source is a file or url.
-  /// @param target_sample_rate the desired sample rate of the audio stream
   /// @param task_name FreeRTOS task name
   /// @param priority FreeRTOS task priority
   /// @return ESP_OK if successful or an appropriate error if not
-  esp_err_t common_start_(uint32_t target_sample_rate, const std::string &task_name, UBaseType_t priority);
+  esp_err_t common_start_(const std::string &task_name, UBaseType_t priority);
 
   uint32_t playback_ms_;
 
@@ -128,8 +123,6 @@ class AudioPipeline {
 
   size_t buffer_size_;           // Ring buffer between reader and decoder
   size_t transfer_buffer_size_;  // Internal source/sink buffers for the audio reader and decoder
-
-  uint32_t target_sample_rate_;
 
   std::weak_ptr<RingBuffer> raw_file_ring_buffer_;
   std::weak_ptr<RingBuffer> decoded_ring_buffer_;

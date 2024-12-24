@@ -266,8 +266,6 @@ async def to_code(config):
 
     cg.add(var.set_buffer_size(config[CONF_BUFFER_SIZE]))
 
-    cg.add(var.set_sample_rate(config[CONF_SAMPLE_RATE]))
-
     cg.add(var.set_volume_increment(config[CONF_VOLUME_INCREMENT]))
     cg.add(var.set_volume_max(config[CONF_VOLUME_MAX]))
     cg.add(var.set_volume_min(config[CONF_VOLUME_MIN]))

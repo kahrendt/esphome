@@ -112,11 +112,9 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
       this->media_pipeline_ = make_unique<AudioPipeline>(this->media_speaker_, this->buffer_size_);
     }
     if (url) {
-      err = this->media_pipeline_->start(this->media_url_.value(), this->sample_rate_, "media",
-                                         MEDIA_PIPELINE_TASK_PRIORITY);
+      err = this->media_pipeline_->start(this->media_url_.value(), "media", MEDIA_PIPELINE_TASK_PRIORITY);
     } else {
-      err = this->media_pipeline_->start(this->media_file_.value(), this->sample_rate_, "media",
-                                         MEDIA_PIPELINE_TASK_PRIORITY);
+      err = this->media_pipeline_->start(this->media_file_.value(), "media", MEDIA_PIPELINE_TASK_PRIORITY);
     }
 
 #ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
@@ -126,10 +124,10 @@ esp_err_t SpeakerMediaPlayer::start_pipeline_(AudioPipelineType type, bool url) 
     }
 
     if (url) {
-      err = this->announcement_pipeline_->start(this->announcement_url_.value(), this->sample_rate_, "ann",
+      err = this->announcement_pipeline_->start(this->announcement_url_.value(), "ann",
                                                 ANNOUNCEMENT_PIPELINE_TASK_PRIORITY);
     } else {
-      err = this->announcement_pipeline_->start(this->announcement_file_.value(), this->sample_rate_, "ann",
+      err = this->announcement_pipeline_->start(this->announcement_file_.value(), "ann",
                                                 ANNOUNCEMENT_PIPELINE_TASK_PRIORITY);
     }
   }
