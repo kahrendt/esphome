@@ -93,6 +93,8 @@ esp_err_t AudioReader::start(const std::string &uri, AudioFileType &file_type) {
   client_config.cert_pem = nullptr;
   client_config.disable_auto_redirect = false;
   client_config.max_redirection_count = 10;
+  client_config.event_handler = this->http_event_handler;
+  client_config.user_data = this;
   client_config.buffer_size = HTTP_STREAM_BUFFER_SIZE;
   client_config.keep_alive_enable = true;
   client_config.timeout_ms = 5000;  // Doesn't raise an error if exceeded in esp-idf v4.4, it just prevents the
@@ -155,32 +157,36 @@ esp_err_t AudioReader::start(const std::string &uri, AudioFileType &file_type) {
     ++redirect_count;
   }
 
-  char url[500];
-  err = esp_http_client_get_url(this->client_, url, 500);
-  if (err != ESP_OK) {
-    this->cleanup_connection_();
-    return err;
-  }
+  if (this->audio_file_type_ == AudioFileType::NONE) {
+    char url[500];
+    err = esp_http_client_get_url(this->client_, url, 500);
+    if (err != ESP_OK) {
+      this->cleanup_connection_();
+      return err;
+    }
 
-  std::string url_string = url;
+    std::string url_string = url;
 
-  if (str_endswith(url_string, ".wav")) {
-    file_type = AudioFileType::WAV;
-  }
+    if (str_endswith(url_string, ".wav")) {
+      file_type = AudioFileType::WAV;
+    }
 #ifdef USE_AUDIO_MP3_SUPPORT
-  else if (str_endswith(url_string, ".mp3")) {
-    file_type = AudioFileType::MP3;
-  }
+    else if (str_endswith(url_string, ".mp3")) {
+      file_type = AudioFileType::MP3;
+    }
 #endif
 #ifdef USE_AUDIO_FLAC_SUPPORT
-  else if (str_endswith(url_string, ".flac")) {
-    file_type = AudioFileType::FLAC;
-  }
+    else if (str_endswith(url_string, ".flac")) {
+      file_type = AudioFileType::FLAC;
+    }
 #endif
-  else {
-    file_type = AudioFileType::NONE;
-    this->cleanup_connection_();
-    return ESP_ERR_NOT_SUPPORTED;
+    else {
+      file_type = AudioFileType::NONE;
+      this->cleanup_connection_();
+      return ESP_ERR_NOT_SUPPORTED;
+    }
+  } else {
+    file_type = this->audio_file_type_;
   }
 
   this->no_data_read_count_ = 0;
@@ -201,6 +207,43 @@ AudioReaderState AudioReader::read() {
   }
 
   return AudioReaderState::FAILED;
+}
+
+AudioFileType AudioReader::get_audio_type(const char *content_type) {
+  if (strcasecmp(content_type, "mp3") == 0 || strcasecmp(content_type, "audio/mp3") == 0 ||
+      strcasecmp(content_type, "audio/mpeg") == 0) {
+    return AudioFileType::MP3;
+  }
+  if (strcasecmp(content_type, "audio/wav") == 0) {
+    return AudioFileType::WAV;
+  }
+  if (strcasecmp(content_type, "audio/flac") == 0 || strcasecmp(content_type, "audio/x-flac") == 0) {
+    return AudioFileType::FLAC;
+  }
+  return AudioFileType::NONE;
+}
+
+esp_err_t AudioReader::http_event_handler(esp_http_client_event_t *evt) {
+  /// Based on https://github.com/maroc81/WeatherLily/tree/main/main/net accessed 20241224
+  AudioReader *this_reader = (AudioReader *) evt->user_data;
+
+  switch (evt->event_id) {
+    case HTTP_EVENT_ERROR:
+    case HTTP_EVENT_ON_CONNECTED:
+    case HTTP_EVENT_HEADER_SENT:
+      break;
+    case HTTP_EVENT_ON_HEADER:
+      if (strcasecmp(evt->header_key, "Content-Type") == 0) {
+        this_reader->audio_file_type_ = get_audio_type(evt->header_value);
+      }
+      break;
+    case HTTP_EVENT_ON_DATA:
+    case HTTP_EVENT_ON_FINISH:
+    case HTTP_EVENT_DISCONNECTED:
+    case HTTP_EVENT_REDIRECT:
+      break;
+  }
+  return ESP_OK;
 }
 
 AudioReaderState AudioReader::file_read_() {
