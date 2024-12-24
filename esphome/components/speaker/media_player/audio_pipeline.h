@@ -110,6 +110,8 @@ class AudioPipeline {
 
   uint32_t playback_ms_;
 
+  bool pause_state_{false};
+
   // Pointer to the media player's mixer object. The resample task feeds the appropriate ring buffer directly
   // AudioMixer *mixer_;
   std::weak_ptr<RingBuffer> output_ring_buffer_;

@@ -69,7 +69,10 @@ esp_err_t AudioPipeline::start(audio::AudioFile *audio_file, const std::string &
   return err;
 }
 
-void AudioPipeline::set_pause_state(bool pause_state) { this->speaker_->set_pause_state(pause_state); }
+void AudioPipeline::set_pause_state(bool pause_state) {
+  this->speaker_->set_pause_state(pause_state);
+  this->pause_state_ = pause_state;
+}
 
 esp_err_t AudioPipeline::allocate_buffers_() {
   if (this->event_group_ == nullptr)
@@ -112,6 +115,7 @@ esp_err_t AudioPipeline::common_start_(const std::string &task_name, UBaseType_t
   }
 
   this->playback_ms_ = 0;
+  this->pause_state_ = false;
 
   return err;
 }
@@ -380,7 +384,7 @@ void AudioPipeline::decode_task(void *params) {
           started_playback = true;
         }
       } else {
-        decoder->set_pause_output_state(false);
+        decoder->set_pause_output_state(this_pipeline->pause_state_);
       }
 
       // Stop gracefully if the reader has finished
