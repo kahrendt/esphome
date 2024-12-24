@@ -108,14 +108,14 @@ class AudioPipeline {
   /// @return ESP_OK if successful or an appropriate error if not
   esp_err_t common_start_(const std::string &task_name, UBaseType_t priority);
 
-  uint32_t playback_ms_;
+  uint32_t playback_ms_{0};
 
   bool pause_state_{false};
 
   // Pointer to the media player's mixer object. The resample task feeds the appropriate ring buffer directly
   // AudioMixer *mixer_;
   std::weak_ptr<RingBuffer> output_ring_buffer_;
-  speaker::Speaker *speaker_;
+  speaker::Speaker *speaker_{nullptr};
 
   std::string current_uri_{};
   audio::AudioFile *current_audio_file_{nullptr};
