@@ -71,6 +71,12 @@ esp_err_t AudioPipeline::start(audio::AudioFile *audio_file, const std::string &
 
 void AudioPipeline::set_pause_state(bool pause_state) {
   this->speaker_->set_pause_state(pause_state);
+
+  if (!pause_state) {
+    // Resend the stream info in case a different component or pipeline used the speaker and changes its settings
+    this->speaker_->set_audio_stream_info(this->current_audio_stream_info_);
+  }
+
   this->pause_state_ = pause_state;
 }
 
@@ -115,7 +121,6 @@ esp_err_t AudioPipeline::common_start_(const std::string &task_name, UBaseType_t
   }
 
   this->playback_ms_ = 0;
-  this->pause_state_ = false;
 
   return err;
 }
@@ -180,6 +185,10 @@ AudioPipelineState AudioPipeline::get_state() {
   if ((event_bits & READER_MESSAGE_FINISHED) &&
       (!(event_bits & READER_MESSAGE_LOADED_MEDIA_TYPE) && (event_bits & DECODER_MESSAGE_FINISHED))) {
     return AudioPipelineState::STOPPED;
+  }
+
+  if (this->pause_state_) {
+    return AudioPipelineState::PAUSED;
   }
 
   return AudioPipelineState::PLAYING;
@@ -428,7 +437,10 @@ void AudioPipeline::decode_task(void *params) {
         } else {
           // Send audio directly to the speaker
           if (this_pipeline->speaker_ != nullptr) {
-            this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
+            if (!this_pipeline->pause_state_) {
+              this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
+            }
+
             decoder->add_sink(this_pipeline->speaker_);
           }
         }

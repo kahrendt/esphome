@@ -148,10 +148,20 @@ void SpeakerMediaPlayer::watch_media_commands_() {
     if (media_command.new_url.has_value() && media_command.new_url.value()) {
 #ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
       if (media_command.announce.has_value() && media_command.announce.value()) {
+        if ((this->media_speaker_ == this->announcement_speaker_) &&
+            (this->media_pipeline_state_ == AudioPipelineState::PLAYING)) {
+          this->media_pipeline_->set_pause_state(true);
+          this->media_speaker_->stop();
+        }
         err = this->start_pipeline_(AudioPipelineType::ANNOUNCEMENT, true);
       } else {
 #endif
         err = this->start_pipeline_(AudioPipelineType::MEDIA, true);
+        if ((this->media_speaker_ == this->announcement_speaker_) &&
+            (this->announcement_pipeline_state_ == AudioPipelineState::PLAYING)) {
+          // Pause new media until the announcement is done
+          this->media_pipeline_->set_pause_state(true);
+        }
         this->is_paused_ = false;
 #ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
       }
@@ -161,10 +171,20 @@ void SpeakerMediaPlayer::watch_media_commands_() {
     if (media_command.new_file.has_value() && media_command.new_file.value()) {
 #ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
       if (media_command.announce.has_value() && media_command.announce.value()) {
+        if ((this->media_speaker_ == this->announcement_speaker_) &&
+            (this->media_pipeline_state_ == AudioPipelineState::PLAYING)) {
+          this->media_pipeline_->set_pause_state(true);
+          this->media_speaker_->stop();
+        }
         err = this->start_pipeline_(AudioPipelineType::ANNOUNCEMENT, false);
       } else {
 #endif
         err = this->start_pipeline_(AudioPipelineType::MEDIA, false);
+        if ((this->media_speaker_ == this->announcement_speaker_) &&
+            (this->announcement_pipeline_state_ == AudioPipelineState::PLAYING)) {
+          // Pause new media until the announcement is done
+          this->media_pipeline_->set_pause_state(true);
+        }
         this->is_paused_ = false;
 #ifdef USE_SPEAKER_MEDIA_PLAYER_DUAL_PIPELINE
       }
@@ -291,6 +311,13 @@ void SpeakerMediaPlayer::loop() {
   }
 #endif
   if (this->state != old_state) {
+    if ((old_state == media_player::MEDIA_PLAYER_STATE_ANNOUNCING) &&
+        (this->state == media_player::MEDIA_PLAYER_STATE_PLAYING)) {
+      if (this->media_speaker_ == this->announcement_speaker_) {
+        // Finished the announcement on the shared speaker, resume the temporarily paused audio
+        this->media_pipeline_->set_pause_state(false);
+      }
+    }
     this->publish_state();
     ESP_LOGD(TAG, "State changed to %s", media_player::media_player_state_to_string(this->state));
   }
