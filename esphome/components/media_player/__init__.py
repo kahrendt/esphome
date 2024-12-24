@@ -21,6 +21,17 @@ media_player_ns = cg.esphome_ns.namespace("media_player")
 
 MediaPlayer = media_player_ns.class_("MediaPlayer")
 
+media_player_ns = cg.esphome_ns.namespace("media_player")
+MediaPlayerSupportedFormat = media_player_ns.struct("MediaPlayerSupportedFormat")
+
+MediaPlayerFormatPurpose = media_player_ns.enum(
+    "MediaPlayerFormatPurpose", is_class=True
+)
+MEDIA_PLAYER_FORMAT_PURPOSE_ENUM = {
+    "default": MediaPlayerFormatPurpose.PURPOSE_DEFAULT,
+    "announcement": MediaPlayerFormatPurpose.PURPOSE_ANNOUNCEMENT,
+}
+
 
 PlayAction = media_player_ns.class_(
     "PlayAction", automation.Action, cg.Parented.template(MediaPlayer)
