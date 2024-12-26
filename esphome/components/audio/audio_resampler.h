@@ -52,9 +52,10 @@ class AudioResampler {
   /// @brief Sets up the class to resample
   /// @param input_stream_info the incoming sample rate, bits per sample, and number of channels
   /// @param target_sample_rate the necessary sample rate to convert to
+  /// @param use_prepost_filter Use a biquad filter before or after the FIR filter. Required for downsampling.
   /// @return ESP_OK if it is able to convert the incoming stream, ESP_ERR_NO_MEM if the transfer buffers failed to
   /// allocate, ESP_ERR_NOT_SUPPORTED if the stream can't be converted.
-  esp_err_t start(AudioStreamInfo &input_stream_info, uint32_t target_sample_rate);
+  esp_err_t start(AudioStreamInfo &input_stream_info, uint32_t target_sample_rate, bool use_prepost_filter);
 
   /// @brief Resamples audio from the ring buffer source and writes to the sink.
   /// @param stop_gracefully If true, it indicates the file decoder is finished. The resampler will resample all the

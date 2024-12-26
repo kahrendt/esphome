@@ -205,7 +205,7 @@ void ResamplingSpeaker::resample_task(void *params) {
       TRANSFER_BUFFER_DURATION_MS * this_resampler->audio_stream_info_.get_bytes_per_ms(),
       TRANSFER_BUFFER_DURATION_MS * resampled_stream_info.get_bytes_per_ms());
 
-  esp_err_t err = resampler->start(this_resampler->audio_stream_info_, this_resampler->target_sample_rate_);
+  esp_err_t err = resampler->start(this_resampler->audio_stream_info_, this_resampler->target_sample_rate_, true);
 
   if (err == ESP_OK) {
     std::shared_ptr<RingBuffer> temp_ring_buffer =

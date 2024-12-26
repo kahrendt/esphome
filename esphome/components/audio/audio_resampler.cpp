@@ -49,7 +49,8 @@ esp_err_t AudioResampler::add_sink(speaker::Speaker *speaker) {
 }
 #endif
 
-esp_err_t AudioResampler::start(AudioStreamInfo &input_stream_info, uint32_t target_sample_rate) {
+esp_err_t AudioResampler::start(AudioStreamInfo &input_stream_info, uint32_t target_sample_rate,
+                                bool use_prepost_filter) {
   this->input_stream_info_ = input_stream_info;
 
   if ((this->input_transfer_buffer_ == nullptr) || (this->output_transfer_buffer_ == nullptr)) {
