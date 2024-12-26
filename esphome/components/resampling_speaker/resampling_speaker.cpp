@@ -14,7 +14,7 @@ namespace resampling_speaker {
 
 static const UBaseType_t RESAMPLER_TASK_PRIORITY = 1;
 
-static const uint32_t MIXER_INPUT_RING_BUFFER_DURATION_MS = 100;
+static const uint32_t RING_BUFFER_DURATION_MS = 100;
 static const uint32_t TRANSFER_BUFFER_DURATION_MS = 50;
 static const size_t TASK_DELAY_MS = 25;
 
@@ -23,7 +23,7 @@ static const uint32_t TASK_STACK_SIZE = 3072;
 static const char *const TAG = "resampling_speaker";
 
 enum ResamplingEventGroupBits : uint32_t {
-  COMMAND_STOP = (1 << 0),  // stops the mixer task
+  COMMAND_STOP = (1 << 0),  // stops the resampler task
   STATE_STARTING = (1 << 10),
   STATE_RUNNING = (1 << 11),
   STATE_STOPPING = (1 << 12),
@@ -209,7 +209,7 @@ void ResamplingSpeaker::resample_task(void *params) {
 
   if (err == ESP_OK) {
     std::shared_ptr<RingBuffer> temp_ring_buffer =
-        RingBuffer::create(MIXER_INPUT_RING_BUFFER_DURATION_MS * this_resampler->audio_stream_info_.get_bytes_per_ms());
+        RingBuffer::create(RING_BUFFER_DURATION_MS * this_resampler->audio_stream_info_.get_bytes_per_ms());
 
     if (temp_ring_buffer.use_count() == 0) {
       err = ESP_ERR_NO_MEM;
