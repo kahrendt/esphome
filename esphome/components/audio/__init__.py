@@ -23,5 +23,5 @@ async def to_code(config):
     cg.add_library(
         None,
         None,
-        "https://github.com/kahrendt/esp-audio-libs.git",
+        "https://github.com/kahrendt/esp-audio-libs.git#resampling-dither",
     )

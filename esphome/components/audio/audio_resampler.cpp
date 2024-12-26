@@ -128,8 +128,11 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully) {
     size_t frames_used = 0;
     size_t frames_generated = 0;
 
+    uint32_t clipped_samples = 0;
+
     this->resampler_->resample(reinterpret_cast<int16_t *>(this->input_transfer_buffer_->get_buffer_start()),
-                               output_buffer, frames_available, frames_free, frames_used, frames_generated);
+                               output_buffer, frames_available, frames_free, frames_used, frames_generated,
+                               clipped_samples);
 
     this->input_transfer_buffer_->decrease_buffer_length(frames_used * this->input_stream_info_.get_bytes_per_frame());
     this->output_transfer_buffer_->increase_buffer_length(frames_generated *
