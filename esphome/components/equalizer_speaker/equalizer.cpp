@@ -56,11 +56,23 @@ bool Equalizer::initialize(uint8_t channels) {
   std::memset(this->error_, 0, channels * sizeof(float));
   this->tpdf_dither_init_(channels);
 
-  add_peak_eq(25.75, 2.027, -1.4);
-  add_peak_eq(52.4, 7.441, 1.4);
-  add_peak_eq(122.5, 18.708, -1.9);
-  add_peak_eq(139, 2.214, 10);
-  add_peak_eq(153.5, 2.001, -23.6);
+  add_peak_eq(0, 160, 1.4, -1.3);
+  add_peak_eq(0, 248.8, 3.4, 4.3);
+  add_peak_eq(0, 306.2, 6.7, 1.5);
+  add_peak_eq(0, 450.7, 0.9, 7.4);
+  add_peak_eq(0, 1107.0, 9.9, 9.8);
+  add_peak_eq(0, 1380.6, 6.8, -10);
+  add_peak_eq(0, 1684.8, 1.8, -10);
+  add_peak_eq(0, 3649.6, 6.0, 5.6);
+  add_peak_eq(0, 3672.9, 0.5, -10);
+  add_peak_eq(0, 4000, 0.5, -10);
+
+  // add_peak_eq(25.75, 2.027, -1.4);
+  // add_peak_eq(52.4, 7.441, 1.4);
+  // add_peak_eq(122.5, 18.708, -1.9);
+  // add_peak_eq(139, 2.214, 10);
+  // add_peak_eq(153.5, 2.001, -23.6);
+  // add_lpf(400, 0.7);
   // add_peak_eq(4000, 5.0, 0.1);
 
   return true;
@@ -78,7 +90,7 @@ void Equalizer::equalize(const int16_t *input_buffer, int16_t *output_buffer, si
   // printf("flloat buffer 0 %.5f\n", this->float_buffers_[0][0]);
   for (uint8_t channel = 0; channel < this->channels_; ++channel) {
     // Need a separate set of filters for each channel!
-    for (auto &filter : this->filters_) {
+    for (auto &filter : this->channel_filters_[channel]) {
       dsps_biquad_f32_ansi(float_buffers_[channel], float_buffers_[channel], frames_to_process, filter.coeffs,
                            filter.history);
     }
