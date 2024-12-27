@@ -295,7 +295,7 @@ async def to_code(config):
                 media_player.MediaPlayerSupportedFormat,
                 ("format", "flac"),
                 ("sample_rate", config[CONF_SAMPLE_RATE]),
-                ("num_channels", 2),
+                ("num_channels", 1),
                 ("purpose", media_player.MEDIA_PLAYER_FORMAT_PURPOSE_ENUM["default"]),
                 ("sample_bytes", 2),
             )
