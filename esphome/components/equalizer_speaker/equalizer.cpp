@@ -28,6 +28,10 @@ Equalizer::~Equalizer() {
   if (this->tpdf_generators_ != nullptr) {
     free(this->tpdf_generators_);
   }
+
+  if (this->error_ != nullptr) {
+    free(this->error_);
+  }
 };
 
 bool Equalizer::initialize(uint8_t channels) {
@@ -52,6 +56,13 @@ bool Equalizer::initialize(uint8_t channels) {
   std::memset(this->error_, 0, channels * sizeof(float));
   this->tpdf_dither_init_(channels);
 
+  add_peak_eq(25.75, 2.027, -1.4);
+  add_peak_eq(52.4, 7.441, 1.4);
+  add_peak_eq(122.5, 18.708, -1.9);
+  add_peak_eq(139, 2.214, 10);
+  add_peak_eq(153.5, 2.001, -23.6);
+  // add_peak_eq(4000, 5.0, 0.1);
+
   return true;
 }
 
@@ -64,7 +75,7 @@ void Equalizer::equalize(const int16_t *input_buffer, int16_t *output_buffer, si
           static_cast<float>(input_buffer[this->channels_ * frame + channel]) / 32768.0f;
     }
   }
-
+  // printf("flloat buffer 0 %.5f\n", this->float_buffers_[0][0]);
   for (uint8_t channel = 0; channel < this->channels_; ++channel) {
     // Need a separate set of filters for each channel!
     for (auto &filter : this->filters_) {
@@ -73,30 +84,39 @@ void Equalizer::equalize(const int16_t *input_buffer, int16_t *output_buffer, si
     }
   }
 
-  const size_t samples_generated = frames_to_process * this->channels_;
-
   const uint8_t out_bits = 16;
 
   float scaler = (1 << out_bits) / 2.0;
   int32_t offset = (out_bits <= 8) * 128;
   int32_t high_clip = (1 << (out_bits - 1)) - 1;
   int32_t low_clip = ~high_clip;
+  int left_shift = (24 - out_bits) % 8;
+  size_t i, j;
   clipped_samples = 0;
 
-  for (unsigned int frame = 0; frame < frames_to_process; ++frame) {
-    for (uint8_t channel = 0; channel < this->channels_; ++channel) {
-      int32_t output = floor((this->float_buffers_[channel][frame] *= scaler) - this->error_[channel] +
-                             this->tpdf_dither_(channel, -1) + 0.5);
-      if (output > high_clip) {
-        ++clipped_samples;
-        output = high_clip;
-      } else if (output < low_clip) {
-        ++clipped_samples;
-        output = low_clip;
-      }
+  uint8_t *temp_buffer = (uint8_t *) (output_buffer);
 
-      this->error_[channel] += output - this->float_buffers_[channel][frame];
-      output_buffer[this->channels_ * frame + channel] = (output >> 16);
+  for (i = j = 0; i < frames_to_process * this->channels_; ++i) {
+    uint8_t chan = i % this->channels_;
+    int32_t output = floor((this->float_buffers_[chan][i / this->channels_] *= scaler) - this->error_[chan] +
+                           this->tpdf_dither_(chan, -1) + 0.5);
+    if (output > high_clip) {
+      ++clipped_samples;
+      output = high_clip;
+    } else if (output < low_clip) {
+      ++clipped_samples;
+      output = low_clip;
+    }
+
+    this->error_[chan] += output - this->float_buffers_[chan][i / this->channels_];
+    output = (output << left_shift) + offset;
+    temp_buffer[j++] = output = (output << left_shift) + offset;
+    if (out_bits > 8) {
+      temp_buffer[j++] = output >> 8;
+
+      if (out_bits > 16) {
+        temp_buffer[j++] = output >> 16;
+      }
     }
   }
 }

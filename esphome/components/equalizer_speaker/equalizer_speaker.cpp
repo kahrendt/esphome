@@ -12,7 +12,7 @@ namespace equalizer_speaker {
 
 static const UBaseType_t EQUALIZER_TASK_PRIORITY = 1;
 
-static const uint32_t MIXER_INPUT_RING_BUFFER_DURATION_MS = 100;
+static const uint32_t RING_BUFFER_DURATION_MS = 100;
 static const uint32_t TRANSFER_BUFFER_DURATION_MS = 50;
 static const size_t TASK_DELAY_MS = 25;
 
@@ -105,7 +105,7 @@ void EqualizerSpeaker::loop() {
     }
     case speaker::STATE_RUNNING:
       if (this->output_speaker_->is_stopped()) {
-        this->state_ = speaker::STATE_STOPPING;
+        // this->state_ = speaker::STATE_STOPPING;
       }
 
       break;
@@ -137,7 +137,6 @@ void EqualizerSpeaker::start() { this->state_ = speaker::STATE_STARTING; }
 
 esp_err_t EqualizerSpeaker::start_() {
   this->output_speaker_->set_audio_stream_info(this->audio_stream_info_);
-  this->output_speaker_->start();
 
   if (this->task_handle_ == nullptr) {
     xTaskCreate(this->equalizer_task, "equalize", TASK_STACK_SIZE, (void *) this, EQUALIZER_TASK_PRIORITY,
@@ -147,6 +146,8 @@ esp_err_t EqualizerSpeaker::start_() {
       return ESP_ERR_INVALID_STATE;
     }
   }
+
+  this->output_speaker_->start();
 
   return ESP_OK;
 }
@@ -187,21 +188,22 @@ void EqualizerSpeaker::equalizer_task(void *params) {
   xEventGroupSetBits(this_equalizer->event_group_, EqualizerEventGroupBits::STATE_STARTING);
 
   std::unique_ptr<audio::AudioSourceTransferBuffer> input_transfer_buffer =
-      audio::AudioSourceTransferBuffer::create(8192);
-  std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer = audio::AudioSinkTransferBuffer::create(8192);
+      audio::AudioSourceTransferBuffer::create(25 * this_equalizer->audio_stream_info_.get_bytes_per_ms());
+  std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
+      audio::AudioSinkTransferBuffer::create(25 * this_equalizer->audio_stream_info_.get_bytes_per_ms());
 
   esp_err_t err = ESP_OK;
   // TODO: Verify it was created
-  {
+  if (err == ESP_OK) {
     std::shared_ptr<RingBuffer> temp_ring_buffer =
-        RingBuffer::create(MIXER_INPUT_RING_BUFFER_DURATION_MS * this_equalizer->audio_stream_info_.get_bytes_per_ms());
+        RingBuffer::create(RING_BUFFER_DURATION_MS * this_equalizer->audio_stream_info_.get_bytes_per_ms());
 
-    if (temp_ring_buffer == 0) {
+    if (temp_ring_buffer.use_count() == 0) {
       err = ESP_ERR_NO_MEM;
     } else {
+      this_equalizer->ring_buffer_ = temp_ring_buffer;
       input_transfer_buffer->set_source(this_equalizer->ring_buffer_);
     }
-    this_equalizer->ring_buffer_ = temp_ring_buffer;
   }
 
   output_transfer_buffer->set_sink(this_equalizer->output_speaker_);
@@ -214,7 +216,8 @@ void EqualizerSpeaker::equalizer_task(void *params) {
     xEventGroupSetBits(this_equalizer->event_group_, EqualizerEventGroupBits::ERR_ESP_NOT_SUPPORTED);
   }
 
-  std::unique_ptr<equalizer::Equalizer> equalizer = std::make_unique<equalizer::Equalizer>(4096);
+  std::unique_ptr<equalizer::Equalizer> equalizer =
+      std::make_unique<equalizer::Equalizer>(25 * this_equalizer->audio_stream_info_.get_frames_per_ms());
   equalizer->initialize(this_equalizer->audio_stream_info_.channels);
 
   const size_t bytes_per_frame = this_equalizer->audio_stream_info_.get_bytes_per_frame();
@@ -226,19 +229,26 @@ void EqualizerSpeaker::equalizer_task(void *params) {
       break;
     }
 
-    output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(1));
+    output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(10));
     input_transfer_buffer->transfer_data_from_source(pdMS_TO_TICKS(10));
 
     const size_t bytes_to_process = std::min(input_transfer_buffer->available(), output_transfer_buffer->free());
     const size_t frames_to_process = bytes_to_process / bytes_per_frame;
 
-    uint32_t clipped_samples = 0;
+    // printf("available =%d; free=%d\n", input_transfer_buffer->available(), output_transfer_buffer->free());
 
-    equalizer->equalize(reinterpret_cast<int16_t *>(input_transfer_buffer->get_buffer_start()),
-                        reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()), frames_to_process,
-                        clipped_samples);
-    input_transfer_buffer->decrease_buffer_length(frames_to_process * bytes_per_frame);
-    output_transfer_buffer->increase_buffer_length(frames_to_process * bytes_per_frame);
+    if (frames_to_process > 0) {
+      uint32_t clipped_samples = 0;
+
+      equalizer->equalize(reinterpret_cast<int16_t *>(input_transfer_buffer->get_buffer_start()),
+                          reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()), frames_to_process,
+                          clipped_samples);
+      input_transfer_buffer->decrease_buffer_length(frames_to_process * bytes_per_frame);
+      output_transfer_buffer->increase_buffer_length(frames_to_process * bytes_per_frame);
+      // printf("processed %d frames\n", frames_to_process);
+    } else {
+      delay(20);
+    }
   }
 
   xEventGroupSetBits(this_equalizer->event_group_, EqualizerEventGroupBits::STATE_STOPPING);

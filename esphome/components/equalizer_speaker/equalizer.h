@@ -17,20 +17,20 @@ struct filter_biquad {
     // based on https://github.com/steindevices/ESP32-LyraT-DSP/
 
     double b0, b1, b2, a0, a1, a2;  // BiQuad coefficients
-    double A, W0, S, C, alpha;      // Intermediate calculation values
+    double amp, w0, s, c, alpha;    // Intermediate calculation values
 
-    W0 = (_TWO_PI * frequency) / _FS;
-    S = sin(W0);
-    C = cos(W0);
-    alpha = S / (2 * q);
-    A = pow(10, gain / 40.0);
+    w0 = (_TWO_PI * frequency) / _FS;
+    s = sin(w0);
+    c = cos(w0);
+    alpha = s / (2 * q);
+    amp = pow(10, gain / 40.0);
 
-    b0 = 1 + alpha * A;
-    b1 = -2 * cos(W0);
-    b2 = 1 - alpha * A;
-    a0 = 1 + alpha / A;
-    a1 = 2 * cos(W0);
-    a2 = -(1 - alpha / A);
+    b0 = 1.0f + alpha * amp;
+    b1 = -2.0f * c;
+    b2 = 1.0f - alpha * amp;
+    a0 = 1.0f + alpha / amp;
+    a1 = -(2.0f * c);
+    a2 = (1.0f - alpha / amp);
 
     // Normalize the BiQuad values
     a1 /= a0;
@@ -40,17 +40,44 @@ struct filter_biquad {
     b2 /= a0;
 
     // Return filter BiQuad values (
-    coeffs[0] = b0;
-    coeffs[1] = b1;
-    coeffs[2] = b2;
-    coeffs[3] = a1;
-    coeffs[4] = a2;
+    coeffs[0] = b0 / a0;
+    coeffs[1] = b1 / a0;
+    coeffs[2] = b2 / a0;
+    coeffs[3] = a1 / a0;
+    coeffs[4] = a2 / a0;
 
-    history[0] = 0.0f;
-    history[1] = 0.0f;
+    printf("coefficeints %.3f,%.3f,%.3f,%.3f,%.3f\n", b0, b1, b2, a1, a2);
   }
-  float coeffs[6];
-  float history[2];
+  // void set_lowpass(double frequency, double q, double gain) {
+  //   // based on https://github.com/steindevices/ESP32-LyraT-DSP/
+
+  //   double b0, b1, b2, a0, a1, a2;  // BiQuad coefficients
+  //   double a, w0, s, c, alpha;      // Intermediate calculation values
+
+  //   w0 = (_TWO_PI * frequency) / _FS;
+  //   s = sin(w0);
+  //   c = cos(w0);
+  //   alpha = S / (2 * q);
+  //   a = pow(10, gain / 40.0);
+
+  //   b0 = (1 - c) / 2;
+  //   b1 = 1 - c;
+  //   b2 = b0;
+  //   a0 = 1 + alpha;
+  //   a1 = -2 * c;
+  //   a2 = 1 - alpha;
+
+  //   // Return filter BiQuad values (
+  //   coeffs[0] = b0 / a0;
+  //   coeffs[1] = b1 / a0;
+  //   coeffs[2] = b2 / a0;
+  //   coeffs[3] = a1 / a0;
+  //   coeffs[4] = a2 / a0;
+
+  //   printf("coefficeints %.3f,%.3f,%.3f,%.3f,%.3f\n", b0, b1, b2, a1, a2);
+  // }
+  float coeffs[5];
+  float history[2] = {0.0f, 0.0f};
 };
 
 class Equalizer {
