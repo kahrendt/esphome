@@ -56,16 +56,49 @@ bool Equalizer::initialize(uint8_t channels) {
   std::memset(this->error_, 0, channels * sizeof(float));
   this->tpdf_dither_init_(channels);
 
-  add_peak_eq(0, 160, 1.4, -1.3);
-  add_peak_eq(0, 248.8, 3.4, 4.3);
-  add_peak_eq(0, 306.2, 6.7, 1.5);
-  add_peak_eq(0, 450.7, 0.9, 7.4);
-  add_peak_eq(0, 1107.0, 9.9, 9.8);
-  add_peak_eq(0, 1380.6, 6.8, -10);
-  add_peak_eq(0, 1684.8, 1.8, -10);
-  add_peak_eq(0, 3649.6, 6.0, 5.6);
-  add_peak_eq(0, 3672.9, 0.5, -10);
-  add_peak_eq(0, 4000, 0.5, -10);
+  // Bookshelf speakers
+  add_peak_eq(0, 84.4, 1.6, -4.8);
+  add_peak_eq(0, 103.7, 9.0, -6.5);
+  add_peak_eq(0, 119.8, 9.0, 8.8);
+  add_peak_eq(0, 139.2, 2.7, 10.0);
+  add_peak_eq(0, 221.6, 1.0, 10.0);
+  add_peak_eq(0, 243.8, 0.9, 10.0);
+  add_peak_eq(0, 359.0, 2.5, 3.1);
+  add_peak_eq(0, 698.5, 3.9, -7.4);
+  add_peak_eq(0, 2870, 4.3, -7.4);
+  add_peak_eq(0, 4000, 0.5, -10.0);
+  add_peak_eq(1, 84.4, 1.6, -4.8);
+  add_peak_eq(1, 103.7, 9.0, -6.5);
+  add_peak_eq(1, 119.8, 9.0, 8.8);
+  add_peak_eq(1, 139.2, 2.7, 10.0);
+  add_peak_eq(1, 221.6, 1.0, 10.0);
+  add_peak_eq(1, 243.8, 0.9, 10.0);
+  add_peak_eq(1, 359.0, 2.5, 3.1);
+  add_peak_eq(1, 698.5, 3.9, -7.4);
+  add_peak_eq(1, 2870, 4.3, -7.4);
+  add_peak_eq(1, 4000, 0.5, -10.0);
+
+  // // Internal speaker
+  // add_peak_eq(0, 82.9, 1.3, -3.8);
+  // add_peak_eq(0, 101, 7.3, -6.9);
+  // add_peak_eq(0, 113.7, 10.0, 9.0);
+  // add_peak_eq(0, 121.7, 5.9, 10.0);
+  // add_peak_eq(0, 171.5, 1.9, 7.2);
+  // add_peak_eq(0, 239.7, 0.9, 10.0);
+  // add_peak_eq(0, 241.5, 0.9, 10.0);
+  // add_peak_eq(0, 696.9, 2.1, -5.0);
+  // add_peak_eq(0, 3004.9, 2.8, -10.0);
+  // add_peak_eq(0, 4000, 0.5, -10.0);
+  // add_peak_eq(1, 82.9, 1.3, -3.8);
+  // add_peak_eq(1, 101, 7.3, -6.9);
+  // add_peak_eq(1, 113.7, 10.0, 9.0);
+  // add_peak_eq(1, 121.7, 5.9, 10.0);
+  // add_peak_eq(1, 171.5, 1.9, 7.2);
+  // add_peak_eq(1, 239.7, 0.9, 10.0);
+  // add_peak_eq(1, 241.5, 0.9, 10.0);
+  // add_peak_eq(1, 696.9, 2.1, -5.0);
+  // add_peak_eq(1, 3004.9, 2.8, -10.0);
+  // add_peak_eq(1, 4000, 0.5, -10.0);
 
   // add_peak_eq(25.75, 2.027, -1.4);
   // add_peak_eq(52.4, 7.441, 1.4);
@@ -87,7 +120,7 @@ void Equalizer::equalize(const int16_t *input_buffer, int16_t *output_buffer, si
           static_cast<float>(input_buffer[this->channels_ * frame + channel]) / 32768.0f;
     }
   }
-  // printf("flloat buffer 0 %.5f\n", this->float_buffers_[0][0]);
+  // // printf("flloat buffer 0 %.5f\n", this->float_buffers_[0][0]);
   for (uint8_t channel = 0; channel < this->channels_; ++channel) {
     // Need a separate set of filters for each channel!
     for (auto &filter : this->channel_filters_[channel]) {

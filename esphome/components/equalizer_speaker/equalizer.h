@@ -33,14 +33,7 @@ struct filter_biquad {
     a1 = -(2 * c);
     a2 = (1 - alpha / amp);
 
-    // Normalize the BiQuad values
-    a1 /= a0;
-    a2 /= a0;
-    b0 /= a0;
-    b1 /= a0;
-    b2 /= a0;
-
-    // Return filter BiQuad values (
+    // Return normalized filter BiQuad values (
     coeffs[0] = b0 / a0;
     coeffs[1] = b1 / a0;
     coeffs[2] = b2 / a0;
@@ -68,14 +61,7 @@ struct filter_biquad {
     a1 = -2.0 * c;
     a2 = 1.0f - alpha;
 
-    // Normalize the BiQuad values
-    a1 /= a0;
-    a2 /= a0;
-    b0 /= a0;
-    b1 /= a0;
-    b2 /= a0;
-
-    // Return filter BiQuad values (
+    // Return normalized filter BiQuad values (
     coeffs[0] = b0 / a0;
     coeffs[1] = b1 / a0;
     coeffs[2] = b2 / a0;
