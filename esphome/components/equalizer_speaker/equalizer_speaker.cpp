@@ -241,8 +241,7 @@ void EqualizerSpeaker::equalizer_task(void *params) {
       uint32_t clipped_samples = 0;
 
       equalizer->equalize(reinterpret_cast<int16_t *>(input_transfer_buffer->get_buffer_start()),
-                          reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()), frames_to_process,
-                          clipped_samples);
+                          (output_transfer_buffer->get_buffer_end()), frames_to_process, clipped_samples);
       input_transfer_buffer->decrease_buffer_length(frames_to_process * bytes_per_frame);
       output_transfer_buffer->increase_buffer_length(frames_to_process * bytes_per_frame);
       // printf("processed %d frames\n", frames_to_process);

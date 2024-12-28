@@ -1,4 +1,5 @@
 #include "equalizer.h"
+#include "dsps_biquad.h"
 
 #include "esp_random.h"
 
@@ -6,14 +7,14 @@
 
 namespace equalizer {
 
-static void dsps_biquad_f32_ansi(const float *input, float *output, int len, float *coef, float *w) {
-  for (int i = 0; i < len; i++) {
-    float d0 = input[i] - coef[3] * w[0] - coef[4] * w[1];
-    output[i] = coef[0] * d0 + coef[1] * w[0] + coef[2] * w[1];
-    w[1] = w[0];
-    w[0] = d0;
-  }
-}
+// static void dsps_biquad_f32_ansi(const float *input, float *output, int len, float *coef, float *w) {
+//   for (int i = 0; i < len; i++) {
+//     float d0 = input[i] - coef[3] * w[0] - coef[4] * w[1];
+//     output[i] = coef[0] * d0 + coef[1] * w[0] + coef[2] * w[1];
+//     w[1] = w[0];
+//     w[0] = d0;
+//   }
+// }
 
 Equalizer::~Equalizer() {
   if (this->float_buffers_ != nullptr) {
@@ -57,61 +58,53 @@ bool Equalizer::initialize(uint8_t channels) {
   this->tpdf_dither_init_(channels);
 
   // Bookshelf speakers
-  add_peak_eq(0, 84.4, 1.6, -4.8);
-  add_peak_eq(0, 103.7, 9.0, -6.5);
-  add_peak_eq(0, 119.8, 9.0, 8.8);
-  add_peak_eq(0, 139.2, 2.7, 10.0);
-  add_peak_eq(0, 221.6, 1.0, 10.0);
-  add_peak_eq(0, 243.8, 0.9, 10.0);
-  add_peak_eq(0, 359.0, 2.5, 3.1);
-  add_peak_eq(0, 698.5, 3.9, -7.4);
-  add_peak_eq(0, 2870, 4.3, -7.4);
-  add_peak_eq(0, 4000, 0.5, -10.0);
-  add_peak_eq(1, 84.4, 1.6, -4.8);
-  add_peak_eq(1, 103.7, 9.0, -6.5);
-  add_peak_eq(1, 119.8, 9.0, 8.8);
-  add_peak_eq(1, 139.2, 2.7, 10.0);
-  add_peak_eq(1, 221.6, 1.0, 10.0);
-  add_peak_eq(1, 243.8, 0.9, 10.0);
-  add_peak_eq(1, 359.0, 2.5, 3.1);
-  add_peak_eq(1, 698.5, 3.9, -7.4);
-  add_peak_eq(1, 2870, 4.3, -7.4);
-  add_peak_eq(1, 4000, 0.5, -10.0);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 84.4, 1.6, -4.8);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 103.7, 9.0, -6.5);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 119.8, 9.0, 8.8);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 139.2, 2.7, 10.0);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 221.6, 1.0, 10.0);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 243.8, 0.9, 10.0);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 359.0, 2.5, 3.1);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 698.5, 3.9, -7.4);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 2870, 4.3, -7.4);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 4000, 0.5, -10.0);
+  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 84.4, 1.6, -4.8);
+  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 103.7, 9.0, -6.5);
+  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 119.8, 9.0, 8.8);
+  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 139.2, 2.7, 10.0);
+  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 221.6, 1.0, 10.0);
+  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 243.8, 0.9, 10.0);
+  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 359.0, 2.5, 3.1);
+  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 698.5, 3.9, -7.4);
+  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 2870, 4.3, -7.4);
+  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 4000, 0.5, -10.0);
 
   // // Internal speaker
-  // add_peak_eq(0, 82.9, 1.3, -3.8);
-  // add_peak_eq(0, 101, 7.3, -6.9);
-  // add_peak_eq(0, 113.7, 10.0, 9.0);
-  // add_peak_eq(0, 121.7, 5.9, 10.0);
-  // add_peak_eq(0, 171.5, 1.9, 7.2);
-  // add_peak_eq(0, 239.7, 0.9, 10.0);
-  // add_peak_eq(0, 241.5, 0.9, 10.0);
-  // add_peak_eq(0, 696.9, 2.1, -5.0);
-  // add_peak_eq(0, 3004.9, 2.8, -10.0);
-  // add_peak_eq(0, 4000, 0.5, -10.0);
-  // add_peak_eq(1, 82.9, 1.3, -3.8);
-  // add_peak_eq(1, 101, 7.3, -6.9);
-  // add_peak_eq(1, 113.7, 10.0, 9.0);
-  // add_peak_eq(1, 121.7, 5.9, 10.0);
-  // add_peak_eq(1, 171.5, 1.9, 7.2);
-  // add_peak_eq(1, 239.7, 0.9, 10.0);
-  // add_peak_eq(1, 241.5, 0.9, 10.0);
-  // add_peak_eq(1, 696.9, 2.1, -5.0);
-  // add_peak_eq(1, 3004.9, 2.8, -10.0);
-  // add_peak_eq(1, 4000, 0.5, -10.0);
-
-  // add_peak_eq(25.75, 2.027, -1.4);
-  // add_peak_eq(52.4, 7.441, 1.4);
-  // add_peak_eq(122.5, 18.708, -1.9);
-  // add_peak_eq(139, 2.214, 10);
-  // add_peak_eq(153.5, 2.001, -23.6);
-  // add_lpf(400, 0.7);
-  // add_peak_eq(4000, 5.0, 0.1);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 82.9, 1.3, -3.8);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 101, 7.3, -6.9);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 113.7, 10.0, 9.0);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 121.7, 5.9, 10.0);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 171.5, 1.9, 7.2);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 239.7, 0.9, 10.0);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 241.5, 0.9, 10.0);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 696.9, 2.1, -5.0);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 3004.9, 2.8, -10.0);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 4000, 0.5, -10.0);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 82.9, 1.3, -3.8);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 101, 7.3, -6.9);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 113.7, 10.0, 9.0);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 121.7, 5.9, 10.0);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 171.5, 1.9, 7.2);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 239.7, 0.9, 10.0);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 241.5, 0.9, 10.0);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 696.9, 2.1, -5.0);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 3004.9, 2.8, -10.0);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 4000, 0.5, -10.0);
 
   return true;
 }
 
-void Equalizer::equalize(const int16_t *input_buffer, int16_t *output_buffer, size_t frames_to_process,
+void Equalizer::equalize(const int16_t *input_buffer, uint8_t *output_buffer, size_t frames_to_process,
                          uint32_t &clipped_samples) {
   // Convert fixed point samples to floating point
   for (unsigned int frame = 0; frame < frames_to_process; ++frame) {
@@ -121,48 +114,79 @@ void Equalizer::equalize(const int16_t *input_buffer, int16_t *output_buffer, si
     }
   }
   // // printf("flloat buffer 0 %.5f\n", this->float_buffers_[0][0]);
-  for (uint8_t channel = 0; channel < this->channels_; ++channel) {
-    // Need a separate set of filters for each channel!
-    for (auto &filter : this->channel_filters_[channel]) {
-      dsps_biquad_f32_ansi(float_buffers_[channel], float_buffers_[channel], frames_to_process, filter.coeffs,
-                           filter.history);
-    }
+
+  for (auto &filter : this->filters_) {
+    dsps_biquad_f32(float_buffers_[filter.channel], float_buffers_[filter.channel], frames_to_process, filter.coeffs,
+                    filter.history);
   }
 
   const uint8_t out_bits = 16;
 
-  float scaler = (1 << out_bits) / 2.0;
-  int32_t offset = (out_bits <= 8) * 128;
-  int32_t high_clip = (1 << (out_bits - 1)) - 1;
-  int32_t low_clip = ~high_clip;
-  int left_shift = (24 - out_bits) % 8;
-  size_t i, j;
-  clipped_samples = 0;
+  if (out_bits != 32) {
+    float scaler = (1 << out_bits) / 2.0;
+    int32_t offset = (out_bits <= 8) * 128;
+    int32_t high_clip = (1 << (out_bits - 1)) - 1;
+    int32_t low_clip = ~high_clip;
+    int left_shift = (24 - out_bits) % 8;
+    size_t i, j;
+    clipped_samples = 0;
 
-  uint8_t *temp_buffer = (uint8_t *) (output_buffer);
+    for (i = j = 0; i < frames_to_process * this->channels_; ++i) {
+      uint8_t chan = i % this->channels_;
+      int32_t output = floor((this->float_buffers_[chan][i / this->channels_] *= scaler) - this->error_[chan] +
+                             this->tpdf_dither_(chan, -1) + 0.5);
+      if (output > high_clip) {
+        ++clipped_samples;
+        output = high_clip;
+      } else if (output < low_clip) {
+        ++clipped_samples;
+        output = low_clip;
+      }
 
-  for (i = j = 0; i < frames_to_process * this->channels_; ++i) {
-    uint8_t chan = i % this->channels_;
-    int32_t output = floor((this->float_buffers_[chan][i / this->channels_] *= scaler) - this->error_[chan] +
-                           this->tpdf_dither_(chan, -1) + 0.5);
-    if (output > high_clip) {
-      ++clipped_samples;
-      output = high_clip;
-    } else if (output < low_clip) {
-      ++clipped_samples;
-      output = low_clip;
-    }
+      this->error_[chan] += output - this->float_buffers_[chan][i / this->channels_];
+      output = (output << left_shift) + offset;
+      output_buffer[j++] = output = (output << left_shift) + offset;
+      if (out_bits > 8) {
+        output_buffer[j++] = output >> 8;
 
-    this->error_[chan] += output - this->float_buffers_[chan][i / this->channels_];
-    output = (output << left_shift) + offset;
-    temp_buffer[j++] = output = (output << left_shift) + offset;
-    if (out_bits > 8) {
-      temp_buffer[j++] = output >> 8;
-
-      if (out_bits > 16) {
-        temp_buffer[j++] = output >> 16;
+        if (out_bits > 16) {
+          output_buffer[j++] = output >> 16;
+        }
       }
     }
+  } else {
+    // float scaler = (1 << out_bits) / 2.0;
+    // int32_t offset = (out_bits <= 8) * 128;
+    // int32_t high_clip = (1 << (out_bits - 1)) - 1;
+    // int32_t low_clip = ~high_clip;
+    // int left_shift = (24 - out_bits) % 8;
+    // size_t i, j;
+    // clipped_samples = 0;
+
+    // for (i = j = 0; i < frames_to_process * this->channels_; ++i) {
+    //   uint8_t chan = i % this->channels_;
+    //   float float_sample = this->float_buffers_[chan][i / this->channels_];
+    //   int32_t output = float_sample * scalar;
+    //   if (float_sample >= 1.0f) {
+    //     ++clipped_samples;
+    //     output = std::numeric_limits<std::int32_t>::max();
+    //   } else if (float_sample < 1.0f) {
+    //     ++clipped_samples;
+    //     output = std::numeric_limits<std::int32_t>::min();
+    //   }
+
+    //   // output_buffer[j++] = output;
+    //   // output_buffer[j++] =
+    //   // output = (output << left_shift) + offset;
+    //   // output_buffer[j++] = output = (output << left_shift) + offset;
+    //   // if (out_bits > 8) {
+    //   //   output_buffer[j++] = output >> 8;
+
+    //   //   if (out_bits > 16) {
+    //   //     output_buffer[j++] = output >> 16;
+    //   //   }
+    //   // }
+    // }
   }
 }
 

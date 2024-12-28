@@ -12,10 +12,22 @@ namespace equalizer {
 #define _TWO_PI (_PI * 2)           /* 2*pi */
 #define _FS 48000                   /* sampling frequency */
 
+enum class EqualizerFilters {
+  LOW_PASS_FILTER,
+  HIGH_PASS_FILTER,
+  BAND_PASS_FILTER,
+  NOTCH_FILTER,
+  ACTIVE_POWER_FILTER,
+  PEAKING_EQ_FILTER,
+  LOW_SHELF_FILTER,
+  HIGH_SHELF_FILTER,
+};
+
 struct filter_biquad {
-  void set_peak_eq(double frequency, double q, double gain) {
-    // based on https://github.com/steindevices/ESP32-LyraT-DSP/
-    // https://webaudio.github.io/Audio-EQ-Cookbook/audio-eq-cookbook.html
+  void set_filter_coeffecients(uint8_t channel, EqualizerFilters type, double frequency, double q, double gain) {
+    // Formulas based on https://webaudio.github.io/Audio-EQ-Cookbook/audio-eq-cookbook.html
+
+    this->channel = channel;
 
     double b0, b1, b2, a0, a1, a2;  // BiQuad coefficients
     double amp, w0, s, c, alpha;    // Intermediate calculation values
@@ -26,51 +38,85 @@ struct filter_biquad {
     alpha = s / (2 * q);
     amp = pow(10, gain / 40.0);
 
-    b0 = 1 + alpha * amp;
-    b1 = -2 * c;
-    b2 = 1 - alpha * amp;
-    a0 = 1 + alpha / amp;
-    a1 = -(2 * c);
-    a2 = (1 - alpha / amp);
+    switch (type) {
+      case EqualizerFilters::LOW_PASS_FILTER:
+        b0 = (1 - c) / 2;
+        b1 = 1 - c;
+        b2 = (1 - c) / 2;
+        a0 = 1 + alpha;
+        a1 = -2 * c;
+        a2 = 1 - alpha;
+        break;
+      case EqualizerFilters::HIGH_PASS_FILTER:
+        b0 = (1 + c) / 2;
+        b1 = -(1 + c);
+        b2 = (1 + c) / 2;
+        a0 = 1 + alpha;
+        a1 = -2 * c;
+        a2 = 1 - alpha;
+        break;
+      case EqualizerFilters::BAND_PASS_FILTER:
+        // Constant 0 dB peak gain version
+        b0 = alpha;
+        b1 = 0;
+        b2 = -alpha;
+        a0 = 1 + alpha;
+        a1 = -2 * c;
+        a2 = 1 - alpha;
+        break;
+      case EqualizerFilters::NOTCH_FILTER:
+        b0 = 1;
+        b1 = -2 * c;
+        b2 = 1;
+        a0 = 1 + alpha;
+        a1 = -2 * c;
+        a2 = 1 - alpha;
+        break;
+      case EqualizerFilters::ACTIVE_POWER_FILTER:
+        b0 = 1 - alpha;
+        b1 = -2 * c;
+        b2 = 1 + alpha;
+        a0 = 1 + alpha;
+        a1 = -2 * c;
+        a2 = 1 - alpha;
+        break;
+      case EqualizerFilters::PEAKING_EQ_FILTER:
+        b0 = 1 + alpha * amp;
+        b1 = -2 * c;
+        b2 = 1 - alpha * amp;
+        a0 = 1 + alpha / amp;
+        a1 = -(2 * c);
+        a2 = (1 - alpha / amp);
+        break;
+      case EqualizerFilters::LOW_SHELF_FILTER:
+        // clang-format off
+        b0 =      amp * ((amp + 1) - (amp - 1) * c + 2 * sqrt(amp) * alpha);
+        b1 =  2 * amp * ((amp - 1) - (amp + 1) * c);
+        b2 =      amp * ((amp + 1) - (amp - 1) * c - 2 * sqrt(amp) * alpha);
+        a0 =            ((amp + 1) + (amp - 1) * c + 2 * sqrt(amp) * alpha);
+        a1 = -2 *       ((amp - 1) + (amp + 1) * c);
+        a2 =            ((amp + 1) + (amp - 1) * c - 2 * sqrt(amp) * alpha);
+        break;
+      case EqualizerFilters::HIGH_SHELF_FILTER:
+        b0 =      amp * ((amp + 1) + (amp - 1) * c + 2 * sqrt(amp) * alpha);
+        b1 = -2 * amp * ((amp - 1) + (amp + 1) * c);
+        b2 =      amp * ((amp + 1) + (amp - 1) * c - 2 * sqrt(amp) * alpha);
+        a0 =            ((amp + 1) - (amp - 1) * c + 2 * sqrt(amp) * alpha);
+        a1 =  2 *       ((amp - 1) - (amp + 1) * c);
+        a2 =            ((amp + 1) - (amp - 1) * c - 2 * sqrt(amp) * alpha);
+        // clang-format on
+        break;
+    }
 
-    // Return normalized filter BiQuad values (
-    coeffs[0] = b0 / a0;
-    coeffs[1] = b1 / a0;
-    coeffs[2] = b2 / a0;
-    coeffs[3] = a1 / a0;
-    coeffs[4] = a2 / a0;
-
-    printf("coefficeints %.3f,%.3f,%.3f,%.3f,%.3f\n", b0, b1, b2, a1, a2);
+    // Use normalized filter coeffecients
+    this->coeffs[0] = b0 / a0;
+    this->coeffs[1] = b1 / a0;
+    this->coeffs[2] = b2 / a0;
+    this->coeffs[3] = a1 / a0;
+    this->coeffs[4] = a2 / a0;
   }
-  void set_lpf(double frequency, double q) {
-    // based on https://github.com/steindevices/ESP32-LyraT-DSP/
-    // https://webaudio.github.io/Audio-EQ-Cookbook/audio-eq-cookbook.html
 
-    double b0, b1, b2, a0, a1, a2;  // BiQuad coefficients
-    double amp, w0, s, c, alpha;    // Intermediate calculation values
-
-    w0 = (_TWO_PI * frequency) / _FS;
-    s = sin(w0);
-    c = cos(w0);
-    alpha = s / (2 * q);
-
-    b0 = (1 - c) / 2;
-    b1 = 1 - c;
-    b2 = (1 - c) / 2;
-    a0 = 1 + alpha;
-    a1 = -2.0 * c;
-    a2 = 1.0f - alpha;
-
-    // Return normalized filter BiQuad values (
-    coeffs[0] = b0 / a0;
-    coeffs[1] = b1 / a0;
-    coeffs[2] = b2 / a0;
-    coeffs[3] = a1 / a0;
-    coeffs[4] = a2 / a0;
-
-    printf("coefficeints %.3f,%.3f,%.3f,%.3f,%.3f\n", b0, b1, b2, a1, a2);
-  }
-
+  uint8_t channel;
   float coeffs[5];
   float history[2] = {0.0f, 0.0f};
 };
@@ -82,40 +128,21 @@ class Equalizer {
 
   bool initialize(uint8_t channels);
 
-  void equalize(const int16_t *input, int16_t *output, size_t frames_to_process, uint32_t &clipped_samples);
+  void equalize(const int16_t *input_buffer, uint8_t *output_buffer, size_t frames_to_process,
+                uint32_t &clipped_samples);
 
-  void add_peak_eq(uint8_t channel, double frequency, double q, double gain) {
+  void add_filter(uint8_t channel, EqualizerFilters type, double frequency, double q, double gain) {
     filter_biquad new_filter;
 
-    std::vector<filter_biquad> filters;
-    if (this->channel_filters_.size() > channel) {
-      filters = this->channel_filters_[channel];
-    } else {
-      this->channel_filters_.push_back(filters);
-    }
-
-    new_filter.set_peak_eq(frequency, q, gain);
-    filters.push_back(new_filter);
-  }
-  void add_lpf(uint8_t channel, double frequency, double q) {
-    filter_biquad new_filter;
-
-    std::vector<filter_biquad> filters;
-    if (this->channel_filters_.size() <= channel) {
-      filters = this->channel_filters_[channel];
-    } else {
-      this->channel_filters_.push_back(filters);
-    }
-
-    new_filter.set_lpf(frequency, q);
-    filters.push_back(new_filter);
+    new_filter.set_filter_coeffecients(channel, type, frequency, q, gain);
+    this->filters_.push_back(new_filter);
   }
 
  protected:
   void tpdf_dither_init_(int num_channels);
   float tpdf_dither_(int channel, int type);
 
-  std::vector<std::vector<filter_biquad>> channel_filters_;
+  std::vector<filter_biquad> filters_;
 
   size_t processing_frames_;
 

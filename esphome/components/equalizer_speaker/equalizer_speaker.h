@@ -41,11 +41,11 @@ class EqualizerSpeaker : public Component, public speaker::Speaker {
 
   void set_output_speaker(speaker::Speaker *speaker) { this->output_speaker_ = speaker; }
 
-  void add_peak_eq(double frequency, double q, double gain) {
-    equalizer::filter_biquad new_filter;
-    new_filter.set_peak_eq(frequency, q, gain);
-    this->filters_.push_back(new_filter);
-  }
+  // void add_peak_eq(double frequency, double q, double gain) {
+  //   equalizer::filter_biquad new_filter;
+  //   new_filter.set_peak_eq(frequency, q, gain);
+  //   this->filters_.push_back(new_filter);
+  // }
 
  protected:
   esp_err_t start_();
