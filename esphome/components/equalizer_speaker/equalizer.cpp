@@ -57,49 +57,61 @@ bool Equalizer::initialize(uint8_t channels) {
   std::memset(this->error_, 0, channels * sizeof(float));
   this->tpdf_dither_init_(channels);
 
-  // Bookshelf speakers
-  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 84.4, 1.6, -4.8);
-  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 103.7, 9.0, -6.5);
-  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 119.8, 9.0, 8.8);
-  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 139.2, 2.7, 10.0);
-  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 221.6, 1.0, 10.0);
-  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 243.8, 0.9, 10.0);
-  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 359.0, 2.5, 3.1);
-  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 698.5, 3.9, -7.4);
-  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 2870, 4.3, -7.4);
-  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 4000, 0.5, -10.0);
-  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 84.4, 1.6, -4.8);
-  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 103.7, 9.0, -6.5);
-  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 119.8, 9.0, 8.8);
-  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 139.2, 2.7, 10.0);
-  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 221.6, 1.0, 10.0);
-  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 243.8, 0.9, 10.0);
-  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 359.0, 2.5, 3.1);
-  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 698.5, 3.9, -7.4);
-  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 2870, 4.3, -7.4);
-  this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 4000, 0.5, -10.0);
+  // // Bookshelf speakers
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 78, 5.7, -4.5);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 127.4, 7.9, -5.4);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 207.7, 8.1, -3.1);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 309.6, 4.6, -4.9);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 501.4, 5.1, 1.5);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 845.2, 7.0, -4.3);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 1129, 9.2, 2.9);
+  // this->add_filter(0, EqualizerFilters::HIGH_SHELF_FILTER, 1464.3, 0.5, -10.0);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 1995.6, 6.7, -2.3);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 3637.3, 4.4, 1.0);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 78, 5.7, -4.5);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 127.4, 7.9, -5.4);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 207.7, 8.1, -3.1);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 309.6, 4.6, -4.9);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 501.4, 5.1, 1.5);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 845.2, 7.0, -4.3);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 1129, 9.2, 2.9);
+  // this->add_filter(1, EqualizerFilters::HIGH_SHELF_FILTER, 1464.3, 0.5, -10.0);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 1995.6, 6.7, -2.3);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 3637.3, 4.4, 1.0);
 
-  // // Internal speaker
-  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 82.9, 1.3, -3.8);
-  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 101, 7.3, -6.9);
-  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 113.7, 10.0, 9.0);
-  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 121.7, 5.9, 10.0);
-  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 171.5, 1.9, 7.2);
-  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 239.7, 0.9, 10.0);
-  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 241.5, 0.9, 10.0);
-  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 696.9, 2.1, -5.0);
-  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 3004.9, 2.8, -10.0);
-  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 4000, 0.5, -10.0);
-  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 82.9, 1.3, -3.8);
-  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 101, 7.3, -6.9);
-  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 113.7, 10.0, 9.0);
-  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 121.7, 5.9, 10.0);
-  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 171.5, 1.9, 7.2);
-  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 239.7, 0.9, 10.0);
-  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 241.5, 0.9, 10.0);
-  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 696.9, 2.1, -5.0);
-  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 3004.9, 2.8, -10.0);
-  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 4000, 0.5, -10.0);
+  // Internal speaker
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 415, 5.8, 2.6);
+  this->add_filter(0, EqualizerFilters::HIGH_SHELF_FILTER, 504.2, 1.0, -10);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 651.8, 4.0, -5.6);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 947.1, 8.0, 2.1);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 1260.0, 7.9, -1.5);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 1834.0, 7.9, 3.1);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 2231.0, 10.0, -2.8);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 2691.7, 1.7, -10.0);
+  this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 2954.0, 9.1, -4.4);
+  this->add_filter(0, EqualizerFilters::HIGH_SHELF_FILTER, 3517.0, 1.0, 1.5);
+
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 189.9, 5.3, 10.0);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 251.9, 1.5, 10.0);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 306.7, 1.3, 10.0);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 403.5, 4.3, 7.1);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 129.5, 1.5, -3.3);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 153.2, 7.1, -4.8);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 1073.6, 5.0, -4.2);
+  // this->add_filter(0, EqualizerFilters::HIGH_SHELF_FILTER, 1831.9, 1.0, -6.5);
+
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 644.0, 4.1, -7.9);
+  // this->add_filter(0, EqualizerFilters::PEAKING_EQ_FILTER, 2724.2, 2.6, -8.0);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 129.5, 1.5, -3.3);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 153.2, 7.1, -4.8);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 189.9, 5.3, 10.0);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 251.9, 1.5, 10.0);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 306.7, 1.3, 10.0);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 403.5, 4.3, 7.1);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 644.0, 4.1, -7.9);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 1073.6, 5.0, -4.2);
+  // this->add_filter(1, EqualizerFilters::HIGH_SHELF_FILTER, 1831.9, 1.0, -6.5);
+  // this->add_filter(1, EqualizerFilters::PEAKING_EQ_FILTER, 2724.2, 2.6, -8.0);
 
   return true;
 }
@@ -110,7 +122,8 @@ void Equalizer::equalize(const int16_t *input_buffer, uint8_t *output_buffer, si
   for (unsigned int frame = 0; frame < frames_to_process; ++frame) {
     for (uint8_t channel = 0; channel < this->channels_; ++channel) {
       this->float_buffers_[channel][frame] =
-          static_cast<float>(input_buffer[this->channels_ * frame + channel]) / 32768.0f;
+          (static_cast<float>(input_buffer[this->channels_ * frame + channel]) / 32768.0f);
+      //   *0.12;
     }
   }
   // // printf("flloat buffer 0 %.5f\n", this->float_buffers_[0][0]);
