@@ -76,8 +76,8 @@ void AIC3204::setup() {
   ERROR_CHECK(this->write_byte(AIC3204_HPL_ROUTE, 0x08), "Set HPL_ROUTE failed");
   // Route Right DAC to HPR
   ERROR_CHECK(this->write_byte(AIC3204_HPR_ROUTE, 0x08), "Set HPR_ROUTE failed");
-  // Route Left DAC to LOL
-  ERROR_CHECK(this->write_byte(AIC3204_LOL_ROUTE, 0x08), "Set LOL_ROUTE failed");
+  // Route Left DAC to LOR to output mono differential
+  ERROR_CHECK(this->write_byte(AIC3204_LOL_ROUTE, 0x09), "Set LOL_ROUTE failed");
   // Route Right DAC to LOR
   ERROR_CHECK(this->write_byte(AIC3204_LOR_ROUTE, 0x08), "Set LOR_ROUTE failed");
 
@@ -85,10 +85,10 @@ void AIC3204::setup() {
   ERROR_CHECK(this->write_byte(AIC3204_HPL_GAIN, 0x3e), "Set HPL_GAIN failed");
   // Unmute HPR and set gain to -2dB (see comment before configuring the AIC3204_CM_CTRL register)
   ERROR_CHECK(this->write_byte(AIC3204_HPR_GAIN, 0x3e), "Set HPR_GAIN failed");
-  // Unmute LOL and set gain to 0dB
-  ERROR_CHECK(this->write_byte(AIC3204_LOL_DRV_GAIN, 0x00), "Set LOL_DRV_GAIN failed");
-  // Unmute LOR and set gain to 0dB
-  ERROR_CHECK(this->write_byte(AIC3204_LOR_DRV_GAIN, 0x00), "Set LOR_DRV_GAIN failed");
+  // Unmute LOL and set gain to -2dB
+  ERROR_CHECK(this->write_byte(AIC3204_LOL_DRV_GAIN, 0x3e), "Set LOL_DRV_GAIN failed");
+  // Unmute LOR and set gain to -2dB
+  ERROR_CHECK(this->write_byte(AIC3204_LOR_DRV_GAIN, 0x3e), "Set LOR_DRV_GAIN failed");
 
   // Power up HPL and HPR, LOL and LOR drivers
   ERROR_CHECK(this->write_byte(AIC3204_OP_PWR_CTRL, 0x3C), "Set OP_PWR_CTRL failed");
