@@ -1,9 +1,18 @@
 from esphome import automation
 from esphome.automation import maybe_simple_id
 import esphome.codegen as cg
+
+# from esphome.components import audio, audio_dac
 from esphome.components import audio_dac
 import esphome.config_validation as cv
-from esphome.const import CONF_DATA, CONF_ID, CONF_VOLUME
+from esphome.const import (
+    # CONF_BITS_PER_SAMPLE,
+    # CONF_CHANNELS,
+    CONF_DATA,
+    CONF_ID,
+    # CONF_SAMPLE_RATE,
+    CONF_VOLUME,
+)
 from esphome.core import CORE
 from esphome.coroutine import coroutine_with_priority
 
@@ -13,6 +22,13 @@ CODEOWNERS = ["@jesserockz", "@kahrendt"]
 IS_PLATFORM_COMPONENT = True
 
 CONF_AUDIO_DAC = "audio_dac"
+
+CONF_INTERNAL_SPEAKER_BITS_PER_SAMPLE_MIN = "internal_speaker_bits_per_sample_min"
+CONF_INTERNAL_SPEAKER_BITS_PER_SAMPLE_MAX = "internal_speaker_bits_per_sample_max"
+CONF_INTERNAL_SPEAKER_CHANNELS_MIN = "internal_speaker_channels_min"
+CONF_INTERNAL_SPEAKER_CHANNELS_MAX = "internal_speaker_channels_max"
+CONF_INTERNAL_SPEAKER_SAMPLE_RATE_MIN = "internal_speaker_bits_sample_rate_min"
+CONF_INTERNAL_SPEAKER_SAMPLE_RATE_MAX = "internal_speaker_bits_sample_rate_max"
 
 speaker_ns = cg.esphome_ns.namespace("speaker")
 
@@ -54,6 +70,7 @@ async def register_speaker(var, config):
     await setup_speaker_core_(var, config)
 
 
+# SPEAKER_SCHEMA = cv.Schema.extend(audio.AUDIO_COMPONENT_SCHEMA).extend(
 SPEAKER_SCHEMA = cv.Schema(
     {
         cv.Optional(CONF_AUDIO_DAC): cv.use_id(audio_dac.AudioDac),
@@ -61,6 +78,40 @@ SPEAKER_SCHEMA = cv.Schema(
 )
 
 SPEAKER_AUTOMATION_SCHEMA = maybe_simple_id({cv.GenerateID(): cv.use_id(Speaker)})
+
+# def final_validate_device_schema(
+#     name: str,
+#     *,
+#     bits_per_sample: int,
+#     channels: int,
+#     sample_rate: int,
+# ):
+#     def validate_bits_per_sample(value):
+#         if value != bits_per_sample:
+#             raise cv.Invalid(
+#                 f"Component {name} requires {bits_per_sample} bits per sample"
+#             )
+#         return value
+
+#     def validate_channels(value):
+#         if value != channels:
+#             raise cv.Invalid(f"Component {name} requires {channels} channels")
+#         return value
+
+#     def validate_sample_rate(value):
+#         if value != sample_rate:
+#             raise cv.Invalid(f"COmponent {name} requires {sample_rate} sample rate")
+#         return value
+
+#     def validate_audio_compatiblity(audio_config):
+#         audio_schema = {}
+#         audio_id = audio_config[CONF_ID]:
+
+#         audio_schema[cv.Required(CONF_BITS_PER_SAMPLE)] = validate_bits_per_sample
+#         audio_schema[cv.Required(CONF_CHANNELS)] = validate_channels
+#         audio_schema[cv.Required(CONF_SAMPLE_RATE)] = validate_sample_rate
+
+#     return validate_audio_compatiblity
 
 
 async def speaker_action(config, action_id, template_arg, args):
