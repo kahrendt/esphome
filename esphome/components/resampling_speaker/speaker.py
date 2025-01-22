@@ -1,5 +1,5 @@
 import esphome.codegen as cg
-from esphome.components import esp32, speaker
+from esphome.components import audio, esp32, speaker
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_BITS_PER_SAMPLE,
@@ -44,26 +44,38 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_TASK_STACK_IN_PSRAM, default=False): cv.boolean,
             cv.Optional(CONF_FILTERS, default=16): cv.int_range(min=2, max=1024),
             cv.Optional(CONF_TAPS, default=16): _validate_taps,
-            cv.Optional(CONF_BITS_PER_SAMPLE): cv.int_range(8, 32),
-            cv.Optional(CONF_SAMPLE_RATE): cv.int_range(8000, 48000),
         }
     ).extend(cv.COMPONENT_SCHEMA),
     cv.only_on([PLATFORM_ESP32]),
 )
 
-FINAL_VALIDATE_SCHEMA = cv.All(
-    # cv.Schema(
-    #     {
-    #         cv.Optional(CONF_BITS_PER_SAMPLE): cv.int_range(8, 32),
-    #         cv.Optional(CONF_NUM_CHANNELS): cv.int_range(1, 2),
-    #         cv.Optional(CONF_SAMPLE_RATE): cv.int_range(8000, 48000),
-    #     },
-    #     extra=cv.ALLOW_EXTRA,
-    # ),
-    inherit_property_from(CONF_BITS_PER_SAMPLE, CONF_OUTPUT_SPEAKER),
-    inherit_property_from(CONF_NUM_CHANNELS, CONF_OUTPUT_SPEAKER),
-    inherit_property_from(CONF_SAMPLE_RATE, CONF_OUTPUT_SPEAKER),
-)
+
+def validate_audio_compatability(config):
+    audio.set_limits(
+        min_bits_per_sample=8,
+        max_bits_per_sample=32,
+        # min_channels=None,  # really this should inherit from the parent speaker
+        # max_channels=None,  # inherit from parent speaker
+    )(config)
+
+    inherit_property_from(CONF_BITS_PER_SAMPLE, CONF_OUTPUT_SPEAKER)(config)
+    inherit_property_from(CONF_NUM_CHANNELS, CONF_OUTPUT_SPEAKER)(config)
+    inherit_property_from(CONF_SAMPLE_RATE, CONF_OUTPUT_SPEAKER)(config)
+
+    configured_bits_per_sample = config.get(CONF_BITS_PER_SAMPLE)
+    configured_num_channels = config.get(CONF_NUM_CHANNELS)
+    configured_sample_rate = config.get(CONF_SAMPLE_RATE)
+
+    audio.final_validate_audio_schema(
+        "source_speaker",
+        audio_device=CONF_OUTPUT_SPEAKER,
+        bits_per_sample=configured_bits_per_sample,
+        channels=configured_num_channels,
+        sample_rate=configured_sample_rate,
+    )(config)
+
+
+FINAL_VALIDATE_SCHEMA = validate_audio_compatability
 
 
 async def to_code(config):

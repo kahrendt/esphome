@@ -1,6 +1,6 @@
 from esphome import pins
 import esphome.codegen as cg
-from esphome.components import esp32, speaker
+from esphome.components import audio, esp32, speaker
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_BUFFER_DURATION,
@@ -117,24 +117,20 @@ CONFIG_SCHEMA = cv.All(
 )
 
 
-def inherit_num_channels_from_config(config):
+def set_num_channels_from_config(config):
     channel_type = config[CONF_CHANNEL]
     if channel_type in (CONF_MONO, CONF_LEFT, CONF_RIGHT):
         config[CONF_NUM_CHANNELS] = 1
     else:
         config[CONF_NUM_CHANNELS] = 2
+
+    audio.set_limits(32, 32, 1, 2, 16000, 48000)(config)
+
     return config
 
 
 FINAL_VALIDATE_SCHEMA = cv.All(
-    # cv.Schema(
-    #     {
-    #         cv.Required(CONF_CHANNEL): cv.enum(I2S_CHANNELS),
-    #         cv.Optional(CONF_NUM_CHANNELS): cv.int_range(1, 2),
-    #     },
-    #     extra=cv.ALLOW_EXTRA,
-    # ),
-    inherit_num_channels_from_config,
+    set_num_channels_from_config,
 )
 
 

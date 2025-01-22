@@ -1,6 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.const import CONF_BITS_PER_SAMPLE, CONF_NUM_CHANNELS, CONF_SAMPLE_RATE
+import esphome.final_validate as fv
 
 CODEOWNERS = ["@kahrendt"]
 audio_ns = cg.esphome_ns.namespace("audio")
@@ -15,50 +16,95 @@ AUDIO_FILE_TYPE_ENUM = {
 }
 
 
+CONF_MIN_BITS_PER_SAMPLE = "min_bits_per_sample"
+CONF_MAX_BITS_PER_SAMPLE = "max_bits_per_sample"
+CONF_MIN_CHANNELS = "min_channels"
+CONF_MAX_CHANNELS = "max_channels"
+CONF_MIN_SAMPLE_RATE = "min_sample_rate"
+CONF_MAX_SAMPLE_RATE = "max_sample_rate"
+
+
 CONFIG_SCHEMA = cv.All(
     cv.Schema({}),
 )
 
 AUDIO_COMPONENT_SCHEMA = cv.Schema(
     {
-        cv.Optional(CONF_BITS_PER_SAMPLE, default=16): cv.int_range(8, 32),
-        cv.Optional(CONF_NUM_CHANNELS, default=1): cv.int_range(1, 2),
-        cv.Optional(CONF_SAMPLE_RATE, default=16000): cv.int_range(8000, 48000),
+        cv.Optional(CONF_BITS_PER_SAMPLE): cv.int_range(8, 32),
+        cv.Optional(CONF_NUM_CHANNELS): cv.int_range(1, 2),
+        cv.Optional(CONF_SAMPLE_RATE): cv.int_range(8000, 48000),
     }
 )
 
 
-# def final_validate_device_schema(
-#     name: str,
-#     *,
-#     bits_per_sample: int,
-#     channels: int,
-#     sample_rate: int,
-# ):
-#     def validate_bits_per_sample(value):
-#         if value != bits_per_sample:
-#             raise cv.Invalid(
-#                 f"Component {name} requires {bits_per_sample} bits per sample"
-#             )
-#         return value
+_UNDEF = object()
 
-#     def validate_channels(value):
-#         if value != channels:
-#             raise cv.Invalid(f"Component {name} requires {channels} channels")
-#         return value
 
-#     def validate_sample_rate(value):
-#         if value != sample_rate:
-#             raise cv.Invalid(f"COmponent {name} requires {sample_rate} sample rate")
-#         return value
+def set_limits(
+    min_bits_per_sample: int = _UNDEF,
+    max_bits_per_sample: int = _UNDEF,
+    min_channels: int = _UNDEF,
+    max_channels: int = _UNDEF,
+    min_sample_rate: int = _UNDEF,
+    max_sample_rate: int = _UNDEF,
+):
+    def set_limits_in_config(config):
+        if min_bits_per_sample is not _UNDEF:
+            config["min_bits_per_sample"] = min_bits_per_sample
+        if max_bits_per_sample is not _UNDEF:
+            config["max_bits_per_sample"] = max_bits_per_sample
+        if min_channels is not _UNDEF:
+            config["min_channels"] = min_channels
+        if max_channels is not _UNDEF:
+            config["max_channels"] = max_channels
+        if min_sample_rate is not _UNDEF:
+            config["min_sample_rates"] = min_sample_rate
+        if max_sample_rate is not _UNDEF:
+            config["max_sample_rate"] = max_sample_rate
 
-#     def validate_audio_compatiblity(config):
-#         audio_schema = {}
-#         audio_schema[cv.Required(CONF_BITS_PER_SAMPLE)] = validate_bits_per_sample
-#         audio_schema[cv.Required(CONF_CHANNELS)] = validate_channels
-#         audio_schema[cv.Required(CONF_SAMPLE_RATE)] = validate_sample_rate
+    return set_limits_in_config
 
-#     return validate_audio_compatiblity
+
+def final_validate_audio_schema(
+    name: str,
+    *,
+    audio_device: str,
+    bits_per_sample: int,
+    channels: int,
+    sample_rate: int,
+):
+    def validate_audio_compatiblity(audio_config):
+        audio_schema = {}
+
+        try:
+            cv.int_range(
+                min=audio_config.get(CONF_MIN_BITS_PER_SAMPLE),
+                max=audio_config.get(CONF_MAX_BITS_PER_SAMPLE),
+            )(bits_per_sample)
+        except cv.Invalid as exc:
+            raise cv.Invalid(
+                f"The {CONF_BITS_PER_SAMPLE} {str(exc)} for {name}"
+            ) from exc
+
+        cv.int_range(
+            min=audio_config.get(CONF_MIN_CHANNELS),
+            max=audio_config.get(CONF_MAX_CHANNELS),
+        )(channels)
+
+        cv.int_range(
+            min=audio_config.get(CONF_MIN_SAMPLE_RATE),
+            max=audio_config.get(CONF_MAX_SAMPLE_RATE),
+        )(sample_rate)
+        return cv.Schema(audio_schema, extra=cv.ALLOW_EXTRA)(audio_config)
+
+    return cv.Schema(
+        {
+            cv.Required(audio_device): fv.id_declaration_match_schema(
+                validate_audio_compatiblity
+            )
+        },
+        extra=cv.ALLOW_EXTRA,
+    )
 
 
 async def to_code(config):

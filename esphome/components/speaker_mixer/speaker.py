@@ -1,6 +1,6 @@
 from esphome import automation
 import esphome.codegen as cg
-from esphome.components import esp32, speaker
+from esphome.components import audio, esp32, speaker
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_BITS_PER_SAMPLE,
@@ -45,6 +45,7 @@ SOURCE_SPEAKER_SCHEMA = speaker.SPEAKER_SCHEMA.extend(
             cv.positive_time_period_milliseconds,
             cv.one_of(CONF_NEVER, lower=True),
         ),
+        cv.Optional(CONF_BITS_PER_SAMPLE, default=16): cv.int_range(16, 16),
     }
 )
 
@@ -65,57 +66,6 @@ CONFIG_SCHEMA = cv.All(
 )
 
 
-def inherit_property_from_id(property_to_inherit, parent_id):
-    """Validator that inherits a configuration property from another entity, for use with FINAL_VALIDATE_SCHEMA.
-    If a property is already set, it will not be inherited.
-    Keyword arguments:
-    property_to_inherit -- the name or path of the property to inherit, e.g. CONF_ICON or [CONF_SENSOR, 0, CONF_ICON]
-                           (the parent must exist, otherwise nothing is done).
-    parent_id -- the ID of the parent from which the property is inherited.
-    """
-
-    def _walk_config(config, path):
-        walk = [path] if not isinstance(path, list) else path
-        for item_or_index in walk:
-            config = config[item_or_index]
-        return config
-
-    def inherit_property(config):
-        # Split the property into its path and name
-        if not isinstance(property_to_inherit, list):
-            property_path, property = [], property_to_inherit
-        else:
-            property_path, property = property_to_inherit[:-1], property_to_inherit[-1]
-
-        # Check if the property to inherit is accessible
-        try:
-            config_part = _walk_config(config, property_path)
-        except KeyError:
-            return config
-
-        # Only inherit the property if it does not exist yet
-        if property not in config_part:
-            fconf = fv.full_config.get()
-
-            # Get config for the parent entity
-            # parent_id = _walk_config(config, parent_id_property)
-            parent_path = fconf.get_path_for_id(parent_id)[:-1]
-            parent_config = fconf.get_config_for_path(parent_path)
-
-            # If parent sensor has the property set, inherit it
-            if property in parent_config:
-                path = fconf.get_path_for_id(config[CONF_ID])[:-1]
-                this_config = _walk_config(
-                    fconf.get_config_for_path(path), property_path
-                )
-                value = parent_config[property]
-                this_config[property] = value
-
-        return config
-
-    return inherit_property
-
-
 def validate_source_speaker(config):
     fconf = fv.full_config.get()
 
@@ -123,15 +73,25 @@ def validate_source_speaker(config):
     path = fconf.get_path_for_id(config[CONF_ID])[:-3]
     path.append(CONF_OUTPUT_SPEAKER)
     output_speaker_id = fconf.get_config_for_path(path)
-    print(output_speaker_id)
 
-    for property in [CONF_BITS_PER_SAMPLE, CONF_NUM_CHANNELS, CONF_SAMPLE_RATE]:
-        inherit_function = inherit_property_from_id(
-            property,
-            output_speaker_id,
-        )
-        inherit_function(config)
-        print(property, config[property])
+    config[CONF_OUTPUT_SPEAKER] = output_speaker_id
+
+    inherit_property_from(CONF_NUM_CHANNELS, CONF_OUTPUT_SPEAKER)(config)
+    inherit_property_from(CONF_SAMPLE_RATE, CONF_OUTPUT_SPEAKER)(config)
+
+    audio.set_limits(
+        min_bits_per_sample=16,
+        max_bits_per_sample=16,
+    )
+
+    audio.final_validate_audio_schema(
+        "mixer",
+        audio_device=CONF_OUTPUT_SPEAKER,
+        bits_per_sample=config.get(CONF_BITS_PER_SAMPLE),
+        channels=config.get(CONF_NUM_CHANNELS),
+        sample_rate=config.get(CONF_SAMPLE_RATE),
+    )(config)
+
     return config
 
 
@@ -144,19 +104,6 @@ FINAL_VALIDATE_SCHEMA = cv.All(
     ),
     inherit_property_from(CONF_NUM_CHANNELS, CONF_OUTPUT_SPEAKER),
 )
-# FINAL_VALIDATE_SCHEMA = cv.All(
-#     # cv.Schema(
-#     #     {
-#     #         cv.Optional(CONF_BITS_PER_SAMPLE): cv.int_range(8, 32),
-#     #         cv.Optional(CONF_NUM_CHANNELS): cv.int_range(1, 2),
-#     #         cv.Optional(CONF_SAMPLE_RATE): cv.int_range(8000, 48000),
-#     #     },
-#     #     extra=cv.ALLOW_EXTRA,
-#     # ),
-#     inherit_property_from(CONF_BITS_PER_SAMPLE, CONF_OUTPUT_SPEAKER),
-#     inherit_property_from(CONF_NUM_CHANNELS, CONF_OUTPUT_SPEAKER),
-#     inherit_property_from(CONF_SAMPLE_RATE, CONF_OUTPUT_SPEAKER),
-# )
 
 
 async def to_code(config):
