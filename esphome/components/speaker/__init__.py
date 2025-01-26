@@ -1,18 +1,8 @@
 from esphome import automation
-from esphome.automation import maybe_simple_id
 import esphome.codegen as cg
 from esphome.components import audio, audio_dac
-
-# from esphome.components import audio_dac
 import esphome.config_validation as cv
-from esphome.const import (
-    # CONF_BITS_PER_SAMPLE,
-    # CONF_CHANNELS,
-    CONF_DATA,
-    CONF_ID,
-    # CONF_SAMPLE_RATE,
-    CONF_VOLUME,
-)
+from esphome.const import CONF_DATA, CONF_ID, CONF_VOLUME
 from esphome.core import CORE
 from esphome.coroutine import coroutine_with_priority
 
@@ -22,13 +12,6 @@ CODEOWNERS = ["@jesserockz", "@kahrendt"]
 IS_PLATFORM_COMPONENT = True
 
 CONF_AUDIO_DAC = "audio_dac"
-
-CONF_INTERNAL_SPEAKER_BITS_PER_SAMPLE_MIN = "internal_speaker_bits_per_sample_min"
-CONF_INTERNAL_SPEAKER_BITS_PER_SAMPLE_MAX = "internal_speaker_bits_per_sample_max"
-CONF_INTERNAL_SPEAKER_CHANNELS_MIN = "internal_speaker_channels_min"
-CONF_INTERNAL_SPEAKER_CHANNELS_MAX = "internal_speaker_channels_max"
-CONF_INTERNAL_SPEAKER_SAMPLE_RATE_MIN = "internal_speaker_bits_sample_rate_min"
-CONF_INTERNAL_SPEAKER_SAMPLE_RATE_MAX = "internal_speaker_bits_sample_rate_max"
 
 speaker_ns = cg.esphome_ns.namespace("speaker")
 
@@ -76,7 +59,9 @@ SPEAKER_SCHEMA = cv.Schema.extend(audio.AUDIO_COMPONENT_SCHEMA).extend(
     }
 )
 
-SPEAKER_AUTOMATION_SCHEMA = maybe_simple_id({cv.GenerateID(): cv.use_id(Speaker)})
+SPEAKER_AUTOMATION_SCHEMA = automation.maybe_simple_id(
+    {cv.GenerateID(): cv.use_id(Speaker)}
+)
 
 
 async def speaker_action(config, action_id, template_arg, args):

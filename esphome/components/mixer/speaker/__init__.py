@@ -69,11 +69,10 @@ CONFIG_SCHEMA = cv.All(
 def validate_source_speaker(config):
     fconf = fv.full_config.get()
 
-    # Get ID for source sensor
+    # Get ID for the output speaker and add it to the source speakrs config to easily inherit properties
     path = fconf.get_path_for_id(config[CONF_ID])[:-3]
     path.append(CONF_OUTPUT_SPEAKER)
     output_speaker_id = fconf.get_config_for_path(path)
-
     config[CONF_OUTPUT_SPEAKER] = output_speaker_id
 
     inherit_property_from(CONF_NUM_CHANNELS, CONF_OUTPUT_SPEAKER)(config)

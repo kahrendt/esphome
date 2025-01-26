@@ -18,7 +18,6 @@ from .. import (
     CONF_MONO,
     CONF_RIGHT,
     CONF_STEREO,
-    # I2S_CHANNELS,
     I2SAudioOut,
     i2s_audio_component_schema,
     i2s_audio_ns,
