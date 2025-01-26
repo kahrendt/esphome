@@ -18,9 +18,9 @@ AUTO_LOAD = ["audio"]
 CODEOWNERS = ["@kahrendt"]
 DEPENDENCIES = ["speaker"]
 
-resampling_speaker_ns = cg.esphome_ns.namespace("resampling_speaker")
-ResamplingSpeaker = resampling_speaker_ns.class_(
-    "ResamplingSpeaker", cg.Component, speaker.Speaker
+resampler_ns = cg.esphome_ns.namespace("resampler")
+ResamplerSpeaker = resampler_ns.class_(
+    "ResamplerSpeaker", cg.Component, speaker.Speaker
 )
 
 CONF_TAPS = "taps"
@@ -36,7 +36,7 @@ def _validate_taps(taps):
 CONFIG_SCHEMA = cv.All(
     speaker.SPEAKER_SCHEMA.extend(
         {
-            cv.GenerateID(): cv.declare_id(ResamplingSpeaker),
+            cv.GenerateID(): cv.declare_id(ResamplerSpeaker),
             cv.Required(CONF_OUTPUT_SPEAKER): cv.use_id(speaker.Speaker),
             cv.Optional(
                 CONF_BUFFER_DURATION, default="100ms"

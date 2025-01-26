@@ -12,9 +12,9 @@
 #include <freertos/FreeRTOS.h>
 
 namespace esphome {
-namespace resampling_speaker {
+namespace resampler {
 
-class ResamplingSpeaker : public Component, public speaker::Speaker {
+class ResamplerSpeaker : public Component, public speaker::Speaker {
  public:
   float get_setup_priority() const override { return esphome::setup_priority::DATA; }
   void setup() override;
@@ -101,7 +101,7 @@ class ResamplingSpeaker : public Component, public speaker::Speaker {
   int32_t playback_differential_ms_{0};
 };
 
-}  // namespace resampling_speaker
+}  // namespace resampler
 }  // namespace esphome
 
 #endif

@@ -1,4 +1,4 @@
-#include "resampling_speaker.h"
+#include "resampler_speaker.h"
 
 #ifdef USE_ESP32
 
@@ -11,7 +11,7 @@
 #include <cstring>
 
 namespace esphome {
-namespace resampling_speaker {
+namespace resampler {
 
 static const UBaseType_t RESAMPLER_TASK_PRIORITY = 1;
 
@@ -20,7 +20,7 @@ static const uint32_t TRANSFER_BUFFER_DURATION_MS = 50;
 static const uint32_t TASK_DELAY_MS = 20;
 static const uint32_t TASK_STACK_SIZE = 3072;
 
-static const char *const TAG = "resampling_speaker";
+static const char *const TAG = "resampler_speaker";
 
 enum ResamplingEventGroupBits : uint32_t {
   COMMAND_STOP = (1 << 0),  // stops the resampler task
@@ -34,7 +34,7 @@ enum ResamplingEventGroupBits : uint32_t {
   ALL_BITS = 0x00FFFFFF,  // All valid FreeRTOS event group bits
 };
 
-void ResamplingSpeaker::setup() {
+void ResamplerSpeaker::setup() {
   this->event_group_ = xEventGroupCreate();
 
   if (this->event_group_ == nullptr) {
@@ -52,7 +52,7 @@ void ResamplingSpeaker::setup() {
       });
 }
 
-void ResamplingSpeaker::loop() {
+void ResamplerSpeaker::loop() {
   uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
 
   if (event_group_bits & ResamplingEventGroupBits::STATE_STARTING) {
@@ -129,7 +129,7 @@ void ResamplingSpeaker::loop() {
   }
 }
 
-size_t ResamplingSpeaker::play(const uint8_t *data, size_t length, TickType_t ticks_to_wait) {
+size_t ResamplerSpeaker::play(const uint8_t *data, size_t length, TickType_t ticks_to_wait) {
   if (this->is_stopped()) {
     this->start();
   }
@@ -147,9 +147,9 @@ size_t ResamplingSpeaker::play(const uint8_t *data, size_t length, TickType_t ti
   return bytes_written;
 }
 
-void ResamplingSpeaker::start() { this->state_ = speaker::STATE_STARTING; }
+void ResamplerSpeaker::start() { this->state_ = speaker::STATE_STARTING; }
 
-esp_err_t ResamplingSpeaker::start_() {
+esp_err_t ResamplerSpeaker::start_() {
   this->target_stream_info_ = audio::AudioStreamInfo(
       this->target_bits_per_sample_, this->audio_stream_info_.get_channels(), this->target_sample_rate_);
 
@@ -164,7 +164,7 @@ esp_err_t ResamplingSpeaker::start_() {
   return ESP_OK;
 }
 
-esp_err_t ResamplingSpeaker::start_task_() {
+esp_err_t ResamplerSpeaker::start_task_() {
   if (this->task_stack_buffer_ == nullptr) {
     if (this->task_stack_in_psram_) {
       RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
@@ -191,16 +191,16 @@ esp_err_t ResamplingSpeaker::start_task_() {
   return ESP_OK;
 }
 
-void ResamplingSpeaker::stop() { this->state_ = speaker::STATE_STOPPING; }
+void ResamplerSpeaker::stop() { this->state_ = speaker::STATE_STOPPING; }
 
-void ResamplingSpeaker::stop_() {
+void ResamplerSpeaker::stop_() {
   if (this->task_handle_ != nullptr) {
     xEventGroupSetBits(this->event_group_, ResamplingEventGroupBits::COMMAND_STOP);
   }
   this->output_speaker_->stop();
 }
 
-esp_err_t ResamplingSpeaker::delete_task_() {
+esp_err_t ResamplerSpeaker::delete_task_() {
   if (!this->task_created_) {
     this->task_handle_ = nullptr;
 
@@ -222,9 +222,9 @@ esp_err_t ResamplingSpeaker::delete_task_() {
   return ESP_ERR_INVALID_STATE;
 }
 
-void ResamplingSpeaker::finish() { this->output_speaker_->finish(); }
+void ResamplerSpeaker::finish() { this->output_speaker_->finish(); }
 
-bool ResamplingSpeaker::has_buffered_data() const {
+bool ResamplerSpeaker::has_buffered_data() const {
   bool has_ring_buffer_data = false;
   if (this->requires_resampling_() && (this->ring_buffer_.use_count() > 0)) {
     has_ring_buffer_data = (this->ring_buffer_.lock()->available() > 0);
@@ -232,23 +232,23 @@ bool ResamplingSpeaker::has_buffered_data() const {
   return (has_ring_buffer_data || this->output_speaker_->has_buffered_data());
 }
 
-void ResamplingSpeaker::set_mute_state(bool mute_state) {
+void ResamplerSpeaker::set_mute_state(bool mute_state) {
   this->mute_state_ = mute_state;
   this->output_speaker_->set_mute_state(mute_state);
 }
 
-void ResamplingSpeaker::set_volume(float volume) {
+void ResamplerSpeaker::set_volume(float volume) {
   this->volume_ = volume;
   this->output_speaker_->set_volume(volume);
 }
 
-bool ResamplingSpeaker::requires_resampling_() const {
+bool ResamplerSpeaker::requires_resampling_() const {
   return (this->audio_stream_info_.get_sample_rate() != this->target_sample_rate_) ||
          (this->audio_stream_info_.get_bits_per_sample() != this->target_bits_per_sample_);
 }
 
-void ResamplingSpeaker::resample_task(void *params) {
-  ResamplingSpeaker *this_resampler = (ResamplingSpeaker *) params;
+void ResamplerSpeaker::resample_task(void *params) {
+  ResamplerSpeaker *this_resampler = (ResamplerSpeaker *) params;
 
   this_resampler->task_created_ = true;
   xEventGroupSetBits(this_resampler->event_group_, ResamplingEventGroupBits::STATE_STARTING);
@@ -312,7 +312,7 @@ void ResamplingSpeaker::resample_task(void *params) {
   vTaskDelete(nullptr);
 }
 
-}  // namespace resampling_speaker
+}  // namespace resampler
 }  // namespace esphome
 
 #endif
