@@ -3,19 +3,23 @@ import esphome.codegen as cg
 from esphome.components import audio, esp32, speaker
 import esphome.config_validation as cv
 from esphome.const import (
+    CONF_BITS_PER_SAMPLE,
     CONF_BUFFER_DURATION,
     CONF_CHANNEL,
     CONF_ID,
     CONF_MODE,
     CONF_NEVER,
     CONF_NUM_CHANNELS,
+    CONF_SAMPLE_RATE,
     CONF_TIMEOUT,
 )
 
 from .. import (
     CONF_I2S_DOUT_PIN,
+    CONF_I2S_MODE,
     CONF_LEFT,
     CONF_MONO,
+    CONF_PRIMARY,
     CONF_RIGHT,
     CONF_STEREO,
     I2SAudioOut,
@@ -123,7 +127,26 @@ def set_num_channels_from_config(config):
     else:
         config[CONF_NUM_CHANNELS] = 2
 
-    audio.set_limits(8, 32, 1, 2, 16000, 48000)(config)
+    if config[CONF_I2S_MODE] == CONF_PRIMARY:
+        # Primary mode has modifiable stream settings
+        audio.set_limits(
+            min_bits_per_sample=8,
+            max_bits_per_sample=32,
+            min_channels=1,
+            max_channels=2,
+            min_sample_rate=16000,
+            max_sample_rate=48000,
+        )(config)
+    else:
+        # Secondary mode has unmodifiable max bits per sample and min/max sample rates
+        audio.set_limits(
+            min_bits_per_sample=8,
+            max_bits_per_sample=config[CONF_BITS_PER_SAMPLE],
+            min_channels=1,
+            max_channels=2,
+            min_sample_rate=config[CONF_SAMPLE_RATE],
+            max_sample_rate=config[CONF_SAMPLE_RATE],
+        )
 
     return config
 
