@@ -124,7 +124,7 @@ def set_num_channels_from_config(config):
     else:
         config[CONF_NUM_CHANNELS] = 2
 
-    audio.set_limits(32, 32, 1, 2, 16000, 48000)(config)
+    audio.set_limits(8, 32, 1, 2, 16000, 48000)(config)
 
     return config
 
