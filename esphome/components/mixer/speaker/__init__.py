@@ -22,15 +22,15 @@ AUTO_LOAD = ["audio"]
 CODEOWNERS = ["@kahrendt"]
 DEPENDENCIES = ["speaker"]
 
-speaker_mixer_ns = cg.esphome_ns.namespace("speaker_mixer")
-SpeakerMixer = speaker_mixer_ns.class_("SpeakerMixer", cg.Component, speaker.Speaker)
-SourceSpeaker = speaker_mixer_ns.class_("SourceSpeaker", cg.Component, speaker.Speaker)
+mixer_speaker_ns = cg.esphome_ns.namespace("mixer_speaker")
+MixerSpeaker = mixer_speaker_ns.class_("MixerSpeaker", cg.Component, speaker.Speaker)
+SourceSpeaker = mixer_speaker_ns.class_("SourceSpeaker", cg.Component, speaker.Speaker)
 
 CONF_DECIBEL_REDUCTION = "decibel_reduction"
 CONF_QUEUE_MODE = "queue_mode"
 CONF_SOURCE_SPEAKERS = "source_speakers"
 
-DuckingApplyAction = speaker_mixer_ns.class_(
+DuckingApplyAction = mixer_speaker_ns.class_(
     "DuckingApplyAction", automation.Action, cg.Parented.template(SourceSpeaker)
 )
 
@@ -52,7 +52,7 @@ SOURCE_SPEAKER_SCHEMA = speaker.SPEAKER_SCHEMA.extend(
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
-            cv.GenerateID(): cv.declare_id(SpeakerMixer),
+            cv.GenerateID(): cv.declare_id(MixerSpeaker),
             cv.Required(CONF_OUTPUT_SPEAKER): cv.use_id(speaker.Speaker),
             cv.Required(CONF_SOURCE_SPEAKERS): cv.All(
                 cv.ensure_list(SOURCE_SPEAKER_SCHEMA), cv.Length(min=2, max=8)
@@ -138,7 +138,7 @@ async def to_code(config):
 
 
 @automation.register_action(
-    "speaker_mixer.apply_ducking",
+    "mixer_speaker.apply_ducking",
     DuckingApplyAction,
     cv.Schema(
         {

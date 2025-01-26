@@ -12,7 +12,7 @@
 #include <freertos/FreeRTOS.h>
 
 namespace esphome {
-namespace speaker_mixer {
+namespace mixer_speaker {
 
 /* Classes for mixing several source speaker audio streams and writing it to another speaker component.
  *  - Volume controls are passed through to the output speaker
@@ -25,16 +25,16 @@ namespace speaker_mixer {
  *  - SourceSpeaker has an internal ring buffer. It also allocates a shared_ptr for an AudioTranserBuffer object.
  *  - Audio Data Flow:
  *      - Audio data played on a SourceSpeaker first writes to its internal ring buffer.
- *      - SpeakerMixer task temporarily takes shared ownership of each SourceSpeaker's AudioTransferBuffer.
- *      - SpeakerMixer calls SourceSpeaker's `process_data_from_source`, which tranfers audio from the SourceSpeaker's
+ *      - MixerSpeaker task temporarily takes shared ownership of each SourceSpeaker's AudioTransferBuffer.
+ *      - MixerSpeaker calls SourceSpeaker's `process_data_from_source`, which tranfers audio from the SourceSpeaker's
  *        ring buffer to its AudioTransferBuffer. Audio ducking is applied at this step.
- *      - In queue mode, SpeakerMixer prioritizes the earliest configured SourceSpeaker with audio data. Audio data is
+ *      - In queue mode, MixerSpeaker prioritizes the earliest configured SourceSpeaker with audio data. Audio data is
  *        sent to the output speaker.
- *      - In non-queue mode, SpeakerMixer adds all the audio data in each SourceSpeaker into one stream that is written
+ *      - In non-queue mode, MixerSpeaker adds all the audio data in each SourceSpeaker into one stream that is written
  *        to the output speaker.
  */
 
-class SpeakerMixer;
+class MixerSpeaker;
 
 class SourceSpeaker : public speaker::Speaker, public Component {
  public:
@@ -71,13 +71,13 @@ class SourceSpeaker : public speaker::Speaker, public Component {
   void apply_ducking(uint8_t decibel_reduction, uint32_t duration);
 
   void set_buffer_duration(uint32_t buffer_duration_ms) { this->buffer_duration_ms_ = buffer_duration_ms; }
-  void set_parent(SpeakerMixer *parent) { this->parent_ = parent; }
+  void set_parent(MixerSpeaker *parent) { this->parent_ = parent; }
   void set_timeout(uint32_t ms) { this->timeout_ms_ = ms; }
 
   std::weak_ptr<audio::AudioSourceTransferBuffer> get_transfer_buffer() { return this->transfer_buffer_; }
 
  protected:
-  friend class SpeakerMixer;
+  friend class MixerSpeaker;
   esp_err_t start_();
   void stop_();
 
@@ -94,7 +94,7 @@ class SourceSpeaker : public speaker::Speaker, public Component {
                            uint32_t *ducking_transition_samples_remaining, uint32_t samples_per_ducking_step,
                            int8_t db_change_per_ducking_step);
 
-  SpeakerMixer *parent_;
+  MixerSpeaker *parent_;
 
   std::shared_ptr<audio::AudioSourceTransferBuffer> transfer_buffer_;
   std::weak_ptr<RingBuffer> ring_buffer_;
@@ -117,7 +117,7 @@ class SourceSpeaker : public speaker::Speaker, public Component {
   uint32_t pending_playback_ms_{0};
 };
 
-class SpeakerMixer : public Component {
+class MixerSpeaker : public Component {
  public:
   void dump_config() override;
   void setup() override;
@@ -201,7 +201,7 @@ class SpeakerMixer : public Component {
   optional<audio::AudioStreamInfo> audio_stream_info_;
 };
 
-}  // namespace speaker_mixer
+}  // namespace mixer_speaker
 }  // namespace esphome
 
 #endif

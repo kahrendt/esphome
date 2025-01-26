@@ -1,4 +1,4 @@
-#include "speaker_mixer.h"
+#include "mixer_speaker.h"
 
 #ifdef USE_ESP32
 
@@ -9,14 +9,14 @@
 #include <cstring>
 
 namespace esphome {
-namespace speaker_mixer {
+namespace mixer_speaker {
 
 static const UBaseType_t MIXER_TASK_PRIORITY = 10;
 
 static const uint32_t TRANSFER_BUFFER_DURATION_MS = 50;
 static const uint32_t TASK_DELAY_MS = 25;
 
-static const size_t TASK_STACK_SIZE = 3072;
+static const size_t TASK_STACK_SIZE = 4096;
 
 static const int16_t MAX_AUDIO_SAMPLE_VALUE = INT16_MAX;
 static const int16_t MIN_AUDIO_SAMPLE_VALUE = INT16_MIN;
@@ -283,12 +283,12 @@ void SourceSpeaker::duck_samples(int16_t *input_buffer, uint32_t input_samples_t
   }
 }
 
-void SpeakerMixer::dump_config() {
+void MixerSpeaker::dump_config() {
   ESP_LOGCONFIG(TAG, "Speaker Mixer:");
   ESP_LOGCONFIG(TAG, "  Number of output channels: %u", this->output_channels_);
 }
 
-void SpeakerMixer::setup() {
+void MixerSpeaker::setup() {
   this->event_group_ = xEventGroupCreate();
 
   if (this->event_group_ == nullptr) {
@@ -298,7 +298,7 @@ void SpeakerMixer::setup() {
   }
 }
 
-void SpeakerMixer::loop() {
+void MixerSpeaker::loop() {
   uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
 
   if (event_group_bits & MixerEventGroupBits::STATE_STARTING) {
@@ -337,7 +337,7 @@ void SpeakerMixer::loop() {
   }
 }
 
-esp_err_t SpeakerMixer::start(audio::AudioStreamInfo &stream_info) {
+esp_err_t MixerSpeaker::start(audio::AudioStreamInfo &stream_info) {
   if (!this->audio_stream_info_.has_value()) {
     if (stream_info.get_bits_per_sample() != 16) {
       // Audio streams that don't have 16 bits per sample are not supported
@@ -357,7 +357,7 @@ esp_err_t SpeakerMixer::start(audio::AudioStreamInfo &stream_info) {
   return this->start_task_();
 }
 
-esp_err_t SpeakerMixer::start_task_() {
+esp_err_t MixerSpeaker::start_task_() {
   if (this->task_stack_buffer_ == nullptr) {
     if (this->task_stack_in_psram_) {
       RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
@@ -384,7 +384,7 @@ esp_err_t SpeakerMixer::start_task_() {
   return ESP_OK;
 }
 
-esp_err_t SpeakerMixer::delete_task_() {
+esp_err_t MixerSpeaker::delete_task_() {
   if (!this->task_created_) {
     this->task_handle_ = nullptr;
 
@@ -406,9 +406,9 @@ esp_err_t SpeakerMixer::delete_task_() {
   return ESP_ERR_INVALID_STATE;
 }
 
-void SpeakerMixer::stop() { xEventGroupSetBits(this->event_group_, MixerEventGroupBits::COMMAND_STOP); }
+void MixerSpeaker::stop() { xEventGroupSetBits(this->event_group_, MixerEventGroupBits::COMMAND_STOP); }
 
-void SpeakerMixer::copy_frames(int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
+void MixerSpeaker::copy_frames(int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
                                audio::AudioStreamInfo output_stream_info, uint32_t frames_to_transfer) {
   uint8_t input_channels = input_stream_info.get_channels();
   uint8_t output_channels = output_stream_info.get_channels();
@@ -430,7 +430,7 @@ void SpeakerMixer::copy_frames(int16_t *input_buffer, audio::AudioStreamInfo inp
   }
 }
 
-void SpeakerMixer::mix_audio_samples(const int16_t *primary_buffer, audio::AudioStreamInfo primary_stream_info,
+void MixerSpeaker::mix_audio_samples(const int16_t *primary_buffer, audio::AudioStreamInfo primary_stream_info,
                                      const int16_t *secondary_buffer, audio::AudioStreamInfo secondary_stream_info,
                                      int16_t *output_buffer, audio::AudioStreamInfo output_stream_info,
                                      uint32_t frames_to_mix) {
@@ -458,8 +458,8 @@ void SpeakerMixer::mix_audio_samples(const int16_t *primary_buffer, audio::Audio
   }
 }
 
-void SpeakerMixer::audio_mixer_task(void *params) {
-  SpeakerMixer *this_mixer = (SpeakerMixer *) params;
+void MixerSpeaker::audio_mixer_task(void *params) {
+  MixerSpeaker *this_mixer = (MixerSpeaker *) params;
 
   xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STARTING);
 
@@ -497,8 +497,8 @@ void SpeakerMixer::audio_mixer_task(void *params) {
     std::vector<std::shared_ptr<audio::AudioSourceTransferBuffer>> transfer_buffers_with_data;
 
     for (auto &speaker : this_mixer->source_speakers_) {
-      std::shared_ptr<audio::AudioSourceTransferBuffer> transfer_buffer = speaker->get_transfer_buffer().lock();
-      if (transfer_buffer.use_count() > 1) {
+      if (speaker->get_transfer_buffer().use_count() > 0) {
+        std::shared_ptr<audio::AudioSourceTransferBuffer> transfer_buffer = speaker->get_transfer_buffer().lock();
         speaker->process_data_from_source(0);  // Transfers and ducks audio from source ring buffers
 
         if ((transfer_buffer->available() > 0) && !speaker->get_pause_state()) {
@@ -579,10 +579,6 @@ void SpeakerMixer::audio_mixer_task(void *params) {
                           reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
                           this_mixer->audio_stream_info_.value(), frames_to_mix);
 
-        transfer_buffers_with_data[i]->decrease_buffer_length(
-            speakers_with_data[i]->get_audio_stream_info().frames_to_bytes(frames_to_mix));
-        speakers_with_data[i]->accumulated_frames_read_ += frames_to_mix;
-
         speakers_with_data[i]->pending_playback_ms_ +=
             speakers_with_data[i]->get_audio_stream_info().frames_to_milliseconds_with_remainder(
                 &speakers_with_data[i]->accumulated_frames_read_);
@@ -620,7 +616,7 @@ void SpeakerMixer::audio_mixer_task(void *params) {
   vTaskDelete(nullptr);
 }
 
-}  // namespace speaker_mixer
+}  // namespace mixer_speaker
 }  // namespace esphome
 
 #endif
