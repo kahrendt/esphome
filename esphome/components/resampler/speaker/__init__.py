@@ -62,16 +62,12 @@ def validate_audio_compatability(config):
     inherit_property_from(CONF_NUM_CHANNELS, CONF_OUTPUT_SPEAKER)(config)
     inherit_property_from(CONF_SAMPLE_RATE, CONF_OUTPUT_SPEAKER)(config)
 
-    configured_bits_per_sample = config.get(CONF_BITS_PER_SAMPLE)
-    configured_num_channels = config.get(CONF_NUM_CHANNELS)
-    configured_sample_rate = config.get(CONF_SAMPLE_RATE)
-
     audio.final_validate_audio_schema(
         "source_speaker",
         audio_device=CONF_OUTPUT_SPEAKER,
-        bits_per_sample=configured_bits_per_sample,
-        channels=configured_num_channels,
-        sample_rate=configured_sample_rate,
+        bits_per_sample=config.get(CONF_BITS_PER_SAMPLE),
+        channels=config.get(CONF_NUM_CHANNELS),
+        sample_rate=config.get(CONF_SAMPLE_RATE),
     )(config)
 
 
