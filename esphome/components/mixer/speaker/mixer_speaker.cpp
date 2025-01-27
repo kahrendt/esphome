@@ -2,6 +2,7 @@
 
 #ifdef USE_ESP32
 
+#include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
 
@@ -256,7 +257,7 @@ void SourceSpeaker::duck_samples(int16_t *input_buffer, uint32_t input_samples_t
 
       // Ensure we only point to valid index in the Q15 scaling factor table
       uint8_t safe_db_reduction_index =
-          std::clamp<uint8_t>(*current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
+          clamp<uint8_t>(*current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
       int16_t q15_scale_factor = DECIBEL_REDUCTION_TABLE[safe_db_reduction_index];
 
       audio::scale_audio_samples(input_buffer, input_buffer, q15_scale_factor, samples_to_duck);
@@ -276,7 +277,7 @@ void SourceSpeaker::duck_samples(int16_t *input_buffer, uint32_t input_samples_t
     // Audio is ducked, but its not in the middle of a transition step
 
     uint8_t safe_db_reduction_index =
-        std::clamp<uint8_t>(*current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
+        clamp<uint8_t>(*current_ducking_db_reduction, 0, DECIBEL_REDUCTION_TABLE.size() - 1);
     int16_t q15_scale_factor = DECIBEL_REDUCTION_TABLE[safe_db_reduction_index];
 
     audio::scale_audio_samples(input_buffer, input_buffer, q15_scale_factor, input_samples_to_duck);
@@ -510,7 +511,7 @@ void MixerSpeaker::audio_mixer_task(void *params) {
       }
     }
 
-    if (transfer_buffers_with_data.size() == 0) {
+    if (transfer_buffers_with_data.empty()) {
       // No audio available for transferring, block task temporarily
       delay(TASK_DELAY_MS);
       continue;
