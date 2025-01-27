@@ -1,0 +1,37 @@
+esphome:
+  on_boot:
+    then:
+      - speaker.mute_on: speaker_id
+      - speaker.mute_off: speaker_id
+      - if:
+          condition:
+            - speaker.is_stopped: speaker_id
+          then:
+            - speaker.play:
+                id: speaker_id
+                data: [0, 1, 2, 3]
+      - speaker.volume_set:
+          id: speaker_id
+          volume: 0.9
+      - if:
+          condition:
+            - speaker.is_playing: speaker_id
+          then:
+            - speaker.finish: speaker_id
+      - speaker.stop: speaker_id
+
+i2s_audio:
+  i2s_lrclk_pin: 16
+  i2s_bclk_pin: 17
+  i2s_mclk_pin: 15
+
+speaker:
+  - platform: i2s_audio
+    id: speaker_id
+    dac_type: external
+    i2s_dout_pin: 13
+  - platform: mixer
+    output_speaker: speaker_id
+    source_speakers:
+      - id: source_speaker_1_id
+      - id: source_speaker_2_id
