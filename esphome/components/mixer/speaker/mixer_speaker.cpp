@@ -408,8 +408,9 @@ esp_err_t MixerSpeaker::delete_task_() {
 
 void MixerSpeaker::stop() { xEventGroupSetBits(this->event_group_, MixerEventGroupBits::COMMAND_STOP); }
 
-void MixerSpeaker::copy_frames(int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
-                               audio::AudioStreamInfo output_stream_info, uint32_t frames_to_transfer) {
+void MixerSpeaker::copy_frames(const int16_t *input_buffer, audio::AudioStreamInfo input_stream_info,
+                               int16_t *output_buffer, audio::AudioStreamInfo output_stream_info,
+                               uint32_t frames_to_transfer) {
   uint8_t input_channels = input_stream_info.get_channels();
   uint8_t output_channels = output_stream_info.get_channels();
   const uint8_t max_input_channel_index = input_channels - 1;

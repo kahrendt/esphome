@@ -152,7 +152,7 @@ class MixerSpeaker : public Component {
   /// @param output_buffer
   /// @param output_stream_info
   /// @param frames_to_transfer number of frames (consisting of a sample for each channel) to copy from the input buffer
-  static void copy_frames(int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
+  static void copy_frames(const int16_t *input_buffer, audio::AudioStreamInfo input_stream_info, int16_t *output_buffer,
                           audio::AudioStreamInfo output_stream_info, uint32_t frames_to_transfer);
 
   /// @brief Mixes the primary and secondary streams taking into account the number of channels in each stream. Primary
