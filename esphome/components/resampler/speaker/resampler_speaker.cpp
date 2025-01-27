@@ -253,9 +253,9 @@ void ResamplerSpeaker::resample_task(void *params) {
   this_resampler->task_created_ = true;
   xEventGroupSetBits(this_resampler->event_group_, ResamplingEventGroupBits::STATE_STARTING);
 
-  std::unique_ptr<audio::AudioResampler> resampler = std::make_unique<audio::AudioResampler>(
-      this_resampler->audio_stream_info_.ms_to_bytes(TRANSFER_BUFFER_DURATION_MS),
-      this_resampler->target_stream_info_.ms_to_bytes(TRANSFER_BUFFER_DURATION_MS));
+  std::unique_ptr<audio::AudioResampler> resampler =
+      make_unique<audio::AudioResampler>(this_resampler->audio_stream_info_.ms_to_bytes(TRANSFER_BUFFER_DURATION_MS),
+                                         this_resampler->target_stream_info_.ms_to_bytes(TRANSFER_BUFFER_DURATION_MS));
 
   esp_err_t err = resampler->start(this_resampler->audio_stream_info_, this_resampler->target_stream_info_,
                                    this_resampler->taps_, this_resampler->filters_);
