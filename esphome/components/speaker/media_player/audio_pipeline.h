@@ -57,7 +57,7 @@ struct InfoErrorEvent {
 class AudioPipeline {
  public:
   AudioPipeline(speaker::Speaker *speaker, size_t buffer_size, bool task_stack_in_psram)
-      : speaker_(speaker), buffer_size_(buffer_size), task_stack_in_psram_(task_stack_in_psram) {
+      : task_stack_in_psram_(task_stack_in_psram), speaker_(speaker), buffer_size_(buffer_size) {
     this->allocate_buffers_();
     this->transfer_buffer_size_ = std::min(buffer_size_ / 4, DEFAULT_TRANSFER_BUFFER_SIZE);
   };

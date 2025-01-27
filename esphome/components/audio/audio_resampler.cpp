@@ -15,7 +15,7 @@ AudioResampler::AudioResampler(size_t input_buffer_size, size_t output_buffer_si
   this->output_transfer_buffer_ = AudioSinkTransferBuffer::create(output_buffer_size);
 }
 
-esp_err_t AudioResampler::add_source(std::weak_ptr<RingBuffer> input_ring_buffer) {
+esp_err_t AudioResampler::add_source(std::weak_ptr<RingBuffer> &input_ring_buffer) {
   if (this->input_transfer_buffer_ != nullptr) {
     this->input_transfer_buffer_->set_source(input_ring_buffer);
     return ESP_OK;
@@ -23,7 +23,7 @@ esp_err_t AudioResampler::add_source(std::weak_ptr<RingBuffer> input_ring_buffer
   return ESP_ERR_NO_MEM;
 }
 
-esp_err_t AudioResampler::add_sink(std::weak_ptr<RingBuffer> output_ring_buffer) {
+esp_err_t AudioResampler::add_sink(std::weak_ptr<RingBuffer> &output_ring_buffer) {
   if (this->output_transfer_buffer_ != nullptr) {
     this->output_transfer_buffer_->set_sink(output_ring_buffer);
     return ESP_OK;
@@ -115,7 +115,6 @@ AudioResamplerState AudioResampler::resample(bool stop_gracefully, int32_t *ms_d
 
   if ((this->input_stream_info_.get_sample_rate() != this->output_stream_info_.get_sample_rate()) ||
       (this->input_stream_info_.get_bits_per_sample() != this->output_stream_info_.get_bits_per_sample())) {
-    uint32_t start_time = millis();
     esp_audio_libs::resampler::ResamplerResults results =
         this->resampler_->resample(this->input_transfer_buffer_->get_buffer_start(),
                                    this->output_transfer_buffer_->get_buffer_end(), frames_available, frames_free, -3);
