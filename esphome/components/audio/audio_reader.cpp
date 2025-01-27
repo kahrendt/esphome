@@ -111,9 +111,9 @@ esp_err_t AudioReader::start(const std::string &uri, AudioFileType &file_type) {
     return ESP_FAIL;
   }
 
-  esp_err_t err = ESP_OK;
+  esp_err_t err = esp_http_client_open(this->client_, 0);
 
-  if ((err = esp_http_client_open(this->client_, 0)) != ESP_OK) {
+  if (err != ESP_OK) {
     this->cleanup_connection_();
     return err;
   }
