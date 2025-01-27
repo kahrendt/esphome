@@ -210,16 +210,20 @@ AudioReaderState AudioReader::read() {
 }
 
 AudioFileType AudioReader::get_audio_type(const char *content_type) {
+#ifdef USE_AUDIO_MP3_SUPPORT
   if (strcasecmp(content_type, "mp3") == 0 || strcasecmp(content_type, "audio/mp3") == 0 ||
       strcasecmp(content_type, "audio/mpeg") == 0) {
     return AudioFileType::MP3;
   }
+#endif
   if (strcasecmp(content_type, "audio/wav") == 0) {
     return AudioFileType::WAV;
   }
+#ifdef USE_AUDIO_FLAC_SUPPORT
   if (strcasecmp(content_type, "audio/flac") == 0 || strcasecmp(content_type, "audio/x-flac") == 0) {
     return AudioFileType::FLAC;
   }
+#endif
   return AudioFileType::NONE;
 }
 
