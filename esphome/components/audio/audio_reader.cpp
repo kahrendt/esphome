@@ -228,7 +228,7 @@ AudioFileType AudioReader::get_audio_type(const char *content_type) {
 }
 
 esp_err_t AudioReader::http_event_handler(esp_http_client_event_t *evt) {
-  /// Based on https://github.com/maroc81/WeatherLily/tree/main/main/net accessed 20241224
+  // Based on https://github.com/maroc81/WeatherLily/tree/main/main/net accessed 20241224
   AudioReader *this_reader = (AudioReader *) evt->user_data;
 
   switch (evt->event_id) {
