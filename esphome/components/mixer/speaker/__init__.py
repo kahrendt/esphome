@@ -78,7 +78,7 @@ def validate_source_speaker(config):
     inherit_property_from(CONF_NUM_CHANNELS, CONF_OUTPUT_SPEAKER)(config)
     inherit_property_from(CONF_SAMPLE_RATE, CONF_OUTPUT_SPEAKER)(config)
 
-    audio.set_limits(
+    audio.set_stream_limits(
         min_bits_per_sample=16,
         max_bits_per_sample=16,
     )

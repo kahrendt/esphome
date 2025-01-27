@@ -129,7 +129,7 @@ def set_num_channels_from_config(config):
 
     if config[CONF_I2S_MODE] == CONF_PRIMARY:
         # Primary mode has modifiable stream settings
-        audio.set_limits(
+        audio.set_stream_limits(
             min_bits_per_sample=8,
             max_bits_per_sample=32,
             min_channels=1,
@@ -139,13 +139,13 @@ def set_num_channels_from_config(config):
         )(config)
     else:
         # Secondary mode has unmodifiable max bits per sample and min/max sample rates
-        audio.set_limits(
+        audio.set_stream_limits(
             min_bits_per_sample=8,
-            max_bits_per_sample=config[CONF_BITS_PER_SAMPLE],
+            max_bits_per_sample=config.get(CONF_BITS_PER_SAMPLE),
             min_channels=1,
             max_channels=2,
-            min_sample_rate=config[CONF_SAMPLE_RATE],
-            max_sample_rate=config[CONF_SAMPLE_RATE],
+            min_sample_rate=config.get(CONF_SAMPLE_RATE),
+            max_sample_rate=config.get(CONF_SAMPLE_RATE),
         )
 
     return config

@@ -51,7 +51,7 @@ CONFIG_SCHEMA = cv.All(
 
 
 def validate_audio_compatability(config):
-    audio.set_limits(
+    audio.set_stream_limits(
         min_bits_per_sample=8,
         max_bits_per_sample=32,
         # min_channels=None,  # really this should inherit from the parent speaker

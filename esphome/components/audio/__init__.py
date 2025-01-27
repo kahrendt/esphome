@@ -40,7 +40,7 @@ AUDIO_COMPONENT_SCHEMA = cv.Schema(
 _UNDEF = object()
 
 
-def set_limits(
+def set_stream_limits(
     min_bits_per_sample: int = _UNDEF,
     max_bits_per_sample: int = _UNDEF,
     min_channels: int = _UNDEF,
