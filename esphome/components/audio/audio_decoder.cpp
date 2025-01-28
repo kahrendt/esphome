@@ -323,6 +323,7 @@ FileDecoderState AudioDecoder::decode_wav_() {
 
       this->wav_bytes_left_ = this->wav_decoder_->chunk_bytes_left();
       this->wav_has_known_end_ = (this->wav_bytes_left_ > 0);
+      return FileDecoderState::MORE_TO_PROCESS;
     } else if (result == esp_audio_libs::wav_decoder::WAV_DECODER_WARNING_INCOMPLETE_DATA) {
       // Available data didn't have the full header
       return FileDecoderState::POTENTIALLY_FAILED;
