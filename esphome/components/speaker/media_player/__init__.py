@@ -6,8 +6,7 @@ from pathlib import Path
 
 from esphome import automation, external_files
 import esphome.codegen as cg
-from esphome.components import esp32, media_player, speaker
-from esphome.components.audio import AUDIO_FILE_TYPE_ENUM, AudioFile
+from esphome.components import audio, esp32, media_player, speaker
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_BUFFER_SIZE,
@@ -25,6 +24,7 @@ from esphome.const import (
     CONF_URL,
 )
 from esphome.core import CORE, HexInt
+from esphome.core.entity_helpers import inherit_property_from
 from esphome.external_files import download_content
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,18 +39,17 @@ TYPE_LOCAL = "local"
 TYPE_WEB = "web"
 
 CONF_ANNOUNCEMENT = "announcement"
+CONF_ANNOUNCEMENT_PIPELINE = "announcement_pipeline"
+CONF_CODEC_SUPPORT_ENABLED = "codec_support_enabled"
 CONF_MEDIA_FILE = "media_file"
+CONF_MEDIA_PIPELINE = "media_pipeline"
+CONF_ON_MUTE = "on_mute"
+CONF_ON_UNMUTE = "on_unmute"
+CONF_ON_VOLUME = "on_volume"
 CONF_STREAM = "stream"
 CONF_VOLUME_INCREMENT = "volume_increment"
 CONF_VOLUME_MIN = "volume_min"
 CONF_VOLUME_MAX = "volume_max"
-
-CONF_ANNOUNCEMENT_PIPELINE = "announcement_pipeline"
-CONF_MEDIA_PIPELINE = "media_pipeline"
-
-CONF_ON_MUTE = "on_mute"
-CONF_ON_UNMUTE = "on_unmute"
-CONF_ON_VOLUME = "on_volume"
 
 
 speaker_ns = cg.esphome_ns.namespace("speaker")
@@ -60,11 +59,11 @@ SpeakerMediaPlayer = speaker_ns.class_(
     cg.Component,
 )
 
-
-PipelineType = speaker_ns.enum("AudioPipelineType", is_class=True)
-PIPELINE_TYPE_ENUM = {
-    "MEDIA": PipelineType.MEDIA,
-    "ANNOUNCEMENT": PipelineType.ANNOUNCEMENT,
+AudioPipeline = speaker_ns.class_("AudioPipeline")
+AudioPipelineType = speaker_ns.enum("AudioPipelineType", is_class=True)
+AUDIO_PIPELINE_TYPE_ENUM = {
+    "MEDIA": AudioPipelineType.MEDIA,
+    "ANNOUNCEMENT": AudioPipelineType.ANNOUNCEMENT,
 }
 
 PlayLocalMediaAction = speaker_ns.class_(
@@ -182,13 +181,13 @@ def _read_audio_file_and_type(file_config):
     if file_type.startswith("."):
         file_type = file_type[1:]
 
-    media_file_type = AUDIO_FILE_TYPE_ENUM["NONE"]
+    media_file_type = audio.AUDIO_FILE_TYPE_ENUM["NONE"]
     if file_type in ("wav"):
-        media_file_type = AUDIO_FILE_TYPE_ENUM["WAV"]
+        media_file_type = audio.AUDIO_FILE_TYPE_ENUM["WAV"]
     elif file_type in ("mp3", "mpeg", "mpga"):
-        media_file_type = AUDIO_FILE_TYPE_ENUM["MP3"]
+        media_file_type = audio.AUDIO_FILE_TYPE_ENUM["MP3"]
     elif file_type in ("flac"):
-        media_file_type = AUDIO_FILE_TYPE_ENUM["FLAC"]
+        media_file_type = audio.AUDIO_FILE_TYPE_ENUM["FLAC"]
 
     return data, media_file_type
 
@@ -197,8 +196,34 @@ def _supported_local_file_validate(config):
     if files_list := config.get(CONF_FILES):
         for file_config in files_list:
             _, media_file_type = _read_audio_file_and_type(file_config)
-            if str(media_file_type) == str(AUDIO_FILE_TYPE_ENUM["NONE"]):
+            if str(media_file_type) == str(audio.AUDIO_FILE_TYPE_ENUM["NONE"]):
                 raise cv.Invalid("Unsupported local media file.")
+            if not config[CONF_CODEC_SUPPORT_ENABLED] and str(media_file_type) != str(
+                audio.AUDIO_FILE_TYPE_ENUM["WAV"]
+            ):
+                # Only wav files are supported
+                raise cv.Invalid(
+                    f"Unsupported local media file type, set {CONF_CODEC_SUPPORT_ENABLED} to true or convert the media file to wav"
+                )
+
+    return config
+
+
+def _validate_pipeline(config):
+    # Inherit transcoder settings from speaker if not manually set
+    inherit_property_from(CONF_NUM_CHANNELS, CONF_SPEAKER)(config)
+    inherit_property_from(CONF_SAMPLE_RATE, CONF_SPEAKER)(config)
+
+    # Validate the transcoder settings is compatible with the speaker
+    audio.final_validate_audio_schema(
+        "mixer",
+        audio_device=CONF_SPEAKER,
+        bits_per_sample=16,
+        channels=config.get(CONF_NUM_CHANNELS),
+        sample_rate=config.get(CONF_SAMPLE_RATE),
+    )(config)
+
+    return config
 
 
 LOCAL_SCHEMA = cv.Schema(
@@ -225,7 +250,7 @@ TYPED_FILE_SCHEMA = cv.typed_schema(
 
 MEDIA_FILE_TYPE_SCHEMA = cv.Schema(
     {
-        cv.Required(CONF_ID): cv.declare_id(AudioFile),
+        cv.Required(CONF_ID): cv.declare_id(audio.AudioFile),
         cv.Required(CONF_FILE): _file_schema,
         cv.GenerateID(CONF_RAW_DATA_ID): cv.declare_id(cg.uint8),
     }
@@ -233,10 +258,11 @@ MEDIA_FILE_TYPE_SCHEMA = cv.Schema(
 
 PIPELINE_SCHEMA = cv.Schema(
     {
+        cv.GenerateID(): cv.declare_id(AudioPipeline),
         cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
-        cv.Optional(CONF_FORMAT, default="FLAC"): cv.enum(AUDIO_FILE_TYPE_ENUM),
-        cv.Optional(CONF_SAMPLE_RATE, default=48000): cv.int_range(8000, 48000),
-        cv.Optional(CONF_NUM_CHANNELS, default=2): cv.int_range(1, 2),
+        cv.Optional(CONF_FORMAT, default="FLAC"): cv.enum(audio.AUDIO_FILE_TYPE_ENUM),
+        cv.Optional(CONF_SAMPLE_RATE): cv.int_range(min=1),
+        cv.Optional(CONF_NUM_CHANNELS): cv.int_range(1, 2),
     }
 )
 
@@ -249,11 +275,12 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_BUFFER_SIZE, default=1000000): cv.int_range(
                 min=8000, max=8000000
             ),
+            cv.Optional(CONF_CODEC_SUPPORT_ENABLED, default=True): cv.boolean,
+            cv.Optional(CONF_FILES): cv.ensure_list(MEDIA_FILE_TYPE_SCHEMA),
+            cv.Optional(CONF_TASK_STACK_IN_PSRAM, default=False): cv.boolean,
             cv.Optional(CONF_VOLUME_INCREMENT, default=0.05): cv.percentage,
             cv.Optional(CONF_VOLUME_MAX, default=1.0): cv.percentage,
             cv.Optional(CONF_VOLUME_MIN, default=0.0): cv.percentage,
-            cv.Optional(CONF_FILES): cv.ensure_list(MEDIA_FILE_TYPE_SCHEMA),
-            cv.Optional(CONF_TASK_STACK_IN_PSRAM, default=False): cv.boolean,
             cv.Optional(CONF_ON_MUTE): automation.validate_automation(single=True),
             cv.Optional(CONF_ON_UNMUTE): automation.validate_automation(single=True),
             cv.Optional(CONF_ON_VOLUME): automation.validate_automation(single=True),
@@ -261,14 +288,27 @@ CONFIG_SCHEMA = cv.All(
     ),
     cv.only_with_esp_idf,
 )
-FINAL_VALIDATE_SCHEMA = _supported_local_file_validate
+
+
+FINAL_VALIDATE_SCHEMA = cv.All(
+    cv.Schema(
+        {
+            cv.Optional(CONF_ANNOUNCEMENT_PIPELINE): _validate_pipeline,
+            cv.Optional(CONF_MEDIA_PIPELINE): _validate_pipeline,
+        },
+        extra=cv.ALLOW_EXTRA,
+    ),
+    _supported_local_file_validate,
+)
 
 
 async def to_code(config):
-    cg.add_define("USE_AUDIO_FLAC_SUPPORT", True)
-    cg.add_define("USE_AUDIO_MP3_SUPPORT", True)
+    if config[CONF_CODEC_SUPPORT_ENABLED]:
+        # Compile all supported audio codecs and optimize the wifi settings
 
-    if CORE.using_esp_idf:
+        cg.add_define("USE_AUDIO_FLAC_SUPPORT", True)
+        cg.add_define("USE_AUDIO_MP3_SUPPORT", True)
+
         # Wifi settings based on https://github.com/espressif/esp-adf/issues/297#issuecomment-783811702
         esp32.add_idf_sdkconfig_option("CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM", 16)
         esp32.add_idf_sdkconfig_option("CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM", 512)
@@ -367,7 +407,7 @@ async def to_code(config):
             prog_arr = cg.progmem_array(file_config[CONF_RAW_DATA_ID], rhs)
 
             media_files_struct = cg.StructInitializer(
-                AudioFile,
+                audio.AudioFile,
                 (
                     "data",
                     prog_arr,
@@ -394,7 +434,7 @@ async def to_code(config):
     cv.maybe_simple_value(
         {
             cv.GenerateID(): cv.use_id(SpeakerMediaPlayer),
-            cv.Required(CONF_MEDIA_FILE): cv.use_id(AudioFile),
+            cv.Required(CONF_MEDIA_FILE): cv.use_id(audio.AudioFile),
             cv.Optional(CONF_ANNOUNCEMENT, default=False): cv.boolean,
         },
         key=CONF_MEDIA_FILE,
@@ -415,7 +455,7 @@ async def play_local_media_media_action(config, action_id, template_arg, args):
     cv.maybe_simple_value(
         {
             cv.GenerateID(): cv.use_id(SpeakerMediaPlayer),
-            cv.Required(CONF_STREAM): cv.enum(PIPELINE_TYPE_ENUM, upper=True),
+            cv.Required(CONF_STREAM): cv.enum(AUDIO_PIPELINE_TYPE_ENUM, upper=True),
         },
         key=CONF_STREAM,
     ),
