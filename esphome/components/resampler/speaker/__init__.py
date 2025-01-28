@@ -41,7 +41,9 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(
                 CONF_BUFFER_DURATION, default="100ms"
             ): cv.positive_time_period_milliseconds,
-            cv.Optional(CONF_TASK_STACK_IN_PSRAM, default=False): cv.boolean,
+            cv.Optional(CONF_TASK_STACK_IN_PSRAM, default=False): cv.All(
+                cv.only_with_esp_idf, cv.boolean
+            ),
             cv.Optional(CONF_FILTERS, default=16): cv.int_range(min=2, max=1024),
             cv.Optional(CONF_TAPS, default=16): _validate_taps,
         }
