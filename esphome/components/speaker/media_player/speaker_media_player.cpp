@@ -348,6 +348,11 @@ media_player::MediaPlayerTraits SpeakerMediaPlayer::get_traits() {
   }
   if (this->media_format_.has_value()) {
     traits.get_supported_formats().push_back(this->media_format_.value());
+  } else if (this->single_pipeline_() && this->announcement_format_.has_value()) {
+    // Only one pipeline is defined, so use the announcement format (if configured) for the default purpose
+    media_player::MediaPlayerSupportedFormat media_format = this->announcement_format_.value();
+    media_format.purpose = media_player::MediaPlayerFormatPurpose::PURPOSE_DEFAULT;
+    traits.get_supported_formats().push_back(media_format);
   }
 
   return traits;
