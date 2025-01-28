@@ -260,7 +260,9 @@ esp_err_t AudioPipeline::stop() {
   // Tasks can't be running, so deallocate stack and reset pointers
   this->delete_tasks_();
 
-  xEventGroupClearBits(this->event_group_, UNFINISHED_BITS);
+  this->raw_file_ring_buffer_.reset();
+
+  xEventGroupClearBits(this->event_group_, EventGroupBits::UNFINISHED_BITS);
 
   if (!this->speaker_->is_stopped()) {
     this->speaker_->stop();
