@@ -139,35 +139,27 @@ void SpeakerMediaPlayer::watch_media_commands_() {
   esp_err_t err = ESP_OK;
 
   if (xQueueReceive(this->media_control_command_queue_, &media_command, 0) == pdTRUE) {
-    if (media_command.new_url.has_value() && media_command.new_url.value()) {
+    bool new_url = media_command.new_url.has_value() && media_command.new_url.value();
+    bool new_file = media_command.new_file.has_value() && media_command.new_file.value();
+
+    if (new_url || new_file) {
+      // Start a pipeline with the new media
+
       if (this->single_pipeline_() || (media_command.announce.has_value() && media_command.announce.value())) {
-        // Announcement URL
-        err = this->start_pipeline_(AudioPipelineType::ANNOUNCEMENT, true);
+        err = this->start_pipeline_(AudioPipelineType::ANNOUNCEMENT, new_url);
       } else {
-        // Media URL
-        err = this->start_pipeline_(AudioPipelineType::MEDIA, true);
+        err = this->start_pipeline_(AudioPipelineType::MEDIA, new_url);
         this->is_paused_ = false;
       }
-      return;
-    }
 
-    if (media_command.new_file.has_value() && media_command.new_file.value()) {
-      if (this->single_pipeline_() || (media_command.announce.has_value() && media_command.announce.value())) {
-        // Announcement File
-        err = this->start_pipeline_(AudioPipelineType::ANNOUNCEMENT, false);
+      if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error starting the audio pipeline: %s", esp_err_to_name(err));
+        this->status_set_error();
       } else {
-        // Media File
-        err = this->start_pipeline_(AudioPipelineType::MEDIA, false);
-        this->is_paused_ = false;
+        this->status_clear_error();
       }
-      return;
-    }
 
-    if (err != ESP_OK) {
-      ESP_LOGE(TAG, "Error starting the audio pipeline: %s", esp_err_to_name(err));
-      this->status_set_error();
-    } else {
-      this->status_clear_error();
+      return;  // Don't process the command further
     }
 
     if (media_command.volume.has_value()) {
