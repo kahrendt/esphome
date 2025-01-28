@@ -23,7 +23,6 @@ from esphome.const import (
     CONF_TASK_STACK_IN_PSRAM,
     CONF_TYPE,
     CONF_URL,
-    PLATFORM_ESP32,
 )
 from esphome.core import CORE, HexInt
 from esphome.external_files import download_content
@@ -260,7 +259,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_ON_VOLUME): automation.validate_automation(single=True),
         }
     ),
-    cv.only_on([PLATFORM_ESP32]),
+    cv.only_with_esp_idf,
 )
 FINAL_VALIDATE_SCHEMA = _supported_local_file_validate
 

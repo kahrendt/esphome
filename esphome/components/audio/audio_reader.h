@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef USE_ESP32
+#ifdef USE_ESP_IDF
 
 #include "audio.h"
 #include "audio_transfer_buffer.h"

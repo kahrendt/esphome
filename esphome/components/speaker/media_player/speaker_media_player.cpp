@@ -1,6 +1,6 @@
 #include "speaker_media_player.h"
 
-#ifdef USE_ESP32
+#ifdef USE_ESP_IDF
 
 #include "esphome/core/log.h"
 

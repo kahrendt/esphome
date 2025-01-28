@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef USE_ESP32
+#ifdef USE_ESP_IDF
 
 #include "audio_pipeline.h"
 

@@ -1,6 +1,6 @@
 #include "audio_reader.h"
 
-#ifdef USE_ESP32
+#ifdef USE_ESP_IDF
 
 #include "esphome/core/defines.h"
 #include "esphome/core/hal.h"

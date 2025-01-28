@@ -1,6 +1,6 @@
 #include "audio_pipeline.h"
 
-#ifdef USE_ESP32
+#ifdef USE_ESP_IDF
 
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"

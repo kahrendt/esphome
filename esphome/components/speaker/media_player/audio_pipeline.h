@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef USE_ESP32
+#ifdef USE_ESP_IDF
 
 #include "esphome/components/audio/audio.h"
 #include "esphome/components/audio/audio_reader.h"
