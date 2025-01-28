@@ -1,10 +1,11 @@
 #pragma once
 
+#include "speaker_media_player.h"
+
 #ifdef USE_ESP32
 
 #include "esphome/components/audio/audio.h"
 #include "esphome/core/automation.h"
-#include "speaker_media_player.h"
 
 namespace esphome {
 namespace speaker {

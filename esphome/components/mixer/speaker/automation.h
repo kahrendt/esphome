@@ -1,8 +1,8 @@
 #pragma once
 
-#ifdef USE_ESP32
-
 #include "mixer_speaker.h"
+
+#ifdef USE_ESP32
 
 namespace esphome {
 namespace mixer_speaker {

@@ -1,6 +1,6 @@
-#ifdef USE_ESP32
-
 #include "audio_decoder.h"
+
+#ifdef USE_ESP32
 
 #include "esphome/core/hal.h"
 
