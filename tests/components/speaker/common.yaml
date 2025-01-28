@@ -34,9 +34,3 @@ speaker:
     audio_dac: internal_dac
     dac_type: external
     i2s_dout_pin: ${dout_pin}
-
-media_player:
-  - platform: speaker
-    id: speaker_media_player_id
-    announcement_pipeline:
-      speaker: speaker_with_audio_dac_id
