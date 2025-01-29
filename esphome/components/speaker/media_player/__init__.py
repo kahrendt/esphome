@@ -130,23 +130,6 @@ def _get_supported_format_struct(pipeline, type):
     return cg.StructInitializer(*args)
 
 
-def _validate_file_shorthand(value):
-    value = cv.string_strict(value)
-    if value.startswith("http://") or value.startswith("https://"):
-        return _file_schema(
-            {
-                CONF_TYPE: TYPE_WEB,
-                CONF_URL: value,
-            }
-        )
-    return _file_schema(
-        {
-            CONF_TYPE: TYPE_LOCAL,
-            CONF_PATH: value,
-        }
-    )
-
-
 def _file_schema(value):
     if isinstance(value, str):
         return _validate_file_shorthand(value)
@@ -192,7 +175,41 @@ def _read_audio_file_and_type(file_config):
     return data, media_file_type
 
 
-def _supported_local_file_validate(config):
+def _validate_file_shorthand(value):
+    value = cv.string_strict(value)
+    if value.startswith("http://") or value.startswith("https://"):
+        return _file_schema(
+            {
+                CONF_TYPE: TYPE_WEB,
+                CONF_URL: value,
+            }
+        )
+    return _file_schema(
+        {
+            CONF_TYPE: TYPE_LOCAL,
+            CONF_PATH: value,
+        }
+    )
+
+
+def _validate_pipeline(config):
+    # Inherit transcoder settings from speaker if not manually set
+    inherit_property_from(CONF_NUM_CHANNELS, CONF_SPEAKER)(config)
+    inherit_property_from(CONF_SAMPLE_RATE, CONF_SPEAKER)(config)
+
+    # Validate the transcoder settings is compatible with the speaker
+    audio.final_validate_audio_schema(
+        "speaker media_player",
+        audio_device=CONF_SPEAKER,
+        bits_per_sample=16,
+        channels=config.get(CONF_NUM_CHANNELS),
+        sample_rate=config.get(CONF_SAMPLE_RATE),
+    )(config)
+
+    return config
+
+
+def _validate_supported_local_file(config):
     if files_list := config.get(CONF_FILES):
         for file_config in files_list:
             _, media_file_type = _read_audio_file_and_type(file_config)
@@ -205,23 +222,6 @@ def _supported_local_file_validate(config):
                 raise cv.Invalid(
                     f"Unsupported local media file type, set {CONF_CODEC_SUPPORT_ENABLED} to true or convert the media file to wav"
                 )
-
-    return config
-
-
-def _validate_pipeline(config):
-    # Inherit transcoder settings from speaker if not manually set
-    inherit_property_from(CONF_NUM_CHANNELS, CONF_SPEAKER)(config)
-    inherit_property_from(CONF_SAMPLE_RATE, CONF_SPEAKER)(config)
-
-    # Validate the transcoder settings is compatible with the speaker
-    audio.final_validate_audio_schema(
-        "mixer",
-        audio_device=CONF_SPEAKER,
-        bits_per_sample=16,
-        channels=config.get(CONF_NUM_CHANNELS),
-        sample_rate=config.get(CONF_SAMPLE_RATE),
-    )(config)
 
     return config
 
@@ -298,7 +298,7 @@ FINAL_VALIDATE_SCHEMA = cv.All(
         },
         extra=cv.ALLOW_EXTRA,
     ),
-    _supported_local_file_validate,
+    _validate_supported_local_file,
 )
 
 

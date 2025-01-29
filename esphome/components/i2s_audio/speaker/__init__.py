@@ -63,7 +63,41 @@ I2C_COMM_FMT_OPTIONS = {
 NO_INTERNAL_DAC_VARIANTS = [esp32.const.VARIANT_ESP32S2]
 
 
-def validate_esp32_variant(config):
+def _set_num_channels_from_config(config):
+    if config[CONF_CHANNEL] in (CONF_MONO, CONF_LEFT, CONF_RIGHT):
+        config[CONF_NUM_CHANNELS] = 1
+    else:
+        config[CONF_NUM_CHANNELS] = 2
+
+    return config
+
+
+def _set_stream_limits(config):
+    if config[CONF_I2S_MODE] == CONF_PRIMARY:
+        # Primary mode has modifiable stream settings
+        audio.set_stream_limits(
+            min_bits_per_sample=8,
+            max_bits_per_sample=32,
+            min_channels=1,
+            max_channels=2,
+            min_sample_rate=16000,
+            max_sample_rate=48000,
+        )(config)
+    else:
+        # Secondary mode has unmodifiable max bits per sample and min/max sample rates
+        audio.set_stream_limits(
+            min_bits_per_sample=8,
+            max_bits_per_sample=config.get(CONF_BITS_PER_SAMPLE),
+            min_channels=1,
+            max_channels=2,
+            min_sample_rate=config.get(CONF_SAMPLE_RATE),
+            max_sample_rate=config.get(CONF_SAMPLE_RATE),
+        )
+
+    return config
+
+
+def _validate_esp32_variant(config):
     if config[CONF_DAC_TYPE] != "internal":
         return config
     variant = esp32.get_esp32_variant()
@@ -95,6 +129,7 @@ BASE_SCHEMA = (
     .extend(cv.COMPONENT_SCHEMA)
 )
 
+
 CONFIG_SCHEMA = cv.All(
     cv.typed_schema(
         {
@@ -116,43 +151,9 @@ CONFIG_SCHEMA = cv.All(
         },
         key=CONF_DAC_TYPE,
     ),
-    validate_esp32_variant,
-)
-
-
-def set_num_channels_from_config(config):
-    channel_type = config[CONF_CHANNEL]
-    if channel_type in (CONF_MONO, CONF_LEFT, CONF_RIGHT):
-        config[CONF_NUM_CHANNELS] = 1
-    else:
-        config[CONF_NUM_CHANNELS] = 2
-
-    if config[CONF_I2S_MODE] == CONF_PRIMARY:
-        # Primary mode has modifiable stream settings
-        audio.set_stream_limits(
-            min_bits_per_sample=8,
-            max_bits_per_sample=32,
-            min_channels=1,
-            max_channels=2,
-            min_sample_rate=16000,
-            max_sample_rate=48000,
-        )(config)
-    else:
-        # Secondary mode has unmodifiable max bits per sample and min/max sample rates
-        audio.set_stream_limits(
-            min_bits_per_sample=8,
-            max_bits_per_sample=config.get(CONF_BITS_PER_SAMPLE),
-            min_channels=1,
-            max_channels=2,
-            min_sample_rate=config.get(CONF_SAMPLE_RATE),
-            max_sample_rate=config.get(CONF_SAMPLE_RATE),
-        )
-
-    return config
-
-
-FINAL_VALIDATE_SCHEMA = cv.All(
-    set_num_channels_from_config,
+    _validate_esp32_variant,
+    _set_num_channels_from_config,
+    _set_stream_limits,
 )
 
 
