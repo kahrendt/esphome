@@ -513,7 +513,7 @@ void AudioPipeline::decode_task(void *params) {
         }
 
         initial_bytes_to_buffer = std::min(this_pipeline->current_audio_stream_info_.ms_to_bytes(INITIAL_BUFFER_MS),
-                                           this_pipeline->buffer_size_);
+                                           this_pipeline->buffer_size_ * 3 / 4);
 
         switch (this_pipeline->current_audio_file_type_) {
 #ifdef USE_AUDIO_MP3_SUPPORT
