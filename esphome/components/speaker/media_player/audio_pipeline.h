@@ -109,6 +109,7 @@ class AudioPipeline {
 
   uint32_t playback_ms_{0};
 
+  bool start_in_progress_{false};
   bool pause_state_{false};
   bool task_stack_in_psram_;
 

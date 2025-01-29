@@ -94,6 +94,8 @@ esp_err_t AudioPipeline::allocate_buffers_() {
 }
 
 esp_err_t AudioPipeline::common_start_(const std::string &task_name, UBaseType_t priority) {
+  this->start_in_progress_ = true;  // block task deletion since they'll be restarted
+
   esp_err_t err = this->allocate_buffers_();
   if (err != ESP_OK) {
     return err;
@@ -128,6 +130,7 @@ esp_err_t AudioPipeline::common_start_(const std::string &task_name, UBaseType_t
       return ESP_ERR_INVALID_STATE;
     }
   }
+
   if (this->decode_task_handle_ == nullptr) {
     if (this->decode_task_stack_buffer_ == nullptr) {
       if (this->task_stack_in_psram_) {
@@ -219,6 +222,11 @@ AudioPipelineState AudioPipeline::get_state() {
   if ((event_bits & EventGroupBits::READER_MESSAGE_FINISHED) &&
       (!(event_bits & EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE) &&
        (event_bits & EventGroupBits::DECODER_MESSAGE_FINISHED))) {
+    if ((this->read_task_handle_ != nullptr) || (this->decode_task_handle_ != nullptr)) {
+      if (!this->start_in_progress_) {
+        this->delete_tasks_();
+      }
+    }
     return AudioPipelineState::STOPPED;
   }
 
@@ -226,6 +234,7 @@ AudioPipelineState AudioPipeline::get_state() {
     return AudioPipelineState::PAUSED;
   }
 
+  this->start_in_progress_ = false;
   return AudioPipelineState::PLAYING;
 }
 
@@ -259,13 +268,6 @@ esp_err_t AudioPipeline::stop() {
     }
   }
 
-  // Tasks can't be running, so deallocate stack and reset pointers
-  this->delete_tasks_();
-
-  delay(5);  // helps avoid a race condition where the idle task doesn't execute after the tasks delete themselves
-
-  this->raw_file_ring_buffer_.reset();
-
   xEventGroupClearBits(this->event_group_, EventGroupBits::UNFINISHED_BITS);
 
   if (!this->speaker_->is_stopped()) {
@@ -276,32 +278,38 @@ esp_err_t AudioPipeline::stop() {
 }
 
 void AudioPipeline::delete_tasks_() {
-  this->read_task_handle_ = nullptr;
+  if (this->read_task_handle_ != nullptr) {
+    vTaskDelete(this->read_task_handle_);
+    this->read_task_handle_ = nullptr;
 
-  if (this->read_task_stack_buffer_ != nullptr) {
-    if (this->task_stack_in_psram_) {
-      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
-      stack_allocator.deallocate(this->read_task_stack_buffer_, READ_TASK_STACK_SIZE);
-    } else {
-      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
-      stack_allocator.deallocate(this->read_task_stack_buffer_, READ_TASK_STACK_SIZE);
+    if (this->read_task_stack_buffer_ != nullptr) {
+      if (this->task_stack_in_psram_) {
+        RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
+        stack_allocator.deallocate(this->read_task_stack_buffer_, READ_TASK_STACK_SIZE);
+      } else {
+        RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
+        stack_allocator.deallocate(this->read_task_stack_buffer_, READ_TASK_STACK_SIZE);
+      }
+
+      this->read_task_stack_buffer_ = nullptr;
     }
-
-    this->read_task_stack_buffer_ = nullptr;
   }
 
-  this->decode_task_handle_ = nullptr;
+  if (this->decode_task_handle_ != nullptr) {
+    vTaskDelete(this->decode_task_handle_);
+    this->decode_task_handle_ = nullptr;
 
-  if (this->decode_task_stack_buffer_ != nullptr) {
-    if (this->task_stack_in_psram_) {
-      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
-      stack_allocator.deallocate(this->decode_task_stack_buffer_, DECODE_TASK_STACK_SIZE);
-    } else {
-      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
-      stack_allocator.deallocate(this->decode_task_stack_buffer_, DECODE_TASK_STACK_SIZE);
+    if (this->decode_task_stack_buffer_ != nullptr) {
+      if (this->task_stack_in_psram_) {
+        RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
+        stack_allocator.deallocate(this->decode_task_stack_buffer_, DECODE_TASK_STACK_SIZE);
+      } else {
+        RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
+        stack_allocator.deallocate(this->decode_task_stack_buffer_, DECODE_TASK_STACK_SIZE);
+      }
+
+      this->decode_task_stack_buffer_ = nullptr;
     }
-
-    this->decode_task_stack_buffer_ = nullptr;
   }
 }
 
@@ -326,224 +334,227 @@ void AudioPipeline::resume_tasks() {
 void AudioPipeline::read_task(void *params) {
   AudioPipeline *this_pipeline = (AudioPipeline *) params;
 
-  // Wait until the pipeline notifies us the source of the media file
-  EventBits_t event_bits =
-      xEventGroupWaitBits(this_pipeline->event_group_,
-                          EventGroupBits::READER_COMMAND_INIT_FILE | EventGroupBits::READER_COMMAND_INIT_HTTP |
-                              EventGroupBits::PIPELINE_COMMAND_STOP,  // Bit message to read
-                          pdFALSE,                                    // Clear the bit on exit
-                          pdFALSE,                                    // Wait for all the bits,
-                          portMAX_DELAY);                             // Block indefinitely until bit is set
+  while (true) {
+    // Wait until the pipeline notifies us the source of the media file
+    EventBits_t event_bits =
+        xEventGroupWaitBits(this_pipeline->event_group_,
+                            EventGroupBits::READER_COMMAND_INIT_FILE | EventGroupBits::READER_COMMAND_INIT_HTTP |
+                                EventGroupBits::PIPELINE_COMMAND_STOP,  // Bit message to read
+                            pdFALSE,                                    // Clear the bit on exit
+                            pdFALSE,                                    // Wait for all the bits,
+                            portMAX_DELAY);                             // Block indefinitely until bit is set
 
-  if (!(event_bits & EventGroupBits::PIPELINE_COMMAND_STOP)) {
-    xEventGroupClearBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_FINISHED |
-                                                          EventGroupBits::READER_COMMAND_INIT_FILE |
-                                                          EventGroupBits::READER_COMMAND_INIT_HTTP);
-    InfoErrorEvent event;
-    event.source = InfoErrorSource::READER;
-    esp_err_t err = ESP_OK;
+    if (!(event_bits & EventGroupBits::PIPELINE_COMMAND_STOP)) {
+      xEventGroupClearBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_FINISHED |
+                                                            EventGroupBits::READER_COMMAND_INIT_FILE |
+                                                            EventGroupBits::READER_COMMAND_INIT_HTTP);
+      InfoErrorEvent event;
+      event.source = InfoErrorSource::READER;
+      esp_err_t err = ESP_OK;
 
-    std::unique_ptr<audio::AudioReader> reader = make_unique<audio::AudioReader>(this_pipeline->transfer_buffer_size_);
+      std::unique_ptr<audio::AudioReader> reader =
+          make_unique<audio::AudioReader>(this_pipeline->transfer_buffer_size_);
 
-    if (event_bits & EventGroupBits::READER_COMMAND_INIT_FILE) {
-      err = reader->start(this_pipeline->current_audio_file_, this_pipeline->current_audio_file_type_);
-    } else {
-      err = reader->start(this_pipeline->current_uri_, this_pipeline->current_audio_file_type_);
-    }
-
-    if (err == ESP_OK) {
-      size_t file_ring_buffer_size = this_pipeline->buffer_size_;
-
-      std::shared_ptr<RingBuffer> temp_ring_buffer;
-
-      if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
-        temp_ring_buffer = RingBuffer::create(file_ring_buffer_size);
-        this_pipeline->raw_file_ring_buffer_ = temp_ring_buffer;
-      }
-
-      if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
-        err = ESP_ERR_NO_MEM;
+      if (event_bits & EventGroupBits::READER_COMMAND_INIT_FILE) {
+        err = reader->start(this_pipeline->current_audio_file_, this_pipeline->current_audio_file_type_);
       } else {
-        reader->add_sink(this_pipeline->raw_file_ring_buffer_);
-      }
-    }
-
-    if (err != ESP_OK) {
-      // Send specific error message
-      event.err = err;
-      xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
-
-      // Setting up the reader failed, stop the pipeline
-      xEventGroupSetBits(this_pipeline->event_group_,
-                         EventGroupBits::READER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
-    } else {
-      // Send the file type to the pipeline
-      event.file_type = this_pipeline->current_audio_file_type_;
-      xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
-      xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE);
-    }
-
-    while (true) {
-      event_bits = xEventGroupGetBits(this_pipeline->event_group_);
-
-      if (event_bits & EventGroupBits::PIPELINE_COMMAND_STOP) {
-        break;
+        err = reader->start(this_pipeline->current_uri_, this_pipeline->current_audio_file_type_);
       }
 
-      audio::AudioReaderState reader_state = reader->read();
+      if (err == ESP_OK) {
+        size_t file_ring_buffer_size = this_pipeline->buffer_size_;
 
-      if (reader_state == audio::AudioReaderState::FINISHED) {
-        break;
-      } else if (reader_state == audio::AudioReaderState::FAILED) {
+        std::shared_ptr<RingBuffer> temp_ring_buffer;
+
+        if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
+          temp_ring_buffer = RingBuffer::create(file_ring_buffer_size);
+          this_pipeline->raw_file_ring_buffer_ = temp_ring_buffer;
+        }
+
+        if (!this_pipeline->raw_file_ring_buffer_.use_count()) {
+          err = ESP_ERR_NO_MEM;
+        } else {
+          reader->add_sink(this_pipeline->raw_file_ring_buffer_);
+        }
+      }
+
+      if (err != ESP_OK) {
+        // Send specific error message
+        event.err = err;
+        xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
+
+        // Setting up the reader failed, stop the pipeline
         xEventGroupSetBits(this_pipeline->event_group_,
                            EventGroupBits::READER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
-        break;
+      } else {
+        // Send the file type to the pipeline
+        event.file_type = this_pipeline->current_audio_file_type_;
+        xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
+        xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE);
+      }
+
+      while (true) {
+        event_bits = xEventGroupGetBits(this_pipeline->event_group_);
+
+        if (event_bits & EventGroupBits::PIPELINE_COMMAND_STOP) {
+          break;
+        }
+
+        audio::AudioReaderState reader_state = reader->read();
+
+        if (reader_state == audio::AudioReaderState::FINISHED) {
+          break;
+        } else if (reader_state == audio::AudioReaderState::FAILED) {
+          xEventGroupSetBits(this_pipeline->event_group_,
+                             EventGroupBits::READER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
+          break;
+        }
+      }
+      event_bits = xEventGroupGetBits(this_pipeline->event_group_);
+      if ((event_bits & EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE) ||
+          (this_pipeline->raw_file_ring_buffer_.use_count() == 1)) {
+        // Decoder task hasn't started yet, so delay a bit before releasing ownership of the ring buffer
+        delay(10);
       }
     }
-    event_bits = xEventGroupGetBits(this_pipeline->event_group_);
-    if ((event_bits & EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE) ||
-        (this_pipeline->raw_file_ring_buffer_.use_count() == 1)) {
-      // Decoder task hasn't started yet, so delay a bit before releasing ownership of the ring buffer
-      delay(10);
-    }
-  }
 
-  xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_FINISHED);
-  vTaskDelete(NULL);
+    xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::READER_MESSAGE_FINISHED);
+  }
 }
 
 void AudioPipeline::decode_task(void *params) {
   AudioPipeline *this_pipeline = (AudioPipeline *) params;
 
-  // Wait until the reader notifies us that the media type is available
-  EventBits_t event_bits = xEventGroupWaitBits(
-      this_pipeline->event_group_,
-      EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE | EventGroupBits::PIPELINE_COMMAND_STOP,  // Bit message to read
-      pdFALSE,         // Clear the bit on exit
-      pdFALSE,         // Wait for all the bits,
-      portMAX_DELAY);  // Block indefinitely until bit is set
+  while (true) {
+    // Wait until the reader notifies us that the media type is available
+    EventBits_t event_bits = xEventGroupWaitBits(this_pipeline->event_group_,
+                                                 EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE |
+                                                     EventGroupBits::PIPELINE_COMMAND_STOP,  // Bit message to read
+                                                 pdFALSE,                                    // Clear the bit on exit
+                                                 pdFALSE,                                    // Wait for all the bits,
+                                                 portMAX_DELAY);  // Block indefinitely until bit is set
 
-  if (!(event_bits & EventGroupBits::PIPELINE_COMMAND_STOP)) {
-    xEventGroupClearBits(this_pipeline->event_group_,
-                         EventGroupBits::DECODER_MESSAGE_FINISHED | EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE);
-    InfoErrorEvent event;
-    event.source = InfoErrorSource::DECODER;
+    if (!(event_bits & EventGroupBits::PIPELINE_COMMAND_STOP)) {
+      xEventGroupClearBits(this_pipeline->event_group_,
+                           EventGroupBits::DECODER_MESSAGE_FINISHED | EventGroupBits::READER_MESSAGE_LOADED_MEDIA_TYPE);
+      InfoErrorEvent event;
+      event.source = InfoErrorSource::DECODER;
 
-    std::unique_ptr<audio::AudioDecoder> decoder =
-        make_unique<audio::AudioDecoder>(this_pipeline->transfer_buffer_size_, this_pipeline->transfer_buffer_size_);
+      std::unique_ptr<audio::AudioDecoder> decoder =
+          make_unique<audio::AudioDecoder>(this_pipeline->transfer_buffer_size_, this_pipeline->transfer_buffer_size_);
 
-    esp_err_t err = decoder->start(this_pipeline->current_audio_file_type_);
-    decoder->add_source(this_pipeline->raw_file_ring_buffer_);
+      esp_err_t err = decoder->start(this_pipeline->current_audio_file_type_);
+      decoder->add_source(this_pipeline->raw_file_ring_buffer_);
 
-    if (err != ESP_OK) {
-      // Send specific error message
-      event.err = err;
-      xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
+      if (err != ESP_OK) {
+        // Send specific error message
+        event.err = err;
+        xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
 
-      // Setting up the decoder failed, stop the pipeline
-      xEventGroupSetBits(this_pipeline->event_group_,
-                         EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
-    }
-
-    bool has_stream_info = false;
-    bool started_playback = false;
-
-    size_t initial_bytes_to_buffer = 0;
-
-    while (true) {
-      event_bits = xEventGroupGetBits(this_pipeline->event_group_);
-
-      if (event_bits & EventGroupBits::PIPELINE_COMMAND_STOP) {
-        break;
-      }
-
-      // Update pause state
-      if (!started_playback) {
-        if (!(event_bits & EventGroupBits::READER_MESSAGE_FINISHED)) {
-          decoder->set_pause_output_state(true);
-        } else {
-          started_playback = true;
-        }
-      } else {
-        decoder->set_pause_output_state(this_pipeline->pause_state_);
-      }
-
-      // Stop gracefully if the reader has finished
-      audio::AudioDecoderState decoder_state = decoder->decode(event_bits & EventGroupBits::READER_MESSAGE_FINISHED);
-
-      if ((decoder_state == audio::AudioDecoderState::DECODING) ||
-          (decoder_state == audio::AudioDecoderState::FINISHED)) {
-        this_pipeline->playback_ms_ = decoder->get_playback_ms();
-      }
-
-      if (decoder_state == audio::AudioDecoderState::FINISHED) {
-        break;
-      } else if (decoder_state == audio::AudioDecoderState::FAILED) {
-        if (!has_stream_info) {
-          event.decoding_err = DecodingError::FAILED_HEADER;
-          xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
-        }
+        // Setting up the decoder failed, stop the pipeline
         xEventGroupSetBits(this_pipeline->event_group_,
                            EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
-        break;
       }
 
-      if (!has_stream_info && decoder->get_audio_stream_info().has_value()) {
-        has_stream_info = true;
+      bool has_stream_info = false;
+      bool started_playback = false;
 
-        this_pipeline->current_audio_stream_info_ = decoder->get_audio_stream_info().value();
+      size_t initial_bytes_to_buffer = 0;
 
-        // Send the stream information to the pipeline
-        event.audio_stream_info = this_pipeline->current_audio_stream_info_;
+      while (true) {
+        event_bits = xEventGroupGetBits(this_pipeline->event_group_);
 
-        if (this_pipeline->current_audio_stream_info_.get_bits_per_sample() != 16) {
-          // Error state, incompatible bits per sample
-          event.decoding_err = DecodingError::INCOMPATIBLE_BITS_PER_SAMPLE;
-          xEventGroupSetBits(this_pipeline->event_group_,
-                             EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
-        } else if ((this_pipeline->current_audio_stream_info_.get_channels() > 2)) {
-          // Error state, incompatible number of channels
-          event.decoding_err = DecodingError::INCOMPATIBLE_CHANNELS;
-          xEventGroupSetBits(this_pipeline->event_group_,
-                             EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
-        } else {
-          // Send audio directly to the speaker
-          this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
-          decoder->add_sink(this_pipeline->speaker_);
+        if (event_bits & EventGroupBits::PIPELINE_COMMAND_STOP) {
+          break;
         }
 
-        initial_bytes_to_buffer = std::min(this_pipeline->current_audio_stream_info_.ms_to_bytes(INITIAL_BUFFER_MS),
-                                           this_pipeline->buffer_size_ * 3 / 4);
+        // Update pause state
+        if (!started_playback) {
+          if (!(event_bits & EventGroupBits::READER_MESSAGE_FINISHED)) {
+            decoder->set_pause_output_state(true);
+          } else {
+            started_playback = true;
+          }
+        } else {
+          decoder->set_pause_output_state(this_pipeline->pause_state_);
+        }
 
-        switch (this_pipeline->current_audio_file_type_) {
+        // Stop gracefully if the reader has finished
+        audio::AudioDecoderState decoder_state = decoder->decode(event_bits & EventGroupBits::READER_MESSAGE_FINISHED);
+
+        if ((decoder_state == audio::AudioDecoderState::DECODING) ||
+            (decoder_state == audio::AudioDecoderState::FINISHED)) {
+          this_pipeline->playback_ms_ = decoder->get_playback_ms();
+        }
+
+        if (decoder_state == audio::AudioDecoderState::FINISHED) {
+          break;
+        } else if (decoder_state == audio::AudioDecoderState::FAILED) {
+          if (!has_stream_info) {
+            event.decoding_err = DecodingError::FAILED_HEADER;
+            xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
+          }
+          xEventGroupSetBits(this_pipeline->event_group_,
+                             EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
+          break;
+        }
+
+        if (!has_stream_info && decoder->get_audio_stream_info().has_value()) {
+          has_stream_info = true;
+
+          this_pipeline->current_audio_stream_info_ = decoder->get_audio_stream_info().value();
+
+          // Send the stream information to the pipeline
+          event.audio_stream_info = this_pipeline->current_audio_stream_info_;
+
+          if (this_pipeline->current_audio_stream_info_.get_bits_per_sample() != 16) {
+            // Error state, incompatible bits per sample
+            event.decoding_err = DecodingError::INCOMPATIBLE_BITS_PER_SAMPLE;
+            xEventGroupSetBits(this_pipeline->event_group_,
+                               EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
+          } else if ((this_pipeline->current_audio_stream_info_.get_channels() > 2)) {
+            // Error state, incompatible number of channels
+            event.decoding_err = DecodingError::INCOMPATIBLE_CHANNELS;
+            xEventGroupSetBits(this_pipeline->event_group_,
+                               EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
+          } else {
+            // Send audio directly to the speaker
+            this_pipeline->speaker_->set_audio_stream_info(this_pipeline->current_audio_stream_info_);
+            decoder->add_sink(this_pipeline->speaker_);
+          }
+
+          initial_bytes_to_buffer = std::min(this_pipeline->current_audio_stream_info_.ms_to_bytes(INITIAL_BUFFER_MS),
+                                             this_pipeline->buffer_size_ * 3 / 4);
+
+          switch (this_pipeline->current_audio_file_type_) {
 #ifdef USE_AUDIO_MP3_SUPPORT
-          case audio::AudioFileType::MP3:
-            initial_bytes_to_buffer /= 8;  // Estimate the MP3 compression factor is 8
-            break;
+            case audio::AudioFileType::MP3:
+              initial_bytes_to_buffer /= 8;  // Estimate the MP3 compression factor is 8
+              break;
 #endif
 #ifdef USE_AUDIO_FLAC_SUPPORT
-          case audio::AudioFileType::FLAC:
-            initial_bytes_to_buffer /= 2;  // Estimate the FLAC compression factor is 2
-            break;
+            case audio::AudioFileType::FLAC:
+              initial_bytes_to_buffer /= 2;  // Estimate the FLAC compression factor is 2
+              break;
 #endif
-          default:
-            break;
+            default:
+              break;
+          }
+          xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
         }
-        xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
-      }
 
-      if (!started_playback && has_stream_info) {
-        // Verify enough data is available before starting playback
-        std::shared_ptr<RingBuffer> temp_ring_buffer = this_pipeline->raw_file_ring_buffer_.lock();
-        if (temp_ring_buffer->available() >= initial_bytes_to_buffer) {
-          started_playback = true;
+        if (!started_playback && has_stream_info) {
+          // Verify enough data is available before starting playback
+          std::shared_ptr<RingBuffer> temp_ring_buffer = this_pipeline->raw_file_ring_buffer_.lock();
+          if (temp_ring_buffer->available() >= initial_bytes_to_buffer) {
+            started_playback = true;
+          }
         }
       }
     }
-  }
 
-  xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_FINISHED);
-  vTaskDelete(NULL);
+    xEventGroupSetBits(this_pipeline->event_group_, EventGroupBits::DECODER_MESSAGE_FINISHED);
+  }
 }
 
 }  // namespace speaker
