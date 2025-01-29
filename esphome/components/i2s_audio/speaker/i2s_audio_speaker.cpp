@@ -203,6 +203,12 @@ size_t I2SAudioSpeaker::play(const uint8_t *data, size_t length, TickType_t tick
     this->start();
   }
 
+  if ((this->state_ != speaker::STATE_RUNNING) || (this->audio_ring_buffer_.use_count() == 1)) {
+    // Unable to write data to a running speaker, so delay the max amount of time so it can get ready
+    vTaskDelay(ticks_to_wait);
+    ticks_to_wait = 0;
+  }
+
   size_t bytes_written = 0;
   if ((this->state_ == speaker::STATE_RUNNING) && (this->audio_ring_buffer_.use_count() == 1)) {
     // Only one owner of the ring buffer (the speaker task), so the ring buffer is allocated and no other components are
