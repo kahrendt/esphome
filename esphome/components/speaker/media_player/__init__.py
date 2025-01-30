@@ -285,7 +285,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Required(CONF_ANNOUNCEMENT_PIPELINE): PIPELINE_SCHEMA,
             cv.Optional(CONF_MEDIA_PIPELINE): PIPELINE_SCHEMA,
             cv.Optional(CONF_BUFFER_SIZE, default=1000000): cv.int_range(
-                min=8000, max=8000000
+                min=4000, max=4000000
             ),
             cv.Optional(CONF_CODEC_SUPPORT_ENABLED, default=True): cv.boolean,
             cv.Optional(CONF_FILES): cv.ensure_list(MEDIA_FILE_TYPE_SCHEMA),
