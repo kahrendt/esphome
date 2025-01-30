@@ -209,6 +209,18 @@ def _validate_pipeline(config):
     return config
 
 
+def _validate_repeated_speaker(config):
+    if (announcement_config := config.get(CONF_ANNOUNCEMENT_PIPELINE)) and (
+        media_config := config.get(CONF_MEDIA_PIPELINE)
+    ):
+        if announcement_config[CONF_SPEAKER] == media_config[CONF_SPEAKER]:
+            raise cv.Invalid(
+                "The announcement and media pipelines cannot use the same speaker. Use the `mixer` speaker component to create two source speakers."
+            )
+
+    return config
+
+
 def _validate_supported_local_file(config):
     if files_list := config.get(CONF_FILES):
         for file_config in files_list:
@@ -287,6 +299,7 @@ CONFIG_SCHEMA = cv.All(
         }
     ),
     cv.only_with_esp_idf,
+    _validate_repeated_speaker,
 )
 
 
