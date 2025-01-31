@@ -10,7 +10,7 @@
 namespace esphome {
 namespace speaker {
 
-template<typename... Ts> class PlayLocalMediaAction : public Action<Ts...>, public Parented<SpeakerMediaPlayer> {
+template<typename... Ts> class PlayOnDeviceMediaAction : public Action<Ts...>, public Parented<SpeakerMediaPlayer> {
   TEMPLATABLE_VALUE(audio::AudioFile *, audio_file)
   TEMPLATABLE_VALUE(bool, announcement)
   void play(Ts... x) override {

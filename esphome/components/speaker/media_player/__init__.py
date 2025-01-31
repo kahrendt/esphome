@@ -66,8 +66,10 @@ AUDIO_PIPELINE_TYPE_ENUM = {
     "ANNOUNCEMENT": AudioPipelineType.ANNOUNCEMENT,
 }
 
-PlayLocalMediaAction = speaker_ns.class_(
-    "PlayLocalMediaAction", automation.Action, cg.Parented.template(SpeakerMediaPlayer)
+PlayOnDeviceMediaAction = speaker_ns.class_(
+    "PlayOnDeviceMediaAction",
+    automation.Action,
+    cg.Parented.template(SpeakerMediaPlayer),
 )
 StopStreamAction = speaker_ns.class_(
     "StopStreamAction", automation.Action, cg.Parented.template(SpeakerMediaPlayer)
@@ -442,8 +444,8 @@ async def to_code(config):
 
 
 @automation.register_action(
-    "speaker_media_player.play_local_media_file",
-    PlayLocalMediaAction,
+    "speaker_media_player.play_on_device_media_file",
+    PlayOnDeviceMediaAction,
     cv.maybe_simple_value(
         {
             cv.GenerateID(): cv.use_id(SpeakerMediaPlayer),
@@ -453,7 +455,7 @@ async def to_code(config):
         key=CONF_MEDIA_FILE,
     ),
 )
-async def play_local_media_media_action(config, action_id, template_arg, args):
+async def play_on_device_media_media_action(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
     media_file = await cg.get_variable(config[CONF_MEDIA_FILE])
