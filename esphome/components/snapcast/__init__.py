@@ -13,7 +13,6 @@ _LOGGER = logging.getLogger(__name__)
 AUTO_LOAD = ["audio", "bytebuffer", "json", "psram", "socket"]
 
 CODEOWNERS = ["@kahrendt", "@synesthesiam"]
-DEPENDENCIES = ["media_player"]
 DOMAIN = "file"
 
 TYPE_LOCAL = "local"

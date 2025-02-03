@@ -112,6 +112,12 @@ class SnapcastPlayer : public Component {
 
   bool server_settings_message_deserialize_(server_settings_message_t *msg, const char *json_str);
 
+  // void codec_header_deserialize(codec_message_t *msg, bytebuffer::ByteBuffer &buffer);
+
+  static void snapcast_task(void *params);
+  TaskHandle_t snapcast_task_handle_{nullptr};
+  // void close_connection_(struct netconn *conn);
+
   // bool codec_header_message_deserialize_(codec_header_message_t *msg, const char *data, uint32_t size);
   // void codec_header_message_free_(codec_header_message_t *msg);
 

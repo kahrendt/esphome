@@ -299,6 +299,8 @@ class ByteBuffer {
   // retrieve a pointer to the underlying data.
   std::vector<uint8_t> get_data() { return this->data_; };
 
+  uint8_t *get_raw_data() { return this->data_.data(); }
+
   void get_bytes(void *dest, size_t length) {
     std::copy(this->data_.begin() + this->position_, this->data_.begin() + this->position_ + length, (uint8_t *) dest);
     this->position_ += length;
