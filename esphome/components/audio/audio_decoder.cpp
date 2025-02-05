@@ -104,13 +104,13 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
     }
   }
 
-  if (this->potentially_failed_count_ > MAX_POTENTIALLY_FAILED_COUNT) {
-    if (stop_gracefully) {
-      // No more new data is going to come in, so decoding is done
-      return AudioDecoderState::FINISHED;
-    }
-    return AudioDecoderState::FAILED;
-  }
+  // if (this->potentially_failed_count_ > MAX_POTENTIALLY_FAILED_COUNT) {
+  //   if (stop_gracefully) {
+  //     // No more new data is going to come in, so decoding is done
+  //     return AudioDecoderState::FINISHED;
+  //   }
+  //   return AudioDecoderState::FAILED;
+  // }
 
   FileDecoderState state = FileDecoderState::MORE_TO_PROCESS;
 

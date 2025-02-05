@@ -3,11 +3,13 @@
 #include "esphome/core/defines.h"
 #ifdef USE_NETWORK
 
+#include "esphome/components/audio/audio.h"
 #include "esphome/components/bytebuffer/bytebuffer.h"
 #include "esphome/components/socket/socket.h"
 #include "esphome/components/speaker/speaker.h"
 
 #include "esphome/core/component.h"
+#include "esphome/core/ring_buffer.h"
 
 namespace esphome {
 namespace snapcast {
@@ -115,15 +117,48 @@ class SnapcastPlayer : public Component {
   // void codec_header_deserialize(codec_message_t *msg, bytebuffer::ByteBuffer &buffer);
 
   static void snapcast_task(void *params);
+  static void decode_task(void *params);
   TaskHandle_t snapcast_task_handle_{nullptr};
-  // void close_connection_(struct netconn *conn);
+  TaskHandle_t decode_task_handle_{nullptr};
+  uint16_t time_sync_counter_{0};
 
-  // bool codec_header_message_deserialize_(codec_header_message_t *msg, const char *data, uint32_t size);
-  // void codec_header_message_free_(codec_header_message_t *msg);
+  audio::AudioFileType current_audio_file_type_{audio::AudioFileType::FLAC};
+  optional<audio::AudioStreamInfo> current_audio_stream_info_;
 
-  // // TODO currently copies, could be made to not copy probably
-  // int wire_chunk_message_deserialize_(wire_chunk_message_t *msg, const char *data, uint32_t size);
-  // void wire_chunk_message_free_(wire_chunk_message_t *msg);
+  std::weak_ptr<RingBuffer> raw_file_ring_buffer_;
+
+  static void time_sync_callback(void *params);
+
+  // int64_t time_offsets_[50];
+  std::vector<int64_t> time_offsets_;
+  uint8_t time_offsets_index_{0};
+  // uint8_t time_offsets_in_set_{0};
+
+  int64_t update_time_offsets_(int64_t new_offset) {
+    if (this->time_offsets_.size() < 50) {
+      this->time_offsets_.push_back(new_offset);
+    } else {
+      this->time_offsets_[this->time_offsets_index_] = new_offset;
+    }
+    printf("time offest index %d\n", this->time_offsets_index_);
+    ++this->time_offsets_index_;
+    if (this->time_offsets_index_ == 50) {
+      this->time_offsets_index_ = 0;
+    }
+    // this->time_offsets_index_ = std::min(this->time_offsets_index_ + 1, (int) (50));
+
+    std::vector<int64_t> sorted_offsets;
+    for (const int64_t &offset : this->time_offsets_) {
+      sorted_offsets.push_back(offset);
+    }
+
+    std::sort(sorted_offsets.begin(), sorted_offsets.end());
+    if (sorted_offsets.size() % 2 == 0) {
+      return (sorted_offsets[sorted_offsets.size() / 2] + sorted_offsets[sorted_offsets.size() / 2 + 1]) / 2;
+    }
+
+    return sorted_offsets[sorted_offsets.size() / 2];
+  }
 };
 
 }  // namespace snapcast

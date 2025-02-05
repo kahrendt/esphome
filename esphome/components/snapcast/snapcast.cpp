@@ -2,6 +2,9 @@
 #ifdef USE_NETWORK
 // #include "esphome/components/network/ip_address.h"
 #include "esphome/components/json/json_util.h"
+#include "esphome/components/audio/audio.h"
+#include "esphome/components/audio/audio_transfer_buffer.h"
+#include "esphome/components/audio/audio_decoder.h"
 
 #include "esphome/core/log.h"
 
@@ -17,10 +20,16 @@
 
 #include <esp_timer.h>
 
+#include <flac_decoder.h>
+
 namespace esphome {
 namespace snapcast {
 
 static const char *TAG = "snapcast";
+
+static const size_t INPUT_BUFFER_SIZE = 1024 * 50;
+static const size_t OUTPUT_BUFFER_SIZE = 1024 * 50;
+static const size_t RING_BUFFER_SIZE = 1024 * 1000;
 
 static void close_connection(struct netconn *conn) {
   if (conn != nullptr) {
@@ -35,6 +44,28 @@ void SnapcastPlayer::setup() {
 }
 
 void SnapcastPlayer::loop() {}
+
+void SnapcastPlayer::time_sync_callback(void *params) {
+  SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
+
+  bytebuffer::ByteBuffer time_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE + TIME_MESSAGE_SIZE);
+
+  int64_t now = esp_timer_get_time();
+  base_message base_msg_for_time = {
+      .type = SNAPCAST_MESSAGE_TIME,
+      .id = this_snapcast->time_sync_counter_++,
+      .refersTo = 0x0000,
+      .sent = {.sec = static_cast<int32_t>(now / 1000000LL),
+               .usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL)},
+      .received = {.sec = 0, .usec = 0},
+      .size = TIME_MESSAGE_SIZE,
+  };
+
+  this_snapcast->base_message_serialize_(&base_msg_for_time, time_msg_buffer);
+  time_msg_buffer.put_int32(0);
+  time_msg_buffer.put_int32(0);
+  this_snapcast->socket_->write((void *) time_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + TIME_MESSAGE_SIZE);
+}
 
 void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
@@ -60,62 +91,19 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
     // }
     // mdns_query_results_free(mdns_result);
 
-    // this->socket_ = socket::socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    // struct sockaddr_storage server;
+    this_snapcast->socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
+    struct sockaddr_storage server;
 
-    // socklen_t sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), "192.168.1.35", 1704);
-    // if (sl == 0) {
-    //   ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);
-    //   this->mark_failed();
-    //   return;
-    // }
-    // esp_err_t err = this->socket_->bind((struct sockaddr *) &server, sizeof(server));
-    // printf("err %d\n", err);
-
-    // std::string hello_message = this->hello_message_serialize_();
-    // ssize_t write_amount = this->socket_->write((void *) hello_message.front(), hello_message.length());
-
-    // printf("write socket %d\n", write_amount);
-
-    // struct sockaddr_in servaddr;
-    ip_addr_t remote_ip;
-
-    // servaddr.sin_family = AF_INET;
-    // inet_pton(AF_INET, "192.168.1.35", &(servaddr.sin_addr.s_addr));
-    // servaddr.sin_port = htons(1704);
-
-    struct netconn *lwip_netconn;
-
-    inet_pton(AF_INET, "192.168.1.35", &(remote_ip.addr));
-    uint16_t remotePort = 1704;
-
-    if (lwip_netconn != nullptr) {
-      close_connection(lwip_netconn);
-    }
-
-    lwip_netconn = netconn_new(NETCONN_TCP);
-    if (lwip_netconn == nullptr) {
-      ESP_LOGE(TAG, "can't create netconn");
+    socklen_t sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), "192.168.1.35", 1704);
+    if (sl == 0) {
+      ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);
       continue;
     }
+    esp_err_t err = this_snapcast->socket_->connect((struct sockaddr *) &server, sizeof(server));
+    printf("err %d\n", err);
 
-    ip_addr_t any_ip_addr = IPADDR4_INIT(IPADDR_ANY);
-
-    esp_err_t err = ESP_OK;
-    err = netconn_bind(lwip_netconn, &any_ip_addr, 0);
-    if (err != ERR_OK) {
-      ESP_LOGE(TAG, "can't bind local IP");
-      close_connection(lwip_netconn);
-      continue;
-    }
-
-    err = netconn_connect(lwip_netconn, &remote_ip, remotePort);
-    if (err != ERR_OK) {
-      ESP_LOGE(TAG, "can't connect to remote %s:%d, err %d", ipaddr_ntoa(&remote_ip), remotePort, err);
-      close_connection(lwip_netconn);
-      continue;
-    }
-
+    // std::string hello_message = this_snapcast->hello_message_serialize_();
+    // ssize_t write_amount = this_snapcast->socket_->write((void *) hello_message.front(), hello_message.length());
     int64_t now = esp_timer_get_time();
 
     std::string hello_msg = this_snapcast->hello_message_serialize_();
@@ -132,7 +120,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
         .type = SNAPCAST_MESSAGE_HELLO,
         .id = 0x0000,
         .refersTo = 0x0000,
-        .sent = {.sec = now / 1000000, .usec = now - now / 1000000},
+        .sent = {.sec = static_cast<int32_t>(now / 1000000),
+                 .usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL)},
         .received = {.sec = 0, .usec = 0},
         .size = total_hello_msg_size,
     };
@@ -145,84 +134,266 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
     printf("base message buffer size: %d, remaining: %d\n", base_msg_buffer.get_capacity(),
            base_msg_buffer.get_remaining());
 
-    err = netconn_write(lwip_netconn, (void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE, NETCONN_NOCOPY);
-    ESP_LOGD(TAG, "attempted to send base message,err %d", err);
+    ssize_t write_amount = this_snapcast->socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
 
-    err = netconn_write(lwip_netconn, (void *) hello_msg_buffer.get_raw_data(), base_msg.size, NETCONN_NOCOPY);
-    ESP_LOGD(TAG, "attempted to send hello message,err %d", err);
+    printf("write socket base %d\n", write_amount);
 
-    struct netbuf *firstNetBuf = NULL;
+    write_amount = this_snapcast->socket_->write((void *) hello_msg_buffer.get_raw_data(), base_msg.size);
+
+    printf("write socket hello %d\n", write_amount);
+
+    std::unique_ptr<audio::AudioSinkTransferBuffer> transfer_buffer =
+        audio::AudioSinkTransferBuffer::create(INPUT_BUFFER_SIZE);
+    {
+      std::shared_ptr<RingBuffer> file_ring_buffer = RingBuffer::create(RING_BUFFER_SIZE);
+      this_snapcast->raw_file_ring_buffer_ = file_ring_buffer;
+
+      transfer_buffer->set_sink(this_snapcast->raw_file_ring_buffer_);
+    }
+
+    esp_timer_create_args_t tSyncArgs = {.callback = &time_sync_callback,
+                                         .arg = this_snapcast,
+                                         .dispatch_method = ESP_TIMER_TASK,
+                                         .name = "t_sync_msg",
+                                         .skip_unhandled_events = false};
+    esp_timer_handle_t timeSyncMessageTimer;
+    esp_timer_create(&tSyncArgs, &timeSyncMessageTimer);
 
     while (true) {
-      err = netconn_recv(lwip_netconn, &firstNetBuf);
-      if (err != ESP_OK) {
-        ESP_LOGE(TAG, "failed to receive message %d", err);
+      transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(0));
+      base_msg_buffer.rewind();
 
-        close_connection(lwip_netconn);
+      ssize_t read_amount = this_snapcast->socket_->read((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
 
-        if (firstNetBuf != NULL) {
-          netbuf_delete(firstNetBuf);
-        }
+      now = esp_timer_get_time();
 
-        break;
+      if (read_amount < BASE_MESSAGE_SIZE) {
+        continue;
       }
 
-      netbuf_first(firstNetBuf);
-      ESP_LOGD(TAG, "attempting to decode");
+      this_snapcast->base_message_deserialize_(&base_msg, base_msg_buffer);
 
-      uint8_t *start;
-      uint16_t len;
+      base_msg.received.sec = static_cast<int32_t>(now / 1000000LL);
+      base_msg.received.usec = static_cast<int32_t>(now - now / 1000000LL);
 
-      err = netbuf_data(firstNetBuf, (void **) &start, &len);
-      if (err == ESP_OK) {
-        printf("data len: %d, %d\n", len, netbuf_len(firstNetBuf));
+      // if (base_msg.type > 0) {
+      //   printf("base message response type: %d\n", base_msg.type);
+      //   printf("base message size of next message: %d\n", base_msg.size);
+      // }
 
-        std::vector<uint8_t> base_msg_read_data;
-        base_msg_read_data.insert(base_msg_read_data.end(), &start[0], &start[BASE_MESSAGE_SIZE]);
-        printf("base message length: %d", base_msg_read_data.size());
+      switch (base_msg.type) {
+        case SNAPCAST_MESSAGE_CODEC_HEADER: {
+          printf("got snapcast header message\n");
+          uint32_t codec_len = 0;
+          this_snapcast->socket_->read(&codec_len, sizeof(uint32_t));
 
-        base_msg_buffer.reset();
-        base_msg_buffer.put(base_msg_read_data);
-        base_msg_buffer.rewind();
-        this_snapcast->base_message_deserialize_(&base_msg, base_msg_buffer);
-        printf("base message response type: %d\n", base_msg.type);
-        printf("base message size of next message: %d\n", base_msg.size);
-        // base_msg.bytebuffer::ByteBuffer incoming_data = bytebuffer::ByteBuffer(len);
+          std::string codec_type;
+          codec_type.resize(codec_len);
+          this_snapcast->socket_->read(&codec_type[0], codec_len);
 
-        switch (base_msg.type) {
-          case SNAPCAST_MESSAGE_SERVER_SETTINGS:
-            if (base_msg.type == SNAPCAST_MESSAGE_SERVER_SETTINGS) {
-              bytebuffer::ByteBuffer server_settings_buffer = bytebuffer::ByteBuffer(base_msg.size);
-              std::string server_msg_read_data = std::string(
-                  (const char *) &start[BASE_MESSAGE_SIZE + sizeof(uint32_t)], base_msg.size - sizeof(uint32_t));
-              // server_msg_read_data.insert(1, (const char *) &start[BASE_MESSAGE_SIZE], (size_t) base_msg.size);
-              // server_settings_buffer.put(server_msg_read_data);
-              // server_settings_buffer.rewind();
-              server_settings_message server_settings_msg;
-              this_snapcast->server_settings_message_deserialize_(&server_settings_msg, server_msg_read_data.c_str());
+          printf("codec format %s\n", codec_type.c_str());
 
-              printf(
-                  "server settings json: %s\n server settings buffer ms: %d\n latency: %d\n muted: %d\n volume: %ds\n",
-                  server_msg_read_data.c_str(), server_settings_msg.buffer_ms, server_settings_msg.latency,
-                  server_settings_msg.muted, server_settings_msg.volume);
+          codec_len = 0;
+          this_snapcast->socket_->read(&codec_len, sizeof(uint32_t));
 
-              // server_settings.copy_from(&base_msg.data[0], base_msg.data.size());
+          if (codec_len > 0) {
+            while (codec_len > 0) {
+              ssize_t bytes_read = this_snapcast->socket_->read(transfer_buffer->get_buffer_end(), codec_len);
+              transfer_buffer->increase_buffer_length(bytes_read);
+              codec_len -= bytes_read;
+              printf("acutally read %d bytes \n", bytes_read);
             }
-            break;
-          default:
-            break;
+
+            xTaskCreate(decode_task, "decode", 1024 * 5, (void *) this_snapcast, 1,
+                        &this_snapcast->decode_task_handle_);
+          }
+
+          esp_timer_stop(timeSyncMessageTimer);
+          if (!esp_timer_is_active(timeSyncMessageTimer)) {
+            esp_timer_start_periodic(timeSyncMessageTimer, 1000000);
+          }
+          break;
         }
+        case SNAPCAST_MESSAGE_WIRE_CHUNK: {
+          if (this_snapcast->current_audio_stream_info_.has_value()) {
+            int32_t timestamp_s;
+            int32_t timestamp_us;
+            uint32_t chunk_size;
+            this_snapcast->socket_->read(&timestamp_s, sizeof(timestamp_s));
+            this_snapcast->socket_->read(&timestamp_us, sizeof(timestamp_us));
+            this_snapcast->socket_->read(&chunk_size, sizeof(chunk_size));
+
+            int64_t total_timestamp_us =
+                static_cast<int64_t>(timestamp_s) * 1000000LL + static_cast<int64_t>(timestamp_us);
+            // printf("play this chunk at %" PRId64 " (%" PRId32 "s, %" PRId32 "us); its currently %" PRId64 "\n",
+            //  total_timestamp_us, timestamp_s, timestamp_us, esp_timer_get_time());
+
+            if (chunk_size > 0) {
+              while (chunk_size > 0) {
+                transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(0));
+                size_t bytes_to_read = std::min(transfer_buffer->free(), (size_t) chunk_size);
+                ssize_t bytes_read = this_snapcast->socket_->read(transfer_buffer->get_buffer_end(), bytes_to_read);
+                transfer_buffer->increase_buffer_length(bytes_read);
+                chunk_size -= bytes_read;
+              }
+            }
+          }
+          break;
+        }
+        case SNAPCAST_MESSAGE_SERVER_SETTINGS: {
+          uint32_t server_settings_len = 0;
+          this_snapcast->socket_->read(&server_settings_len, sizeof(uint32_t));
+          if (server_settings_len > 0) {
+            std::string server_msg_read_data;
+            server_msg_read_data.resize(server_settings_len);
+            this_snapcast->socket_->read(&server_msg_read_data[0], server_settings_len);
+            server_settings_message server_settings_msg;
+            this_snapcast->server_settings_message_deserialize_(&server_settings_msg, server_msg_read_data.c_str());
+
+            printf("server settings json: %s\n server settings buffer ms: %d\n latency: %d\n muted: %d\n volume %d\n",
+                   server_msg_read_data.c_str(), server_settings_msg.buffer_ms, server_settings_msg.latency,
+                   server_settings_msg.muted, server_settings_msg.volume);
+
+            this_snapcast->speaker_->set_volume(static_cast<float>(server_settings_msg.volume) / 100.0f);
+            this_snapcast->speaker_->set_mute_state(server_settings_msg.muted);
+          }
+
+          break;
+        }
+        case SNAPCAST_MESSAGE_TIME: {
+          int32_t latency_s;
+          int32_t latency_us;
+          this_snapcast->socket_->read(&latency_s, sizeof(latency_s));
+          this_snapcast->socket_->read(&latency_us, sizeof(latency_us));
+
+          int64_t time_rx_us = now;
+          // int64_t time_rx_us =
+          //     static_cast<int64_t>(base_msg.received.sec) * 1000000LL + static_cast<int64_t>(base_msg.received.usec);
+          int64_t time_tx_us =
+              static_cast<int64_t>(base_msg.sent.sec) * 1000000LL + static_cast<int64_t>(base_msg.sent.usec);
+          int64_t t_dif = time_rx_us - time_tx_us;
+
+          int64_t latency = static_cast<int64_t>(latency_s) * 1000000LL + static_cast<int64_t>(latency_us);
+
+          int64_t tmp_dif = (latency - t_dif) / 2;
+
+          printf("time_rx_us=%" PRId64 ", time_tx_us=%" PRId64 ", t_dif=%" PRId64 ", latency=%" PRId64
+                 ", tmp_dif=%" PRId64 "\n",
+                 time_rx_us, time_tx_us, t_dif, latency, tmp_dif);
+
+          int64_t median_offset = this_snapcast->update_time_offsets_(tmp_dif);
+
+          printf("media offset %" PRId64 "\n", median_offset);
+
+          break;
+        }
+
+        default:
+          break;
       }
-      // break;
+
+      //   while (input_transfer_buffer->has_buffered_data() && stream_info.has_value() &&
+      //          (output_transfer_buffer->free() >= free_buffer_required)) {
+      //     uint32_t output_samples = 0;
+      //     auto result = flac_decoder->decode_frame(
+      //         input_transfer_buffer->get_buffer_start(), input_transfer_buffer->available(),
+      //         reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()), &output_samples);
+      //     if (result == esp_audio_libs::flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
+      //       // Not an issue, just needs more data that we'll get next time.
+      //       printf("ran out of data... \n");
+      //       break;
+      //     }
+
+      //     size_t bytes_consumed = flac_decoder->get_bytes_index();
+      //     input_transfer_buffer->decrease_buffer_length(bytes_consumed);
+
+      //     if (result > esp_audio_libs::flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
+      //       // Corrupted frame, don't retry with current buffer content, wait for new sync
+      //       printf("larger error\n");
+      //       break;
+      //     }
+
+      //     // We have successfully decoded some input data and have new output data
+
+      //     output_transfer_buffer->increase_buffer_length(stream_info.value().samples_to_bytes(output_samples));
+      //     output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
+      //   }
+      // }
     }
-    netbuf_delete(firstNetBuf);
-    close_connection(lwip_netconn);
     while (true) {
       delay(10);
     }
   }
 }
 
+void SnapcastPlayer::decode_task(void *params) {
+  SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
+
+  while (true) {
+    std::unique_ptr<audio::AudioDecoder> decoder =
+        make_unique<audio::AudioDecoder>(INPUT_BUFFER_SIZE, OUTPUT_BUFFER_SIZE);
+
+    esp_err_t err = decoder->start(this_snapcast->current_audio_file_type_);
+
+    if (this_snapcast->raw_file_ring_buffer_.use_count() > 0) {
+      decoder->add_source(this_snapcast->raw_file_ring_buffer_);
+    }
+
+    if (err == ESP_OK) {
+      bool has_stream_info = false;
+      bool started_playback = false;
+
+      printf("decoder task loop starting\n");
+      while (true) {
+        audio::AudioDecoderState decoder_state = decoder->decode(false);
+
+        // if ((decoder_state == audio::AudioDecoderState::DECODING) ||
+        //     (decoder_state == audio::AudioDecoderState::FINISHED)) {
+        //   this_pipeline->playback_ms_ = decoder->get_playback_ms();
+        // }
+
+        // if (decoder_state == audio::AudioDecoderState::FINISHED) {
+        //   break;
+        // } else if (decoder_state == audio::AudioDecoderState::FAILED) {
+        //   if (!has_stream_info) {
+        //     event.decoding_err = DecodingError::FAILED_HEADER;
+        //     xQueueSend(this_pipeline->info_error_queue_, &event, portMAX_DELAY);
+        //   }
+        //   xEventGroupSetBits(this_pipeline->event_group_,
+        //                      EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
+        //   break;
+        // }
+
+        if (!has_stream_info && decoder->get_audio_stream_info().has_value()) {
+          has_stream_info = true;
+
+          this_snapcast->current_audio_stream_info_ = decoder->get_audio_stream_info().value();
+
+          // // Send the stream information to the pipeline
+          // event.audio_stream_info = this_snapcast->current_audio_stream_info_;
+
+          // if (this_pipeline->current_audio_stream_info_.get_bits_per_sample() != 16) {
+          //   // Error state, incompatible bits per sample
+          //   event.decoding_err = DecodingError::INCOMPATIBLE_BITS_PER_SAMPLE;
+          //   xEventGroupSetBits(this_pipeline->event_group_,
+          //                      EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
+          // } else if ((this_pipeline->current_audio_stream_info_.get_channels() > 2)) {
+          //   // Error state, incompatible number of channels
+          //   event.decoding_err = DecodingError::INCOMPATIBLE_CHANNELS;
+          //   xEventGroupSetBits(this_pipeline->event_group_,
+          //                      EventGroupBits::DECODER_MESSAGE_ERROR | EventGroupBits::PIPELINE_COMMAND_STOP);
+          // } else {
+          // Send audio directly to the speaker
+          this_snapcast->speaker_->set_audio_stream_info(this_snapcast->current_audio_stream_info_.value());
+          decoder->add_sink(this_snapcast->speaker_);
+          printf("got audio stream info");
+          // }
+        }
+      }
+    }
+  }
+  vTaskDelete(NULL);
+}
 void SnapcastPlayer::base_message_serialize_(base_message_t *msg, bytebuffer::ByteBuffer &buffer) {
   buffer.put_uint16(msg->type);
   buffer.put_uint16(msg->id);
@@ -253,7 +424,7 @@ std::string SnapcastPlayer::hello_message_serialize_() {
           base_mac[5]);
   hello_message_t hello_message;
   hello_message.mac = mac_address;
-  hello_message.hostname = "my_hostname";
+  hello_message.hostname = "my_hostname4";
   hello_message.version = "0.0.1";
   hello_message.client_name = "libsnapcast";
   hello_message.os = "esp32";
