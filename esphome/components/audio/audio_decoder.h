@@ -85,7 +85,11 @@ class AudioDecoder {
   /// @param stop_gracefully If true, it indicates the file source is finished. The decoder will decode all the
   /// reamining data and then finish.
   /// @return AudioDecoderState
-  AudioDecoderState decode(bool stop_gracefully);
+  AudioDecoderState decode(bool stop_gracefully, int32_t &frames_adjustment);
+  AudioDecoderState decode(bool stop_gracefully) {
+    int32_t zero = 0;
+    this->decode(stop_gracefully, zero);
+  }
 
   /// @brief Gets the audio stream information, if it has been decoded from the files header
   /// @return optional<AudioStreamInfo> with the audio information. If not available yet, returns no value.

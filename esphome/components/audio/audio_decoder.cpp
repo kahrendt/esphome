@@ -89,7 +89,7 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
   return ESP_OK;
 }
 
-AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
+AudioDecoderState AudioDecoder::decode(bool stop_gracefully, int32_t &frames_adjustment) {
   if (stop_gracefully) {
     if (this->output_transfer_buffer_->available() == 0) {
       if (this->end_of_file_) {
@@ -119,8 +119,46 @@ AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
   while (state == FileDecoderState::MORE_TO_PROCESS) {
     // Transfer decoded out
     if (!this->pause_output_) {
+      if (frames_adjustment != 0) {
+        if (this->audio_stream_info_.has_value()) {
+          size_t bytes_per_frame = this->audio_stream_info_.value().frames_to_bytes(1);
+          int32_t bytes_to_adjust = static_cast<int32_t>(bytes_per_frame) * frames_adjustment;
+          if (bytes_to_adjust > 0) {
+            if (this->output_transfer_buffer_->free() > bytes_to_adjust) {
+              while (bytes_to_adjust > 0) {
+                printf("duplicating a frame\n");
+                std::memcpy((void *) this->output_transfer_buffer_->get_buffer_end(),
+                            (void *) this->output_transfer_buffer_->get_buffer_end() - bytes_per_frame,
+                            bytes_per_frame);
+                this->output_transfer_buffer_->increase_buffer_length(bytes_per_frame);
+                bytes_to_adjust -= bytes_per_frame;
+              }
+            } else {
+              frames_adjustment = 0;
+            }
+          } else if (bytes_to_adjust < 0) {
+            size_t bytes_to_adjust_abs = -bytes_to_adjust;
+            if (this->output_transfer_buffer_->available() > bytes_to_adjust_abs) {
+              printf("deleting a frame\n");
+              this->output_transfer_buffer_->decrease_buffer_length(bytes_to_adjust_abs);
+            } else {
+              frames_adjustment = 0;
+            }
+
+          } else {
+            // nothing to adjust
+            frames_adjustment = 0;
+          }
+        } else {
+          // audio stream info isn't known, so we can't adjust the frames
+          frames_adjustment = 0;
+        }
+      }
       size_t bytes_written = this->output_transfer_buffer_->transfer_data_to_sink(pdMS_TO_TICKS(READ_WRITE_TIMEOUT_MS));
+
       if (this->audio_stream_info_.has_value()) {
+        this->audio_stream_info_.value().frames_to_bytes(1);
+
         this->accumulated_frames_written_ += this->audio_stream_info_.value().bytes_to_frames(bytes_written);
         this->playback_ms_ +=
             this->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&this->accumulated_frames_written_);

@@ -134,6 +134,11 @@ class SnapcastPlayer : public Component {
   uint8_t time_offsets_index_{0};
   // uint8_t time_offsets_in_set_{0};
 
+  int64_t previous_median_offset_{0};
+  int64_t accumulated_drift_{0};
+
+  bool decoder_pause_{false};
+
   int64_t update_time_offsets_(int64_t new_offset) {
     if (this->time_offsets_.size() < 50) {
       this->time_offsets_.push_back(new_offset);
@@ -151,13 +156,20 @@ class SnapcastPlayer : public Component {
     for (const int64_t &offset : this->time_offsets_) {
       sorted_offsets.push_back(offset);
     }
-
     std::sort(sorted_offsets.begin(), sorted_offsets.end());
+
+    int64_t median_offset = sorted_offsets[sorted_offsets.size() / 2];
     if (sorted_offsets.size() % 2 == 0) {
-      return (sorted_offsets[sorted_offsets.size() / 2] + sorted_offsets[sorted_offsets.size() / 2 + 1]) / 2;
+      median_offset = (sorted_offsets[sorted_offsets.size() / 2] + sorted_offsets[sorted_offsets.size() / 2 + 1]) / 2;
     }
 
-    return sorted_offsets[sorted_offsets.size() / 2];
+    int64_t drift_since_last_offset = 0;
+    if (this->time_offsets_.size() > 1) {
+      drift_since_last_offset = median_offset - this->previous_median_offset_;
+    }
+    this->previous_median_offset_ = median_offset;
+    this->accumulated_drift_ += drift_since_last_offset;
+    return this->accumulated_drift_;
   }
 };
 

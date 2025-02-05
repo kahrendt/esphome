@@ -31,6 +31,9 @@ static const size_t INPUT_BUFFER_SIZE = 1024 * 50;
 static const size_t OUTPUT_BUFFER_SIZE = 1024 * 50;
 static const size_t RING_BUFFER_SIZE = 1024 * 1000;
 
+static const uint32_t FAST_SYNC_LATENCY_BUF = 10000;      // in µs
+static const uint32_t NORMAL_SYNC_LATENCY_BUF = 1000000;  // in µs
+
 static void close_connection(struct netconn *conn) {
   if (conn != nullptr) {
     netconn_close(conn);
@@ -159,6 +162,9 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
     esp_timer_handle_t timeSyncMessageTimer;
     esp_timer_create(&tSyncArgs, &timeSyncMessageTimer);
 
+    bool low_speed_timer_started = false;
+    bool high_speed_timer_started = false;
+
     while (true) {
       transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(0));
       base_msg_buffer.rewind();
@@ -175,6 +181,16 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
       base_msg.received.sec = static_cast<int32_t>(now / 1000000LL);
       base_msg.received.usec = static_cast<int32_t>(now - now / 1000000LL);
+
+      if (high_speed_timer_started && this_snapcast->time_offsets_.size() == 50) {
+        if (esp_timer_is_active(timeSyncMessageTimer)) {
+          esp_timer_stop(timeSyncMessageTimer);
+        }
+        high_speed_timer_started = false;
+        esp_timer_start_periodic(timeSyncMessageTimer, NORMAL_SYNC_LATENCY_BUF);
+        low_speed_timer_started = true;
+        this_snapcast->accumulated_drift_ = 0;
+      }
 
       // if (base_msg.type > 0) {
       //   printf("base message response type: %d\n", base_msg.type);
@@ -204,13 +220,17 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
               printf("acutally read %d bytes \n", bytes_read);
             }
 
+            this_snapcast->decoder_pause_ = true;
             xTaskCreate(decode_task, "decode", 1024 * 5, (void *) this_snapcast, 1,
                         &this_snapcast->decode_task_handle_);
+
+            this_snapcast->set_timeout(1500, [this_snapcast] { this_snapcast->decoder_pause_ = false; });
           }
 
           esp_timer_stop(timeSyncMessageTimer);
           if (!esp_timer_is_active(timeSyncMessageTimer)) {
-            esp_timer_start_periodic(timeSyncMessageTimer, 1000000);
+            esp_timer_start_periodic(timeSyncMessageTimer, FAST_SYNC_LATENCY_BUF);
+            high_speed_timer_started = true;
           }
           break;
         }
@@ -233,7 +253,10 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
                 transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(0));
                 size_t bytes_to_read = std::min(transfer_buffer->free(), (size_t) chunk_size);
                 ssize_t bytes_read = this_snapcast->socket_->read(transfer_buffer->get_buffer_end(), bytes_to_read);
-                transfer_buffer->increase_buffer_length(bytes_read);
+                if (low_speed_timer_started) {
+                  // only use the data if we have had enough timer events ot detect the latency
+                  transfer_buffer->increase_buffer_length(bytes_read);
+                }
                 chunk_size -= bytes_read;
               }
             }
@@ -345,7 +368,24 @@ void SnapcastPlayer::decode_task(void *params) {
 
       printf("decoder task loop starting\n");
       while (true) {
-        audio::AudioDecoderState decoder_state = decoder->decode(false);
+        int32_t frames_adjustment = 0;
+        if (this_snapcast->accumulated_drift_ > 21) {
+          // add frame
+          frames_adjustment = 1;
+
+        } else if (this_snapcast->accumulated_drift_ < -21) {
+          // remove frame
+          frames_adjustment = -1;
+        }
+
+        decoder->set_pause_output_state(this_snapcast->decoder_pause_);
+
+        audio::AudioDecoderState decoder_state = decoder->decode(false, frames_adjustment);
+        if (frames_adjustment == 1) {
+          this_snapcast->accumulated_drift_ -= 21;
+        } else if (frames_adjustment == -1) {
+          this_snapcast->accumulated_drift_ += 21;
+        }
 
         // if ((decoder_state == audio::AudioDecoderState::DECODING) ||
         //     (decoder_state == audio::AudioDecoderState::FINISHED)) {
