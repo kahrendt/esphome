@@ -20,10 +20,9 @@ import esphome.final_validate as fv
 
 AUTO_LOAD = ["audio"]
 CODEOWNERS = ["@kahrendt"]
-DEPENDENCIES = ["speaker"]
 
 mixer_speaker_ns = cg.esphome_ns.namespace("mixer_speaker")
-MixerSpeaker = mixer_speaker_ns.class_("MixerSpeaker", cg.Component, speaker.Speaker)
+MixerSpeaker = mixer_speaker_ns.class_("MixerSpeaker", cg.Component)
 SourceSpeaker = mixer_speaker_ns.class_("SourceSpeaker", cg.Component, speaker.Speaker)
 
 CONF_DECIBEL_REDUCTION = "decibel_reduction"
@@ -49,24 +48,17 @@ SOURCE_SPEAKER_SCHEMA = speaker.SPEAKER_SCHEMA.extend(
     }
 )
 
-CONFIG_SCHEMA = cv.All(
-    cv.Schema(
-        {
-            cv.GenerateID(): cv.declare_id(MixerSpeaker),
-            cv.Required(CONF_OUTPUT_SPEAKER): cv.use_id(speaker.Speaker),
-            cv.Required(CONF_SOURCE_SPEAKERS): cv.All(
-                cv.ensure_list(SOURCE_SPEAKER_SCHEMA), cv.Length(min=2, max=8)
-            ),
-            cv.Optional(CONF_NUM_CHANNELS): cv.int_range(min=1, max=2),
-            cv.Optional(CONF_QUEUE_MODE, default=False): cv.boolean,
-            cv.Optional(CONF_TASK_STACK_IN_PSRAM, default=False): cv.boolean,
-        }
-    ),
-    cv.only_on([PLATFORM_ESP32]),
-)
+
+def _set_stream_limits(config):
+    audio.set_stream_limits(
+        min_bits_per_sample=16,
+        max_bits_per_sample=16,
+    )(config)
+
+    return config
 
 
-def validate_source_speaker(config):
+def _validate_source_speaker(config):
     fconf = fv.full_config.get()
 
     # Get ID for the output speaker and add it to the source speakrs config to easily inherit properties
@@ -77,11 +69,6 @@ def validate_source_speaker(config):
 
     inherit_property_from(CONF_NUM_CHANNELS, CONF_OUTPUT_SPEAKER)(config)
     inherit_property_from(CONF_SAMPLE_RATE, CONF_OUTPUT_SPEAKER)(config)
-
-    audio.set_stream_limits(
-        min_bits_per_sample=16,
-        max_bits_per_sample=16,
-    )
 
     audio.final_validate_audio_schema(
         "mixer",
@@ -94,10 +81,30 @@ def validate_source_speaker(config):
     return config
 
 
+CONFIG_SCHEMA = cv.All(
+    cv.Schema(
+        {
+            cv.GenerateID(): cv.declare_id(MixerSpeaker),
+            cv.Required(CONF_OUTPUT_SPEAKER): cv.use_id(speaker.Speaker),
+            cv.Required(CONF_SOURCE_SPEAKERS): cv.All(
+                cv.ensure_list(SOURCE_SPEAKER_SCHEMA),
+                cv.Length(min=2, max=8),
+                [_set_stream_limits],
+            ),
+            cv.Optional(CONF_NUM_CHANNELS): cv.int_range(min=1, max=2),
+            cv.Optional(CONF_QUEUE_MODE, default=False): cv.boolean,
+            cv.SplitDefault(CONF_TASK_STACK_IN_PSRAM, esp32_idf=False): cv.All(
+                cv.boolean, cv.only_with_esp_idf
+            ),
+        }
+    ),
+    cv.only_on([PLATFORM_ESP32]),
+)
+
 FINAL_VALIDATE_SCHEMA = cv.All(
     cv.Schema(
         {
-            cv.Optional(CONF_SOURCE_SPEAKERS): [validate_source_speaker],
+            cv.Optional(CONF_SOURCE_SPEAKERS): [_validate_source_speaker],
         },
         extra=cv.ALLOW_EXTRA,
     ),
@@ -115,11 +122,13 @@ async def to_code(config):
     cg.add(var.set_output_speaker(spkr))
     cg.add(var.set_queue_mode(config[CONF_QUEUE_MODE]))
 
-    cg.add(var.set_task_stack_in_psram(config[CONF_TASK_STACK_IN_PSRAM]))
-    if config[CONF_TASK_STACK_IN_PSRAM]:
-        esp32.add_idf_sdkconfig_option(
-            "CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY", True
-        )
+    if task_stack_in_psram := config.get(CONF_TASK_STACK_IN_PSRAM):
+        cg.add(var.set_task_stack_in_psram(task_stack_in_psram))
+        if task_stack_in_psram:
+            if config[CONF_TASK_STACK_IN_PSRAM]:
+                esp32.add_idf_sdkconfig_option(
+                    "CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY", True
+                )
 
     for speaker_config in config[CONF_SOURCE_SPEAKERS]:
         source_speaker = cg.new_Pvariable(speaker_config[CONF_ID])

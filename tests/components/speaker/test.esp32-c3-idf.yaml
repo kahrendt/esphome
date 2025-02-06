@@ -6,4 +6,4 @@ substitutions:
   mclk_pin: GPIO5
   dout_pin: GPIO6
 
-<<: !include common.yaml
+<<: !include common_media_player.yaml

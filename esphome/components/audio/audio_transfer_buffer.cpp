@@ -1,6 +1,6 @@
-#ifdef USE_ESP32
-
 #include "audio_transfer_buffer.h"
+
+#ifdef USE_ESP32
 
 #include "esphome/core/helpers.h"
 

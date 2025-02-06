@@ -190,7 +190,7 @@ class MixerSpeaker : public Component {
 
   uint8_t output_channels_;
   bool queue_mode_;
-  bool task_stack_in_psram_;
+  bool task_stack_in_psram_{false};
 
   bool task_created_{false};
 

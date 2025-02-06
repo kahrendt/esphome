@@ -16,7 +16,6 @@ from esphome.core.entity_helpers import inherit_property_from
 
 AUTO_LOAD = ["audio"]
 CODEOWNERS = ["@kahrendt"]
-DEPENDENCIES = ["speaker"]
 
 resampler_ns = cg.esphome_ns.namespace("resampler")
 ResamplerSpeaker = resampler_ns.class_(
@@ -24,6 +23,29 @@ ResamplerSpeaker = resampler_ns.class_(
 )
 
 CONF_TAPS = "taps"
+
+
+def _set_stream_limits(config):
+    audio.set_stream_limits(
+        min_bits_per_sample=16,
+        max_bits_per_sample=32,
+    )(config)
+
+    return config
+
+
+def _validate_audio_compatability(config):
+    inherit_property_from(CONF_BITS_PER_SAMPLE, CONF_OUTPUT_SPEAKER)(config)
+    inherit_property_from(CONF_NUM_CHANNELS, CONF_OUTPUT_SPEAKER)(config)
+    inherit_property_from(CONF_SAMPLE_RATE, CONF_OUTPUT_SPEAKER)(config)
+
+    audio.final_validate_audio_schema(
+        "source_speaker",
+        audio_device=CONF_OUTPUT_SPEAKER,
+        bits_per_sample=config.get(CONF_BITS_PER_SAMPLE),
+        channels=config.get(CONF_NUM_CHANNELS),
+        sample_rate=config.get(CONF_SAMPLE_RATE),
+    )(config)
 
 
 def _validate_taps(taps):
@@ -41,37 +63,19 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(
                 CONF_BUFFER_DURATION, default="100ms"
             ): cv.positive_time_period_milliseconds,
-            cv.Optional(CONF_TASK_STACK_IN_PSRAM, default=False): cv.boolean,
+            cv.SplitDefault(CONF_TASK_STACK_IN_PSRAM, esp32_idf=False): cv.All(
+                cv.boolean, cv.only_with_esp_idf
+            ),
             cv.Optional(CONF_FILTERS, default=16): cv.int_range(min=2, max=1024),
             cv.Optional(CONF_TAPS, default=16): _validate_taps,
         }
     ).extend(cv.COMPONENT_SCHEMA),
     cv.only_on([PLATFORM_ESP32]),
+    _set_stream_limits,
 )
 
 
-def validate_audio_compatability(config):
-    audio.set_stream_limits(
-        min_bits_per_sample=8,
-        max_bits_per_sample=32,
-        # min_channels=None,  # really this should inherit from the parent speaker
-        # max_channels=None,  # inherit from parent speaker
-    )(config)
-
-    inherit_property_from(CONF_BITS_PER_SAMPLE, CONF_OUTPUT_SPEAKER)(config)
-    inherit_property_from(CONF_NUM_CHANNELS, CONF_OUTPUT_SPEAKER)(config)
-    inherit_property_from(CONF_SAMPLE_RATE, CONF_OUTPUT_SPEAKER)(config)
-
-    audio.final_validate_audio_schema(
-        "source_speaker",
-        audio_device=CONF_OUTPUT_SPEAKER,
-        bits_per_sample=config.get(CONF_BITS_PER_SAMPLE),
-        channels=config.get(CONF_NUM_CHANNELS),
-        sample_rate=config.get(CONF_SAMPLE_RATE),
-    )(config)
-
-
-FINAL_VALIDATE_SCHEMA = validate_audio_compatability
+FINAL_VALIDATE_SCHEMA = _validate_audio_compatability
 
 
 async def to_code(config):
@@ -84,11 +88,13 @@ async def to_code(config):
 
     cg.add(var.set_buffer_duration(config[CONF_BUFFER_DURATION]))
 
-    cg.add(var.set_task_stack_in_psram(config[CONF_TASK_STACK_IN_PSRAM]))
-    if config[CONF_TASK_STACK_IN_PSRAM]:
-        esp32.add_idf_sdkconfig_option(
-            "CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY", True
-        )
+    if task_stack_in_psram := config.get(CONF_TASK_STACK_IN_PSRAM):
+        cg.add(var.set_task_stack_in_psram(task_stack_in_psram))
+        if task_stack_in_psram:
+            if config[CONF_TASK_STACK_IN_PSRAM]:
+                esp32.add_idf_sdkconfig_option(
+                    "CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY", True
+                )
 
     cg.add(var.set_target_bits_per_sample(config[CONF_BITS_PER_SAMPLE]))
     cg.add(var.set_target_sample_rate(config[CONF_SAMPLE_RATE]))

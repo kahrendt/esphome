@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef USE_ESP32
+#ifdef USE_ESP_IDF
 
 #include "audio_pipeline.h"
 
@@ -13,6 +13,7 @@
 #include "esphome/core/component.h"
 #include "esphome/core/preferences.h"
 
+#include <deque>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 
@@ -25,6 +26,12 @@ struct MediaCallCommand {
   optional<bool> announce;
   optional<bool> new_url;
   optional<bool> new_file;
+  optional<bool> enqueue;
+};
+
+struct PlaylistItem {
+  optional<std::string> url;
+  optional<audio::AudioFile *> file;
 };
 
 struct VolumeRestoreState {
@@ -64,11 +71,13 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   Trigger<> *get_unmute_trigger() const { return this->unmute_trigger_; }
   Trigger<float> *get_volume_trigger() const { return this->volume_trigger_; }
 
-  void play_file(audio::AudioFile *media_file, bool announcement);
+  void play_file(audio::AudioFile *media_file, bool announcement, bool enqueue);
 
   uint32_t get_playback_ms() const { return this->playback_ms_; }
   uint32_t get_playback_us() const { return this->playback_us_; }
   uint32_t get_decoded_playback_ms() const { return this->decoded_playback_ms_; }
+
+  void set_playlist_delay_ms(AudioPipelineType pipeline_type, uint32_t delay_ms);
 
  protected:
   // Receives commands from HA or from the voice assistant component
@@ -86,9 +95,11 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   /// @brief Saves the current volume and mute state to the flash for restoration.
   void save_volume_restore_state_();
 
+  /// Returns true if the media player has only the announcement pipeline defined, false if both the announcement and
+  /// media pipelines are defined.
   inline bool single_pipeline_() { return (this->media_speaker_ == nullptr); }
 
-  // Reads commands from media_control_command_queue_. Starts pipelines and mixer if necessary.
+  // Processes commands from media_control_command_queue_.
   void watch_media_commands_();
 
   std::unique_ptr<AudioPipeline> announcement_pipeline_;
@@ -96,21 +107,24 @@ class SpeakerMediaPlayer : public Component, public media_player::MediaPlayer {
   Speaker *media_speaker_{nullptr};
   Speaker *announcement_speaker_{nullptr};
 
-  // Starts the ``type`` pipeline with a ``url`` or file. Starts the mixer, pipeline, and speaker tasks if necessary.
-  // Unpauses if starting media in paused state
-  esp_err_t start_pipeline_(AudioPipelineType type, bool url);
-
   optional<media_player::MediaPlayerSupportedFormat> media_format_;
   AudioPipelineState media_pipeline_state_{AudioPipelineState::STOPPED};
-  optional<std::string> media_url_{};          // only modified by control function
-  optional<audio::AudioFile *> media_file_{};  // only modified by play_file function
+  std::string media_url_{};         // only modified by control function
+  audio::AudioFile *media_file_{};  // only modified by play_file function
+  bool media_repeat_one_{false};
+  uint32_t media_playlist_delay_ms_{0};
 
   optional<media_player::MediaPlayerSupportedFormat> announcement_format_;
   AudioPipelineState announcement_pipeline_state_{AudioPipelineState::STOPPED};
-  optional<std::string> announcement_url_{};          // only modified by control function
-  optional<audio::AudioFile *> announcement_file_{};  // only modified by play_file function
+  std::string announcement_url_{};         // only modified by control function
+  audio::AudioFile *announcement_file_{};  // only modified by play_file function
+  bool announcement_repeat_one_{false};
+  uint32_t announcement_playlist_delay_ms_{0};
 
   QueueHandle_t media_control_command_queue_;
+
+  std::deque<PlaylistItem> announcement_playlist_;
+  std::deque<PlaylistItem> media_playlist_;
 
   size_t buffer_size_;
 
