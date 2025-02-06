@@ -165,6 +165,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
     bool low_speed_timer_started = false;
     bool high_speed_timer_started = false;
 
+    bool new_file_start = true;
+
     while (true) {
       transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(0));
       base_msg_buffer.rewind();
@@ -220,11 +222,11 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
               printf("acutally read %d bytes \n", bytes_read);
             }
 
-            this_snapcast->decoder_pause_ = true;
+            // this_snapcast->decoder_pause_ = true;
             xTaskCreate(decode_task, "decode", 1024 * 5, (void *) this_snapcast, 1,
                         &this_snapcast->decode_task_handle_);
 
-            this_snapcast->set_timeout(1500, [this_snapcast] { this_snapcast->decoder_pause_ = false; });
+            // this_snapcast->set_timeout(1500, [this_snapcast] { this_snapcast->decoder_pause_ = false; });
           }
 
           esp_timer_stop(timeSyncMessageTimer);
@@ -247,6 +249,20 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
                 static_cast<int64_t>(timestamp_s) * 1000000LL + static_cast<int64_t>(timestamp_us);
             // printf("play this chunk at %" PRId64 " (%" PRId32 "s, %" PRId32 "us); its currently %" PRId64 "\n",
             //  total_timestamp_us, timestamp_s, timestamp_us, esp_timer_get_time());
+
+            if (low_speed_timer_started && new_file_start) {
+              new_file_start = false;
+              this_snapcast->speaker_->start();
+              this_snapcast->speaker_->set_pause_state(true);
+
+              printf("ttotal_timestamp %" PRId64 "; median_offset %" PRId64 "; current time %" PRId64 "\n",
+                     total_timestamp_us, this_snapcast->previous_median_offset_, esp_timer_get_time());
+              int64_t us_to_start = total_timestamp_us - this_snapcast->previous_median_offset_ - esp_timer_get_time();
+
+              printf("initial playback in %" PRId64 "us\n", us_to_start);
+              this_snapcast->set_timeout("int_pause", (1000 + us_to_start / 1000),
+                                         [this_snapcast] { this_snapcast->speaker_->set_pause_state(false); });
+            }
 
             if (chunk_size > 0) {
               while (chunk_size > 0) {
@@ -369,21 +385,23 @@ void SnapcastPlayer::decode_task(void *params) {
       printf("decoder task loop starting\n");
       while (true) {
         int32_t frames_adjustment = 0;
-        if (this_snapcast->accumulated_drift_ > 21) {
-          // add frame
-          frames_adjustment = 1;
+        if (has_stream_info) {
+          if (this_snapcast->accumulated_drift_ > 21) {
+            // add frame
+            frames_adjustment = 1;
 
-        } else if (this_snapcast->accumulated_drift_ < -21) {
-          // remove frame
-          frames_adjustment = -1;
+          } else if (this_snapcast->accumulated_drift_ < -21) {
+            // remove frame
+            frames_adjustment = -1;
+          }
         }
 
         decoder->set_pause_output_state(this_snapcast->decoder_pause_);
-
+        int32_t desired_adjustment = frames_adjustment;
         audio::AudioDecoderState decoder_state = decoder->decode(false, frames_adjustment);
-        if (frames_adjustment == 1) {
+        if (desired_adjustment == 1 && frames_adjustment == 0) {
           this_snapcast->accumulated_drift_ -= 21;
-        } else if (frames_adjustment == -1) {
+        } else if (desired_adjustment == -1 && frames_adjustment == 0) {
           this_snapcast->accumulated_drift_ += 21;
         }
 
