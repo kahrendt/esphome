@@ -88,7 +88,7 @@ class AudioDecoder {
   AudioDecoderState decode(bool stop_gracefully, int32_t &frames_adjustment);
   AudioDecoderState decode(bool stop_gracefully) {
     int32_t zero = 0;
-    this->decode(stop_gracefully, zero);
+    return this->decode(stop_gracefully, zero);
   }
 
   /// @brief Gets the audio stream information, if it has been decoded from the files header

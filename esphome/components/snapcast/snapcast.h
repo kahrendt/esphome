@@ -11,6 +11,7 @@
 #include "esphome/core/component.h"
 #include "esphome/core/ring_buffer.h"
 
+#include <deque>
 namespace esphome {
 namespace snapcast {
 
@@ -25,6 +26,17 @@ enum message_type {
 
   SNAPCAST_MESSAGE_FIRST = SNAPCAST_MESSAGE_BASE,
   SNAPCAST_MESSAGE_LAST = SNAPCAST_MESSAGE_STREAM_TAGS
+};
+
+struct AudioSyncChunk {
+  int64_t server_timestamp;
+  size_t size;
+  uint8_t data[4096];
+};
+
+struct AudioSyncChunkTimings {
+  int64_t server_timestamp;
+  uint32_t duration;
 };
 
 typedef struct tv {
@@ -57,11 +69,11 @@ typedef struct base_message {
 
 typedef struct hello_message {
   char *mac;
-  char *hostname;
-  char *version;
-  char *client_name;
-  char *os;
-  char *arch;
+  const char *hostname;
+  const char *version;
+  const char *client_name;
+  const char *os;
+  const char *arch;
   int instance;
   char *id;
   int protocol_version;
@@ -118,27 +130,42 @@ class SnapcastPlayer : public Component {
 
   static void snapcast_task(void *params);
   static void decode_task(void *params);
+  static void sync_task(void *params);
   TaskHandle_t snapcast_task_handle_{nullptr};
   TaskHandle_t decode_task_handle_{nullptr};
+  TaskHandle_t sync_task_handle_{nullptr};
   uint16_t time_sync_counter_{0};
 
   audio::AudioFileType current_audio_file_type_{audio::AudioFileType::FLAC};
   optional<audio::AudioStreamInfo> current_audio_stream_info_;
 
-  std::weak_ptr<RingBuffer> raw_file_ring_buffer_;
+  // std::weak_ptr<RingBuffer> raw_file_ring_buffer_;
+  std::weak_ptr<RingBuffer> sync_ring_buffer_;
 
   static void time_sync_callback(void *params);
+  static void unpause_callback(void *params);
 
   // int64_t time_offsets_[50];
   std::vector<int64_t> time_offsets_;
   uint8_t time_offsets_index_{0};
+  std::vector<int64_t> actual_offsets_;
+  uint8_t actual_offsets_index_{0};
   // uint8_t time_offsets_in_set_{0};
 
   int64_t previous_median_offset_{0};
   int64_t accumulated_drift_{0};
 
   bool decoder_pause_{false};
+  bool first_audio_played_{true};
+  int64_t initial_playback_timestamp_{0};
 
+  QueueHandle_t chunk_data_queue_;
+
+  std::deque<AudioSyncChunkTimings> chunk_timings_;
+
+  int32_t pending_frame_adjustments_{0};
+
+  size_t snapcast_buffer_duration_ms_{0};
   int64_t update_time_offsets_(int64_t new_offset) {
     if (this->time_offsets_.size() < 50) {
       this->time_offsets_.push_back(new_offset);
@@ -168,8 +195,39 @@ class SnapcastPlayer : public Component {
       drift_since_last_offset = median_offset - this->previous_median_offset_;
     }
     this->previous_median_offset_ = median_offset;
-    this->accumulated_drift_ += drift_since_last_offset;
     return this->accumulated_drift_;
+  }
+
+  int64_t update_actual_offsets_(int64_t new_offset) {
+    if (this->actual_offsets_.size() < 12) {
+      this->actual_offsets_.push_back(new_offset);
+    } else {
+      this->actual_offsets_[this->actual_offsets_index_] = new_offset;
+    }
+    ++this->actual_offsets_index_;
+    if (this->actual_offsets_index_ == 12) {
+      this->actual_offsets_index_ = 0;
+    }
+    // this->actual_offsets_index_ = std::min(this->actual_offsets_index_ + 1, (int) (50));
+
+    int64_t average_offset = 0;
+    for (const int64_t &val : this->actual_offsets_) {
+      average_offset += val;
+    }
+    average_offset = average_offset / this->actual_offsets_.size();
+    return average_offset;
+    // std::vector<int64_t> sorted_offsets;
+    // for (const int64_t &offset : this->actual_offsets_) {
+    //   sorted_offsets.push_back(offset);
+    // }
+    // std::sort(sorted_offsets.begin(), sorted_offsets.end());
+
+    // int64_t median_offset = sorted_offsets[sorted_offsets.size() / 2];
+    // if (sorted_offsets.size() % 2 == 0) {
+    //   median_offset = (sorted_offsets[sorted_offsets.size() / 2] + sorted_offsets[sorted_offsets.size() / 2 + 1]) /
+    //   2;
+    // }
+    // return median_offset;
   }
 };
 

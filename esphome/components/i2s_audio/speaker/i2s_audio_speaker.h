@@ -42,7 +42,7 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   void stop() override;
   void finish() override;
 
-  void set_pause_state(bool pause_state) override { this->pause_state_ = pause_state; }
+  void set_pause_state(bool pause_state) override;
   bool get_pause_state() const override { return this->pause_state_; }
 
   /// @brief Plays the provided audio data.
@@ -79,7 +79,7 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   /// @param params I2SAudioSpeaker component
   static void speaker_task(void *params);
 
-  static void process_i2q_event_queue(void *params);
+  static void process_i2s_event_queue(void *params);
 
   /// @brief Sends a stop command to the speaker task via event_group_.
   /// @param wait_on_empty If false, sends the COMMAND_STOP signal. If true, sends the COMMAND_STOP_GRACEFULLY signal.
@@ -135,8 +135,6 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   bool pause_state_{false};
 
   int16_t q15_volume_factor_{INT16_MAX};
-
-  size_t bytes_written_{0};
 
 #if SOC_I2S_SUPPORTS_DAC
   i2s_dac_mode_t internal_dac_mode_{I2S_DAC_CHANNEL_DISABLE};
