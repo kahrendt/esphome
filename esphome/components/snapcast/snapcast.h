@@ -9,7 +9,6 @@
 #include "esphome/components/speaker/speaker.h"
 
 #include "esphome/core/component.h"
-#include "esphome/core/ring_buffer.h"
 
 #include <deque>
 namespace esphome {
@@ -88,22 +87,6 @@ typedef struct server_settings_message {
   bool muted;
 } server_settings_message_t;
 
-// typedef struct codec_header_message {
-//   char *codec;
-//   uint32_t size;
-//   char *payload;
-// } codec_header_message_t;
-
-// typedef struct wire_chunk_message {
-//   tv_t timestamp;
-//   size_t size;
-//   char *payload;
-// } wire_chunk_message_t;
-
-// typedef struct time_message {
-//   tv_t latency;
-// } time_message_t;
-
 static const size_t BASE_MESSAGE_SIZE = 26;
 static const size_t TIME_MESSAGE_SIZE = 8;
 
@@ -173,8 +156,6 @@ class SnapcastPlayer : public Component {
 
   bool server_settings_message_deserialize_(server_settings_message_t *msg, const char *json_str);
 
-  // void codec_header_deserialize(codec_message_t *msg, bytebuffer::ByteBuffer &buffer);
-
   static void snapcast_task(void *params);
   static void decode_task(void *params);
   static void sync_task(void *params);
@@ -183,15 +164,11 @@ class SnapcastPlayer : public Component {
   TaskHandle_t sync_task_handle_{nullptr};
   uint16_t time_sync_counter_{0};
 
-  audio::AudioFileType current_audio_file_type_{audio::AudioFileType::FLAC};
   optional<audio::AudioStreamInfo> current_audio_stream_info_;
-
-  std::weak_ptr<RingBuffer> sync_ring_buffer_;
 
   static void time_sync_callback(void *params);
   static void unpause_callback(void *params);
 
-  bool decoder_pause_{false};
   bool first_audio_played_{true};
   int64_t initial_playback_timestamp_{0};
 
@@ -204,8 +181,6 @@ class SnapcastPlayer : public Component {
   uint8_t *decoded_chunk_data_queue_storage_{nullptr};
 
   std::deque<AudioSyncChunkTimings> chunk_timings_;
-
-  int32_t pending_frame_adjustments_{0};
 
   size_t snapcast_buffer_duration_ms_{0};
   uint32_t snapcast_latency_ms_{0};
