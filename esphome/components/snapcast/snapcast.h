@@ -31,7 +31,8 @@ enum message_type {
 struct AudioSyncChunk {
   int64_t server_timestamp;
   size_t size;
-  uint8_t data[4096];
+  bool codec_header;
+  uint8_t data[8000];
 };
 
 struct AudioSyncChunkTimings {
@@ -159,7 +160,13 @@ class SnapcastPlayer : public Component {
   bool first_audio_played_{true};
   int64_t initial_playback_timestamp_{0};
 
-  QueueHandle_t chunk_data_queue_;
+  QueueHandle_t encoded_chunk_data_queue_;
+  StaticQueue_t encoded_chunk_data_queue_buffer_;
+  uint8_t *encoded_chunk_data_queue_storage_{nullptr};
+
+  QueueHandle_t decoded_chunk_data_queue_;
+  StaticQueue_t decoded_chunk_data_queue_buffer_;
+  uint8_t *decoded_chunk_data_queue_storage_{nullptr};
 
   std::deque<AudioSyncChunkTimings> chunk_timings_;
 
@@ -174,7 +181,7 @@ class SnapcastPlayer : public Component {
     } else {
       this->time_offsets_[this->time_offsets_index_] = new_offset;
     }
-    printf("time offest index %d\n", this->time_offsets_index_);
+    // printf("time offest index %d\n", this->time_offsets_index_);
     ++this->time_offsets_index_;
     if (this->time_offsets_index_ == 50) {
       this->time_offsets_index_ = 0;
