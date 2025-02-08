@@ -589,35 +589,25 @@ void SnapcastPlayer::decode_task(void *params) {
           if (this_snapcast->accumulated_drift_ < -50) {
             this_snapcast->accumulated_drift_ += 21;
             if (new_bytes > bytes_per_frame) {
+              // Drop a frame
               new_bytes -= bytes_per_frame;
-
-              const uint32_t num_channels = this_snapcast->current_audio_stream_info_.value().get_channels();
-              int16_t *samples = reinterpret_cast<int16_t *>(transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
-              for (int chan = 0; chan < num_channels; ++chan) {
-                const int16_t left_sample = samples[chan] / 2;
-                const int16_t right_sample = samples[2 * chan] / 2;
-                const int16_t replaced_sample = left_sample + right_sample;
-                samples[chan] = replaced_sample;
-              }
             }
 
           } else if (this_snapcast->accumulated_drift_ > 50) {
             this_snapcast->accumulated_drift_ -= 21;
             if (transfer_buffer->free() >= bytes_per_frame) {
+              // Insert a linearly inerpolated frame
               new_bytes += bytes_per_frame;
 
               const uint32_t num_channels = this_snapcast->current_audio_stream_info_.value().get_channels();
               int16_t *samples = reinterpret_cast<int16_t *>(transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
               for (int chan = 0; chan < num_channels; ++chan) {
-                const int16_t left_sample = samples[chan] / 2;
-                const int16_t right_sample = samples[2 * chan] / 2;
-                const int16_t inserted_sample = left_sample + right_sample;
-                samples[2 * chan] = inserted_sample;
-                samples[3 * chan] = right_sample;
+                const int16_t left_sample = samples[chan];
+                const int16_t right_sample = samples[num_channels + chan];
+                const int16_t inserted_sample = left_sample / 2 + right_sample / 2;
+                samples[num_channels + chan] = inserted_sample;
+                samples[2 * num_channels + chan] = right_sample;
               }
-
-              // std::memcpy((void *) transfer_buffer->get_buffer_end(),
-              //             (void *) (transfer_buffer->get_buffer_end() - bytes_per_frame), bytes_per_frame);
             }
           }
           chunks_since_last_adjustment = 0;
