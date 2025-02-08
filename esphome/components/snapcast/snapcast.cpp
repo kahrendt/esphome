@@ -584,13 +584,25 @@ void SnapcastPlayer::decode_task(void *params) {
         size_t new_bytes = this_snapcast->current_audio_stream_info_.value().samples_to_bytes(output_samples);
 
         if (chunks_since_last_adjustment > 20) {
+          // if ((chunks_since_last_adjustment > 20) && (abs(this_snapcast->accumulated_drift_) < 5000)) {
+          // Only add/remove sample if less than 5 ms off and we haven't adjusted in the last 20 chunks
+
           int32_t bytes_adjustment = 0;
           size_t bytes_per_frame = this_snapcast->current_audio_stream_info_.value().frames_to_bytes(1);
           if (this_snapcast->accumulated_drift_ < -50) {
             this_snapcast->accumulated_drift_ += 21;
-            if (new_bytes > bytes_per_frame) {
+            if (new_bytes >= 2 * bytes_per_frame) {
               // Drop a frame
               new_bytes -= bytes_per_frame;
+
+              const uint32_t num_channels = this_snapcast->current_audio_stream_info_.value().get_channels();
+              int16_t *samples = reinterpret_cast<int16_t *>(transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
+              for (int chan = 0; chan < num_channels; ++chan) {
+                const int16_t left_sample = samples[chan];
+                const int16_t right_sample = samples[num_channels + chan];
+                const int16_t average_smaple = left_sample / 2 + right_sample / 2;
+                samples[chan] = average_sample;
+              }
             }
 
           } else if (this_snapcast->accumulated_drift_ > 50) {
