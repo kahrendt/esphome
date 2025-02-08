@@ -6,6 +6,8 @@
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
 
+#include "driver/gpio.h"
+
 namespace esphome {
 namespace i2s_audio {
 
@@ -56,6 +58,10 @@ class I2SAudioComponent : public Component {
   void unlock() { this->lock_.unlock(); }
 
   i2s_port_t get_port() const { return this->port_; }
+
+  gpio_num_t get_mclk_pin() { return (gpio_num_t) this->mclk_pin_; }
+  gpio_num_t get_bclk_pin() { return (gpio_num_t) this->bclk_pin_; }
+  gpio_num_t get_lrclk_pin() { return (gpio_num_t) this->lrclk_pin_; }
 
  protected:
   Mutex lock_;

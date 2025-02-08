@@ -80,6 +80,7 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   static void speaker_task(void *params);
 
   static void process_i2s_event_queue(void *params);
+  static bool IRAM_ATTR on_sent_callback(i2s_channel_obj_t *handle, i2s_event_data_t *event, void *params);
 
   /// @brief Sends a stop command to the speaker task via event_group_.
   /// @param wait_on_empty If false, sends the COMMAND_STOP signal. If true, sends the COMMAND_STOP_GRACEFULLY signal.
@@ -142,6 +143,8 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   i2s_comm_format_t i2s_comm_fmt_;
 
   uint32_t accumulated_frames_written_{0};
+
+  i2s_chan_handle_t tx_handle_;
 };
 
 }  // namespace i2s_audio

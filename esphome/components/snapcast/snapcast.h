@@ -166,6 +166,8 @@ class SnapcastPlayer : public Component {
   int32_t pending_frame_adjustments_{0};
 
   size_t snapcast_buffer_duration_ms_{0};
+  uint32_t snapcast_latency_ms_{0};
+
   int64_t update_time_offsets_(int64_t new_offset) {
     if (this->time_offsets_.size() < 50) {
       this->time_offsets_.push_back(new_offset);
@@ -199,35 +201,34 @@ class SnapcastPlayer : public Component {
   }
 
   int64_t update_actual_offsets_(int64_t new_offset) {
-    if (this->actual_offsets_.size() < 12) {
+    if (this->actual_offsets_.size() < 20) {
       this->actual_offsets_.push_back(new_offset);
     } else {
       this->actual_offsets_[this->actual_offsets_index_] = new_offset;
     }
     ++this->actual_offsets_index_;
-    if (this->actual_offsets_index_ == 12) {
+    if (this->actual_offsets_index_ == 20) {
       this->actual_offsets_index_ = 0;
     }
     // this->actual_offsets_index_ = std::min(this->actual_offsets_index_ + 1, (int) (50));
 
-    int64_t average_offset = 0;
-    for (const int64_t &val : this->actual_offsets_) {
-      average_offset += val;
+    // int64_t average_offset = 0;
+    // for (const int64_t &val : this->actual_offsets_) {
+    //   average_offset += val;
+    // }
+    // average_offset = average_offset / this->actual_offsets_.size();
+    // return average_offset;
+    std::vector<int64_t> sorted_offsets;
+    for (const int64_t &offset : this->actual_offsets_) {
+      sorted_offsets.push_back(offset);
     }
-    average_offset = average_offset / this->actual_offsets_.size();
-    return average_offset;
-    // std::vector<int64_t> sorted_offsets;
-    // for (const int64_t &offset : this->actual_offsets_) {
-    //   sorted_offsets.push_back(offset);
-    // }
-    // std::sort(sorted_offsets.begin(), sorted_offsets.end());
+    std::sort(sorted_offsets.begin(), sorted_offsets.end());
 
-    // int64_t median_offset = sorted_offsets[sorted_offsets.size() / 2];
-    // if (sorted_offsets.size() % 2 == 0) {
-    //   median_offset = (sorted_offsets[sorted_offsets.size() / 2] + sorted_offsets[sorted_offsets.size() / 2 + 1]) /
-    //   2;
-    // }
-    // return median_offset;
+    int64_t median_offset = sorted_offsets[sorted_offsets.size() / 2];
+    if (sorted_offsets.size() % 2 == 0) {
+      median_offset = (sorted_offsets[sorted_offsets.size() / 2] + sorted_offsets[sorted_offsets.size() / 2 + 1]) / 2;
+    }
+    return median_offset;
   }
 };
 
