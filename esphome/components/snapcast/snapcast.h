@@ -150,7 +150,10 @@ class MedianFilter {
 
 class SnapcastPlayer : public Component {
  public:
-  SnapcastPlayer() : internal_latency_(MedianFilter(50)), server_internal_clock_offset_(MedianFilter(50)){};
+  SnapcastPlayer()
+      : internal_latency_(MedianFilter(50)),
+        server_internal_clock_offset_(MedianFilter(50)),
+        actual_offsets_(MedianFilter(20)){};
   float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
   void setup() override;
   void loop() override;
@@ -183,18 +186,10 @@ class SnapcastPlayer : public Component {
   audio::AudioFileType current_audio_file_type_{audio::AudioFileType::FLAC};
   optional<audio::AudioStreamInfo> current_audio_stream_info_;
 
-  // std::weak_ptr<RingBuffer> raw_file_ring_buffer_;
   std::weak_ptr<RingBuffer> sync_ring_buffer_;
 
   static void time_sync_callback(void *params);
   static void unpause_callback(void *params);
-
-  std::vector<int64_t> actual_offsets_;
-  uint8_t actual_offsets_index_{0};
-  // uint8_t time_offsets_in_set_{0};
-
-  int64_t previous_median_offset_{0};
-  int64_t accumulated_drift_{0};
 
   bool decoder_pause_{false};
   bool first_audio_played_{true};
@@ -217,37 +212,7 @@ class SnapcastPlayer : public Component {
 
   MedianFilter internal_latency_;
   MedianFilter server_internal_clock_offset_;
-
-  int64_t update_actual_offsets_(int64_t new_offset) {
-    if (this->actual_offsets_.size() < 20) {
-      this->actual_offsets_.push_back(new_offset);
-    } else {
-      this->actual_offsets_[this->actual_offsets_index_] = new_offset;
-    }
-    ++this->actual_offsets_index_;
-    if (this->actual_offsets_index_ == 20) {
-      this->actual_offsets_index_ = 0;
-    }
-    // this->actual_offsets_index_ = std::min(this->actual_offsets_index_ + 1, (int) (50));
-
-    // int64_t average_offset = 0;
-    // for (const int64_t &val : this->actual_offsets_) {
-    //   average_offset += val;
-    // }
-    // average_offset = average_offset / this->actual_offsets_.size();
-    // return average_offset;
-    std::vector<int64_t> sorted_offsets;
-    for (const int64_t &offset : this->actual_offsets_) {
-      sorted_offsets.push_back(offset);
-    }
-    std::sort(sorted_offsets.begin(), sorted_offsets.end());
-
-    int64_t median_offset = sorted_offsets[sorted_offsets.size() / 2];
-    if (sorted_offsets.size() % 2 == 0) {
-      median_offset = (sorted_offsets[sorted_offsets.size() / 2] + sorted_offsets[sorted_offsets.size() / 2 + 1]) / 2;
-    }
-    return median_offset;
-  }
+  MedianFilter actual_offsets_;
 };
 
 }  // namespace snapcast
