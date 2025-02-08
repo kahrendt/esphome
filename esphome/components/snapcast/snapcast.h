@@ -109,7 +109,7 @@ static const size_t TIME_MESSAGE_SIZE = 8;
 
 class MedianFilter {
  public:
-  MedianFilter(uint8_t capacity) : capacity_(capacity) { this->data_.resize(capacity); };
+  MedianFilter(uint8_t capacity) : capacity_(capacity) { this->data_.reserve(capacity); };
 
   int64_t update(int64_t new_value) {
     if (this->data_.size() < this->capacity_) {
@@ -189,9 +189,6 @@ class SnapcastPlayer : public Component {
   static void time_sync_callback(void *params);
   static void unpause_callback(void *params);
 
-  // int64_t time_offsets_[50];
-  std::vector<int64_t> time_offsets_;
-  uint8_t time_offsets_index_{0};
   std::vector<int64_t> actual_offsets_;
   uint8_t actual_offsets_index_{0};
   // uint8_t time_offsets_in_set_{0};
@@ -220,39 +217,6 @@ class SnapcastPlayer : public Component {
 
   MedianFilter internal_latency_;
   MedianFilter server_internal_clock_offset_;
-
-  // int64_t internal_latency_{0};
-  int64_t update_time_offsets_(int64_t new_offset) {
-    if (this->time_offsets_.size() < 50) {
-      this->time_offsets_.push_back(new_offset);
-    } else {
-      this->time_offsets_[this->time_offsets_index_] = new_offset;
-    }
-    // printf("time offest index %d\n", this->time_offsets_index_);
-    ++this->time_offsets_index_;
-    if (this->time_offsets_index_ == 50) {
-      this->time_offsets_index_ = 0;
-    }
-    // this->time_offsets_index_ = std::min(this->time_offsets_index_ + 1, (int) (50));
-
-    std::vector<int64_t> sorted_offsets;
-    for (const int64_t &offset : this->time_offsets_) {
-      sorted_offsets.push_back(offset);
-    }
-    std::sort(sorted_offsets.begin(), sorted_offsets.end());
-
-    int64_t median_offset = sorted_offsets[sorted_offsets.size() / 2];
-    if (sorted_offsets.size() % 2 == 0) {
-      median_offset = (sorted_offsets[sorted_offsets.size() / 2] + sorted_offsets[sorted_offsets.size() / 2 + 1]) / 2;
-    }
-
-    int64_t drift_since_last_offset = 0;
-    if (this->time_offsets_.size() > 1) {
-      drift_since_last_offset = median_offset - this->previous_median_offset_;
-    }
-    this->previous_median_offset_ = median_offset;
-    return this->accumulated_drift_;
-  }
 
   int64_t update_actual_offsets_(int64_t new_offset) {
     if (this->actual_offsets_.size() < 20) {

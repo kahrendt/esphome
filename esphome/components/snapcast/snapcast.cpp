@@ -66,7 +66,9 @@ void SnapcastPlayer::setup() {
       // Now we are in the middle of the current audio chunk
       int64_t server_timestamp_finished =
           front_chunk.server_timestamp + this->current_audio_stream_info_.value().frames_to_microseconds(frames_played);
-      int64_t equivalent_client_timestamp = server_timestamp_finished - this->previous_median_offset_ +
+      // int64_t equivalent_client_timestamp = server_timestamp_finished - this->previous_median_offset_ +
+      int64_t equivalent_client_timestamp = server_timestamp_finished -
+                                            this->server_internal_clock_offset_.get_most_recent_median() +
                                             (this->snapcast_buffer_duration_ms_ + this->snapcast_latency_ms_) * 1000;
       this->chunk_timings_.front().duration = this->chunk_timings_.front().duration - frames_played;
 
@@ -310,7 +312,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       base_msg.received.sec = static_cast<int32_t>(now / 1000000LL);
       base_msg.received.usec = static_cast<int32_t>(now - now / 1000000LL);
 
-      if (high_speed_timer_started && this_snapcast->time_offsets_.size() == 50) {
+      // if (high_speed_timer_started && this_snapcast->time_offsets_.size() == 50) {
+      if (high_speed_timer_started && this_snapcast->server_internal_clock_offset_.is_full()) {
         if (esp_timer_is_active(timeSyncMessageTimer)) {
           esp_timer_stop(timeSyncMessageTimer);
         }
@@ -390,10 +393,14 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
               this_snapcast->speaker_->set_pause_state(true);
 
               printf("total_timestamp %" PRId64 "; median_offset %" PRId64 "; current time %" PRId64 "\n",
-                     total_timestamp_us, this_snapcast->previous_median_offset_, esp_timer_get_time());
+                     total_timestamp_us, this_snapcast->server_internal_clock_offset_.get_most_recent_median(),
+                     esp_timer_get_time());
+              //  total_timestamp_us, this_snapcast->previous_median_offset_, esp_timer_get_time());
 
               this_snapcast->initial_playback_timestamp_ =
-                  total_timestamp_us - this_snapcast->previous_median_offset_ + 1000000 + 27000;
+                  total_timestamp_us - this_snapcast->server_internal_clock_offset_.get_most_recent_median() + 1000000 +
+                  27000;
+              // total_timestamp_us - this_snapcast->previous_median_offset_ + 1000000 + 27000;
               int64_t us_to_start = this_snapcast->initial_playback_timestamp_ - esp_timer_get_time();
               printf("initial playback in %" PRId64 "us\n", us_to_start);
 
@@ -475,10 +482,11 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           //        ", tmp_dif=%" PRId64 "\n",
           //        time_rx_us, time_tx_us, t_dif, latency, tmp_dif);
 
-          int64_t server_mismatch_median = this_snapcast->update_time_offsets_(tmp_dif);
+          int64_t server_clock_offset = this_snapcast->server_internal_clock_offset_.update(tmp_dif);
+          //->update_time_offsets_(tmp_dif);
 
           printf("median offset %" PRId64 " with server mismatch %" PRId64 " internal latency is %" PRId64 "\n",
-                 this_snapcast->previous_median_offset_, server_mismatch_median,
+                 server_clock_offset, this_snapcast->accumulated_drift_,
                  this_snapcast->internal_latency_.get_most_recent_median());
 
           break;
