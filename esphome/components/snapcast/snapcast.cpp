@@ -582,6 +582,7 @@ void SnapcastPlayer::decode_task(void *params) {
         static bool logged_duration = false;
 
         size_t new_bytes = this_snapcast->current_audio_stream_info_.value().samples_to_bytes(output_samples);
+        transfer_buffer->increase_buffer_length(new_bytes);
 
         if (chunks_since_last_adjustment > 20) {
           // if ((chunks_since_last_adjustment > 20) && (abs(this_snapcast->accumulated_drift_) < 5000)) {
@@ -600,9 +601,9 @@ void SnapcastPlayer::decode_task(void *params) {
               for (int chan = 0; chan < num_channels; ++chan) {
                 const int16_t left_sample = samples[chan];
                 const int16_t right_sample = samples[num_channels + chan];
-                const int16_t average_smaple = left_sample / 2 + right_sample / 2;
-                samples[chan] = average_sample;
+                samples[chan] = left_sample / 2 + right_sample / 2;
               }
+              transfer_buffer->decrease_buffer_length(bytes_per_frame);
             }
 
           } else if (this_snapcast->accumulated_drift_ > 50) {
@@ -619,6 +620,11 @@ void SnapcastPlayer::decode_task(void *params) {
                 const int16_t inserted_sample = left_sample / 2 + right_sample / 2;
                 samples[num_channels + chan] = inserted_sample;
                 samples[2 * num_channels + chan] = right_sample;
+                if (chan == 0) {
+                  printf("inserted a frame with value %" PRId16 " between %" PRId16 " and %" PRId16 "\n",
+                         inserted_sample, samples[chan], samples[2 * num_channels + chan]);
+                }
+                transfer_buffer->increase_buffer_length(bytes_per_frame);
               }
             }
           }
@@ -640,7 +646,6 @@ void SnapcastPlayer::decode_task(void *params) {
         timings.duration = new_duration_us;
         this_snapcast->chunk_timings_.push_back(timings);
         // We have successfully decoded some input data and have new output data
-        transfer_buffer->increase_buffer_length(new_bytes);
       }
     }
   }
