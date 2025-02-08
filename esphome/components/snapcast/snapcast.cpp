@@ -50,24 +50,31 @@ void SnapcastPlayer::setup() {
       uint32_t frames_played = new_playback_ms;
 
       bool new_chunk = false;
-      while (this->chunk_timings_.front().duration <= frames_played) {
+      // uint32_t frames_in_chunk = .duration;
+      AudioSyncChunkTimings front_chunk = this->chunk_timings_.front();
+      while (front_chunk.duration < frames_played) {
         // if (this->first_audio_played_) {
         //   printf("chunk was")
         // }
-        frames_played -= this->chunk_timings_.front().duration;
+        frames_played -= front_chunk.duration;
+        // frames_played -= this->chunk_timings_.front().duration;
         this->chunk_timings_.pop_front();
+        front_chunk = this->chunk_timings_.front();
         new_chunk = true;
       }
 
       // Now we are in the middle of the current audio chunk
       int64_t server_timestamp_finished =
-          this->chunk_timings_.front().server_timestamp +
-          this->current_audio_stream_info_.value().frames_to_microseconds(frames_played);
+          front_chunk.server_timestamp + this->current_audio_stream_info_.value().frames_to_microseconds(frames_played);
       int64_t equivalent_client_timestamp = server_timestamp_finished - this->previous_median_offset_ +
                                             (this->snapcast_buffer_duration_ms_ + this->snapcast_latency_ms_) * 1000;
       this->chunk_timings_.front().duration = this->chunk_timings_.front().duration - frames_played;
+
+      int64_t internal_latency_written = front_chunk.internal_timestamp +
+                                         this->current_audio_stream_info_.value().frames_to_microseconds(frames_played);
       if (new_chunk) {
         this->accumulated_drift_ = this->update_actual_offsets_(equivalent_client_timestamp - write_timestamp);
+        this->internal_latency_.update(internal_latency_written - write_timestamp);
       }
 
       // this->accumulated_drift_ = equivalent_client_timestamp - write_timestamp;
@@ -470,8 +477,9 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
           int64_t server_mismatch_median = this_snapcast->update_time_offsets_(tmp_dif);
 
-          printf("median offset %" PRId64 " with server mismatch %" PRId64 "\n", this_snapcast->previous_median_offset_,
-                 server_mismatch_median);
+          printf("median offset %" PRId64 " with server mismatch %" PRId64 " internal latency is %" PRId64 "\n",
+                 this_snapcast->previous_median_offset_, server_mismatch_median,
+                 this_snapcast->internal_latency_.get_most_recent_median());
 
           break;
         }
@@ -697,6 +705,12 @@ void SnapcastPlayer::sync_task(void *params) {
     output_transfer_buffer->set_sink(this_snapcast->speaker_);
 
     while (true) {
+      if (this_snapcast->accumulated_drift_ < -5000) {
+        // Hard sync as we need to cut at least 5 ms of audio
+      } else if (this_snapcast->accumulated_drift_ > 5000) {
+        // hard sync as need to add at least 5 ms of audio
+      }
+
       output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
       if (!xQueuePeek(this_snapcast->decoded_chunk_data_queue_, chunk, pdMS_TO_TICKS(20))) {
         continue;
@@ -720,7 +734,7 @@ void SnapcastPlayer::sync_task(void *params) {
       const size_t bytes_per_frame = this_snapcast->current_audio_stream_info_.value().frames_to_bytes(1);
       if (chunks_since_last_adjustment > 25) {
         chunks_since_last_adjustment = 0;
-        if (this_snapcast->accumulated_drift_ < -50) {
+        if (this_snapcast->accumulated_drift_ < -25) {
           this_snapcast->accumulated_drift_ += 21;
           const uint32_t num_channels = this_snapcast->current_audio_stream_info_.value().get_channels();
           int16_t *samples =
@@ -733,7 +747,7 @@ void SnapcastPlayer::sync_task(void *params) {
           // transfer_buffer->decrease_buffer_length(bytes_per_frame);
           chunk->size -= bytes_per_frame;
 
-        } else if (this_snapcast->accumulated_drift_ > 50) {
+        } else if (this_snapcast->accumulated_drift_ > 25) {
           this_snapcast->accumulated_drift_ -= 21;
           const uint32_t num_channels = this_snapcast->current_audio_stream_info_.value().get_channels();
           int16_t *samples =
@@ -761,6 +775,7 @@ void SnapcastPlayer::sync_task(void *params) {
 
       AudioSyncChunkTimings timings;
       timings.server_timestamp = chunk->server_timestamp;
+      timings.internal_timestamp = esp_timer_get_time();
       // timings.duration = new_duration_us;
       timings.duration = this_snapcast->current_audio_stream_info_->bytes_to_frames(chunk->size);
       this_snapcast->chunk_timings_.push_back(timings);

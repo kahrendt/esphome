@@ -38,6 +38,7 @@ struct AudioSyncChunk {
 struct AudioSyncChunkTimings {
   int64_t server_timestamp;
   uint32_t duration;
+  int64_t internal_timestamp;
 };
 
 typedef struct tv {
@@ -106,8 +107,50 @@ typedef struct server_settings_message {
 static const size_t BASE_MESSAGE_SIZE = 26;
 static const size_t TIME_MESSAGE_SIZE = 8;
 
+class MedianFilter {
+ public:
+  MedianFilter(uint8_t capacity) : capacity_(capacity) { this->data_.resize(capacity); };
+
+  int64_t update(int64_t new_value) {
+    if (this->data_.size() < this->capacity_) {
+      this->data_.push_back(new_value);
+    } else {
+      this->data_[this->index_] = new_value;
+    }
+    ++this->index_;
+    if (this->index_ == this->capacity_) {
+      this->index_ = 0;
+    }
+
+    std::vector<int64_t> sorted_data;
+    for (const int64_t &value : this->data_) {
+      sorted_data.push_back(value);
+    }
+    std::sort(sorted_data.begin(), sorted_data.end());
+
+    int64_t median_offset = sorted_data[sorted_data.size() / 2];
+    if (sorted_data.size() % 2 == 0) {
+      median_offset = (sorted_data[sorted_data.size() / 2] + sorted_data[sorted_data.size() / 2 + 1]) / 2;
+    }
+
+    this->most_recent_median_ = median_offset;
+    return median_offset;
+  }
+
+  int64_t get_most_recent_median() { return this->most_recent_median_; }
+
+  bool is_full() { return (this->data_.size() == this->capacity_); }
+
+ protected:
+  int64_t most_recent_median_;
+  std::vector<int64_t> data_;
+  uint8_t index_{0};
+  uint8_t capacity_;
+};
+
 class SnapcastPlayer : public Component {
  public:
+  SnapcastPlayer() : internal_latency_(MedianFilter(50)), server_internal_clock_offset_(MedianFilter(50)){};
   float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
   void setup() override;
   void loop() override;
@@ -175,6 +218,10 @@ class SnapcastPlayer : public Component {
   size_t snapcast_buffer_duration_ms_{0};
   uint32_t snapcast_latency_ms_{0};
 
+  MedianFilter internal_latency_;
+  MedianFilter server_internal_clock_offset_;
+
+  // int64_t internal_latency_{0};
   int64_t update_time_offsets_(int64_t new_offset) {
     if (this->time_offsets_.size() < 50) {
       this->time_offsets_.push_back(new_offset);
