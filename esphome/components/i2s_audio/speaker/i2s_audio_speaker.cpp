@@ -575,35 +575,35 @@ esp_err_t I2SAudioSpeaker::allocate_buffers_(size_t data_buffer_size, size_t rin
 }
 
 esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_stream_info) {
-  if ((this->i2s_mode_ & I2S_MODE_SLAVE) && (this->sample_rate_ != audio_stream_info.get_sample_rate())) {  // NOLINT
+  if ((this->i2s_role_ & I2S_ROLE_SLAVE) && (this->sample_rate_ != audio_stream_info.get_sample_rate())) {  // NOLINT
     // Can't reconfigure I2S bus, so the sample rate must match the configured value
     return ESP_ERR_NOT_SUPPORTED;
   }
 
-  if ((i2s_bits_per_sample_t) audio_stream_info.get_bits_per_sample() > this->bits_per_sample_) {
-    // Currently can't handle the case when the incoming audio has more bits per sample than the configured value
-    return ESP_ERR_NOT_SUPPORTED;
-  }
+  // if ((i2s_bits_per_sample_t) audio_stream_info.get_bits_per_sample() > this->bits_per_sample_) {
+  //   // Currently can't handle the case when the incoming audio has more bits per sample than the configured value
+  //   return ESP_ERR_NOT_SUPPORTED;
+  // }
 
   if (!this->parent_->try_lock()) {
     return ESP_ERR_INVALID_STATE;
   }
 
-  i2s_channel_fmt_t channel = this->channel_;
+  // i2s_channel_fmt_t channel = this->channel_;
 
-  if (audio_stream_info.get_channels() == 1) {
-    if (this->channel_ == I2S_CHANNEL_FMT_ONLY_LEFT) {
-      channel = I2S_CHANNEL_FMT_ONLY_LEFT;
-    } else {
-      channel = I2S_CHANNEL_FMT_ONLY_RIGHT;
-    }
-  } else if (audio_stream_info.get_channels() == 2) {
-    channel = I2S_CHANNEL_FMT_RIGHT_LEFT;
-  }
+  // if (audio_stream_info.get_channels() == 1) {
+  //   if (this->channel_ == I2S_CHANNEL_FMT_ONLY_LEFT) {
+  //     channel = I2S_CHANNEL_FMT_ONLY_LEFT;
+  //   } else {
+  //     channel = I2S_CHANNEL_FMT_ONLY_RIGHT;
+  //   }
+  // } else if (audio_stream_info.get_channels() == 2) {
+  //   channel = I2S_CHANNEL_FMT_RIGHT_LEFT;
+  // }
 
   int dma_buffer_length = audio_stream_info.ms_to_frames(DMA_BUFFER_DURATION_MS);
 
-  i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_SLAVE);
+  i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, this->i2s_role_);
   /* Allocate a new TX channel and get the handle of this channel */
   i2s_new_channel(&chan_cfg, &this->tx_handle_, NULL);
 
@@ -611,32 +611,24 @@ esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_strea
    * These two helper macros are defined in `i2s_std.h` which can only be used in STD mode.
    * They can help to specify the slot and clock configurations for initialization or updating */
 
-  i2s_std_clk_config_t clk_config = I2S_STD_CLK_DEFAULT_CONFIG(48000);
+  i2s_std_clk_config_t clk_config = I2S_STD_CLK_DEFAULT_CONFIG(audio_stream_info.get_sample_rate());
 
-  clk_config.clk_src = I2S_CLK_SRC_XTAL;
-  clk_config.mclk_multiple = (i2s_mclk_multiple_t) 512;
+  if (this->i2s_role_ & I2S_ROLE_SLAVE) {
+    clk_config.clk_src = I2S_CLK_SRC_XTAL;
+    clk_config.mclk_multiple = (i2s_mclk_multiple_t) 512;
+  }
 
-  i2s_std_slot_config_t slot_config = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO);
-  slot_config.data_bit_width = (i2s_data_bit_width_t) 16;
-  slot_config.slot_bit_width = (i2s_slot_bit_width_t) 32;
+  i2s_std_slot_config_t slot_config = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, this->slot_mode_);
+  slot_config.data_bit_width = (i2s_data_bit_width_t) audio_stream_info.get_bits_per_sample();
+  slot_config.slot_bit_width = (i2s_slot_bit_width_t) this->slot_bit_width_;
+
+  i2s_std_gpio_config_t pin_config = this->parent_->get_pin_config();
+  pin_config.dout = (gpio_num_t) this->dout_pin_;
 
   i2s_std_config_t std_cfg = {
       .clk_cfg = clk_config,
       .slot_cfg = slot_config,
-      .gpio_cfg =
-          {
-              .mclk = this->parent_->get_mclk_pin(),
-              .bclk = this->parent_->get_bclk_pin(),
-              .ws = this->parent_->get_lrclk_pin(),
-              .dout = (gpio_num_t) this->dout_pin_,
-              .din = I2S_GPIO_UNUSED,
-              .invert_flags =
-                  {
-                      .mclk_inv = false,
-                      .bclk_inv = false,
-                      .ws_inv = false,
-                  },
-          },
+      .gpio_cfg = pin_config,
   };
 
   i2s_channel_init_std_mode(this->tx_handle_, &std_cfg);
