@@ -30,13 +30,14 @@ enum message_type {
 struct AudioSyncChunk {
   int64_t server_timestamp;
   size_t size;
-  bool codec_header;
+  bool codec_header = false;
   uint8_t data[8000];
 };
 
 struct AudioSyncChunkTimings {
   int64_t server_timestamp;
   uint32_t duration;
+  int32_t frame_corrections = 0;
   int64_t internal_timestamp;
 };
 
@@ -124,8 +125,13 @@ class MedianFilter {
 
   bool is_full() { return (this->data_.size() == this->capacity_); }
 
+  void reset() {
+    this->data_.clear();
+    this->most_recent_median_ = 0;
+  }
+
  protected:
-  int64_t most_recent_median_;
+  int64_t most_recent_median_{0};
   std::vector<int64_t> data_;
   uint8_t index_{0};
   uint8_t capacity_;
@@ -184,6 +190,10 @@ class SnapcastPlayer : public Component {
 
   size_t snapcast_buffer_duration_ms_{0};
   uint32_t snapcast_latency_ms_{0};
+
+  int32_t pending_frame_corrections_{0};
+
+  bool external_mute_{false};
 
   MedianFilter internal_latency_;
   MedianFilter server_internal_clock_offset_;

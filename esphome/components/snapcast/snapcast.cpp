@@ -50,9 +50,11 @@ void SnapcastPlayer::setup() {
 
       bool new_chunk = false;
       // uint32_t frames_in_chunk = .duration;
+      int32_t accumulated_chunk_corrections = 0;
       AudioSyncChunkTimings front_chunk = this->chunk_timings_.front();
-      while (front_chunk.duration < frames_played) {
-        frames_played -= front_chunk.duration;
+      while (front_chunk.duration + front_chunk.frame_corrections < frames_played) {
+        frames_played -= (front_chunk.duration + front_chunk.frame_corrections);
+        accumulated_chunk_corrections += front_chunk.frame_corrections;
         this->chunk_timings_.pop_front();
         front_chunk = this->chunk_timings_.front();
         new_chunk = true;
@@ -66,9 +68,22 @@ void SnapcastPlayer::setup() {
                                             (this->snapcast_buffer_duration_ms_ + this->snapcast_latency_ms_) * 1000;
       this->chunk_timings_.front().duration = this->chunk_timings_.front().duration - frames_played;
 
+      if (abs(accumulated_chunk_corrections) > 10) {
+        // Very large change, our median filter will be slow to a adapt
+        this->actual_offsets_.reset();
+      }
+      this->pending_frame_corrections_ -= accumulated_chunk_corrections;
+
+      // uint32_t pending_duration_corrections =
+      //     this->current_audio_stream_info_.value().frames_to_microseconds(abs(this->pending_frame_corrections_));
+      // int32_t signed_pending_duration_corrections =
+      //     this->pending_frame_corrections_ / abs(this->pending_frame_corrections_) * pending_duration_corrections;
+
       int64_t internal_latency_written = front_chunk.internal_timestamp +
                                          this->current_audio_stream_info_.value().frames_to_microseconds(frames_played);
       if (new_chunk) {
+        // this->actual_offsets_.update(equivalent_client_timestamp - write_timestamp -
+        //                              signed_pending_duration_corrections);
         this->actual_offsets_.update(equivalent_client_timestamp - write_timestamp);
         this->internal_latency_.update(internal_latency_written - write_timestamp);
       }
@@ -325,8 +340,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
                      esp_timer_get_time());
 
               this_snapcast->initial_playback_timestamp_ =
-                  total_timestamp_us - this_snapcast->server_internal_clock_offset_.get_most_recent_median() + 1000000 +
-                  27000;
+                  total_timestamp_us - this_snapcast->server_internal_clock_offset_.get_most_recent_median() + 1000000;
               int64_t us_to_start = this_snapcast->initial_playback_timestamp_ - esp_timer_get_time();
               printf("initial playback in %" PRId64 "us\n", us_to_start);
 
@@ -368,10 +382,14 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
                    server_settings_msg.muted, server_settings_msg.volume);
 
             this_snapcast->snapcast_buffer_duration_ms_ = server_settings_msg.buffer_ms;
+            if (server_settings_msg.latency != this_snapcast->snapcast_latency_ms_) {
+              this_snapcast->actual_offsets_.reset();
+            }
             this_snapcast->snapcast_latency_ms_ = server_settings_msg.latency;
 
             this_snapcast->speaker_->set_volume(static_cast<float>(server_settings_msg.volume) / 100.0f);
             this_snapcast->speaker_->set_mute_state(server_settings_msg.muted);
+            this_snapcast->external_mute_ = server_settings_msg.muted;
           }
 
           break;
@@ -394,9 +412,10 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
           int64_t server_clock_offset = this_snapcast->server_internal_clock_offset_.update(tmp_dif);
 
-          printf("median offset %" PRId64 " with server mismatch %" PRId64 " internal latency is %" PRId64 "\n",
+          printf("median offset %" PRId64 " with server mismatch %" PRId64 " internal latency is %" PRId64
+                 "; pending frames to be corrected %d\n",
                  server_clock_offset, this_snapcast->actual_offsets_.get_most_recent_median(),
-                 this_snapcast->internal_latency_.get_most_recent_median());
+                 this_snapcast->internal_latency_.get_most_recent_median(), this_snapcast->pending_frame_corrections_);
 
           break;
         }
@@ -500,18 +519,47 @@ void SnapcastPlayer::sync_task(void *params) {
     std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
         audio::AudioSinkTransferBuffer::create(OUTPUT_BUFFER_SIZE);
     output_transfer_buffer->set_sink(this_snapcast->speaker_);
-
+    bool run_once = false;
     while (true) {
-      if (this_snapcast->actual_offsets_.get_most_recent_median() < -5000) {
-        // Hard sync as we need to cut at least 5 ms of audio
-      } else if (this_snapcast->actual_offsets_.get_most_recent_median() > 5000) {
-        // hard sync as need to add at least 5 ms of audio
-      }
-
       output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
       if (!xQueuePeek(this_snapcast->decoded_chunk_data_queue_, chunk, pdMS_TO_TICKS(20))) {
         continue;
       }
+
+      if (chunk->size > output_transfer_buffer->free()) {
+        continue;
+      }
+
+      int64_t signed_pending_duration_corrections = 0;
+
+      int32_t pending_frame_corrections = this_snapcast->pending_frame_corrections_;
+
+      if (pending_frame_corrections != 0) {
+        uint32_t pending_duration_corrections =
+            this_snapcast->current_audio_stream_info_.value().frames_to_microseconds(abs(pending_frame_corrections));
+        signed_pending_duration_corrections = ((int64_t) pending_frame_corrections / abs(pending_frame_corrections)) *
+                                              static_cast<int64_t>(pending_duration_corrections);
+      }
+      int64_t recent_error = 0;
+      if (this_snapcast->actual_offsets_.is_full()) {
+        recent_error = this_snapcast->actual_offsets_.get_most_recent_median() - signed_pending_duration_corrections;
+        if ((abs(recent_error) < 5000) &&
+            (this_snapcast->external_mute_ != this_snapcast->speaker_->get_mute_state())) {
+          printf("sync is decent, setting to external mute state\n");
+          this_snapcast->speaker_->set_mute_state(this_snapcast->external_mute_);
+        }
+      } else if (!this_snapcast->speaker_->get_mute_state()) {
+        this_snapcast->speaker_->set_mute_state(true);
+        printf("muting while waiting until we have a good sync");
+      }
+
+      // size_t silence_bytes = 0;
+      // if (recent_error < -5000) {
+      //   // Hard sync as we need to cut at least 5 ms of audio
+      // } else if (recent_error > 5000) {
+      //   // hard sync as need to add at least 5 ms of audio
+      //   silence_bytes = this_snapcast->current_audio_stream_info_.value().ms_to_bytes(recent_error / 1000);
+      // }
 
       if (chunk->size > output_transfer_buffer->free()) {
         continue;
@@ -520,14 +568,31 @@ void SnapcastPlayer::sync_task(void *params) {
       }
 
       std::memcpy(output_transfer_buffer->get_buffer_end(), chunk->data, chunk->size);
-
       output_transfer_buffer->increase_buffer_length(chunk->size);
 
-      int32_t bytes_adjustment = 0;
+      uint32_t chunk_frame_count = this_snapcast->current_audio_stream_info_.value().bytes_to_frames(chunk->size);
+      int32_t frame_corrections = 0;
+
       const size_t bytes_per_frame = this_snapcast->current_audio_stream_info_.value().frames_to_bytes(1);
-      if (chunks_since_last_adjustment > 25) {
-        chunks_since_last_adjustment = 0;
-        if (this_snapcast->actual_offsets_.get_most_recent_median() < -25) {
+
+      if (recent_error > 5000) {
+        size_t silence_bytes = this_snapcast->current_audio_stream_info_.value().ms_to_bytes(recent_error / 1000);
+        size_t actual_silence_bytes = std::min(silence_bytes, output_transfer_buffer->free());
+        std::memset((void *) output_transfer_buffer->get_buffer_end(), 0, actual_silence_bytes);
+        output_transfer_buffer->increase_buffer_length(actual_silence_bytes);
+        frame_corrections = this_snapcast->current_audio_stream_info_.value().bytes_to_frames(actual_silence_bytes);
+
+        printf("adding %d frames of silence to hard sync, current pending %d, internal current pending %d\n",
+               frame_corrections, this_snapcast->pending_frame_corrections_, pending_frame_corrections);
+      } else if (recent_error < -5000) {
+        size_t bytes_to_remove =
+            this_snapcast->current_audio_stream_info_.value().ms_to_bytes(abs(recent_error) / 1000);
+        size_t actual_bytes_to_remove = std::min(bytes_to_remove, chunk->size);
+        output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
+        frame_corrections = -this_snapcast->current_audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
+        printf("hard sync, removing %d frames from a chunk\n", frame_corrections);
+      } else {
+        if (recent_error < -25) {
           const uint32_t num_channels = this_snapcast->current_audio_stream_info_.value().get_channels();
           int16_t *samples =
               reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
@@ -536,9 +601,8 @@ void SnapcastPlayer::sync_task(void *params) {
             const int16_t right_sample = samples[num_channels + chan];
             samples[chan] = left_sample / 2 + right_sample / 2;
           }
-          chunk->size -= bytes_per_frame;
-
-        } else if (this_snapcast->actual_offsets_.get_most_recent_median() > 25) {
+          frame_corrections = -1;
+        } else if (recent_error > 25) {
           const uint32_t num_channels = this_snapcast->current_audio_stream_info_.value().get_channels();
           int16_t *samples =
               reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
@@ -548,17 +612,17 @@ void SnapcastPlayer::sync_task(void *params) {
             const int16_t inserted_sample = left_sample / 2 + right_sample / 2;
             samples[num_channels + chan] = inserted_sample;
             samples[2 * num_channels + chan] = right_sample;
-            chunk->size += bytes_per_frame;
           }
+          frame_corrections = 1;
         }
-      } else {
-        ++chunks_since_last_adjustment;
       }
+      this_snapcast->pending_frame_corrections_ += frame_corrections;
 
       AudioSyncChunkTimings timings;
       timings.server_timestamp = chunk->server_timestamp;
       timings.internal_timestamp = esp_timer_get_time();
-      timings.duration = this_snapcast->current_audio_stream_info_->bytes_to_frames(chunk->size);
+      timings.duration = chunk_frame_count;
+      timings.frame_corrections = frame_corrections;
       this_snapcast->chunk_timings_.push_back(timings);
     }
   }
