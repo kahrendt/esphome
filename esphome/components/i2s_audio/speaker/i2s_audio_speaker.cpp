@@ -11,6 +11,8 @@
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
+#include <esp_timer.h>
+
 namespace esphome {
 namespace i2s_audio {
 
@@ -25,6 +27,11 @@ static const ssize_t TASK_PRIORITY = 23;
 static const size_t I2S_EVENT_QUEUE_COUNT = DMA_BUFFERS_COUNT + 1;
 
 static const char *const TAG = "i2s_audio.speaker";
+
+struct TxDoneInfo {
+  size_t size;
+  int64_t timestamp;
+};
 
 enum SpeakerEventGroupBits : uint32_t {
   COMMAND_START = (1 << 0),            // starts the speaker task
@@ -105,7 +112,8 @@ void I2SAudioSpeaker::setup() {
     return;
   }
 
-  this->i2s_event_queue_ = xQueueCreate(4, sizeof(uint32_t));
+  // this->i2s_event_queue_ = xQueueCreate(4, sizeof(int64_t));
+  this->i2s_event_queue_ = xQueueCreate(4, sizeof(TxDoneInfo));
 }
 
 void I2SAudioSpeaker::loop() {
@@ -228,10 +236,15 @@ bool I2SAudioSpeaker::has_buffered_data() const {
 }
 
 bool I2SAudioSpeaker::on_sent_callback(i2s_channel_obj_t *handle, i2s_event_data_t *event, void *params) {
+  // int64_t timestamp = esp_timer_get_time();
+
+  TxDoneInfo info = {.size = event->size, .timestamp = esp_timer_get_time()};
   I2SAudioSpeaker *this_speaker = (I2SAudioSpeaker *) params;
   BaseType_t higher_priority_task_woken;
-  uint32_t timestamp = micros();
-  xQueueSendFromISR(this_speaker->i2s_event_queue_, &timestamp, &higher_priority_task_woken);
+  // uint32_t timestamp = micros();
+  // xQueueSendFromISR(this_speaker->i2s_event_queue_, &timestamp, &higher_priority_task_woken);
+  xQueueSendFromISR(this_speaker->i2s_event_queue_, &info, &higher_priority_task_woken);
+
   // // void I2SAudioSpeaker::on_sent_callback(void *params) {
   //
   // uint32_t write_timestamp = micros();
@@ -264,9 +277,13 @@ void I2SAudioSpeaker::process_i2s_event_queue(void *params) {
   I2SAudioSpeaker *this_speaker = (I2SAudioSpeaker *) params;
 
   while (true) {
-    uint32_t timestamp;
-    while (xQueueReceive(this_speaker->i2s_event_queue_, &timestamp, portMAX_DELAY)) {
-      uint32_t write_timestamp = timestamp;
+    // int64_t timestamp;
+    TxDoneInfo info;
+    while (xQueueReceive(this_speaker->i2s_event_queue_, &info, portMAX_DELAY)) {
+      uint32_t write_timestamp = (uint32_t) info.timestamp;
+
+      // this_speaker->audio_output_callback_(this_speaker->audio_stream_info_.bytes_to_frames(info.size), 0, 0,
+      //                                      write_timestamp);
 
       if (!this_speaker->pending_dma_write_sizes_.empty()) {
         // TODO careful, the speaker's audio stream info can be changed while playing!
@@ -274,21 +291,6 @@ void I2SAudioSpeaker::process_i2s_event_queue(void *params) {
         size_t pending_bytes = this_speaker->pending_dma_write_sizes_.front();
         this_speaker->pending_dma_write_sizes_.pop_front();
 
-        // this_speaker->accumulated_frames_written_ += this_speaker->audio_stream_info_.bytes_to_frames(pending_bytes);
-        // const uint32_t new_playback_ms = this_speaker->audio_stream_info_.frames_to_milliseconds_with_remainder(
-        //     &this_speaker->accumulated_frames_written_);
-        // const uint32_t remainder_us =
-        //     this_speaker->audio_stream_info_.frames_to_microseconds(this_speaker->accumulated_frames_written_);
-
-        // uint32_t pending_ms = this_speaker->pending_dma_write_sizes_.size();
-        // uint32_t pending_frames = this_speaker->audio_stream_info_.bytes_to_frames(
-        //     bytes_read + this_speaker->audio_ring_buffer_->available());
-        // const uint32_t pending_ms =
-        //     this_speaker->audio_stream_info_.frames_to_milliseconds_with_remainder(&pending_frames);
-
-        // pending_ms = (write_timestamp - last_callback_timestamp);
-
-        // this_speaker->audio_output_callback_(new_playback_ms, remainder_us, pending_ms, write_timestamp);
         this_speaker->audio_output_callback_(this_speaker->audio_stream_info_.bytes_to_frames(pending_bytes), 0, 0,
                                              write_timestamp);
       }
@@ -414,9 +416,8 @@ void I2SAudioSpeaker::speaker_task(void *params) {
             xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE);
           }
 
+          this_speaker->pending_dma_write_sizes_.push_back(bytes_to_write);
           bytes_read -= bytes_written;
-
-          this_speaker->pending_dma_write_sizes_.push_back(bytes_written);
 
           this_speaker->tx_dma_buffer_underflow_ = false;
           last_data_received_time = millis();
@@ -562,6 +563,9 @@ esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_strea
 
   i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, this->i2s_role_);
   chan_cfg.auto_clear = true;
+  chan_cfg.dma_desc_num = DMA_BUFFERS_COUNT;
+  chan_cfg.dma_frame_num = dma_buffer_length;
+  // chan_cfg.auto_clear_before_cb = true;
 
   /* Allocate a new TX channel and get the handle of this channel */
   i2s_new_channel(&chan_cfg, &this->tx_handle_, NULL);

@@ -80,7 +80,7 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   static void speaker_task(void *params);
 
   static void process_i2s_event_queue(void *params);
-  static bool IRAM_ATTR on_sent_callback(i2s_channel_obj_t *handle, i2s_event_data_t *event, void *params);
+  static IRAM_ATTR bool on_sent_callback(i2s_channel_obj_t *handle, i2s_event_data_t *event, void *params);
 
   /// @brief Sends a stop command to the speaker task via event_group_.
   /// @param wait_on_empty If false, sends the COMMAND_STOP signal. If true, sends the COMMAND_STOP_GRACEFULLY signal.
