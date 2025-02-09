@@ -115,6 +115,7 @@ class SourceSpeaker : public speaker::Speaker, public Component {
   uint32_t accumulated_frames_read_{0};
 
   uint32_t pending_playback_ms_{0};
+  uint32_t pending_playback_frames_{0};
 };
 
 class MixerSpeaker : public Component {
