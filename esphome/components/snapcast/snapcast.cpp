@@ -126,10 +126,10 @@ void SnapcastPlayer::time_sync_callback(void *params) {
   bytebuffer::ByteBuffer time_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE + TIME_MESSAGE_SIZE);
 
   int64_t now = esp_timer_get_time();
-  base_message base_msg_for_time = {
+  BaseMessage base_msg_for_time = {
       .type = SNAPCAST_MESSAGE_TIME,
       .id = this_snapcast->time_sync_counter_++,
-      .refersTo = 0x0000,
+      .refers_to = 0x0000,
       .sent = {.sec = static_cast<int32_t>(now / 1000000LL),
                .usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL)},
       .received = {.sec = 0, .usec = 0},
@@ -197,10 +197,10 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       hello_msg_buffer.put_uint8(hello_msg.data()[i]);
     }
 
-    base_message base_msg = {
+    BaseMessage base_msg = {
         .type = SNAPCAST_MESSAGE_HELLO,
         .id = 0x0000,
-        .refersTo = 0x0000,
+        .refers_to = 0x0000,
         .sent = {.sec = static_cast<int32_t>(now / 1000000),
                  .usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL)},
         .received = {.sec = 0, .usec = 0},
@@ -375,7 +375,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             std::string server_msg_read_data;
             server_msg_read_data.resize(server_settings_len);
             this_snapcast->socket_->read(&server_msg_read_data[0], server_settings_len);
-            server_settings_message server_settings_msg;
+            ServerSettingsMessage server_settings_msg;
             this_snapcast->server_settings_message_deserialize_(&server_settings_msg, server_msg_read_data.c_str());
 
             printf("server settings json: %s\n server settings buffer ms: %d\n latency: %d\n muted: %d\n volume %d\n",
@@ -629,10 +629,10 @@ void SnapcastPlayer::sync_task(void *params) {
   }
 }
 
-void SnapcastPlayer::base_message_serialize_(base_message_t *msg, bytebuffer::ByteBuffer &buffer) {
+void SnapcastPlayer::base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer) {
   buffer.put_uint16(msg->type);
   buffer.put_uint16(msg->id);
-  buffer.put_uint16(msg->refersTo);
+  buffer.put_uint16(msg->refers_to);
   buffer.put_int32(msg->sent.sec);
   buffer.put_int32(msg->sent.usec);
   buffer.put_int32(msg->received.sec);
@@ -640,10 +640,10 @@ void SnapcastPlayer::base_message_serialize_(base_message_t *msg, bytebuffer::By
   buffer.put_uint32(msg->size);
 }
 
-void SnapcastPlayer::base_message_deserialize_(base_message_t *msg, bytebuffer::ByteBuffer &buffer) {
+void SnapcastPlayer::base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer) {
   msg->type = buffer.get_uint16();
   msg->id = buffer.get_uint16();
-  msg->refersTo = buffer.get_uint16();
+  msg->refers_to = buffer.get_uint16();
   msg->sent.sec = buffer.get_int32();
   msg->sent.usec = buffer.get_int32();
   msg->received.sec = buffer.get_int32();
@@ -657,7 +657,7 @@ std::string SnapcastPlayer::hello_message_serialize_() {
   esp_read_mac(base_mac, ESP_MAC_WIFI_STA);
   sprintf(mac_address, "%02X:%02X:%02X:%02X:%02X:%02X", base_mac[0], base_mac[1], base_mac[2], base_mac[3], base_mac[4],
           base_mac[5]);
-  hello_message_t hello_message;
+  HelloMessage hello_message;
   hello_message.mac = mac_address;
   hello_message.hostname = App.get_name().c_str();
   hello_message.version = "0.0.1";
@@ -670,7 +670,7 @@ std::string SnapcastPlayer::hello_message_serialize_() {
   return this->build_hello_message_(&hello_message);
 }
 
-std::string SnapcastPlayer::build_hello_message_(hello_message_t *msg) {
+std::string SnapcastPlayer::build_hello_message_(HelloMessage *msg) {
   return json::build_json([msg](JsonObject root) {
     root["MAC"] = msg->mac;
     root["HostName"] = msg->hostname;
@@ -684,7 +684,7 @@ std::string SnapcastPlayer::build_hello_message_(hello_message_t *msg) {
   });
 }
 
-bool SnapcastPlayer::server_settings_message_deserialize_(server_settings_message_t *msg, const char *json_str) {
+bool SnapcastPlayer::server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str) {
   bool valid = json::parse_json(json_str, [msg](JsonObject root) -> bool {
     if (!root.containsKey("bufferMs") || !root.containsKey("latency") || !root.containsKey("muted") ||
         !root.containsKey("volume")) {

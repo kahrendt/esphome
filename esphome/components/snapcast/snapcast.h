@@ -41,35 +41,21 @@ struct AudioSyncChunkTimings {
   int64_t internal_timestamp;
 };
 
-typedef struct tv {
+struct TimeMessage {
   int32_t sec;
   int32_t usec;
-} tv_t;
+};
 
-typedef struct base_message {
+struct BaseMessage {
   uint16_t type;
   uint16_t id;
-  uint16_t refersTo;
-  tv_t sent;
-  tv_t received;
+  uint16_t refers_to;
+  TimeMessage sent;
+  TimeMessage received;
   uint32_t size;
-} base_message_t;
+};
 
-/* Sample Hello message
-{
-    "Arch": "x86_64",
-    "ClientName": "Snapclient",
-    "HostName": "my_hostname",
-    "ID": "00:11:22:33:44:55",
-    "Instance": 1,
-    "MAC": "00:11:22:33:44:55",
-    "OS": "Arch Linux",
-    "SnapStreamProtocolVersion": 2,
-    "Version": "0.17.1"
-}
-*/
-
-typedef struct hello_message {
+struct HelloMessage {
   char *mac;
   const char *hostname;
   const char *version;
@@ -79,14 +65,14 @@ typedef struct hello_message {
   int instance;
   char *id;
   int protocol_version;
-} hello_message_t;
+};
 
-typedef struct server_settings_message {
+struct ServerSettingsMessage {
   int32_t buffer_ms;
   int32_t latency;
   uint32_t volume;
   bool muted;
-} server_settings_message_t;
+};
 
 static const size_t BASE_MESSAGE_SIZE = 26;
 static const size_t TIME_MESSAGE_SIZE = 8;
@@ -155,14 +141,14 @@ class SnapcastPlayer : public Component {
   speaker::Speaker *speaker_{nullptr};
   std::unique_ptr<socket::Socket> socket_;
 
-  void base_message_serialize_(base_message_t *msg, bytebuffer::ByteBuffer &buffer);
-  void base_message_deserialize_(base_message_t *msg, bytebuffer::ByteBuffer &buffer);
+  void base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
+  void base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
 
   std::string hello_message_serialize_();
 
-  std::string build_hello_message_(hello_message_t *msg);
+  std::string build_hello_message_(HelloMessage *msg);
 
-  bool server_settings_message_deserialize_(server_settings_message_t *msg, const char *json_str);
+  bool server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str);
 
   static void snapcast_task(void *params);
   static void decode_task(void *params);
