@@ -144,8 +144,10 @@ class SnapcastPlayer : public Component {
         server_internal_clock_offset_(MedianFilter(50)),
         actual_offsets_(MedianFilter(20)){};
   float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
-  void setup() override;
+  void setup() override{};
   void loop() override;
+
+  void start();
 
   void set_speaker(speaker::Speaker *speaker) { this->speaker_ = speaker; }
 

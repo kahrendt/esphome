@@ -42,7 +42,7 @@ static void close_connection(struct netconn *conn) {
   }
 }
 
-void SnapcastPlayer::setup() {
+void SnapcastPlayer::start() {
   this->speaker_->add_audio_output_callback([this](uint32_t new_playback_ms, uint32_t remainder_us, uint32_t pending_ms,
                                                    uint32_t write_timestamp) {
     if (!this->chunk_timings_.empty()) {
@@ -115,7 +115,7 @@ void SnapcastPlayer::setup() {
   this->decoded_chunk_data_queue_ = xQueueCreateStatic(
       50, sizeof(AudioSyncChunk), this->decoded_chunk_data_queue_storage_, &decoded_chunk_data_queue_buffer_);
   // this->encoded_chunk_data_queue_ = xQueueCreate(20, sizeof(AudioSyncChunk));
-  xTaskCreate(snapcast_task, "snapcast", 1024 * 15, (void *) this, 1, &this->snapcast_task_handle_);
+  xTaskCreate(snapcast_task, "snapcast", 1024 * 5, (void *) this, 1, &this->snapcast_task_handle_);
 }
 
 void SnapcastPlayer::loop() {}
@@ -307,7 +307,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             this_snapcast->speaker_->stop();
             xQueueSend(this_snapcast->encoded_chunk_data_queue_, audio_chunk, portMAX_DELAY);
 
-            xTaskCreate(decode_task, "decode", 1024 * 15, (void *) this_snapcast, 1,
+            xTaskCreate(decode_task, "decode", 1024 * 5, (void *) this_snapcast, 1,
                         &this_snapcast->decode_task_handle_);
           }
 
@@ -340,7 +340,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
                      esp_timer_get_time());
 
               this_snapcast->initial_playback_timestamp_ =
-                  total_timestamp_us - this_snapcast->server_internal_clock_offset_.get_most_recent_median() + 1000000;
+                  total_timestamp_us - this_snapcast->server_internal_clock_offset_.get_most_recent_median() +
+                  this_snapcast->snapcast_buffer_duration_ms_ * 1000 + this_snapcast->snapcast_latency_ms_ * 1000;
               int64_t us_to_start = this_snapcast->initial_playback_timestamp_ - esp_timer_get_time();
               printf("initial playback in %" PRId64 "us\n", us_to_start);
 
@@ -465,7 +466,7 @@ void SnapcastPlayer::decode_task(void *params) {
         printf("decoded flac header\n");
 
         if (this_snapcast->sync_task_handle_ == nullptr) {
-          xTaskCreate(sync_task, "sync", 1024 * 15, (void *) this_snapcast, 1, &this_snapcast->sync_task_handle_);
+          xTaskCreate(sync_task, "sync", 1024 * 3, (void *) this_snapcast, 1, &this_snapcast->sync_task_handle_);
         }
         // }
 
