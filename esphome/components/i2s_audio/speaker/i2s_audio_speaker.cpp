@@ -561,7 +561,7 @@ esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_strea
 
   int dma_buffer_length = audio_stream_info.ms_to_frames(DMA_BUFFER_DURATION_MS);
 
-  i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, this->i2s_role_);
+  i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(this->parent_->get_port(), this->i2s_role_);
   chan_cfg.auto_clear = true;
   chan_cfg.dma_desc_num = DMA_BUFFERS_COUNT;
   chan_cfg.dma_frame_num = dma_buffer_length;
