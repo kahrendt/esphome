@@ -461,7 +461,12 @@ void SnapcastPlayer::decode_task(void *params) {
   while (true) {
     if (xQueueReceive(this_snapcast->encoded_chunk_data_queue_, encoded_chunk, pdMS_TO_TICKS(20))) {
       if (encoded_chunk->codec_header) {
-        flac_decoder.reset();
+        if (flac_decoder != nullptr) {
+          flac_decoder.reset();
+        }
+
+        xQueueReset(this_snapcast->decoded_chunk_data_queue_);
+        this_snapcast->actual_offsets_.reset();
         flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
         auto result = flac_decoder->read_header(encoded_chunk->data, encoded_chunk->size);
 
