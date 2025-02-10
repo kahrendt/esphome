@@ -108,14 +108,13 @@ void SpeakerMediaPlayer::setup() {
     }
 
     // Setup callback to track the duration of audio played by the media pipeline
-    this->media_speaker_->add_audio_output_callback(
-        [this](uint32_t new_playback_ms, uint32_t remainder_us, uint32_t pending_ms, uint32_t write_timestamp) {
-          this->playback_ms_ += new_playback_ms;
-          this->remainder_us_ = remainder_us;
-          this->pending_ms_ = pending_ms;
-          this->last_audio_write_timestamp_ = write_timestamp;
-          this->playback_us_ = this->playback_ms_ * 1000 + this->remainder_us_;
-        });
+    this->media_speaker_->add_audio_output_callback([this](uint32_t new_frames, int64_t write_timestamp) {
+      // this->playback_ms_ += new_playback_ms;
+      // this->remainder_us_ = remainder_us;
+      // this->pending_ms_ = pending_ms;
+      // this->last_audio_write_timestamp_ = write_timestamp;
+      // this->playback_us_ = this->playback_ms_ * 1000 + this->remainder_us_;
+    });
   }
 
   ESP_LOGI(TAG, "Set up speaker media player");

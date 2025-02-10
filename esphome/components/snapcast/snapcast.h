@@ -33,7 +33,7 @@ struct AudioSyncChunk {
 
 struct AudioSyncChunkTimings {
   int64_t server_timestamp;
-  uint32_t duration;
+  uint32_t total_frames;
   int32_t frame_corrections = 0;
   int64_t internal_timestamp;
 };
@@ -102,7 +102,7 @@ class MedianFilter {
 
     int64_t median_offset = sorted_data[sorted_data.size() / 2];
     if (sorted_data.size() % 2 == 0) {
-      median_offset = (sorted_data[sorted_data.size() / 2] + sorted_data[sorted_data.size() / 2 + 1]) / 2;
+      median_offset = sorted_data[sorted_data.size() / 2] / 2 + sorted_data[sorted_data.size() / 2 + 1] / 2;
     }
 
     this->most_recent_median_ = median_offset;
@@ -130,9 +130,9 @@ class SnapcastPlayer : public Component {
   SnapcastPlayer()
       : internal_latency_(MedianFilter(50)),
         server_internal_clock_offset_(MedianFilter(50)),
-        actual_offsets_(MedianFilter(20)){};
+        actual_offsets_(MedianFilter(19)){};
   float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
-  void setup() override{};
+  void setup() override { this->start(); }
   void loop() override;
 
   void start();
@@ -152,7 +152,7 @@ class SnapcastPlayer : public Component {
 
   bool server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str);
 
-  std::string client_message_serialize_(ClientMessage *msg);
+  std::string client_message_serialize_(ClientInfoMessage *msg);
   void send_client_message();
 
   static void snapcast_task(void *params);

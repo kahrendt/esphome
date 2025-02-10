@@ -53,20 +53,19 @@ void SourceSpeaker::dump_config() {
 }
 
 void SourceSpeaker::setup() {
-  this->parent_->get_output_speaker()->add_audio_output_callback(
-      [this](uint32_t new_playback_ms, uint32_t remainder_us, uint32_t pending_ms, uint32_t write_timestamp) {
-        uint32_t personal_playback_frames = std::min(new_playback_ms, this->pending_playback_frames_);
-        if (personal_playback_frames > 0) {
-          this->pending_playback_frames_ -= personal_playback_frames;
-          this->audio_output_callback_(personal_playback_frames, 0, 0, write_timestamp);
-        }
-        // uint32_t personal_playback_ms = std::min(new_playback_ms, this->pending_playback_ms_);
-        // if (personal_playback_ms > 0) {
-        //   this->pending_playback_ms_ -= personal_playback_ms;
-        //   this->audio_output_callback_(personal_playback_ms, remainder_us, this->pending_playback_ms_,
-        //   write_timestamp);
-        // }
-      });
+  this->parent_->get_output_speaker()->add_audio_output_callback([this](uint32_t new_frames, int64_t write_timestamp) {
+    uint32_t personal_playback_frames = std::min(new_frames, this->pending_playback_frames_);
+    if (personal_playback_frames > 0) {
+      this->pending_playback_frames_ -= personal_playback_frames;
+      this->audio_output_callback_(personal_playback_frames, write_timestamp);
+    }
+    // uint32_t personal_playback_ms = std::min(new_playback_ms, this->pending_playback_ms_);
+    // if (personal_playback_ms > 0) {
+    //   this->pending_playback_ms_ -= personal_playback_ms;
+    //   this->audio_output_callback_(personal_playback_ms, remainder_us, this->pending_playback_ms_,
+    //   write_timestamp);
+    // }
+  });
 }
 
 void SourceSpeaker::loop() {

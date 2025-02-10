@@ -43,17 +43,13 @@ static void close_connection(struct netconn *conn) {
 }
 
 void SnapcastPlayer::start() {
-  this->speaker_->add_audio_output_callback([this](uint32_t new_playback_ms, uint32_t remainder_us, uint32_t pending_ms,
-                                                   uint32_t write_timestamp) {
+  this->speaker_->add_audio_output_callback([this](uint32_t frames_played, int64_t write_timestamp) {
     if (!this->chunk_timings_.empty()) {
-      uint32_t frames_played = new_playback_ms;
-
       bool new_chunk = false;
-      // uint32_t frames_in_chunk = .duration;
       int32_t accumulated_chunk_corrections = 0;
       AudioSyncChunkTimings front_chunk = this->chunk_timings_.front();
-      while (front_chunk.duration + front_chunk.frame_corrections < frames_played) {
-        frames_played -= (front_chunk.duration + front_chunk.frame_corrections);
+      while (front_chunk.total_frames < frames_played) {
+        frames_played -= front_chunk.total_frames;
         accumulated_chunk_corrections += front_chunk.frame_corrections;
         this->chunk_timings_.pop_front();
         front_chunk = this->chunk_timings_.front();
@@ -66,7 +62,8 @@ void SnapcastPlayer::start() {
       int64_t equivalent_client_timestamp = server_timestamp_finished -
                                             this->server_internal_clock_offset_.get_most_recent_median() +
                                             (this->snapcast_buffer_duration_ms_ - this->snapcast_latency_ms_) * 1000;
-      this->chunk_timings_.front().duration = this->chunk_timings_.front().duration - frames_played;
+      this->chunk_timings_.front().total_frames -= frames_played;
+      this->chunk_timings_.front().server_timestamp = server_timestamp_finished;
 
       if (abs(accumulated_chunk_corrections) > 10) {
         // Very large change, our median filter will be slow to a adapt
@@ -74,17 +71,17 @@ void SnapcastPlayer::start() {
       }
       this->pending_frame_corrections_ -= accumulated_chunk_corrections;
 
-      // uint32_t pending_duration_corrections =
-      //     this->current_audio_stream_info_.value().frames_to_microseconds(abs(this->pending_frame_corrections_));
-      // int32_t signed_pending_duration_corrections =
-      //     this->pending_frame_corrections_ / abs(this->pending_frame_corrections_) * pending_duration_corrections;
-
       int64_t internal_latency_written = front_chunk.internal_timestamp +
                                          this->current_audio_stream_info_.value().frames_to_microseconds(frames_played);
       if (new_chunk) {
-        // this->actual_offsets_.update(equivalent_client_timestamp - write_timestamp -
-        //                              signed_pending_duration_corrections);
-        this->actual_offsets_.update(equivalent_client_timestamp - write_timestamp);
+        int64_t new_error = equivalent_client_timestamp - write_timestamp;
+        this->actual_offsets_.update(new_error);
+        if (new_error > 22982976707978547LL) {
+          printf("weirdly huge error. server timestamp should have been %" PRId64 "; client timestamp %" PRId64
+                 "; actually written %" PRId64 "\n",
+                 server_timestamp_finished, equivalent_client_timestamp, write_timestamp);
+        }
+
         this->internal_latency_.update(internal_latency_written - write_timestamp);
       }
 
@@ -121,11 +118,12 @@ void SnapcastPlayer::start() {
 void SnapcastPlayer::loop() {}
 
 void SnapcastPlayer::send_client_message() {
-  ClientMessage client_msg = {.volume = this->speaker_->get_volume(), .muted = this->external_mute_};
-  std::string json_client_msg = this->client_message_serialize(client_msg);
-
-  bytebuffer::ByteBuffer client_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE + json_client_msg.size());
-  BaseMessage base_msg_for_client = {
+  ClientInfoMessage client_msg = {.volume = static_cast<uint32_t>(this->speaker_->get_volume() * 100.0f),
+                                  .muted = this->external_mute_};
+  std::string json_client_msg = this->client_message_serialize_(&client_msg);
+  int64_t now = esp_timer_get_time();
+  bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE);
+  BaseMessage base_msg_for_client_info = {
       .type = SNAPCAST_MESSAGE_CLIENT_INFO,
       .id = 0x0000,
       .refers_to = 0x0000,
@@ -134,8 +132,11 @@ void SnapcastPlayer::send_client_message() {
       .received = {.sec = 0, .usec = 0},
       .size = json_client_msg.size(),
   };
+  this->base_message_serialize_(&base_msg_for_client_info, base_msg_buffer);
   this->socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
   this->socket_->write((void *) json_client_msg.data(), json_client_msg.size());
+
+  printf("Sent the followign client message: %s\n", json_client_msg.c_str());
 }
 
 void SnapcastPlayer::time_sync_callback(void *params) {
@@ -267,8 +268,6 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       continue;
     }
 
-    this_snapcast->set_interval(60000, [this_snapcast]() { this_snapcast->send_client_message(); });
-
     while (true) {
       base_msg_buffer.rewind();
 
@@ -292,6 +291,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
         high_speed_timer_started = false;
         esp_timer_start_periodic(timeSyncMessageTimer, NORMAL_SYNC_LATENCY_BUF);
         low_speed_timer_started = true;
+        // this_snapcast->set_interval(60000, [this_snapcast]() { this_snapcast->send_client_message(); });
       }
 
       switch (base_msg.type) {
@@ -351,7 +351,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             if (low_speed_timer_started && new_file_start) {
               new_file_start = false;
               this_snapcast->speaker_->start();
-              this_snapcast->speaker_->set_pause_state(true);
+              // this_snapcast->speaker_->set_pause_state(true);
 
               printf("total_timestamp %" PRId64 "; median_offset %" PRId64 "; current time %" PRId64 "\n",
                      total_timestamp_us, this_snapcast->server_internal_clock_offset_.get_most_recent_median(),
@@ -363,7 +363,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
               int64_t us_to_start = this_snapcast->initial_playback_timestamp_ - esp_timer_get_time();
               printf("initial playback in %" PRId64 "us\n", us_to_start);
 
-              esp_timer_start_once(unpauseTimer, us_to_start);
+              // esp_timer_start_once(unpauseTimer, us_to_start);
             }
 
             audio_chunk->codec_header = false;
@@ -553,20 +553,34 @@ void SnapcastPlayer::sync_task(void *params) {
         continue;
       }
 
-      int64_t signed_pending_duration_corrections = 0;
+      // int64_t signed_pending_duration_corrections = 0;
 
-      int32_t pending_frame_corrections = this_snapcast->pending_frame_corrections_;
+      int64_t pending_frame_corrections = this_snapcast->pending_frame_corrections_;
 
-      if (pending_frame_corrections != 0) {
-        uint32_t pending_duration_corrections =
-            this_snapcast->current_audio_stream_info_.value().frames_to_microseconds(abs(pending_frame_corrections));
-        signed_pending_duration_corrections = ((int64_t) pending_frame_corrections / abs(pending_frame_corrections)) *
-                                              static_cast<int64_t>(pending_duration_corrections);
-      }
-      int64_t recent_error = 0;
+      // if (pending_frame_corrections != 0) {
+      //   uint32_t pending_duration_corrections =
+      //       this_snapcast->current_audio_stream_info_.value().frames_to_microseconds(abs(pending_frame_corrections));
+
+      //   signed_pending_duration_corrections = ((int64_t) pending_frame_corrections / abs(pending_frame_corrections))
+      //   *
+      //                                         static_cast<int64_t>(pending_duration_corrections);
+      // }
+
+      int64_t signed_pending_duration_corrections =
+          (pending_frame_corrections * 1000000L) /
+          static_cast<int64_t>(this_snapcast->current_audio_stream_info_.value().get_sample_rate());
+
+      // if (pending_frame_corrections < 0) {
+      //   signed_pending_duration_corrections =
+      //       -this_snapcast->current_audio_stream_info_.value().frames_to_microseconds(-pending_frame_corrections);
+      // } else if (pending_frame_corrections > 0) {
+      //   signed_pending_duration_corrections =
+      //       this_snapcast->current_audio_stream_info_.value().frames_to_microseconds(abs(pending_frame_corrections));
+      // }
+      int64_t recent_error_us = 0;
       if (this_snapcast->actual_offsets_.is_full()) {
-        recent_error = this_snapcast->actual_offsets_.get_most_recent_median() - signed_pending_duration_corrections;
-        if ((abs(recent_error) < 5000) &&
+        recent_error_us = this_snapcast->actual_offsets_.get_most_recent_median() - signed_pending_duration_corrections;
+        if ((abs(recent_error_us) < 5000) &&
             (this_snapcast->external_mute_ != this_snapcast->speaker_->get_mute_state())) {
           printf("sync is decent, setting to external mute state\n");
           this_snapcast->speaker_->set_mute_state(this_snapcast->external_mute_);
@@ -575,6 +589,16 @@ void SnapcastPlayer::sync_task(void *params) {
         this_snapcast->speaker_->set_mute_state(true);
         printf("muting while waiting until we have a good sync");
       }
+
+      // uint32_t ms_in_chunk = this_snapcast->current_audio_stream_info_.value().bytes_to_ms(chunk->size);
+      // int64_t us_in_chunk = 1000 * ms_in_chunk;
+      // if ((recent_error_us < 0) && (-recent_error_us > us_in_chunk)) {
+      //   printf("skipping a chunk to sync as the error is %" PRId64 "us and the chunk as %d us\n",
+      //   abs(recent_error_us),
+      //          ms_in_chunk * 1000);
+      //   xQueueReceive(this_snapcast->decoded_chunk_data_queue_, chunk, pdMS_TO_TICKS(20));
+      //   continue;
+      // }
 
       if (chunk->size > output_transfer_buffer->free()) {
         continue;
@@ -590,23 +614,28 @@ void SnapcastPlayer::sync_task(void *params) {
 
       const size_t bytes_per_frame = this_snapcast->current_audio_stream_info_.value().frames_to_bytes(1);
 
-      if (recent_error > 5000) {
-        size_t silence_bytes = this_snapcast->current_audio_stream_info_.value().ms_to_bytes(recent_error / 1000);
+      if (recent_error_us > 5000) {
+        size_t silence_bytes =
+            this_snapcast->current_audio_stream_info_.value().ms_to_bytes((recent_error_us - 2500) / 1000);
         size_t actual_silence_bytes = std::min(silence_bytes, output_transfer_buffer->free());
         std::memset((void *) output_transfer_buffer->get_buffer_end(), 0, actual_silence_bytes);
         output_transfer_buffer->increase_buffer_length(actual_silence_bytes);
         frame_corrections = this_snapcast->current_audio_stream_info_.value().bytes_to_frames(actual_silence_bytes);
 
-        printf("adding %d frames of silence to hard sync, current pending %d, internal current pending %d\n",
-               frame_corrections, this_snapcast->pending_frame_corrections_, pending_frame_corrections);
-      } else if (recent_error < -5000) {
+        printf("adding %d frames of silence to hard sync, current error is %" PRId64
+               "current pending %d us,current pending %d, internal current pending %d\n",
+               frame_corrections, recent_error_us, signed_pending_duration_corrections,
+               this_snapcast->pending_frame_corrections_, pending_frame_corrections);
+
+      } else if (recent_error_us < -5000) {
         size_t bytes_to_remove =
-            this_snapcast->current_audio_stream_info_.value().ms_to_bytes(abs(recent_error) / 1000);
+            this_snapcast->current_audio_stream_info_.value().ms_to_bytes((abs(recent_error_us) - 2500) / 1000);
         size_t actual_bytes_to_remove = std::min(bytes_to_remove, chunk->size - bytes_per_frame);
         output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
         frame_corrections = -this_snapcast->current_audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
         printf("hard sync, removing %d frames from a chunk\n", frame_corrections);
-      } else if (recent_error < -25) {
+
+      } else if (recent_error_us < -25) {
         const uint32_t num_channels = this_snapcast->current_audio_stream_info_.value().get_channels();
         int16_t *samples = reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
         for (int chan = 0; chan < num_channels; ++chan) {
@@ -614,8 +643,9 @@ void SnapcastPlayer::sync_task(void *params) {
           const int16_t right_sample = samples[num_channels + chan];
           samples[chan] = left_sample / 2 + right_sample / 2;
         }
+        output_transfer_buffer->decrease_buffer_length(bytes_per_frame);
         frame_corrections = -1;
-      } else if (recent_error > 25) {
+      } else if (recent_error_us > 25) {
         const uint32_t num_channels = this_snapcast->current_audio_stream_info_.value().get_channels();
         int16_t *samples = reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
         for (int chan = 0; chan < num_channels; ++chan) {
@@ -625,15 +655,17 @@ void SnapcastPlayer::sync_task(void *params) {
           samples[num_channels + chan] = inserted_sample;
           samples[2 * num_channels + chan] = right_sample;
         }
+        output_transfer_buffer->increase_buffer_length(bytes_per_frame);
         frame_corrections = 1;
       }
 
+      chunk_frame_count += frame_corrections;
       this_snapcast->pending_frame_corrections_ += frame_corrections;
 
       AudioSyncChunkTimings timings;
       timings.server_timestamp = chunk->server_timestamp;
       timings.internal_timestamp = esp_timer_get_time();
-      timings.duration = chunk_frame_count;
+      timings.total_frames = chunk_frame_count;
       timings.frame_corrections = frame_corrections;
       this_snapcast->chunk_timings_.push_back(timings);
     }
@@ -681,10 +713,10 @@ std::string SnapcastPlayer::hello_message_serialize_() {
   return this->build_hello_message_(&hello_message);
 }
 
-std::string SnapcastPlayer::client_message_serialize_(ClientMessage *msg) {
+std::string SnapcastPlayer::client_message_serialize_(ClientInfoMessage *msg) {
   return json::build_json([msg](JsonObject root) {
-    root["volume"] = msg.volume;
-    root["muted"] = msg.muted;
+    root["volume"] = msg->volume;
+    root["muted"] = msg->muted;
   });
 }
 

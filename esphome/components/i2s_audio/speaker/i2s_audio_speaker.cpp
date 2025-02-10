@@ -280,8 +280,6 @@ void I2SAudioSpeaker::process_i2s_event_queue(void *params) {
     // int64_t timestamp;
     TxDoneInfo info;
     while (xQueueReceive(this_speaker->i2s_event_queue_, &info, portMAX_DELAY)) {
-      uint32_t write_timestamp = (uint32_t) info.timestamp;
-
       // this_speaker->audio_output_callback_(this_speaker->audio_stream_info_.bytes_to_frames(info.size), 0, 0,
       //                                      write_timestamp);
 
@@ -291,8 +289,8 @@ void I2SAudioSpeaker::process_i2s_event_queue(void *params) {
         size_t pending_bytes = this_speaker->pending_dma_write_sizes_.front();
         this_speaker->pending_dma_write_sizes_.pop_front();
 
-        this_speaker->audio_output_callback_(this_speaker->audio_stream_info_.bytes_to_frames(pending_bytes), 0, 0,
-                                             write_timestamp);
+        this_speaker->audio_output_callback_(this_speaker->audio_stream_info_.bytes_to_frames(pending_bytes),
+                                             info.timestamp);
       }
     }
   }
