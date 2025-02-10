@@ -597,7 +597,7 @@ void SnapcastPlayer::sync_task(void *params) {
       } else if (recent_error < -5000) {
         size_t bytes_to_remove =
             this_snapcast->current_audio_stream_info_.value().ms_to_bytes(abs(recent_error) / 1000);
-        size_t actual_bytes_to_remove = std::min(bytes_to_remove, chunk->size);
+        size_t actual_bytes_to_remove = std::min(bytes_to_remove, chunk->size - bytes_per_frame);
         output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
         frame_corrections = -this_snapcast->current_audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
         printf("hard sync, removing %d frames from a chunk\n", frame_corrections);
