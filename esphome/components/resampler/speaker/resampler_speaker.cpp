@@ -43,13 +43,12 @@ void ResamplerSpeaker::setup() {
     return;
   }
 
-  this->output_speaker_->add_audio_output_callback(
-      [this](uint32_t new_playback_ms, uint32_t remainder_us, uint32_t pending_ms, uint32_t write_timestamp) {
-        int32_t adjustment = this->playback_differential_ms_;
-        this->playback_differential_ms_ -= adjustment;
-        int32_t adjusted_playback_ms = static_cast<int32_t>(new_playback_ms) + adjustment;
-        this->audio_output_callback_(adjusted_playback_ms, remainder_us, pending_ms, write_timestamp);
-      });
+  this->output_speaker_->add_audio_output_callback([this](uint32_t new_frames, int64_t write_timestamp) {
+    // int32_t adjustment = this->playback_differential_ms_;
+    // this->playback_differential_ms_ -= adjustment;
+    // int32_t adjusted_playback_ms = static_cast<int32_t>(new_playback_ms) + adjustment;
+    this->audio_output_callback_(new_frames, write_timestamp);
+  });
 }
 
 void ResamplerSpeaker::loop() {
