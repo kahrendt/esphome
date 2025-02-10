@@ -57,8 +57,10 @@ void SnapcastPlayer::start() {
       }
 
       // Now we are in the middle of the current audio chunk
-      int64_t server_timestamp_finished =
-          front_chunk.server_timestamp + this->current_audio_stream_info_.value().frames_to_microseconds(frames_played);
+
+      int64_t full_precision_microseconds =
+          (frames_played * 1000000L) / static_cast<int64_t>(this->current_audio_stream_info_.value().get_sample_rate());
+      int64_t server_timestamp_finished = front_chunk.server_timestamp + full_precision_microseconds;
       int64_t equivalent_client_timestamp = server_timestamp_finished -
                                             this->server_internal_clock_offset_.get_most_recent_median() +
                                             (this->snapcast_buffer_duration_ms_ - this->snapcast_latency_ms_) * 1000;
@@ -71,8 +73,7 @@ void SnapcastPlayer::start() {
       }
       this->pending_frame_corrections_ -= accumulated_chunk_corrections;
 
-      int64_t internal_latency_written = front_chunk.internal_timestamp +
-                                         this->current_audio_stream_info_.value().frames_to_microseconds(frames_played);
+      int64_t internal_latency_written = front_chunk.internal_timestamp + full_precision_microseconds;
       if (new_chunk) {
         int64_t new_error = equivalent_client_timestamp - write_timestamp;
         this->actual_offsets_.update(new_error);
