@@ -120,6 +120,24 @@ void SnapcastPlayer::start() {
 
 void SnapcastPlayer::loop() {}
 
+void SnapcastPlayer::send_client_message() {
+  ClientMessage client_msg = {.volume = this->speaker_->get_volume(), .muted = this->external_mute_};
+  std::string json_client_msg = this->client_message_serialize(client_msg);
+
+  bytebuffer::ByteBuffer client_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE + json_client_msg.size());
+  BaseMessage base_msg_for_client = {
+      .type = SNAPCAST_MESSAGE_CLIENT_INFO,
+      .id = 0x0000,
+      .refers_to = 0x0000,
+      .sent = {.sec = static_cast<int32_t>(now / 1000000LL),
+               .usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL)},
+      .received = {.sec = 0, .usec = 0},
+      .size = json_client_msg.size(),
+  };
+  this->socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
+  this->socket_->write((void *) json_client_msg.data(), json_client_msg.size());
+}
+
 void SnapcastPlayer::time_sync_callback(void *params) {
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
 
@@ -248,6 +266,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       printf("failed to allocate audio chunk\n");
       continue;
     }
+
+    this_snapcast->set_interval(60000, [this_snapcast]() { this_snapcast->send_client_message(); });
 
     while (true) {
       base_msg_buffer.rewind();
@@ -654,6 +674,13 @@ std::string SnapcastPlayer::hello_message_serialize_() {
   hello_message.id = mac_address;
   hello_message.protocol_version = 2;
   return this->build_hello_message_(&hello_message);
+}
+
+std::string SnapcastPlayer::client_message_serialize_(ClientMessage *msg) {
+  return json::build_json([msg](JsonObject root) {
+    root["volume"] = msg.volume;
+    root["muted"] = msg.muted;
+  });
 }
 
 std::string SnapcastPlayer::build_hello_message_(HelloMessage *msg) {

@@ -21,10 +21,7 @@ enum message_type {
   SNAPCAST_MESSAGE_SERVER_SETTINGS = 3,
   SNAPCAST_MESSAGE_TIME = 4,
   SNAPCAST_MESSAGE_HELLO = 5,
-  SNAPCAST_MESSAGE_STREAM_TAGS = 6,
-
-  SNAPCAST_MESSAGE_FIRST = SNAPCAST_MESSAGE_BASE,
-  SNAPCAST_MESSAGE_LAST = SNAPCAST_MESSAGE_STREAM_TAGS
+  SNAPCAST_MESSAGE_CLIENT_INFO = 7,
 };
 
 struct AudioSyncChunk {
@@ -70,6 +67,11 @@ struct HelloMessage {
 struct ServerSettingsMessage {
   int32_t buffer_ms;
   int32_t latency;
+  uint32_t volume;
+  bool muted;
+};
+
+struct ClientInfoMessage {
   uint32_t volume;
   bool muted;
 };
@@ -149,6 +151,9 @@ class SnapcastPlayer : public Component {
   std::string build_hello_message_(HelloMessage *msg);
 
   bool server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str);
+
+  std::string client_message_serialize_(ClientMessage *msg);
+  void send_client_message();
 
   static void snapcast_task(void *params);
   static void decode_task(void *params);
