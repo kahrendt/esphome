@@ -130,7 +130,7 @@ class SnapcastPlayer : public Component {
   SnapcastPlayer()
       : internal_latency_(MedianFilter(50)),
         server_internal_clock_offset_(MedianFilter(50)),
-        actual_offsets_(MedianFilter(19)){};
+        actual_offsets_(MedianFilter(1)){};
   float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
   void setup() override { this->start(); }
   void loop() override;

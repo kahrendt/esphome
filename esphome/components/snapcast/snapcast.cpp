@@ -51,15 +51,17 @@ void SnapcastPlayer::start() {
       bool new_chunk = false;
       int32_t accumulated_chunk_corrections = 0;
       AudioSyncChunkTimings front_chunk = this->chunk_timings_.front();
-      accumulated_chunk_corrections += front_chunk.frame_corrections;
-      this->chunk_timings_.front().frame_corrections -= accumulated_chunk_corrections;
       while (front_chunk.total_frames < frames_played) {
         frames_played -= front_chunk.total_frames;
+        accumulated_chunk_corrections += front_chunk.frame_corrections;
+        this->chunk_timings_.front().frame_corrections -= accumulated_chunk_corrections;
 
         this->chunk_timings_.pop_front();
         front_chunk = this->chunk_timings_.front();
-        accumulated_chunk_corrections += front_chunk.frame_corrections;
-        this->chunk_timings_.front().frame_corrections -= accumulated_chunk_corrections;
+
+        // accumulated_chunk_corrections += front_chunk.frame_corrections;
+        // this->chunk_timings_.front().frame_corrections -= accumulated_chunk_corrections;
+
         new_chunk = true;
       }
 
@@ -320,8 +322,11 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           audio_chunk->size = codec_len;
           audio_chunk->codec_header = true;
           if (codec_len > 0) {
+            this_snapcast->speaker_->stop();
+
             new_file_start = true;
             xQueueReset(this_snapcast->encoded_chunk_data_queue_);
+            xQueueReset(this_snapcast->decoded_chunk_data_queue_);
 
             size_t offset = 0;
             while (codec_len > 0) {
@@ -330,11 +335,12 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
               offset += bytes_read;
             }
 
-            this_snapcast->speaker_->stop();
             xQueueSend(this_snapcast->encoded_chunk_data_queue_, audio_chunk, portMAX_DELAY);
 
-            xTaskCreate(decode_task, "decode", 1024 * 5, (void *) this_snapcast, 1,
-                        &this_snapcast->decode_task_handle_);
+            if (this_snapcast->decode_task_handle_ == nullptr) {
+              xTaskCreate(decode_task, "decode", 1024 * 5, (void *) this_snapcast, 1,
+                          &this_snapcast->decode_task_handle_);
+            }
           }
 
           esp_timer_stop(timeSyncMessageTimer);
@@ -475,6 +481,7 @@ void SnapcastPlayer::decode_task(void *params) {
 
         xQueueReset(this_snapcast->decoded_chunk_data_queue_);
         this_snapcast->actual_offsets_.reset();
+        this_snapcast->pending_frame_corrections_ = 0;
         flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
         auto result = flac_decoder->read_header(encoded_chunk->data, encoded_chunk->size);
 
