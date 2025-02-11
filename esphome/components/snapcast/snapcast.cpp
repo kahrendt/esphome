@@ -9,6 +9,9 @@
 #include "esphome/core/application.h"
 #include "esphome/core/log.h"
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
 // #include "mdns.h"
 
 #include "lwip/api.h"
@@ -48,11 +51,15 @@ void SnapcastPlayer::start() {
       bool new_chunk = false;
       int32_t accumulated_chunk_corrections = 0;
       AudioSyncChunkTimings front_chunk = this->chunk_timings_.front();
+      accumulated_chunk_corrections += front_chunk.frame_corrections;
+      this->chunk_timings_.front().frame_corrections -= accumulated_chunk_corrections;
       while (front_chunk.total_frames < frames_played) {
         frames_played -= front_chunk.total_frames;
-        accumulated_chunk_corrections += front_chunk.frame_corrections;
+
         this->chunk_timings_.pop_front();
         front_chunk = this->chunk_timings_.front();
+        accumulated_chunk_corrections += front_chunk.frame_corrections;
+        this->chunk_timings_.front().frame_corrections -= accumulated_chunk_corrections;
         new_chunk = true;
       }
 
@@ -554,6 +561,27 @@ void SnapcastPlayer::sync_task(void *params) {
         continue;
       }
 
+      if (!this_snapcast->chunk_timings_.empty()) {
+        int64_t pending_frame_corrections = this_snapcast->pending_frame_corrections_;
+
+        int64_t signed_pending_duration_corrections =
+            (pending_frame_corrections * 1000000L) /
+            static_cast<int64_t>(this_snapcast->current_audio_stream_info_.value().get_sample_rate());
+
+        int64_t front_chunk_plays_at = this_snapcast->chunk_timings_.front().server_timestamp -
+                                       this_snapcast->server_internal_clock_offset_.get_most_recent_median() +
+                                       this_snapcast->snapcast_buffer_duration_ms_ * 1000 -
+                                       this_snapcast->snapcast_latency_ms_ * 1000;
+        int64_t us_to_start = front_chunk_plays_at - esp_timer_get_time();
+        if (us_to_start - signed_pending_duration_corrections > 200000) {
+          this_snapcast->speaker_->set_pause_state(true);
+          uint32_t pause_time_ms = us_to_start / 2000;
+          printf("chunk doesn't play for %" PRId64 "ms, so pausing for %d ms\n", us_to_start / 1000, pause_time_ms);
+          vTaskDelay(pdMS_TO_TICKS(pause_time_ms));
+          this_snapcast->speaker_->set_pause_state(false);
+        }
+      }
+
       // int64_t signed_pending_duration_corrections = 0;
 
       int64_t pending_frame_corrections = this_snapcast->pending_frame_corrections_;
@@ -598,6 +626,20 @@ void SnapcastPlayer::sync_task(void *params) {
       //   abs(recent_error_us),
       //          ms_in_chunk * 1000);
       //   xQueueReceive(this_snapcast->decoded_chunk_data_queue_, chunk, pdMS_TO_TICKS(20));
+      //   continue;
+      // }
+
+      // if (recent_error_us > 100000) {
+      // int64_t chunk_plays_at =
+      //     chunk->server_timestamp - this_snapcast->server_internal_clock_offset_.get_most_recent_median() +
+      //     this_snapcast->snapcast_buffer_duration_ms_ * 1000 - this_snapcast->snapcast_latency_ms_ * 1000;
+      // int64_t us_to_start = chunk_plays_at - esp_timer_get_time();
+      // if (us_to_start > 500000) {
+      //   this_snapcast->speaker_->set_pause_state(true);
+      //   uint32_t pause_time_ms = us_to_start / 2000;
+      //   printf("chunk doesn't play for %" PRId64 "ms, so pausing for %d ms\n", us_to_start / 1000, pause_time_ms);
+      //   vTaskDelay(pdMS_TO_TICKS(pause_time_ms));
+      //   this_snapcast->speaker_->set_pause_state(false);
       //   continue;
       // }
 
