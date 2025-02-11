@@ -558,6 +558,7 @@ void SnapcastPlayer::sync_task(void *params) {
         audio::AudioSinkTransferBuffer::create(OUTPUT_BUFFER_SIZE);
     output_transfer_buffer->set_sink(this_snapcast->speaker_);
     bool run_once = false;
+    uint8_t synced_chunks = 0;
     while (true) {
       output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
       if (!xQueuePeek(this_snapcast->decoded_chunk_data_queue_, chunk, pdMS_TO_TICKS(20))) {
@@ -616,14 +617,27 @@ void SnapcastPlayer::sync_task(void *params) {
       int64_t recent_error_us = 0;
       if (this_snapcast->actual_offsets_.is_full()) {
         recent_error_us = this_snapcast->actual_offsets_.get_most_recent_median() - signed_pending_duration_corrections;
-        if ((abs(recent_error_us) < 5000) &&
-            (this_snapcast->external_mute_ != this_snapcast->speaker_->get_mute_state())) {
-          printf("sync is decent, setting to external mute state\n");
-          this_snapcast->speaker_->set_mute_state(this_snapcast->external_mute_);
+        if (abs(recent_error_us) < 5000) {
+          synced_chunks = std::min(synced_chunks + 1, 10);
+        } else {
+          synced_chunks = 0;
         }
-      } else if (!this_snapcast->speaker_->get_mute_state()) {
-        this_snapcast->speaker_->set_mute_state(true);
+        // if ((abs(recent_error_us) < 5000) &&
+        //     (this_snapcast->external_mute_ != this_snapcast->speaker_->get_mute_state())) {
+        //   printf("sync is decent, setting to external mute state\n");
+        //   this_snapcast->speaker_->set_mute_state(this_snapcast->external_mute_);
+        // }
+        // } else if (!this_snapcast->speaker_->get_mute_state()) {
+        //   this_snapcast->speaker_->set_mute_state(true);
+        //   printf("muting while waiting until we have a good sync");
+      }
+      if ((synced_chunks < 10) && (!this_snapcast->speaker_->get_mute_state())) {
         printf("muting while waiting until we have a good sync");
+        this_snapcast->speaker_->set_mute_state(true);
+      } else if ((synced_chunks >= 10) &&
+                 (this_snapcast->external_mute_ != this_snapcast->speaker_->get_mute_state())) {
+        printf("sync is decent, setting to external mute state\n");
+        this_snapcast->speaker_->set_mute_state(this_snapcast->external_mute_);
       }
 
       // uint32_t ms_in_chunk = this_snapcast->current_audio_stream_info_.value().bytes_to_ms(chunk->size);
@@ -668,7 +682,8 @@ void SnapcastPlayer::sync_task(void *params) {
         size_t silence_bytes =
             this_snapcast->current_audio_stream_info_.value().ms_to_bytes((recent_error_us - 2500) / 1000);
         size_t actual_silence_bytes = std::min(silence_bytes, output_transfer_buffer->free());
-        std::memset((void *) output_transfer_buffer->get_buffer_end(), 0, actual_silence_bytes);
+        std::memset((void *) (output_transfer_buffer->get_buffer_end() - chunk->size), 0,
+                    actual_silence_bytes + chunk->size);
         output_transfer_buffer->increase_buffer_length(actual_silence_bytes);
         frame_corrections = this_snapcast->current_audio_stream_info_.value().bytes_to_frames(actual_silence_bytes);
 
