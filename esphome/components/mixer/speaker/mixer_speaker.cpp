@@ -54,7 +54,14 @@ void SourceSpeaker::dump_config() {
 
 void SourceSpeaker::setup() {
   this->parent_->get_output_speaker()->add_audio_output_callback([this](uint32_t new_frames, int64_t write_timestamp) {
+    // this->audio_output_callback_(new_frames, write_timestamp);
     uint32_t personal_playback_frames = std::min(new_frames, this->pending_playback_frames_);
+    if (personal_playback_frames < new_frames) {
+      printf("some frames played weren't sent through this source speakaer %d played but %d pending\n", new_frames,
+             this->pending_playback_frames_);
+    } else {
+      printf("pendinga nd played matched\n");
+    }
     if (personal_playback_frames > 0) {
       this->pending_playback_frames_ -= personal_playback_frames;
       this->audio_output_callback_(personal_playback_frames, write_timestamp);
@@ -111,6 +118,7 @@ void SourceSpeaker::loop() {
     case speaker::STATE_STOPPING:
       this->stop_();
       this->stop_gracefully_ = false;
+      this->pending_playback_frames_ = 0;
       this->state_ = speaker::STATE_STOPPED;
       break;
     case speaker::STATE_STOPPED:

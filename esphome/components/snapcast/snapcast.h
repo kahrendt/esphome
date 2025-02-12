@@ -10,6 +10,8 @@
 
 #include "esphome/core/component.h"
 
+#include <freertos/queue.h>
+
 #include <deque>
 namespace esphome {
 namespace snapcast {
@@ -132,7 +134,11 @@ class SnapcastPlayer : public Component {
         server_internal_clock_offset_(MedianFilter(50)),
         actual_offsets_(MedianFilter(1)){};
   float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
-  void setup() override { this->start(); }
+  void setup() override {
+    this->actual_offset_queue_ = xQueueCreate(20, sizeof(int64_t));
+
+    this->start();
+  }
   void loop() override;
 
   void start();
@@ -147,6 +153,8 @@ class SnapcastPlayer : public Component {
 
   std::string server_address_;
   uint16_t server_port_;
+
+  QueueHandle_t actual_offset_queue_;
 
   void base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
   void base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);

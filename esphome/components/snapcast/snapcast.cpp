@@ -73,6 +73,8 @@ void SnapcastPlayer::start() {
       int64_t internal_latency_written = front_chunk.internal_timestamp + full_precision_microseconds;
       if (new_chunk) {
         int64_t new_error = equivalent_client_timestamp - write_timestamp;
+
+        xQueueSend(this->actual_offset_queue_, &new_error, 0);
         this->actual_offsets_.update(new_error);
         if (new_error > 22982976707978547LL) {
           printf("weirdly huge error. server timestamp should have been %" PRId64 "; client timestamp %" PRId64
@@ -579,6 +581,16 @@ void SnapcastPlayer::sync_task(void *params) {
           static_cast<int64_t>(this_snapcast->current_audio_stream_info_.value().get_sample_rate());
 
       int64_t recent_error_us = 0;
+      // int64_t most_recent_offset = 0;
+      // if (xQueueReceive(this_snapcast->actual_offset_queue_, &most_recent_offset, 0)) {
+      //   recent_error_us = most_recent_offset - signed_pending_duration_corrections;
+      //   if (abs(recent_error_us) < 5000) {
+      //     synced_chunks = std::min(synced_chunks + 1, 10);
+      //   } else {
+      //     synced_chunks = 0;
+      //   }
+      // }
+
       if (this_snapcast->actual_offsets_.is_full()) {
         recent_error_us = this_snapcast->actual_offsets_.get_most_recent_median() - signed_pending_duration_corrections;
         if (abs(recent_error_us) < 5000) {
