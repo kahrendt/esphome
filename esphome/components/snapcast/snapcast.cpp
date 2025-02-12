@@ -37,14 +37,6 @@ static const size_t OUTPUT_BUFFER_SIZE = 1024 * 50;
 static const uint32_t FAST_SYNC_LATENCY_BUF = 10000;      // in µs
 static const uint32_t NORMAL_SYNC_LATENCY_BUF = 1000000;  // in µs
 
-static void close_connection(struct netconn *conn) {
-  if (conn != nullptr) {
-    netconn_close(conn);
-    netconn_delete(conn);
-    conn = nullptr;
-  }
-}
-
 void SnapcastPlayer::start() {
   this->speaker_->add_audio_output_callback([this](uint32_t frames_played, int64_t write_timestamp) {
     if (!this->chunk_timings_.empty()) {
@@ -54,13 +46,9 @@ void SnapcastPlayer::start() {
       while (front_chunk.total_frames < frames_played) {
         frames_played -= front_chunk.total_frames;
         accumulated_chunk_corrections += front_chunk.frame_corrections;
-        this->chunk_timings_.front().frame_corrections -= accumulated_chunk_corrections;
 
         this->chunk_timings_.pop_front();
         front_chunk = this->chunk_timings_.front();
-
-        // accumulated_chunk_corrections += front_chunk.frame_corrections;
-        // this->chunk_timings_.front().frame_corrections -= accumulated_chunk_corrections;
 
         new_chunk = true;
       }
@@ -170,11 +158,6 @@ void SnapcastPlayer::time_sync_callback(void *params) {
   time_msg_buffer.put_int32(0);
   this_snapcast->socket_->write((void *) time_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + TIME_MESSAGE_SIZE);
 }
-void SnapcastPlayer::unpause_callback(void *params) {
-  SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
-  printf("unpausing at %" PRId64 "\n", esp_timer_get_time());
-  this_snapcast->speaker_->set_pause_state(false);
-}
 
 void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
@@ -257,14 +240,6 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
                                          .skip_unhandled_events = false};
     esp_timer_handle_t timeSyncMessageTimer;
     esp_timer_create(&tSyncArgs, &timeSyncMessageTimer);
-
-    esp_timer_create_args_t unpause_timer_args = {.callback = &unpause_callback,
-                                                  .arg = this_snapcast,
-                                                  .dispatch_method = ESP_TIMER_TASK,
-                                                  .name = "t_unpause",
-                                                  .skip_unhandled_events = false};
-    esp_timer_handle_t unpauseTimer;
-    esp_timer_create(&unpause_timer_args, &unpauseTimer);
 
     bool low_speed_timer_started = false;
     bool high_speed_timer_started = false;
@@ -365,7 +340,6 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             if (low_speed_timer_started && new_file_start) {
               new_file_start = false;
               this_snapcast->speaker_->start();
-              // this_snapcast->speaker_->set_pause_state(true);
 
               printf("total_timestamp %" PRId64 "; median_offset %" PRId64 "; current time %" PRId64 "\n",
                      total_timestamp_us, this_snapcast->server_internal_clock_offset_.get_most_recent_median(),
@@ -376,8 +350,6 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
                   this_snapcast->snapcast_buffer_duration_ms_ * 1000 - this_snapcast->snapcast_latency_ms_ * 1000;
               int64_t us_to_start = this_snapcast->initial_playback_timestamp_ - esp_timer_get_time();
               printf("initial playback in %" PRId64 "us\n", us_to_start);
-
-              // esp_timer_start_once(unpauseTimer, us_to_start);
             }
 
             audio_chunk->codec_header = false;
@@ -590,30 +562,12 @@ void SnapcastPlayer::sync_task(void *params) {
         }
       }
 
-      // int64_t signed_pending_duration_corrections = 0;
-
       int64_t pending_frame_corrections = this_snapcast->pending_frame_corrections_;
-
-      // if (pending_frame_corrections != 0) {
-      //   uint32_t pending_duration_corrections =
-      //       this_snapcast->current_audio_stream_info_.value().frames_to_microseconds(abs(pending_frame_corrections));
-
-      //   signed_pending_duration_corrections = ((int64_t) pending_frame_corrections / abs(pending_frame_corrections))
-      //   *
-      //                                         static_cast<int64_t>(pending_duration_corrections);
-      // }
 
       int64_t signed_pending_duration_corrections =
           (pending_frame_corrections * 1000000L) /
           static_cast<int64_t>(this_snapcast->current_audio_stream_info_.value().get_sample_rate());
 
-      // if (pending_frame_corrections < 0) {
-      //   signed_pending_duration_corrections =
-      //       -this_snapcast->current_audio_stream_info_.value().frames_to_microseconds(-pending_frame_corrections);
-      // } else if (pending_frame_corrections > 0) {
-      //   signed_pending_duration_corrections =
-      //       this_snapcast->current_audio_stream_info_.value().frames_to_microseconds(abs(pending_frame_corrections));
-      // }
       int64_t recent_error_us = 0;
       if (this_snapcast->actual_offsets_.is_full()) {
         recent_error_us = this_snapcast->actual_offsets_.get_most_recent_median() - signed_pending_duration_corrections;
@@ -622,15 +576,8 @@ void SnapcastPlayer::sync_task(void *params) {
         } else {
           synced_chunks = 0;
         }
-        // if ((abs(recent_error_us) < 5000) &&
-        //     (this_snapcast->external_mute_ != this_snapcast->speaker_->get_mute_state())) {
-        //   printf("sync is decent, setting to external mute state\n");
-        //   this_snapcast->speaker_->set_mute_state(this_snapcast->external_mute_);
-        // }
-        // } else if (!this_snapcast->speaker_->get_mute_state()) {
-        //   this_snapcast->speaker_->set_mute_state(true);
-        //   printf("muting while waiting until we have a good sync");
       }
+
       if ((synced_chunks < 10) && (!this_snapcast->speaker_->get_mute_state())) {
         printf("muting while waiting until we have a good sync");
         this_snapcast->speaker_->set_mute_state(true);
@@ -639,30 +586,6 @@ void SnapcastPlayer::sync_task(void *params) {
         printf("sync is decent, setting to external mute state\n");
         this_snapcast->speaker_->set_mute_state(this_snapcast->external_mute_);
       }
-
-      // uint32_t ms_in_chunk = this_snapcast->current_audio_stream_info_.value().bytes_to_ms(chunk->size);
-      // int64_t us_in_chunk = 1000 * ms_in_chunk;
-      // if ((recent_error_us < 0) && (-recent_error_us > us_in_chunk)) {
-      //   printf("skipping a chunk to sync as the error is %" PRId64 "us and the chunk as %d us\n",
-      //   abs(recent_error_us),
-      //          ms_in_chunk * 1000);
-      //   xQueueReceive(this_snapcast->decoded_chunk_data_queue_, chunk, pdMS_TO_TICKS(20));
-      //   continue;
-      // }
-
-      // if (recent_error_us > 100000) {
-      // int64_t chunk_plays_at =
-      //     chunk->server_timestamp - this_snapcast->server_internal_clock_offset_.get_most_recent_median() +
-      //     this_snapcast->snapcast_buffer_duration_ms_ * 1000 - this_snapcast->snapcast_latency_ms_ * 1000;
-      // int64_t us_to_start = chunk_plays_at - esp_timer_get_time();
-      // if (us_to_start > 500000) {
-      //   this_snapcast->speaker_->set_pause_state(true);
-      //   uint32_t pause_time_ms = us_to_start / 2000;
-      //   printf("chunk doesn't play for %" PRId64 "ms, so pausing for %d ms\n", us_to_start / 1000, pause_time_ms);
-      //   vTaskDelay(pdMS_TO_TICKS(pause_time_ms));
-      //   this_snapcast->speaker_->set_pause_state(false);
-      //   continue;
-      // }
 
       if (chunk->size > output_transfer_buffer->free()) {
         continue;
@@ -769,7 +692,7 @@ std::string SnapcastPlayer::hello_message_serialize_() {
   hello_message.mac = mac_address;
   hello_message.hostname = App.get_name().c_str();
   hello_message.version = "0.0.1";
-  hello_message.client_name = "libsnapcast";
+  hello_message.client_name = "esphome";
   hello_message.os = "esp32";
   hello_message.arch = "xtensa";
   hello_message.instance = 1;

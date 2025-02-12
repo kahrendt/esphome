@@ -166,7 +166,6 @@ class SnapcastPlayer : public Component {
   optional<audio::AudioStreamInfo> current_audio_stream_info_;
 
   static void time_sync_callback(void *params);
-  static void unpause_callback(void *params);
 
   bool first_audio_played_{true};
   int64_t initial_playback_timestamp_{0};
