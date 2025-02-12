@@ -12,7 +12,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-// #include "mdns.h"
+#include "mdns.h"
 
 #include "lwip/api.h"
 #include "lwip/dns.h"
@@ -110,7 +110,7 @@ void SnapcastPlayer::start() {
   this->decoded_chunk_data_queue_ = xQueueCreateStatic(
       50, sizeof(AudioSyncChunk), this->decoded_chunk_data_queue_storage_, &decoded_chunk_data_queue_buffer_);
   // this->encoded_chunk_data_queue_ = xQueueCreate(20, sizeof(AudioSyncChunk));
-  xTaskCreate(snapcast_task, "snapcast", 1024 * 5, (void *) this, 1, &this->snapcast_task_handle_);
+  xTaskCreate(snapcast_task, "snapcast", 1024 * 4, (void *) this, 1, &this->snapcast_task_handle_);
 }
 
 void SnapcastPlayer::loop() {}
@@ -163,37 +163,47 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
   RAMAllocator<AudioSyncChunk> chunk_allocator(ExternalRAMAllocator<AudioSyncChunk>::ALLOW_FAILURE);
   while (true) {
-    // // Connect to first snapcast server found
+    // Connect to first snapcast server found
 
-    // mdns_result_t *mdns_result;
+    mdns_result_t *mdns_result;
 
-    // mdns_init();
-    // ESP_LOGI(TAG, "Lookup snapcast service on network");
-    // esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
+    mdns_init();
 
-    // if (!mdns_result) {
-    //   ESP_LOGW(TAG, "No results found for snapcast service!");
-    // }
+    ESP_LOGI(TAG, "Lookup snapcast service on network");
+    esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
 
-    // if (mdns_result->addr) {
-    //   ip_addr_t *remote_ip;
-    //   ip_addr_copy(remote_ip, (mdns_result->addr->addr));
-    //   remote_ip.type = IPADDR_TYPE_V4;
-    //   remotePort = r->port;
-    //   ESP_LOGI(TAG, "Found %s:%d", ipaddr_ntoa(&remote_ip), remotePort);
-    // }
-    // mdns_query_results_free(mdns_result);
+    if (!mdns_result) {
+      ESP_LOGW(TAG, "No results found for snapcast service!");
+    }
+
+    // char *hostname = this_snapcast->server_address_.c_str();
+    char ip_address[16];
+    bool use_mdns = false;
+    uint16_t port = this_snapcast->server_port_;
+    if (mdns_result->addr) {
+      use_mdns = true;
+      sprintf(ip_address, "%d.%d.%d.%d", IP2STR(mdns_result->addr));
+      port = mdns_result->port;
+      printf("found a snapcast server via mdns %s; ip is " IPSTR " sprintf ip %s\n", mdns_result->hostname,
+             IP2STR(mdns_result->addr), ip_address);
+    }
+    mdns_query_results_free(mdns_result);
 
     this_snapcast->socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
     struct sockaddr_storage server;
 
     socklen_t sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server),
                                         this_snapcast->server_address_.c_str(), this_snapcast->server_port_);
+    if (use_mdns) {
+      printf("socket actually set with mdns\n");
+      sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), (const char *) ip_address, port);
+    }
+
     if (sl == 0) {
       ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);
       continue;
     }
-    esp_err_t err = this_snapcast->socket_->connect((struct sockaddr *) &server, sizeof(server));
+    err = this_snapcast->socket_->connect((struct sockaddr *) &server, sizeof(server));
     printf("err %d\n", err);
 
     int64_t now = esp_timer_get_time();
@@ -478,7 +488,6 @@ void SnapcastPlayer::decode_task(void *params) {
         if (this_snapcast->sync_task_handle_ == nullptr) {
           xTaskCreate(sync_task, "sync", 1024 * 3, (void *) this_snapcast, 1, &this_snapcast->sync_task_handle_);
         }
-        // }
 
         this_snapcast->chunk_timings_.clear();
         this_snapcast->speaker_->set_audio_stream_info(this_snapcast->current_audio_stream_info_.value());
