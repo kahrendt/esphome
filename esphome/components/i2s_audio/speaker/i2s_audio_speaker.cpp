@@ -112,11 +112,18 @@ void I2SAudioSpeaker::setup() {
     return;
   }
 
-  // this->i2s_event_queue_ = xQueueCreate(4, sizeof(int64_t));
-  this->i2s_event_queue_ = xQueueCreate(4, sizeof(TxDoneInfo));
+  this->i2s_event_queue_ = xQueueCreate(I2S_EVENT_QUEUE_COUNT, sizeof(TxDoneInfo));
+  this->pending_dma_write_sizes_queue_ = xQueueCreate(I2S_EVENT_QUEUE_COUNT, sizeof(size_t));
 }
 
 void I2SAudioSpeaker::loop() {
+  TxDoneInfo info;
+  while (xQueueReceive(this->i2s_event_queue_, &info, 0)) {
+    size_t pending_write_size;
+    if (xQueueReceive(this->pending_dma_write_sizes_queue_, &pending_write_size, 0)) {
+      this->audio_output_callback_(this->audio_stream_info_.bytes_to_frames(pending_write_size), info.timestamp);
+    }
+  }
   uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
 
   if (event_group_bits & SpeakerEventGroupBits::STATE_STARTING) {
@@ -236,65 +243,13 @@ bool I2SAudioSpeaker::has_buffered_data() const {
 }
 
 bool I2SAudioSpeaker::on_sent_callback(i2s_channel_obj_t *handle, i2s_event_data_t *event, void *params) {
-  // int64_t timestamp = esp_timer_get_time();
-
   TxDoneInfo info = {.size = event->size, .timestamp = esp_timer_get_time()};
   I2SAudioSpeaker *this_speaker = (I2SAudioSpeaker *) params;
   BaseType_t higher_priority_task_woken;
-  // uint32_t timestamp = micros();
-  // xQueueSendFromISR(this_speaker->i2s_event_queue_, &timestamp, &higher_priority_task_woken);
+
   xQueueSendFromISR(this_speaker->i2s_event_queue_, &info, &higher_priority_task_woken);
 
-  // // void I2SAudioSpeaker::on_sent_callback(void *params) {
-  //
-  // uint32_t write_timestamp = micros();
-  // if (!this_speaker->pending_dma_write_sizes_.empty()) {
-  //   // TODO careful, the speaker's audio stream info can be changed while playing!
-
-  //   size_t pending_bytes = this_speaker->pending_dma_write_sizes_.front();
-  //   this_speaker->pending_dma_write_sizes_.pop_front();
-
-  //   this_speaker->accumulated_frames_written_ += this_speaker->audio_stream_info_.bytes_to_frames(pending_bytes);
-  //   const uint32_t new_playback_ms = this_speaker->audio_stream_info_.frames_to_milliseconds_with_remainder(
-  //       &this_speaker->accumulated_frames_written_);
-  //   const uint32_t remainder_us =
-  //       this_speaker->audio_stream_info_.frames_to_microseconds(this_speaker->accumulated_frames_written_);
-
-  //   uint32_t pending_ms = this_speaker->pending_dma_write_sizes_.size();
-  //   // uint32_t pending_frames = this_speaker->audio_stream_info_.bytes_to_frames(
-  //   //     bytes_read + this_speaker->audio_ring_buffer_->available());
-  //   // const uint32_t pending_ms =
-  //   //     this_speaker->audio_stream_info_.frames_to_milliseconds_with_remainder(&pending_frames);
-
-  //   // pending_ms = (write_timestamp - last_callback_timestamp);
-
-  //   this_speaker->audio_output_callback_(new_playback_ms, remainder_us, pending_ms, write_timestamp);
-  // }
   return higher_priority_task_woken;
-}
-
-void I2SAudioSpeaker::process_i2s_event_queue(void *params) {
-  I2SAudioSpeaker *this_speaker = (I2SAudioSpeaker *) params;
-
-  while (true) {
-    // int64_t timestamp;
-    TxDoneInfo info;
-    while (xQueueReceive(this_speaker->i2s_event_queue_, &info, portMAX_DELAY)) {
-      // this_speaker->audio_output_callback_(this_speaker->audio_stream_info_.bytes_to_frames(info.size), 0, 0,
-      //                                      write_timestamp);
-
-      if (!this_speaker->pending_dma_write_sizes_.empty()) {
-        // TODO careful, the speaker's audio stream info can be changed while playing!
-
-        size_t pending_bytes = this_speaker->pending_dma_write_sizes_.front();
-        this_speaker->pending_dma_write_sizes_.pop_front();
-
-        this_speaker->audio_output_callback_(this_speaker->audio_stream_info_.bytes_to_frames(pending_bytes),
-                                             info.timestamp);
-      }
-    }
-  }
-  vTaskDelete(nullptr);
 }
 
 void I2SAudioSpeaker::set_pause_state(bool pause_state) {
@@ -344,18 +299,13 @@ void I2SAudioSpeaker::speaker_task(void *params) {
   }
 
   if (!this_speaker->send_esp_err_to_event_group_(this_speaker->start_i2s_driver_(audio_stream_info))) {
-    if (this_speaker->process_i2s_event_queue_task_handle_ == nullptr) {
-      xTaskCreate(I2SAudioSpeaker::process_i2s_event_queue, "speaker_events", TASK_STACK_SIZE, (void *) this_speaker,
-                  20, &this_speaker->process_i2s_event_queue_task_handle_);
-    }
-
     xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::STATE_RUNNING);
 
     bool stop_gracefully = false;
     uint32_t last_data_received_time = millis();
 
     this_speaker->accumulated_frames_written_ = 0;
-    this_speaker->pending_dma_write_sizes_.clear();
+    xQueueReset(this_speaker->pending_dma_write_sizes_queue_);
 
     // Keep looping if paused, there is no timeout configured, or data was received more recently than the configured
     // timeout
@@ -377,12 +327,12 @@ void I2SAudioSpeaker::speaker_task(void *params) {
         break;
       }
 
-      // if (this_speaker->pause_state_) {
-      //   // Pause state is accessed atomically, so thread safe
-      //   // Delay so the task can yields, then skip transferring audio data
-      //   delay(TASK_DELAY_MS);
-      //   continue;
-      // }
+      if (this_speaker->pause_state_) {
+        // Pause state is accessed atomically, so thread safe
+        // Delay so the task yields, then skip transferring audio data
+        delay(TASK_DELAY_MS);
+        continue;
+      }
 
       size_t bytes_read = this_speaker->audio_ring_buffer_->read((void *) this_speaker->data_buffer_, data_buffer_size,
                                                                  pdMS_TO_TICKS(TASK_DELAY_MS));
@@ -398,11 +348,6 @@ void I2SAudioSpeaker::speaker_task(void *params) {
         // callback.
         const uint32_t batches = (bytes_read + single_dma_buffer_input_size - 1) / single_dma_buffer_input_size;
 
-        if (this_speaker->pause_state_) {
-          xEventGroupWaitBits(this_speaker->event_group_, SpeakerEventGroupBits::COMMAND_UNPAUSE, false, false,
-                              portMAX_DELAY);
-        }
-
         for (uint32_t i = 0; i < batches; ++i) {
           size_t bytes_written = 0;
           size_t bytes_to_write = std::min(single_dma_buffer_input_size, bytes_read);
@@ -414,7 +359,8 @@ void I2SAudioSpeaker::speaker_task(void *params) {
             xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE);
           }
 
-          this_speaker->pending_dma_write_sizes_.push_back(bytes_to_write);
+          xQueueSend(this_speaker->pending_dma_write_sizes_queue_, &bytes_to_write, 0);
+
           bytes_read -= bytes_written;
 
           this_speaker->tx_dma_buffer_underflow_ = false;
@@ -430,12 +376,8 @@ void I2SAudioSpeaker::speaker_task(void *params) {
 
     xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::STATE_STOPPING);
 
-    // i2s_driver_uninstall(this_speaker->parent_->get_port());
     i2s_channel_disable(this_speaker->tx_handle_);
     i2s_del_channel(this_speaker->tx_handle_);
-
-    vTaskDelete(this_speaker->process_i2s_event_queue_task_handle_);
-    this_speaker->process_i2s_event_queue_task_handle_ = nullptr;
 
     this_speaker->parent_->unlock();
   }
@@ -532,11 +474,6 @@ esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_strea
     return ESP_ERR_NOT_SUPPORTED;
   }
 
-  // if ((i2s_bits_per_sample_t) audio_stream_info.get_bits_per_sample() > this->bits_per_sample_) {
-  //   // Currently can't handle the case when the incoming audio has more bits per sample than the configured value
-  //   return ESP_ERR_NOT_SUPPORTED;
-  // }
-
   if (!this->parent_->try_lock()) {
     return ESP_ERR_INVALID_STATE;
   }
@@ -547,15 +484,6 @@ esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_strea
   if (audio_stream_info.get_channels() == 1) {
     slot_mode = I2S_SLOT_MODE_MONO;
   }
-  // if (audio_stream_info.get_channels() == 1) {
-  //   if (this->channel_ == I2S_CHANNEL_FMT_ONLY_LEFT) {
-  //     channel = I2S_CHANNEL_FMT_ONLY_LEFT;
-  //   } else {
-  //     channel = I2S_CHANNEL_FMT_ONLY_RIGHT;
-  //   }
-  // } else if (audio_stream_info.get_channels() == 2) {
-  //   channel = I2S_CHANNEL_FMT_RIGHT_LEFT;
-  // }
 
   int dma_buffer_length = audio_stream_info.ms_to_frames(DMA_BUFFER_DURATION_MS);
 
@@ -563,7 +491,6 @@ esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_strea
   chan_cfg.auto_clear = true;
   chan_cfg.dma_desc_num = DMA_BUFFERS_COUNT;
   chan_cfg.dma_frame_num = dma_buffer_length;
-  // chan_cfg.auto_clear_before_cb = true;
 
   /* Allocate a new TX channel and get the handle of this channel */
   i2s_new_channel(&chan_cfg, &this->tx_handle_, NULL);
@@ -606,65 +533,6 @@ esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_strea
   i2s_channel_enable(this->tx_handle_);
 
   return ESP_OK;
-
-  //   i2s_driver_config_t config = {
-  //     .mode = (i2s_mode_t) (this->i2s_mode_ | I2S_MODE_TX),
-  //     .sample_rate = audio_stream_info.get_sample_rate(),
-  //     .bits_per_sample = this->bits_per_sample_,
-  //     .channel_format = channel,
-  //     .communication_format = this->i2s_comm_fmt_,
-  //     .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-  //     .dma_buf_count = DMA_BUFFERS_COUNT,
-  //     .dma_buf_len = dma_buffer_length,
-  //     .use_apll = this->use_apll_,
-  //     .tx_desc_auto_clear = true,
-  //     .fixed_mclk = I2S_PIN_NO_CHANGE,
-  //     .mclk_multiple = I2S_MCLK_MULTIPLE_512,  // ,I2S_MCLK_MULTIPLE_256
-  //     .bits_per_chan = this->bits_per_channel_,
-  // #if SOC_I2S_SUPPORTS_TDM
-  //     .chan_mask = (i2s_channel_t) (I2S_TDM_ACTIVE_CH0 | I2S_TDM_ACTIVE_CH1),
-  //     .total_chan = 2,
-  //     .left_align = false,
-  //     .big_edin = false,
-  //     .bit_order_msb = false,
-  //     .skip_msk = false,
-  // #endif
-  //   };
-  // #if SOC_I2S_SUPPORTS_DAC
-  //   if (this->internal_dac_mode_ != I2S_DAC_CHANNEL_DISABLE) {
-  //     config.mode = (i2s_mode_t) (config.mode | I2S_MODE_DAC_BUILT_IN);
-  //   }
-  // #endif
-
-  //   esp_err_t err =
-  //       i2s_driver_install(this->parent_->get_port(), &config, I2S_EVENT_QUEUE_COUNT, &this->i2s_event_queue_);
-  //   if (err != ESP_OK) {
-  //     // Failed to install the driver, so unlock the I2S port
-  //     this->parent_->unlock();
-  //     return err;
-  //   }
-
-  // #if SOC_I2S_SUPPORTS_DAC
-  //   if (this->internal_dac_mode_ == I2S_DAC_CHANNEL_DISABLE) {
-  // #endif
-
-  //     i2s_pin_config_t pin_config = this->parent_->get_pin_config();
-  //     pin_config.data_out_num = this->dout_pin_;
-
-  //     err = i2s_set_pin(this->parent_->get_port(), &pin_config);
-  // #if SOC_I2S_SUPPORTS_DAC
-  //   } else {
-  //     i2s_set_dac_mode(this->internal_dac_mode_);
-  //   }
-  // #endif
-
-  //   if (err != ESP_OK) {
-  //     // Failed to set the data out pin, so uninstall the driver and unlock the I2S port
-  //     i2s_driver_uninstall(this->parent_->get_port());
-  //     this->parent_->unlock();
-  //   }
-
-  //   return err;
 }
 
 void I2SAudioSpeaker::delete_task_(size_t buffer_size) {

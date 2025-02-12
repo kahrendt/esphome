@@ -6,8 +6,6 @@
 
 #include <driver/i2s.h>
 
-#include <deque>
-
 #include <freertos/event_groups.h>
 #include <freertos/queue.h>
 #include <freertos/FreeRTOS.h>
@@ -79,7 +77,6 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   /// @param params I2SAudioSpeaker component
   static void speaker_task(void *params);
 
-  static void process_i2s_event_queue(void *params);
   static IRAM_ATTR bool on_sent_callback(i2s_channel_obj_t *handle, i2s_event_data_t *event, void *params);
 
   /// @brief Sends a stop command to the speaker task via event_group_.
@@ -116,13 +113,12 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   void delete_task_(size_t buffer_size);
 
   TaskHandle_t speaker_task_handle_{nullptr};
-  TaskHandle_t process_i2s_event_queue_task_handle_{nullptr};
   EventGroupHandle_t event_group_{nullptr};
 
   QueueHandle_t i2s_event_queue_;
+  QueueHandle_t pending_dma_write_sizes_queue_;
 
   bool tx_dma_buffer_underflow_{false};
-  std::deque<size_t> pending_dma_write_sizes_;
 
   uint8_t *data_buffer_;
   std::shared_ptr<RingBuffer> audio_ring_buffer_;
