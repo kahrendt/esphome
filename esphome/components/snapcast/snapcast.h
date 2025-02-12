@@ -138,10 +138,15 @@ class SnapcastPlayer : public Component {
   void start();
 
   void set_speaker(speaker::Speaker *speaker) { this->speaker_ = speaker; }
+  void set_server_address(std::string server_address) { this->server_address_ = std::move(server_address); }
+  void set_server_port(uint16_t server_port) { this->server_port_ = server_port; }
 
  protected:
   speaker::Speaker *speaker_{nullptr};
   std::unique_ptr<socket::Socket> socket_;
+
+  std::string server_address_;
+  uint16_t server_port_;
 
   void base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
   void base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);

@@ -187,7 +187,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
     this_snapcast->socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
     struct sockaddr_storage server;
 
-    socklen_t sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), "192.168.1.35", 1704);
+    socklen_t sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server),
+                                        this_snapcast->server_address_.c_str(), this_snapcast->server_port_);
     if (sl == 0) {
       ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);
       continue;

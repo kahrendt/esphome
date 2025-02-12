@@ -5,7 +5,7 @@ import logging
 import esphome.codegen as cg
 from esphome.components import esp32, speaker
 import esphome.config_validation as cv
-from esphome.const import CONF_ID, CONF_SPEAKER, PLATFORM_ESP32
+from esphome.const import CONF_ID, CONF_PORT, CONF_SPEAKER, PLATFORM_ESP32
 from esphome.core import CORE
 
 _LOGGER = logging.getLogger(__name__)
@@ -18,20 +18,7 @@ DOMAIN = "file"
 TYPE_LOCAL = "local"
 TYPE_WEB = "web"
 
-CONF_ANNOUNCEMENT = "announcement"
-CONF_MEDIA_FILE = "media_file"
-CONF_STREAM = "stream"
-CONF_VOLUME_INCREMENT = "volume_increment"
-CONF_VOLUME_MIN = "volume_min"
-CONF_VOLUME_MAX = "volume_max"
-
-CONF_ANNOUNCEMENT_PIPELINE = "announcement_pipeline"
-CONF_MEDIA_PIPELINE = "media_pipeline"
-
-CONF_ON_MUTE = "on_mute"
-CONF_ON_UNMUTE = "on_unmute"
-CONF_ON_VOLUME = "on_volume"
-
+CONF_SERVER_ADDRESS = "server_address"
 
 snapcast_ns = cg.esphome_ns.namespace("snapcast")
 SnapcastPlayer = snapcast_ns.class_(
@@ -45,6 +32,8 @@ CONFIG_SCHEMA = cv.All(
         {
             cv.GenerateID(): cv.declare_id(SnapcastPlayer),
             cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
+            cv.Required(CONF_SERVER_ADDRESS): cv.string,
+            cv.Optional(CONF_PORT, default=1704): cv.int_range(1, 65535),
         }
     ).extend(cv.COMPONENT_SCHEMA),
     cv.only_on([PLATFORM_ESP32]),
@@ -90,3 +79,5 @@ async def to_code(config):
     await cg.register_component(var, config)
     spkr = await cg.get_variable(config[CONF_SPEAKER])
     cg.add(var.set_speaker(spkr))
+    cg.add(var.set_server_address(config[CONF_SERVER_ADDRESS]))
+    cg.add(var.set_server_port(config[CONF_PORT]))
