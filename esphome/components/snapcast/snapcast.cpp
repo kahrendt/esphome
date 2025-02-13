@@ -656,17 +656,20 @@ void SnapcastPlayer::sync_task(void *params) {
         output_transfer_buffer->decrease_buffer_length(bytes_per_frame);
         frame_corrections = -1;
       } else if (recent_error_us > 25) {
-        const uint32_t num_channels = this_snapcast->current_audio_stream_info_.value().get_channels();
-        int16_t *samples = reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
-        for (int chan = 0; chan < num_channels; ++chan) {
-          const int16_t left_sample = samples[chan];
-          const int16_t right_sample = samples[num_channels + chan];
-          const int16_t inserted_sample = left_sample / 2 + right_sample / 2;
-          samples[num_channels + chan] = inserted_sample;
-          samples[2 * num_channels + chan] = right_sample;
+        if (output_transfer_buffer->free() >= bytes_per_frame) {
+          const uint32_t num_channels = this_snapcast->current_audio_stream_info_.value().get_channels();
+          int16_t *samples =
+              reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
+          for (int chan = 0; chan < num_channels; ++chan) {
+            const int16_t left_sample = samples[chan];
+            const int16_t right_sample = samples[num_channels + chan];
+            const int16_t inserted_sample = left_sample / 2 + right_sample / 2;
+            samples[num_channels + chan] = inserted_sample;
+            samples[2 * num_channels + chan] = right_sample;
+          }
+          output_transfer_buffer->increase_buffer_length(bytes_per_frame);
+          frame_corrections = 1;
         }
-        output_transfer_buffer->increase_buffer_length(bytes_per_frame);
-        frame_corrections = 1;
       }
 
       chunk_frame_count += frame_corrections;
