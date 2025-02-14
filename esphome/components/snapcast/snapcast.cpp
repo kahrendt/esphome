@@ -40,6 +40,16 @@ static const uint32_t DECODED_CHUNK_QUEUE_SIZE = 50;
 static const uint32_t FAST_SYNC_LATENCY_BUF = 10000;      // in µs
 static const uint32_t NORMAL_SYNC_LATENCY_BUF = 1000000;  // in µs
 
+static const size_t SNAPCAST_TASK_STACK_SIZE = 3 * 1024;
+static const size_t DECODE_TASK_STACK_SIZE = 3 * 1024;
+static const size_t SYNC_TASK_STACK_SIZE = 3 * 1024;
+
+enum EventGroupBits : uint32_t {
+  COMMAND_STOP = (1 << 0),
+  DECODE_FINISHED = (1 << 3),
+  SYNC_FINISHED = (1 << 5),
+};
+
 void SnapcastPlayer::start() {
   this->speaker_->add_audio_output_callback([this](uint32_t frames_played, int64_t write_timestamp) {
     PlaybackInfo playback_info = {.frames_played = frames_played, .write_timestamp = write_timestamp};
@@ -68,12 +78,24 @@ void SnapcastPlayer::start() {
       xQueueCreateStatic(DECODED_CHUNK_QUEUE_SIZE, sizeof(AudioSyncChunk), this->decoded_chunk_data_queue_storage_,
                          &decoded_chunk_data_queue_buffer_);
   // this->encoded_chunk_data_queue_ = xQueueCreate(20, sizeof(AudioSyncChunk));
-  xTaskCreate(snapcast_task, "snapcast", 1024 * 5, (void *) this, 5, &this->snapcast_task_handle_);
+  xTaskCreate(snapcast_task, "snapcast", SNAPCAST_TASK_STACK_SIZE, (void *) this, 5, &this->snapcast_task_handle_);
 
   this->playback_info_queue_ = xQueueCreate(10, sizeof(PlaybackInfo));
+  this->event_group_ = xEventGroupCreate();
 }
 
-void SnapcastPlayer::loop() {}
+void SnapcastPlayer::loop() {
+  EventBits_t event_bits = xEventGroupGetBits(this->event_group_);
+  if ((event_bits & (DECODE_FINISHED | SYNC_FINISHED)) && this->speaker_->is_stopped()) {
+    if (this->speaker_->is_stopped()) {
+      xQueueReset(this->playback_info_queue_);
+      xEventGroupClearBits(this->event_group_, (COMMAND_STOP | DECODE_FINISHED | SYNC_FINISHED));
+      printf("clearing bits\n");
+    } else {
+      this->speaker_->stop();
+    }
+  }
+}
 
 esp_err_t SnapcastPlayer::send_client_message_() {
   ClientInfoMessage client_msg = {.volume = static_cast<uint32_t>(this->speaker_->get_volume() * 100.0f),
@@ -310,11 +332,11 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           audio_chunk->size = codec_len;
           audio_chunk->codec_header = true;
           if (codec_len > 0) {
-            this_snapcast->speaker_->stop();
+            // this_snapcast->speaker_->stop();
+            xEventGroupSetBits(this_snapcast->event_group_, COMMAND_STOP);
 
             new_file_start = true;
             xQueueReset(this_snapcast->encoded_chunk_data_queue_);
-            xQueueReset(this_snapcast->decoded_chunk_data_queue_);
 
             printf("codec header has length %d\n", codec_len);
             size_t offset = 0;
@@ -332,7 +354,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             xQueueSend(this_snapcast->encoded_chunk_data_queue_, audio_chunk, portMAX_DELAY);
 
             if (this_snapcast->decode_task_handle_ == nullptr) {
-              xTaskCreate(decode_task, "decode", 1024 * 5, (void *) this_snapcast, 1,
+              xTaskCreate(decode_task, "decode", DECODE_TASK_STACK_SIZE, (void *) this_snapcast, 1,
                           &this_snapcast->decode_task_handle_);
             }
           }
@@ -364,7 +386,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           if (chunk_size > 0) {
             if (chunk_size > MAX_CHUNK_SIZE) {
               valid_chunk = false;
-              printf("got a wire chunk that had too big of a size\n");
+              printf("got a wire chunk that had too big of a size: %d base message said size was %d\n", chunk_size,
+                     base_msg.size);
             }
             size_t offset = 0;
             while (chunk_size > 0) {
@@ -500,19 +523,28 @@ void SnapcastPlayer::decode_task(void *params) {
   RAMAllocator<AudioSyncChunk> chunk_allocator(ExternalRAMAllocator<AudioSyncChunk>::ALLOW_FAILURE);
   AudioSyncChunk *encoded_chunk = chunk_allocator.allocate(1);
   AudioSyncChunk *decoded_chunk = chunk_allocator.allocate(1);
-  std::unique_ptr<esp_audio_libs::flac::FLACDecoder> flac_decoder;
+  std::unique_ptr<esp_audio_libs::flac::FLACDecoder> flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
 
   while (true) {
+    EventBits_t event_bits = xEventGroupGetBits(this_snapcast->event_group_);
+    if ((event_bits & COMMAND_STOP) && !(event_bits & DECODE_FINISHED)) {
+      // if (flac_decoder != nullptr) {
+      //   flac_decoder.reset();
+      // }
+      // flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
+
+      xQueueReset(this_snapcast->decoded_chunk_data_queue_);
+
+      xEventGroupSetBits(this_snapcast->event_group_, DECODE_FINISHED);
+    }
+
+    if (event_bits & DECODE_FINISHED) {
+      delay(20);
+      continue;
+    }
+
     if (xQueueReceive(this_snapcast->encoded_chunk_data_queue_, encoded_chunk, pdMS_TO_TICKS(20))) {
       if (encoded_chunk->codec_header) {
-        if (flac_decoder != nullptr) {
-          flac_decoder.reset();
-        }
-
-        xQueueReset(this_snapcast->decoded_chunk_data_queue_);
-        this_snapcast->actual_offsets_.reset();
-        this_snapcast->pending_frame_corrections_ = 0;
-        flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
         auto result = flac_decoder->read_header(encoded_chunk->data, encoded_chunk->size);
 
         if (result == esp_audio_libs::flac::FLAC_DECODER_HEADER_OUT_OF_DATA) {
@@ -533,10 +565,10 @@ void SnapcastPlayer::decode_task(void *params) {
         printf("decoded flac header\n");
 
         if (this_snapcast->sync_task_handle_ == nullptr) {
-          xTaskCreate(sync_task, "sync", 1024 * 3, (void *) this_snapcast, 1, &this_snapcast->sync_task_handle_);
+          xTaskCreate(sync_task, "sync", SYNC_TASK_STACK_SIZE, (void *) this_snapcast, 1,
+                      &this_snapcast->sync_task_handle_);
         }
 
-        this_snapcast->chunk_timings_.clear();
         this_snapcast->speaker_->set_audio_stream_info(this_snapcast->current_audio_stream_info_.value());
 
       } else if (flac_decoder != nullptr) {
@@ -601,7 +633,29 @@ void SnapcastPlayer::sync_task(void *params) {
         ESP_LOGD(TAG, "Sync task - High water mark increased from %d to %d.", high_water_mark, new_high_water_mark);
         high_water_mark = new_high_water_mark;
       }
-      output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
+
+      EventBits_t event_bits = xEventGroupGetBits(this_snapcast->event_group_);
+      if ((event_bits & COMMAND_STOP) && !(event_bits & SYNC_FINISHED)) {
+        // clear things we own as well
+        output_transfer_buffer.reset();
+        output_transfer_buffer = audio::AudioSinkTransferBuffer::create(OUTPUT_BUFFER_SIZE);
+        output_transfer_buffer->set_sink(this_snapcast->speaker_);
+
+        this_snapcast->speaker_->stop();
+
+        this_snapcast->actual_offsets_.reset();
+        this_snapcast->pending_frame_corrections_ = 0;
+        this_snapcast->chunk_timings_.clear();
+
+        xEventGroupSetBits(this_snapcast->event_group_, SYNC_FINISHED);
+      } else {
+        output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
+      }
+
+      if (event_bits & SYNC_FINISHED) {
+        delay(20);
+        continue;
+      }
 
       PlaybackInfo playback_info;
       while (xQueueReceive(this_snapcast->playback_info_queue_, &playback_info, 0) == pdTRUE) {

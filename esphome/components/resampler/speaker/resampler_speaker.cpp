@@ -198,8 +198,11 @@ esp_err_t ResamplerSpeaker::start_task_() {
   return ESP_OK;
 }
 
-void ResamplerSpeaker::stop() { this->state_ = speaker::STATE_STOPPING; }
-
+void ResamplerSpeaker::stop() {
+  if ((this->state_ != speaker::STATE_STOPPED) && (this->state_ != speaker::STATE_STOPPED)) {
+    this->state_ = speaker::STATE_STOPPING;
+  }
+}
 void ResamplerSpeaker::stop_() {
   if (this->task_handle_ != nullptr) {
     xEventGroupSetBits(this->event_group_, ResamplingEventGroupBits::COMMAND_STOP);

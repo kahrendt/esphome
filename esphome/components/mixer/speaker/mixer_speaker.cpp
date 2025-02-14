@@ -114,6 +114,7 @@ void SourceSpeaker::loop() {
       this->stop_();
       this->stop_gracefully_ = false;
       this->state_ = speaker::STATE_STOPPED;
+      ESP_LOGD(TAG, "Stopped a mixer source speaker");
       break;
     case speaker::STATE_STOPPED:
       break;
@@ -123,6 +124,9 @@ void SourceSpeaker::loop() {
 size_t SourceSpeaker::play(const uint8_t *data, size_t length, TickType_t ticks_to_wait) {
   if (this->is_stopped()) {
     this->start();
+  }
+  if (this->state_ == speaker::STATE_STOPPING) {
+    return 0;
   }
   size_t bytes_written = 0;
   if (this->ring_buffer_.use_count() == 1) {
@@ -165,8 +169,9 @@ esp_err_t SourceSpeaker::start_() {
 }
 
 void SourceSpeaker::stop() {
-  if (this->state_ != speaker::STATE_STOPPED) {
+  if ((this->state_ != speaker::STATE_STOPPED) && (this->state_ != speaker::STATE_STOPPING)) {
     this->state_ = speaker::STATE_STOPPING;
+    printf("stopping source speaker\n");
   }
 }
 
@@ -330,6 +335,7 @@ void MixerSpeaker::loop() {
   }
   if (event_group_bits & MixerEventGroupBits::STATE_STOPPED) {
     if (this->delete_task_() == ESP_OK) {
+      ESP_LOGD(TAG, "Stopped speaker mixer task");
       xEventGroupClearBits(this->event_group_, MixerEventGroupBits::ALL_BITS);
     }
   }
