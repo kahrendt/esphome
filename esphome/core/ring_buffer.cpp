@@ -37,6 +37,10 @@ std::unique_ptr<RingBuffer> RingBuffer::create(size_t len) {
 }
 
 size_t RingBuffer::read(void *data, size_t len, TickType_t ticks_to_wait) {
+  if (this->available() < len) {
+    vTaskDelay(ticks_to_wait);
+  }
+
   size_t bytes_read = 0;
 
   void *buffer_data = xRingbufferReceiveUpTo(this->handle_, &bytes_read, ticks_to_wait, len);

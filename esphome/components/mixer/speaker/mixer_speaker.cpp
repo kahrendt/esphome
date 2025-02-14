@@ -56,14 +56,9 @@ void SourceSpeaker::setup() {
   this->parent_->get_output_speaker()->add_audio_output_callback([this](uint32_t new_frames, int64_t write_timestamp) {
     // this->audio_output_callback_(new_frames, write_timestamp);
     uint32_t personal_playback_frames = std::min(new_frames, this->pending_playback_frames_);
-    if (personal_playback_frames < new_frames) {
-      printf("some frames played weren't sent through this source speakaer %d played but %d pending\n", new_frames,
-             this->pending_playback_frames_);
-    } else {
-      printf("pendinga nd played matched\n");
-    }
+    this->pending_playback_frames_ -= personal_playback_frames;
+
     if (personal_playback_frames > 0) {
-      this->pending_playback_frames_ -= personal_playback_frames;
       this->audio_output_callback_(personal_playback_frames, write_timestamp);
     }
     // uint32_t personal_playback_ms = std::min(new_playback_ms, this->pending_playback_ms_);
@@ -118,7 +113,6 @@ void SourceSpeaker::loop() {
     case speaker::STATE_STOPPING:
       this->stop_();
       this->stop_gracefully_ = false;
-      this->pending_playback_frames_ = 0;
       this->state_ = speaker::STATE_STOPPED;
       break;
     case speaker::STATE_STOPPED:
@@ -166,6 +160,7 @@ esp_err_t SourceSpeaker::start_() {
     }
   }
 
+  this->pending_playback_frames_ = 0;
   return this->parent_->start(this->audio_stream_info_);
 }
 
@@ -196,18 +191,19 @@ void SourceSpeaker::set_volume(float volume) {
 }
 
 size_t SourceSpeaker::process_data_from_source(TickType_t ticks_to_wait) {
-  if (!this->transfer_buffer_.use_count()) {
+  std::shared_ptr<audio::AudioSourceTransferBuffer> temp_transfer_buffer = this->transfer_buffer_;
+  if (!temp_transfer_buffer.use_count()) {
     return 0;
   }
 
   // Store current offset, as these samples are already ducked
-  const size_t current_length = this->transfer_buffer_->available();
+  const size_t current_length = temp_transfer_buffer->available();
 
-  size_t bytes_read = this->transfer_buffer_->transfer_data_from_source(ticks_to_wait);
+  size_t bytes_read = temp_transfer_buffer->transfer_data_from_source(ticks_to_wait);
 
   uint32_t samples_to_duck = this->audio_stream_info_.bytes_to_samples(bytes_read);
   if (samples_to_duck > 0) {
-    int16_t *current_buffer = reinterpret_cast<int16_t *>(this->transfer_buffer_->get_buffer_start() + current_length);
+    int16_t *current_buffer = reinterpret_cast<int16_t *>(temp_transfer_buffer->get_buffer_start() + current_length);
 
     duck_samples(current_buffer, samples_to_duck, &this->current_ducking_db_reduction_,
                  &this->ducking_transition_samples_remaining_, this->samples_per_ducking_step_,

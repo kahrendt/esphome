@@ -88,7 +88,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Required(CONF_OUTPUT_SPEAKER): cv.use_id(speaker.Speaker),
             cv.Required(CONF_SOURCE_SPEAKERS): cv.All(
                 cv.ensure_list(SOURCE_SPEAKER_SCHEMA),
-                cv.Length(min=2, max=8),
+                cv.Length(min=1, max=8),
                 [_set_stream_limits],
             ),
             cv.Optional(CONF_NUM_CHANNELS): cv.int_range(min=1, max=2),

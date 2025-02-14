@@ -98,6 +98,8 @@ class ResamplerSpeaker : public Component, public speaker::Speaker {
 
   uint32_t buffer_duration_ms_;
 
+  uint32_t callback_remainder_{0};
+
   int32_t playback_differential_ms_{0};
 };
 

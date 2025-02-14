@@ -24,7 +24,7 @@ static const size_t TASK_DELAY_MS = DMA_BUFFER_DURATION_MS * DMA_BUFFERS_COUNT /
 static const size_t TASK_STACK_SIZE = 4096;
 static const ssize_t TASK_PRIORITY = 23;
 
-static const size_t I2S_EVENT_QUEUE_COUNT = DMA_BUFFERS_COUNT + 1;
+static const size_t I2S_EVENT_QUEUE_COUNT = 2 * (DMA_BUFFERS_COUNT + 1);
 
 static const char *const TAG = "i2s_audio.speaker";
 
@@ -121,7 +121,7 @@ void I2SAudioSpeaker::loop() {
   while (xQueueReceive(this->i2s_event_queue_, &info, 0)) {
     size_t pending_write_size;
     if (xQueueReceive(this->pending_dma_write_sizes_queue_, &pending_write_size, 0)) {
-      this->audio_output_callback_(this->audio_stream_info_.bytes_to_frames(pending_write_size), info.timestamp);
+      // this->audio_output_callback_(this->audio_stream_info_.bytes_to_frames(pending_write_size), info.timestamp);
     }
   }
   uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
@@ -247,9 +247,10 @@ bool I2SAudioSpeaker::on_sent_callback(i2s_channel_obj_t *handle, i2s_event_data
   I2SAudioSpeaker *this_speaker = (I2SAudioSpeaker *) params;
   BaseType_t higher_priority_task_woken;
 
-  xQueueSendFromISR(this_speaker->i2s_event_queue_, &info, &higher_priority_task_woken);
+  // xQueueSendFromISR(this_speaker->i2s_event_queue_, &info, &higher_priority_task_woken);
 
-  return higher_priority_task_woken;
+  // return higher_priority_task_woken;
+  return false;
 }
 
 void I2SAudioSpeaker::set_pause_state(bool pause_state) {
@@ -292,10 +293,11 @@ void I2SAudioSpeaker::speaker_task(void *params) {
 
   const size_t single_dma_buffer_input_size = data_buffer_size / DMA_BUFFERS_COUNT;
 
-  if (this_speaker->send_esp_err_to_event_group_(this_speaker->allocate_buffers_(data_buffer_size, ring_buffer_size))) {
+  if (this_speaker->send_esp_err_to_event_group_(
+          this_speaker->allocate_buffers_(single_dma_buffer_input_size, ring_buffer_size))) {
     // Failed to allocate buffers
     xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_NO_MEM);
-    this_speaker->delete_task_(data_buffer_size);
+    this_speaker->delete_task_(single_dma_buffer_input_size);
   }
 
   if (!this_speaker->send_esp_err_to_event_group_(this_speaker->start_i2s_driver_(audio_stream_info))) {
@@ -334,8 +336,8 @@ void I2SAudioSpeaker::speaker_task(void *params) {
         continue;
       }
 
-      size_t bytes_read = this_speaker->audio_ring_buffer_->read((void *) this_speaker->data_buffer_, data_buffer_size,
-                                                                 pdMS_TO_TICKS(TASK_DELAY_MS));
+      size_t bytes_read = this_speaker->audio_ring_buffer_->read(
+          (void *) this_speaker->data_buffer_, single_dma_buffer_input_size, pdMS_TO_TICKS(DMA_BUFFER_DURATION_MS));
 
       if (bytes_read > 0) {
         if ((audio_stream_info.get_bits_per_sample() == 16) && (this_speaker->q15_volume_factor_ < INT16_MAX)) {
@@ -354,7 +356,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
 
           i2s_channel_write(this_speaker->tx_handle_, this_speaker->data_buffer_ + i * single_dma_buffer_input_size,
                             bytes_to_write, &bytes_written, DMA_BUFFER_DURATION_MS * 5);
-
+          int64_t now = esp_timer_get_time();
           if (bytes_written != bytes_to_write) {
             xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE);
           }
@@ -365,6 +367,8 @@ void I2SAudioSpeaker::speaker_task(void *params) {
 
           this_speaker->tx_dma_buffer_underflow_ = false;
           last_data_received_time = millis();
+          this_speaker->audio_output_callback_(audio_stream_info.bytes_to_frames(bytes_written),
+                                               now + dma_buffers_duration_ms * 1000);
         }
       } else {
         // No data received
@@ -382,7 +386,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
     this_speaker->parent_->unlock();
   }
 
-  this_speaker->delete_task_(data_buffer_size);
+  this_speaker->delete_task_(single_dma_buffer_input_size);
 }
 
 void I2SAudioSpeaker::start() {

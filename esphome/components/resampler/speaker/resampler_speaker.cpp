@@ -47,7 +47,15 @@ void ResamplerSpeaker::setup() {
     // int32_t adjustment = this->playback_differential_ms_;
     // this->playback_differential_ms_ -= adjustment;
     // int32_t adjusted_playback_ms = static_cast<int32_t>(new_playback_ms) + adjustment;
-    this->audio_output_callback_(new_frames, write_timestamp);
+
+    if (this->audio_stream_info_.get_sample_rate() != this->target_stream_info_.get_sample_rate()) {
+      const uint32_t numerator = new_frames * this->audio_stream_info_.get_sample_rate() + this->callback_remainder_;
+      const uint32_t denominator = this->target_stream_info_.get_sample_rate();
+      this->callback_remainder_ = numerator % denominator;
+      this->audio_output_callback_(numerator / denominator, write_timestamp);
+    } else {
+      this->audio_output_callback_(new_frames, write_timestamp);
+    }
   });
 }
 

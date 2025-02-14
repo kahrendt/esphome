@@ -16,6 +16,8 @@
 namespace esphome {
 namespace snapcast {
 
+static const size_t MAX_CHUNK_SIZE = 8000;
+
 enum message_type {
   SNAPCAST_MESSAGE_BASE = 0,
   SNAPCAST_MESSAGE_CODEC_HEADER = 1,
@@ -30,7 +32,7 @@ struct AudioSyncChunk {
   int64_t server_timestamp;
   size_t size;
   bool codec_header = false;
-  uint8_t data[8000];
+  uint8_t data[MAX_CHUNK_SIZE];
 };
 
 struct AudioSyncChunkTimings {
@@ -132,7 +134,7 @@ class SnapcastPlayer : public Component {
   SnapcastPlayer()
       : internal_latency_(MedianFilter(50)),
         server_internal_clock_offset_(MedianFilter(50)),
-        actual_offsets_(MedianFilter(1)){};
+        actual_offsets_(MedianFilter(3)){};
   float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
   void setup() override {
     this->actual_offset_queue_ = xQueueCreate(20, sizeof(int64_t));

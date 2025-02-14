@@ -34,6 +34,9 @@ static const char *TAG = "snapcast";
 static const size_t INPUT_BUFFER_SIZE = 1024 * 50;
 static const size_t OUTPUT_BUFFER_SIZE = 1024 * 50;
 
+static const uint32_t ENCODED_CHUNK_QUEUE_SIZE = 50;
+static const uint32_t DECODED_CHUNK_QUEUE_SIZE = 50;
+
 static const uint32_t FAST_SYNC_LATENCY_BUF = 10000;      // in µs
 static const uint32_t NORMAL_SYNC_LATENCY_BUF = 1000000;  // in µs
 
@@ -56,7 +59,8 @@ void SnapcastPlayer::start() {
       // Now we are in the middle of the current audio chunk
 
       int64_t full_precision_microseconds =
-          (frames_played * 1000000L) / static_cast<int64_t>(this->current_audio_stream_info_.value().get_sample_rate());
+          (frames_played * 1000000LL) /
+          static_cast<int64_t>(this->current_audio_stream_info_.value().get_sample_rate());
       int64_t server_timestamp_finished = front_chunk.server_timestamp + full_precision_microseconds;
       int64_t equivalent_client_timestamp = server_timestamp_finished -
                                             this->server_internal_clock_offset_.get_most_recent_median() +
@@ -71,48 +75,43 @@ void SnapcastPlayer::start() {
       this->pending_frame_corrections_ -= accumulated_chunk_corrections;
 
       int64_t internal_latency_written = front_chunk.internal_timestamp + full_precision_microseconds;
-      if (new_chunk) {
-        int64_t new_error = equivalent_client_timestamp - write_timestamp;
+      // if (new_chunk) {
+      int64_t new_error = equivalent_client_timestamp - write_timestamp;
 
-        xQueueSend(this->actual_offset_queue_, &new_error, 0);
-        this->actual_offsets_.update(new_error);
-        if (new_error > 22982976707978547LL) {
-          printf("weirdly huge error. server timestamp should have been %" PRId64 "; client timestamp %" PRId64
-                 "; actually written %" PRId64 "\n",
-                 server_timestamp_finished, equivalent_client_timestamp, write_timestamp);
-        }
-
-        this->internal_latency_.update(internal_latency_written - write_timestamp);
+      // xQueueSend(this->actual_offset_queue_, &new_error, 0);
+      this->actual_offsets_.update(new_error);
+      if (new_error > 22982976707978547LL) {
+        printf("weirdly huge error. server timestamp should have been %" PRId64 "; client timestamp %" PRId64
+               "; actually written %" PRId64 "\n",
+               server_timestamp_finished, equivalent_client_timestamp, write_timestamp);
       }
 
-      if (this->first_audio_played_) {
-        this->first_audio_played_ = false;
-        printf("supposed to write it at %" PRId64 "us (new calculation as this at %" PRId64
-               "), actually finished writing out at %" PRId32 "us\n",
-               this->initial_playback_timestamp_, equivalent_client_timestamp, write_timestamp);
-      }
+      this->internal_latency_.update(internal_latency_written - write_timestamp);
+      // }
     }
   });
 
   RAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
-  this->encoded_chunk_data_queue_storage_ = allocator.allocate(20 * sizeof(AudioSyncChunk));
+  this->encoded_chunk_data_queue_storage_ = allocator.allocate(ENCODED_CHUNK_QUEUE_SIZE * sizeof(AudioSyncChunk));
   if (this->encoded_chunk_data_queue_storage_ == nullptr) {
     this->mark_failed();
     return;
   }
-  this->encoded_chunk_data_queue_ = xQueueCreateStatic(
-      20, sizeof(AudioSyncChunk), this->encoded_chunk_data_queue_storage_, &encoded_chunk_data_queue_buffer_);
+  this->encoded_chunk_data_queue_ =
+      xQueueCreateStatic(ENCODED_CHUNK_QUEUE_SIZE, sizeof(AudioSyncChunk), this->encoded_chunk_data_queue_storage_,
+                         &encoded_chunk_data_queue_buffer_);
 
-  this->decoded_chunk_data_queue_storage_ = allocator.allocate(50 * sizeof(AudioSyncChunk));
+  this->decoded_chunk_data_queue_storage_ = allocator.allocate(DECODED_CHUNK_QUEUE_SIZE * sizeof(AudioSyncChunk));
   if (this->decoded_chunk_data_queue_storage_ == nullptr) {
     this->mark_failed();
     return;
   }
 
-  this->decoded_chunk_data_queue_ = xQueueCreateStatic(
-      50, sizeof(AudioSyncChunk), this->decoded_chunk_data_queue_storage_, &decoded_chunk_data_queue_buffer_);
+  this->decoded_chunk_data_queue_ =
+      xQueueCreateStatic(DECODED_CHUNK_QUEUE_SIZE, sizeof(AudioSyncChunk), this->decoded_chunk_data_queue_storage_,
+                         &decoded_chunk_data_queue_buffer_);
   // this->encoded_chunk_data_queue_ = xQueueCreate(20, sizeof(AudioSyncChunk));
-  xTaskCreate(snapcast_task, "snapcast", 1024 * 4, (void *) this, 1, &this->snapcast_task_handle_);
+  xTaskCreate(snapcast_task, "snapcast", 1024 * 5, (void *) this, 5, &this->snapcast_task_handle_);
 }
 
 void SnapcastPlayer::loop() {}
@@ -178,7 +177,6 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       ESP_LOGW(TAG, "No results found for snapcast service!");
     }
 
-    // char *hostname = this_snapcast->server_address_.c_str();
     char ip_address[16];
     bool use_mdns = false;
     uint16_t port = this_snapcast->server_port_;
@@ -206,7 +204,13 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       continue;
     }
     err = this_snapcast->socket_->connect((struct sockaddr *) &server, sizeof(server));
-    printf("err %d\n", err);
+
+    int nodelay = 1;
+    if (this_snapcast->socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
+      /* If failed to turn on TCP_NODELAY, throw warning and continue */
+      printf("failed to turn on tcp_nodelay\n");
+      nodelay = 0;
+    }
 
     int64_t now = esp_timer_get_time();
 
@@ -234,25 +238,11 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
     this_snapcast->base_message_serialize_(&base_msg, base_msg_buffer);
 
-    printf("hello msg %s\n size with size: %d\n", hello_msg.c_str(), base_msg.size);
-    printf("base message buffer size: %d, remaining: %d\n", base_msg_buffer.get_capacity(),
-           base_msg_buffer.get_remaining());
-
     ssize_t write_amount = this_snapcast->socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
-
-    printf("write socket base %d\n", write_amount);
 
     write_amount = this_snapcast->socket_->write((void *) hello_msg_buffer.get_raw_data(), base_msg.size);
 
-    printf("write socket hello %d\n", write_amount);
-
-    esp_timer_create_args_t tSyncArgs = {.callback = &time_sync_callback,
-                                         .arg = this_snapcast,
-                                         .dispatch_method = ESP_TIMER_TASK,
-                                         .name = "t_sync_msg",
-                                         .skip_unhandled_events = false};
-    esp_timer_handle_t timeSyncMessageTimer;
-    esp_timer_create(&tSyncArgs, &timeSyncMessageTimer);
+    printf("wrote hello message: %s\n", hello_msg.c_str());
 
     bool low_speed_timer_started = false;
     bool high_speed_timer_started = false;
@@ -265,6 +255,12 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       printf("failed to allocate audio chunk\n");
       continue;
     }
+
+    int64_t last_time_sync_message = 0;
+    uint32_t time_message_delay = FAST_SYNC_LATENCY_BUF;
+
+    int64_t last_client_settings_message = 0;
+    uint32_t client_message_delay = 60000000;
 
     while (true) {
       base_msg_buffer.rewind();
@@ -283,13 +279,9 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       base_msg.received.usec = static_cast<int32_t>(now - now / 1000000LL);
 
       if (high_speed_timer_started && this_snapcast->server_internal_clock_offset_.is_full()) {
-        if (esp_timer_is_active(timeSyncMessageTimer)) {
-          esp_timer_stop(timeSyncMessageTimer);
-        }
         high_speed_timer_started = false;
-        esp_timer_start_periodic(timeSyncMessageTimer, NORMAL_SYNC_LATENCY_BUF);
         low_speed_timer_started = true;
-        // this_snapcast->set_interval(60000, [this_snapcast]() { this_snapcast->send_client_message(); });
+        time_message_delay = NORMAL_SYNC_LATENCY_BUF;
       }
 
       switch (base_msg.type) {
@@ -331,58 +323,49 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             }
           }
 
-          esp_timer_stop(timeSyncMessageTimer);
-          if (!esp_timer_is_active(timeSyncMessageTimer)) {
-            esp_timer_start_periodic(timeSyncMessageTimer, FAST_SYNC_LATENCY_BUF);
+          if (!low_speed_timer_started) {
+            time_message_delay = FAST_SYNC_LATENCY_BUF;
             high_speed_timer_started = true;
           }
           break;
         }
         case SNAPCAST_MESSAGE_WIRE_CHUNK: {
-          if (this_snapcast->current_audio_stream_info_.has_value()) {
-            int32_t timestamp_s;
-            int32_t timestamp_us;
-            uint32_t chunk_size;
-            this_snapcast->socket_->read(&timestamp_s, sizeof(timestamp_s));
-            this_snapcast->socket_->read(&timestamp_us, sizeof(timestamp_us));
-            this_snapcast->socket_->read(&chunk_size, sizeof(chunk_size));
+          bool valid_chunk = this_snapcast->current_audio_stream_info_.has_value();
 
-            int64_t total_timestamp_us =
-                static_cast<int64_t>(timestamp_s) * 1000000LL + static_cast<int64_t>(timestamp_us);
+          int32_t timestamp_s;
+          int32_t timestamp_us;
+          uint32_t chunk_size;
+          this_snapcast->socket_->read(&timestamp_s, sizeof(timestamp_s));
+          this_snapcast->socket_->read(&timestamp_us, sizeof(timestamp_us));
+          this_snapcast->socket_->read(&chunk_size, sizeof(chunk_size));
 
-            if (low_speed_timer_started && new_file_start) {
-              new_file_start = false;
-              this_snapcast->speaker_->start();
+          int64_t total_timestamp_us =
+              static_cast<int64_t>(timestamp_s) * 1000000LL + static_cast<int64_t>(timestamp_us);
 
-              printf("total_timestamp %" PRId64 "; median_offset %" PRId64 "; current time %" PRId64 "\n",
-                     total_timestamp_us, this_snapcast->server_internal_clock_offset_.get_most_recent_median(),
-                     esp_timer_get_time());
-
-              this_snapcast->initial_playback_timestamp_ =
-                  total_timestamp_us - this_snapcast->server_internal_clock_offset_.get_most_recent_median() +
-                  this_snapcast->snapcast_buffer_duration_ms_ * 1000 - this_snapcast->snapcast_latency_ms_ * 1000;
-              int64_t us_to_start = this_snapcast->initial_playback_timestamp_ - esp_timer_get_time();
-              printf("initial playback in %" PRId64 "us\n", us_to_start);
+          audio_chunk->codec_header = false;
+          audio_chunk->server_timestamp = total_timestamp_us;
+          audio_chunk->size = chunk_size;
+          if (chunk_size > 0) {
+            if (chunk_size > MAX_CHUNK_SIZE) {
+              valid_chunk = false;
+              printf("got a wire chunk that had too big of a size\n");
             }
-
-            audio_chunk->codec_header = false;
-            audio_chunk->server_timestamp = total_timestamp_us;
-            audio_chunk->size = chunk_size;
-            if (chunk_size > 0) {
-              size_t offset = 0;
-              while (chunk_size > 0) {
-                ssize_t bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, chunk_size);
-                chunk_size -= bytes_read;
+            size_t offset = 0;
+            while (chunk_size > 0) {
+              ssize_t bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, chunk_size);
+              chunk_size -= bytes_read;
+              if (valid_chunk) {
                 offset += bytes_read;
               }
+            }
 
-              if (low_speed_timer_started) {
-                if (!xQueueSend(this_snapcast->encoded_chunk_data_queue_, audio_chunk, 0)) {
-                  printf("no room in data queue!\n");
-                }
+            if (low_speed_timer_started && valid_chunk) {
+              if (!xQueueSend(this_snapcast->encoded_chunk_data_queue_, audio_chunk, 0)) {
+                printf("no room in data queue!\n");
               }
             }
           }
+
           break;
         }
         case SNAPCAST_MESSAGE_SERVER_SETTINGS: {
@@ -430,10 +413,11 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
           int64_t server_clock_offset = this_snapcast->server_internal_clock_offset_.update(tmp_dif);
 
-          printf("median offset %" PRId64 " with server mismatch %" PRId64 " internal latency is %" PRId64
-                 "; pending frames to be corrected %d\n",
-                 server_clock_offset, this_snapcast->actual_offsets_.get_most_recent_median(),
-                 this_snapcast->internal_latency_.get_most_recent_median(), this_snapcast->pending_frame_corrections_);
+          // printf("median offset %" PRId64 " with server mismatch %" PRId64 " internal latency is %" PRId64
+          //        "; pending frames to be corrected %d\n",
+          //        server_clock_offset, this_snapcast->actual_offsets_.get_most_recent_median(),
+          //        this_snapcast->internal_latency_.get_most_recent_median(),
+          //        this_snapcast->pending_frame_corrections_);
 
           break;
         }
@@ -442,6 +426,15 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
           break;
       }
+
+      if (now - last_time_sync_message > time_message_delay) {
+        this_snapcast->time_sync_callback(this_snapcast);
+        last_time_sync_message = now;
+      }
+      // if (now - last_client_settings_message > client_message_delay) {
+      //   this_snapcast->send_client_message();
+      //   last_client_settings_message = now;
+      // }
     }
     while (true) {
       delay(10);
@@ -549,8 +542,12 @@ void SnapcastPlayer::sync_task(void *params) {
         continue;
       }
 
-      if (chunk->size > output_transfer_buffer->free()) {
-        continue;
+      // if (chunk->size > output_transfer_buffer->free()) {
+      //   continue;
+      // }
+
+      if (this_snapcast->speaker_->is_stopped()) {
+        this_snapcast->speaker_->start();
       }
 
       if (!this_snapcast->chunk_timings_.empty()) {
@@ -581,15 +578,6 @@ void SnapcastPlayer::sync_task(void *params) {
           static_cast<int64_t>(this_snapcast->current_audio_stream_info_.value().get_sample_rate());
 
       int64_t recent_error_us = 0;
-      // int64_t most_recent_offset = 0;
-      // if (xQueueReceive(this_snapcast->actual_offset_queue_, &most_recent_offset, 0)) {
-      //   recent_error_us = most_recent_offset - signed_pending_duration_corrections;
-      //   if (abs(recent_error_us) < 5000) {
-      //     synced_chunks = std::min(synced_chunks + 1, 10);
-      //   } else {
-      //     synced_chunks = 0;
-      //   }
-      // }
 
       if (this_snapcast->actual_offsets_.is_full()) {
         recent_error_us = this_snapcast->actual_offsets_.get_most_recent_median() - signed_pending_duration_corrections;
