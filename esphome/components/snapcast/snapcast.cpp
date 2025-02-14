@@ -635,7 +635,12 @@ void SnapcastPlayer::sync_task(void *params) {
       }
 
       EventBits_t event_bits = xEventGroupGetBits(this_snapcast->event_group_);
-      if ((event_bits & COMMAND_STOP) && !(event_bits & SYNC_FINISHED)) {
+
+      if (event_bits & SYNC_FINISHED) {
+        delay(20);
+        continue;
+      }
+      if (event_bits & COMMAND_STOP) {
         // clear things we own as well
         output_transfer_buffer.reset();
         output_transfer_buffer = audio::AudioSinkTransferBuffer::create(OUTPUT_BUFFER_SIZE);
@@ -648,14 +653,10 @@ void SnapcastPlayer::sync_task(void *params) {
         this_snapcast->chunk_timings_.clear();
 
         xEventGroupSetBits(this_snapcast->event_group_, SYNC_FINISHED);
-      } else {
-        output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
-      }
-
-      if (event_bits & SYNC_FINISHED) {
-        delay(20);
         continue;
       }
+
+      output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
 
       PlaybackInfo playback_info;
       while (xQueueReceive(this_snapcast->playback_info_queue_, &playback_info, 0) == pdTRUE) {
@@ -785,7 +786,7 @@ void SnapcastPlayer::sync_task(void *params) {
 
       if (recent_error_us > 5000) {
         size_t silence_bytes =
-            this_snapcast->current_audio_stream_info_.value().ms_to_bytes((recent_error_us - 2500) / 1000);
+            this_snapcast->current_audio_stream_info_.value().ms_to_bytes((recent_error_us - 25) / 1000);
         size_t actual_silence_bytes = std::min(silence_bytes, output_transfer_buffer->free());
         std::memset((void *) (output_transfer_buffer->get_buffer_end() - chunk->size), 0,
                     actual_silence_bytes + chunk->size);
@@ -799,7 +800,7 @@ void SnapcastPlayer::sync_task(void *params) {
 
       } else if (recent_error_us < -5000) {
         size_t bytes_to_remove =
-            this_snapcast->current_audio_stream_info_.value().ms_to_bytes((abs(recent_error_us) - 2500) / 1000);
+            this_snapcast->current_audio_stream_info_.value().ms_to_bytes((abs(recent_error_us) - 25) / 1000);
         size_t actual_bytes_to_remove = std::min(bytes_to_remove, chunk->size - bytes_per_frame);
         output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
         frame_corrections = -this_snapcast->current_audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
