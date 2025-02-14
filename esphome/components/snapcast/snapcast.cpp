@@ -170,6 +170,7 @@ void SnapcastPlayer::send_hello_message_() {
   for (size_t i = 0; i < hello_msg.size(); ++i) {
     hello_msg_buffer.put_uint8(hello_msg.data()[i]);
   }
+  int64_t now = esp_timer_get_time();
 
   BaseMessage base_msg = {
       .type = SNAPCAST_MESSAGE_HELLO,
@@ -244,8 +245,6 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       nodelay = 0;
     }
 
-    int64_t now = esp_timer_get_time();
-
     this_snapcast->send_hello_message_();
 
     bool low_speed_timer_started = false;
@@ -271,12 +270,12 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
       ssize_t read_amount = this_snapcast->socket_->read((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
 
-      now = esp_timer_get_time();
+      int64_t now = esp_timer_get_time();
 
       if (read_amount < BASE_MESSAGE_SIZE) {
         continue;
       }
-
+      BaseMessage base_msg;
       this_snapcast->base_message_deserialize_(&base_msg, base_msg_buffer);
 
       base_msg.received.sec = static_cast<int32_t>(now / 1000000LL);
@@ -356,7 +355,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             }
             size_t offset = 0;
             while (chunk_size > 0) {
-              ssize_t actual_read_size = std::min(chunk_size, MAX_CHUNK_SIZE);
+              ssize_t actual_read_size = std::min((size_t) chunk_size, MAX_CHUNK_SIZE);
               ssize_t bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, actual_read_size);
               chunk_size -= bytes_read;
               if (valid_chunk) {
