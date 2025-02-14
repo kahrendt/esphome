@@ -515,6 +515,13 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       //   }
       // }
 
+      static uint32_t high_water_mark = 0;
+      uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
+      if (new_high_water_mark > high_water_mark) {
+        ESP_LOGD(TAG, "High water mark increased from %d to %d.", high_water_mark, new_high_water_mark);
+        high_water_mark = new_high_water_mark;
+      }
+
       if (!no_socket_error) {
         ESP_LOGD(TAG, "Failed to read from the socket, closing the connection.");
         this_snapcast->socket_->shutdown(0);
