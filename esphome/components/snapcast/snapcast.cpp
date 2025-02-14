@@ -352,7 +352,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             }
             size_t offset = 0;
             while (chunk_size > 0) {
-              ssize_t bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, chunk_size);
+              ssize_t actual_read_size = std::min(chunk_size, MAX_CHUNK_SIZE);
+              ssize_t bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, actual_read_size);
               chunk_size -= bytes_read;
               if (valid_chunk) {
                 offset += bytes_read;
