@@ -168,6 +168,7 @@ class SnapcastPlayer : public Component {
   bool server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str);
 
   std::string client_message_serialize_(ClientInfoMessage *msg);
+  esp_err_t connect_to_server_();
   void send_client_message();
   void send_hello_message_();
   static void snapcast_task(void *params);

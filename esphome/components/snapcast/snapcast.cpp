@@ -193,56 +193,69 @@ void SnapcastPlayer::send_hello_message_() {
   printf("wrote hello message: %s\n", hello_msg.c_str());
 }
 
+esp_err_t SnapcastPlayer::connect_to_server_() {
+  // Connect to first snapcast server found
+
+  mdns_result_t *mdns_result;
+
+  mdns_init();
+
+  ESP_LOGI(TAG, "Lookup snapcast service on network");
+  esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
+
+  if (!mdns_result) {
+    ESP_LOGW(TAG, "No results found for snapcast service!");
+  }
+
+  char ip_address[16];
+  bool use_mdns = false;
+  uint16_t port = this->server_port_;
+  if (mdns_result->addr) {
+    use_mdns = true;
+    sprintf(ip_address, "%d.%d.%d.%d", IP2STR(mdns_result->addr));
+    port = mdns_result->port;
+    ESP_LOGD(TAG, "Found a snapcast server via mdns: " IPSTR, IP2STR(mdns_result->addr));
+  }
+  mdns_query_results_free(mdns_result);
+
+  this->socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
+  struct sockaddr_storage server;
+
+  socklen_t sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), this->server_address_.c_str(),
+                                      this->server_port_);
+  if (use_mdns) {
+    ESP_LOGD(TAG, "Connecting to the snapcast server found vida mdns\n");
+    sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), (const char *) ip_address, port);
+  }
+
+  if (sl == 0) {
+    ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);
+    return ESP_FAIL;
+  }
+  err = this->socket_->connect((struct sockaddr *) &server, sizeof(server));
+  if (err != 0) {
+    ESP_LOGE(TAG, "Socket unable to connect: errno %d", err);
+    return ESP_FAIL;
+  }
+
+  int nodelay = 1;
+  if (this->socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
+    /* If failed to turn on TCP_NODELAY, throw warning and continue */
+    printf("failed to turn on tcp_nodelay\n");
+    nodelay = 0;
+  }
+
+  return ESP_OK;
+}
+
 void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
   RAMAllocator<AudioSyncChunk> chunk_allocator(ExternalRAMAllocator<AudioSyncChunk>::ALLOW_FAILURE);
   while (true) {
-    // Connect to first snapcast server found
-
-    mdns_result_t *mdns_result;
-
-    mdns_init();
-
-    ESP_LOGI(TAG, "Lookup snapcast service on network");
-    esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
-
-    if (!mdns_result) {
-      ESP_LOGW(TAG, "No results found for snapcast service!");
-    }
-
-    char ip_address[16];
-    bool use_mdns = false;
-    uint16_t port = this_snapcast->server_port_;
-    if (mdns_result->addr) {
-      use_mdns = true;
-      sprintf(ip_address, "%d.%d.%d.%d", IP2STR(mdns_result->addr));
-      port = mdns_result->port;
-      printf("found a snapcast server via mdns %s; ip is " IPSTR " sprintf ip %s\n", mdns_result->hostname,
-             IP2STR(mdns_result->addr), ip_address);
-    }
-    mdns_query_results_free(mdns_result);
-
-    this_snapcast->socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
-    struct sockaddr_storage server;
-
-    socklen_t sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server),
-                                        this_snapcast->server_address_.c_str(), this_snapcast->server_port_);
-    if (use_mdns) {
-      printf("socket actually set with mdns\n");
-      sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), (const char *) ip_address, port);
-    }
-
-    if (sl == 0) {
-      ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);
+    if (this_snapcast->connect_to_server_() != ESP_OK) {
+      printf("failed to connect to snapcast server, retrying in 5 seconds\n");
+      vTaskDelay(pdMS_TO_TICKS(5000));
       continue;
-    }
-    err = this_snapcast->socket_->connect((struct sockaddr *) &server, sizeof(server));
-
-    int nodelay = 1;
-    if (this_snapcast->socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
-      /* If failed to turn on TCP_NODELAY, throw warning and continue */
-      printf("failed to turn on tcp_nodelay\n");
-      nodelay = 0;
     }
 
     this_snapcast->send_hello_message_();
