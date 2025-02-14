@@ -169,7 +169,7 @@ class SnapcastPlayer : public Component {
 
   std::string client_message_serialize_(ClientInfoMessage *msg);
   void send_client_message();
-
+  void send_hello_message_();
   static void snapcast_task(void *params);
   static void decode_task(void *params);
   static void sync_task(void *params);

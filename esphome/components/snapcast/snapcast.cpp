@@ -160,6 +160,38 @@ void SnapcastPlayer::time_sync_callback(void *params) {
   this_snapcast->socket_->write((void *) time_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + TIME_MESSAGE_SIZE);
 }
 
+void SnapcastPlayer::send_hello_message_() {
+  std::string hello_msg = this->hello_message_serialize_();
+
+  size_t total_hello_msg_size = hello_msg.size() + sizeof(uint32_t);
+  bytebuffer::ByteBuffer hello_msg_buffer = bytebuffer::ByteBuffer(total_hello_msg_size);
+
+  hello_msg_buffer.put_uint32(total_hello_msg_size);
+  for (size_t i = 0; i < hello_msg.size(); ++i) {
+    hello_msg_buffer.put_uint8(hello_msg.data()[i]);
+  }
+
+  BaseMessage base_msg = {
+      .type = SNAPCAST_MESSAGE_HELLO,
+      .id = 0x0000,
+      .refers_to = 0x0000,
+      .sent = {.sec = static_cast<int32_t>(now / 1000000),
+               .usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL)},
+      .received = {.sec = 0, .usec = 0},
+      .size = total_hello_msg_size,
+  };
+
+  bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE);
+
+  this->base_message_serialize_(&base_msg, base_msg_buffer);
+
+  ssize_t write_amount = this->socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
+
+  write_amount = this->socket_->write((void *) hello_msg_buffer.get_raw_data(), base_msg.size);
+
+  printf("wrote hello message: %s\n", hello_msg.c_str());
+}
+
 void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
   RAMAllocator<AudioSyncChunk> chunk_allocator(ExternalRAMAllocator<AudioSyncChunk>::ALLOW_FAILURE);
@@ -214,35 +246,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
     int64_t now = esp_timer_get_time();
 
-    std::string hello_msg = this_snapcast->hello_message_serialize_();
-
-    size_t total_hello_msg_size = hello_msg.size() + sizeof(uint32_t);
-    bytebuffer::ByteBuffer hello_msg_buffer = bytebuffer::ByteBuffer(total_hello_msg_size);
-
-    hello_msg_buffer.put_uint32(total_hello_msg_size);
-    for (size_t i = 0; i < hello_msg.size(); ++i) {
-      hello_msg_buffer.put_uint8(hello_msg.data()[i]);
-    }
-
-    BaseMessage base_msg = {
-        .type = SNAPCAST_MESSAGE_HELLO,
-        .id = 0x0000,
-        .refers_to = 0x0000,
-        .sent = {.sec = static_cast<int32_t>(now / 1000000),
-                 .usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL)},
-        .received = {.sec = 0, .usec = 0},
-        .size = total_hello_msg_size,
-    };
-
-    bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE);
-
-    this_snapcast->base_message_serialize_(&base_msg, base_msg_buffer);
-
-    ssize_t write_amount = this_snapcast->socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
-
-    write_amount = this_snapcast->socket_->write((void *) hello_msg_buffer.get_raw_data(), base_msg.size);
-
-    printf("wrote hello message: %s\n", hello_msg.c_str());
+    this_snapcast->send_hello_message_();
 
     bool low_speed_timer_started = false;
     bool high_speed_timer_started = false;
@@ -263,7 +267,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
     uint32_t client_message_delay = 60000000;
 
     while (true) {
-      base_msg_buffer.rewind();
+      bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE);
 
       ssize_t read_amount = this_snapcast->socket_->read((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
 
