@@ -42,52 +42,9 @@ static const uint32_t NORMAL_SYNC_LATENCY_BUF = 1000000;  // in µs
 
 void SnapcastPlayer::start() {
   this->speaker_->add_audio_output_callback([this](uint32_t frames_played, int64_t write_timestamp) {
-    if (!this->chunk_timings_.empty()) {
-      bool new_chunk = false;
-      int32_t accumulated_chunk_corrections = 0;
-      AudioSyncChunkTimings front_chunk = this->chunk_timings_.front();
-      while (front_chunk.total_frames < frames_played) {
-        frames_played -= front_chunk.total_frames;
-        accumulated_chunk_corrections += front_chunk.frame_corrections;
-
-        this->chunk_timings_.pop_front();
-        front_chunk = this->chunk_timings_.front();
-
-        new_chunk = true;
-      }
-
-      // Now we are in the middle of the current audio chunk
-
-      int64_t full_precision_microseconds =
-          (frames_played * 1000000LL) /
-          static_cast<int64_t>(this->current_audio_stream_info_.value().get_sample_rate());
-      int64_t server_timestamp_finished = front_chunk.server_timestamp + full_precision_microseconds;
-      int64_t equivalent_client_timestamp = server_timestamp_finished -
-                                            this->server_internal_clock_offset_.get_most_recent_median() +
-                                            (this->snapcast_buffer_duration_ms_ - this->snapcast_latency_ms_) * 1000;
-      this->chunk_timings_.front().total_frames -= frames_played;
-      this->chunk_timings_.front().server_timestamp = server_timestamp_finished;
-
-      if (abs(accumulated_chunk_corrections) > 10) {
-        // Very large change, our median filter will be slow to a adapt
-        this->actual_offsets_.reset();
-      }
-      this->pending_frame_corrections_ -= accumulated_chunk_corrections;
-
-      int64_t internal_latency_written = front_chunk.internal_timestamp + full_precision_microseconds;
-      // if (new_chunk) {
-      int64_t new_error = equivalent_client_timestamp - write_timestamp;
-
-      // xQueueSend(this->actual_offset_queue_, &new_error, 0);
-      this->actual_offsets_.update(new_error);
-      if (new_error > 22982976707978547LL) {
-        printf("weirdly huge error. server timestamp should have been %" PRId64 "; client timestamp %" PRId64
-               "; actually written %" PRId64 "\n",
-               server_timestamp_finished, equivalent_client_timestamp, write_timestamp);
-      }
-
-      this->internal_latency_.update(internal_latency_written - write_timestamp);
-      // }
+    PlaybackInfo playback_info = {.frames_played = frames_played, .write_timestamp = write_timestamp};
+    if (!xQueueSend(this->playback_info_queue_, &playback_info, 0)) {
+      ESP_LOGE(TAG, "Playback info queue was full");
     }
   });
 
@@ -112,6 +69,8 @@ void SnapcastPlayer::start() {
                          &decoded_chunk_data_queue_buffer_);
   // this->encoded_chunk_data_queue_ = xQueueCreate(20, sizeof(AudioSyncChunk));
   xTaskCreate(snapcast_task, "snapcast", 1024 * 5, (void *) this, 5, &this->snapcast_task_handle_);
+
+  this->playback_info_queue_ = xQueueCreate(10, sizeof(PlaybackInfo));
 }
 
 void SnapcastPlayer::loop() {}
@@ -631,6 +590,60 @@ void SnapcastPlayer::sync_task(void *params) {
     uint8_t synced_chunks = 0;
     while (true) {
       output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
+
+      PlaybackInfo playback_info;
+      while (xQueueReceive(this_snapcast->playback_info_queue_, &playback_info, 0) == pdTRUE) {
+        if (!this_snapcast->chunk_timings_.empty()) {
+          uint32_t frames_played = playback_info.frames_played;
+          int64_t write_timestamp = playback_info.write_timestamp;
+
+          bool new_chunk = false;
+          int32_t accumulated_chunk_corrections = 0;
+          AudioSyncChunkTimings front_chunk = this_snapcast->chunk_timings_.front();
+          while (front_chunk.total_frames < frames_played) {
+            frames_played -= front_chunk.total_frames;
+            accumulated_chunk_corrections += front_chunk.frame_corrections;
+
+            this_snapcast->chunk_timings_.pop_front();
+            front_chunk = this_snapcast->chunk_timings_.front();
+
+            new_chunk = true;
+          }
+
+          // Now we are in the middle of the current audio chunk
+
+          int64_t full_precision_microseconds =
+              (frames_played * 1000000LL) /
+              static_cast<int64_t>(this_snapcast->current_audio_stream_info_.value().get_sample_rate());
+          int64_t server_timestamp_finished = front_chunk.server_timestamp + full_precision_microseconds;
+          int64_t equivalent_client_timestamp =
+              server_timestamp_finished - this_snapcast->server_internal_clock_offset_.get_most_recent_median() +
+              (this_snapcast->snapcast_buffer_duration_ms_ - this_snapcast->snapcast_latency_ms_) * 1000;
+          this_snapcast->chunk_timings_.front().total_frames -= frames_played;
+          this_snapcast->chunk_timings_.front().server_timestamp = server_timestamp_finished;
+
+          if (abs(accumulated_chunk_corrections) > 10) {
+            // Very large change, our median filter will be slow to a adapt
+            this_snapcast->actual_offsets_.reset();
+          }
+          this_snapcast->pending_frame_corrections_ -= accumulated_chunk_corrections;
+
+          int64_t internal_latency_written = front_chunk.internal_timestamp + full_precision_microseconds;
+          // if (new_chunk) {
+          int64_t new_error = equivalent_client_timestamp - write_timestamp;
+
+          this_snapcast->actual_offsets_.update(new_error);
+          if (new_error > 22982976707978547LL) {
+            printf("weirdly huge error. server timestamp should have been %" PRId64 "; client timestamp %" PRId64
+                   "; actually written %" PRId64 "\n",
+                   server_timestamp_finished, equivalent_client_timestamp, write_timestamp);
+          }
+
+          this_snapcast->internal_latency_.update(internal_latency_written - write_timestamp);
+          // }
+        }
+      }
+
       if (!xQueuePeek(this_snapcast->decoded_chunk_data_queue_, chunk, pdMS_TO_TICKS(20))) {
         continue;
       }

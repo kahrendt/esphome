@@ -18,7 +18,7 @@ namespace snapcast {
 
 static const size_t MAX_CHUNK_SIZE = 8000;
 
-enum message_type {
+enum MessageType {
   SNAPCAST_MESSAGE_BASE = 0,
   SNAPCAST_MESSAGE_CODEC_HEADER = 1,
   SNAPCAST_MESSAGE_WIRE_CHUNK = 2,
@@ -26,6 +26,11 @@ enum message_type {
   SNAPCAST_MESSAGE_TIME = 4,
   SNAPCAST_MESSAGE_HELLO = 5,
   SNAPCAST_MESSAGE_CLIENT_INFO = 7,
+};
+
+struct PlaybackInfo {
+  uint32_t frames_played;
+  int64_t write_timestamp;
 };
 
 struct AudioSyncChunk {
@@ -136,11 +141,7 @@ class SnapcastPlayer : public Component {
         server_internal_clock_offset_(MedianFilter(50)),
         actual_offsets_(MedianFilter(3)){};
   float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
-  void setup() override {
-    this->actual_offset_queue_ = xQueueCreate(20, sizeof(int64_t));
-
-    this->start();
-  }
+  void setup() override { this->start(); }
   void loop() override;
 
   void start();
@@ -156,7 +157,7 @@ class SnapcastPlayer : public Component {
   std::string server_address_;
   uint16_t server_port_;
 
-  QueueHandle_t actual_offset_queue_;
+  QueueHandle_t playback_info_queue_;
 
   void base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
   void base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
