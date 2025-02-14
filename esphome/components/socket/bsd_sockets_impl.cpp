@@ -88,7 +88,7 @@ class BSDSocketImpl : public Socket {
     return ::setsockopt(fd_, level, optname, optval, optlen);
   }
   int listen(int backlog) override { return ::listen(fd_, backlog); }
-  ssize_t read(void *buf, size_t len) override { return ::read(fd_, buf, len); }
+  int read(void *buf, size_t len) override { return ::read(fd_, buf, len); }
   ssize_t recvfrom(void *buf, size_t len, sockaddr *addr, socklen_t *addr_len) override {
 #if defined(USE_ESP32) || defined(USE_HOST)
     return ::recvfrom(this->fd_, buf, len, 0, addr, addr_len);
@@ -103,7 +103,7 @@ class BSDSocketImpl : public Socket {
     return ::readv(fd_, iov, iovcnt);
 #endif
   }
-  ssize_t write(const void *buf, size_t len) override { return ::write(fd_, buf, len); }
+  int write(const void *buf, size_t len) override { return ::write(fd_, buf, len); }
   ssize_t send(void *buf, size_t len, int flags) { return ::send(fd_, buf, len, flags); }
   ssize_t writev(const struct iovec *iov, int iovcnt) override {
 #if defined(USE_ESP32)

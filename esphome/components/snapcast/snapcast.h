@@ -169,8 +169,8 @@ class SnapcastPlayer : public Component {
 
   std::string client_message_serialize_(ClientInfoMessage *msg);
   esp_err_t connect_to_server_();
-  void send_client_message();
-  void send_hello_message_();
+  esp_err_t send_client_message_();
+  esp_err_t send_hello_message_();
   static void snapcast_task(void *params);
   static void decode_task(void *params);
   static void sync_task(void *params);
@@ -181,7 +181,7 @@ class SnapcastPlayer : public Component {
 
   optional<audio::AudioStreamInfo> current_audio_stream_info_;
 
-  static void time_sync_callback(void *params);
+  esp_err_t send_time_message_();
 
   bool first_audio_played_{true};
   int64_t initial_playback_timestamp_{0};
