@@ -474,10 +474,10 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       //   }
       // }
 
-      static uint32_t high_water_mark = 0;
+      static uint32_t high_water_mark = 8192;
       uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
-      if (new_high_water_mark > high_water_mark) {
-        ESP_LOGD(TAG, "High water mark increased from %d to %d.", high_water_mark, new_high_water_mark);
+      if (new_high_water_mark < high_water_mark) {
+        ESP_LOGD(TAG, "Snapcast task - High water mark increased from %d to %d.", high_water_mark, new_high_water_mark);
         high_water_mark = new_high_water_mark;
       }
 
@@ -573,6 +573,12 @@ void SnapcastPlayer::decode_task(void *params) {
         }
       }
     }
+    static uint32_t high_water_mark = 8192;
+    uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
+    if (new_high_water_mark < high_water_mark) {
+      ESP_LOGD(TAG, "Decode task - High water mark increased from %d to %d.", high_water_mark, new_high_water_mark);
+      high_water_mark = new_high_water_mark;
+    }
   }
 }
 
@@ -589,6 +595,12 @@ void SnapcastPlayer::sync_task(void *params) {
     bool run_once = false;
     uint8_t synced_chunks = 0;
     while (true) {
+      static uint32_t high_water_mark = 8192;
+      uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
+      if (new_high_water_mark < high_water_mark) {
+        ESP_LOGD(TAG, "Sync task - High water mark increased from %d to %d.", high_water_mark, new_high_water_mark);
+        high_water_mark = new_high_water_mark;
+      }
       output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
 
       PlaybackInfo playback_info;
