@@ -206,20 +206,21 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
   ESP_LOGI(TAG, "Lookup snapcast service on network");
   esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
 
-  if (!mdns_result) {
-    ESP_LOGW(TAG, "No results found for snapcast service!");
-  }
-
   char ip_address[16];
   bool use_mdns = false;
   uint16_t port = this->server_port_;
-  if (mdns_result->addr) {
-    use_mdns = true;
-    sprintf(ip_address, "%d.%d.%d.%d", IP2STR(mdns_result->addr));
-    port = mdns_result->port;
-    ESP_LOGD(TAG, "Found a snapcast server via mdns: " IPSTR, IP2STR(mdns_result->addr));
+
+  if (!mdns_result) {
+    ESP_LOGW(TAG, "No results found for snapcast service!");
+  } else {
+    if (mdns_result->addr) {
+      use_mdns = true;
+      sprintf(ip_address, "%d.%d.%d.%d", IP2STR(mdns_result->addr));
+      port = mdns_result->port;
+      ESP_LOGD(TAG, "Found a snapcast server via mdns: " IPSTR, IP2STR(mdns_result->addr));
+    }
+    mdns_query_results_free(mdns_result);
   }
-  mdns_query_results_free(mdns_result);
 
   this->socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
   struct sockaddr_storage server;
