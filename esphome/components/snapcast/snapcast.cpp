@@ -273,7 +273,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
     while (true) {
       bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE);
 
-      int read_amount = this_snapcast->socket_->read((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
+      ssize_t read_amount = this_snapcast->socket_->read((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
 
       if (read_amount == -1) {
         no_socket_error = false;
@@ -286,8 +286,10 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       int64_t now = esp_timer_get_time();
 
       if (read_amount < BASE_MESSAGE_SIZE) {
+        ESP_LOGE(TAG, "read something smaller than the base message, this is potentially problematic!");
         continue;
       }
+
       BaseMessage base_msg;
       this_snapcast->base_message_deserialize_(&base_msg, base_msg_buffer);
 
@@ -341,7 +343,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             printf("codec header has length %d\n", codec_len);
             size_t offset = 0;
             while (codec_len > 0) {
-              int bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, codec_len);
+              ssize_t bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, codec_len);
               if (bytes_read == -1) {
                 no_socket_error = false;
                 break;
@@ -392,7 +394,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             size_t offset = 0;
             while (chunk_size > 0) {
               ssize_t actual_read_size = std::min((size_t) chunk_size, MAX_CHUNK_SIZE);
-              int bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, actual_read_size);
+              ssize_t bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, actual_read_size);
               if (bytes_read == -1) {
                 no_socket_error = false;
                 break;
