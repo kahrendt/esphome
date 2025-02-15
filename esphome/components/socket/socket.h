@@ -32,7 +32,7 @@ class Socket {
   virtual int setsockopt(int level, int optname, const void *optval, socklen_t optlen) = 0;
   virtual int listen(int backlog) = 0;
   virtual ssize_t read(void *buf, size_t len) = 0;
-  virtual ssize_t recv(void *buf, sizee_t len, int flags) = 0;
+  virtual ssize_t recv(void *buf, size_t len, int flags) = 0;
 #ifdef USE_SOCKET_IMPL_BSD_SOCKETS
   virtual ssize_t recvfrom(void *buf, size_t len, sockaddr *addr, socklen_t *addr_len) = 0;
 #endif
