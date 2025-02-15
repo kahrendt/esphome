@@ -39,6 +39,7 @@ struct AudioSyncChunk {
   size_t size;
   bool codec_header = false;
   uint8_t data[MAX_CHUNK_SIZE];
+  size_t offset{0};
 };
 
 struct AudioSyncChunkTimings {

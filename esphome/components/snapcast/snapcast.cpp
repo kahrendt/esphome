@@ -296,6 +296,31 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       base_msg.received.sec = static_cast<int32_t>(now / 1000000LL);
       base_msg.received.usec = static_cast<int32_t>(now - now / 1000000LL);
 
+      size_t offset = 0;
+      size_t base_msg_size = base_msg.size;
+      if (base_msg_size > MAX_CHUNK_SIZE) {
+        ESP_LOGD(TAG, "message size is bigger than the max chunk size, problematic! Message size = %d", base_msg_size);
+        continue;
+      }
+      while (base_msg_size > 0) {
+        ssize_t bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, base_msg_size);
+        if (bytes_read == -1) {
+          no_socket_error = false;
+          break;
+        }
+        base_msg_size -= bytes_read;
+        offset += bytes_read;
+      }
+      chunk->offset = 0;
+      chunk->size = bytes_read;
+
+      if (!no_socket_error) {
+        ESP_LOGD(TAG, "Failed to read from the socket, closing the connection.");
+        this_snapcast->socket_->shutdown(0);
+        this_snapcast->socket_->close();
+        break;
+      }
+
       if (high_speed_timer_started && this_snapcast->server_internal_clock_offset_.is_full()) {
         high_speed_timer_started = false;
         low_speed_timer_started = true;
@@ -306,32 +331,29 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
         case SNAPCAST_MESSAGE_CODEC_HEADER: {
           ESP_LOGD(TAG, "Received a new codec header message.");
 
-          printf("header message has %d bytes\n", base_msg.size);
-          uint8_t codec_id = 0;
-          uint32_t codec_len = 0;
-          if (this_snapcast->socket_->read(&codec_len, sizeof(uint32_t)) == -1) {
-            no_socket_error = false;
-            break;
-          }
+          uint32_t codec_len = *reinterpret_cast<uint32_t *>(audio_chunk->data + audio_chunk->offset);
+          audio_chunk->offset += sizeof(uint32_t);
+          audio_chunk->size -= sizeof(uint32_t);
 
           std::string codec_type;
           codec_type.resize(codec_len);
+          std::memcpy((void *) codec_type.data(), (void *) (audio_chunk->data + audio_chunk->offset), codec_len);
 
-          printf("codec type string has length %d\n", codec_len);
-          if (this_snapcast->socket_->read(&codec_type[0], codec_len) == -1) {
-            no_socket_error = false;
-            break;
-          }
+          audio_chunk->offset += codec_len;
+          audio_chunk->size -= codec_len;
 
-          codec_len = 0;
+          codec_len = *reinterpret_cast<uint32_t *>(audio_chunk->data + audio_chunk->offset);
+          audio_chunk->offset += = sizeof(uint32_t);
+          audio_chunk->size -= sizeof(uint32_t);
 
-          if (this_snapcast->socket_->read(&codec_len, sizeof(uint32_t)) == -1) {
+          if (codec_len != audio_chunk->size) {
+            ESP_LOGE(TAG, "Codec length doesn't match base size! Base size = %d; codec header = %d", audio_chunk->size,
+                     codec_len);
             no_socket_error = false;
             break;
           }
 
           audio_chunk->server_timestamp = 0;
-          audio_chunk->size = codec_len;
           audio_chunk->codec_header = true;
           if (codec_len > 0) {
             // this_snapcast->speaker_->stop();
@@ -340,18 +362,18 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             new_file_start = true;
             xQueueReset(this_snapcast->encoded_chunk_data_queue_);
 
-            printf("codec header has length %d\n", codec_len);
-            size_t offset = 0;
-            while (codec_len > 0) {
-              ssize_t bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, codec_len);
-              if (bytes_read == -1) {
-                no_socket_error = false;
-                break;
-              }
-              codec_len -= bytes_read;
-              offset += bytes_read;
-            }
-            printf("send %d bytes to flac decoder for the header\n", offset);
+            // printf("codec header has length %d\n", codec_len);
+            // size_t offset = 0;
+            // while (codec_len > 0) {
+            //   ssize_t bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, codec_len);
+            //   if (bytes_read == -1) {
+            //     no_socket_error = false;
+            //     break;
+            //   }
+            //   codec_len -= bytes_read;
+            //   offset += bytes_read;
+            // }
+            // printf("send %d bytes to flac decoder for the header\n", offset);
 
             xQueueSend(this_snapcast->encoded_chunk_data_queue_, audio_chunk, portMAX_DELAY);
 
@@ -370,40 +392,56 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
         case SNAPCAST_MESSAGE_WIRE_CHUNK: {
           bool valid_chunk = this_snapcast->current_audio_stream_info_.has_value();
 
-          int32_t timestamp_s;
-          int32_t timestamp_us;
-          uint32_t chunk_size;
-          if ((this_snapcast->socket_->read(&timestamp_s, sizeof(timestamp_s)) == -1) ||
-              (this_snapcast->socket_->read(&timestamp_us, sizeof(timestamp_us)) == -1) ||
-              (this_snapcast->socket_->read(&chunk_size, sizeof(chunk_size)) == -1)) {
+          int32_t timestamp_s = *reinterpret_cast<int32_t *>(audio_chunk->data + audio_chunk->offset);
+          audio_chunk->offset += sizeof(int32_t);
+          audio_chunk->size -= sizeof(int32_t);
+          int32_t timestamp_us = *reinterpret_cast<int32_t *>(audio_chunk->data + audio_chunk->offset);
+          audio_chunk->offset += sizeof(int32_t);
+          audio_chunk->size -= sizeof(int32_t);
+          uint32_t chunk_size = *reinterpret_cast<uint32_t *>(audio_chunk->data + audio_chunk->offset);
+          audio_chunk->offset += sizeof(uint32_t);
+          audio_chunk->size -= sizeof(uint32_t);
+
+          if (chunk_size != audio_chunk->size) {
+            ESP_LOGE(TAG, "Wire chunk size doesn't match base size! Base size = %d; wire chunk = %d", audio_chunk->size,
+                     chunk_size);
             no_socket_error = false;
+            break;
           }
+          // int32_t timestamp_s;
+          // int32_t timestamp_us;
+          // uint32_t chunk_size;
+          // if ((this_snapcast->socket_->read(&timestamp_s, sizeof(timestamp_s)) == -1) ||
+          //     (this_snapcast->socket_->read(&timestamp_us, sizeof(timestamp_us)) == -1) ||
+          //     (this_snapcast->socket_->read(&chunk_size, sizeof(chunk_size)) == -1)) {
+          //   no_socket_error = false;
+          // }
 
           int64_t total_timestamp_us =
               static_cast<int64_t>(timestamp_s) * 1000000LL + static_cast<int64_t>(timestamp_us);
 
           audio_chunk->codec_header = false;
           audio_chunk->server_timestamp = total_timestamp_us;
-          audio_chunk->size = chunk_size;
+          // audio_chunk->size = chunk_size;
           if (chunk_size > 0) {
-            if (chunk_size > MAX_CHUNK_SIZE) {
-              valid_chunk = false;
-              printf("got a wire chunk that had too big of a size: %d base message said size was %d\n", chunk_size,
-                     base_msg.size);
-            }
-            size_t offset = 0;
-            while (chunk_size > 0) {
-              ssize_t actual_read_size = std::min((size_t) chunk_size, MAX_CHUNK_SIZE);
-              ssize_t bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, actual_read_size);
-              if (bytes_read == -1) {
-                no_socket_error = false;
-                break;
-              }
-              chunk_size -= bytes_read;
-              if (valid_chunk) {
-                offset += bytes_read;
-              }
-            }
+            // if (chunk_size > MAX_CHUNK_SIZE) {
+            //   valid_chunk = false;
+            //   printf("got a wire chunk that had too big of a size: %d base message said size was %d\n", chunk_size,
+            //          base_msg.size);
+            // }
+            // size_t offset = 0;
+            // while (chunk_size > 0) {
+            //   ssize_t actual_read_size = std::min((size_t) chunk_size, MAX_CHUNK_SIZE);
+            //   ssize_t bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, actual_read_size);
+            //   if (bytes_read == -1) {
+            //     no_socket_error = false;
+            //     break;
+            //   }
+            //   chunk_size -= bytes_read;
+            //   if (valid_chunk) {
+            //     offset += bytes_read;
+            //   }
+            // }
 
             if (low_speed_timer_started && valid_chunk && no_socket_error) {
               if (!xQueueSend(this_snapcast->encoded_chunk_data_queue_, audio_chunk, 0)) {
@@ -415,17 +453,26 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           break;
         }
         case SNAPCAST_MESSAGE_SERVER_SETTINGS: {
-          uint32_t server_settings_len = 0;
-          if (this_snapcast->socket_->read(&server_settings_len, sizeof(uint32_t)) == -1) {
+          uint32_t server_settings_len = *reinterpret_cast<uint32_t *>(audio_chunk->data + audio_chunk->offset);
+          audio_chunk->offset += sizeof(uint32_t);
+          audio_chunk->size -= sizeof(uint32_t);
+
+          if (server_settings_len != audio_chunk->size) {
+            ESP_LOGE(TAG,
+                     "Server settings messag size doesn't match base size! Base size = %d; server settings size = %d",
+                     audio_chunk->size, server_settings_len);
             no_socket_error = false;
             break;
           }
+
           if (server_settings_len > 0) {
             std::string server_msg_read_data;
             server_msg_read_data.resize(server_settings_len);
-            if (this_snapcast->socket_->read(&server_msg_read_data[0], server_settings_len) == -1) {
-              no_socket_error = false;
-            }
+            std::memcpy((void *) server_msg_read_data.data(), (void *) (audio_chunk->data + audio_chunk->offset),
+                        codec_len);
+            // if (this_snapcast->socket_->read(&server_msg_read_data[0], server_settings_len) == -1) {
+            //   no_socket_error = false;
+            // }
 
             ServerSettingsMessage server_settings_msg;
             this_snapcast->server_settings_message_deserialize_(&server_settings_msg, server_msg_read_data.c_str());
@@ -448,13 +495,20 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           break;
         }
         case SNAPCAST_MESSAGE_TIME: {
-          int32_t latency_s;
-          int32_t latency_us;
-          if ((this_snapcast->socket_->read(&latency_s, sizeof(latency_s)) == -1) ||
-              (this_snapcast->socket_->read(&latency_us, sizeof(latency_us)) == -1)) {
-            no_socket_error = false;
-            break;
-          }
+          int32_t latency_s = *reinterpret_cast<int32_t *>(audio_chunk->data + audio_chunk->offset);
+          audio_chunk->offset += sizeof(int32_t);
+          audio_chunk->size -= sizeof(int32_t);
+          int32_t latency_us = *reinterpret_cast<int32_t *>(audio_chunk->data + audio_chunk->offset);
+          audio_chunk->offset += sizeof(int32_t);
+          audio_chunk->size -= sizeof(int32_t);
+
+          // int32_t latency_s;
+          // int32_t latency_us;
+          // if ((this_snapcast->socket_->read(&latency_s, sizeof(latency_s)) == -1) ||
+          //     (this_snapcast->socket_->read(&latency_us, sizeof(latency_us)) == -1)) {
+          //   no_socket_error = false;
+          //   break;
+          // }
 
           int64_t time_rx_us = now;
 
@@ -547,7 +601,7 @@ void SnapcastPlayer::decode_task(void *params) {
 
     if (xQueueReceive(this_snapcast->encoded_chunk_data_queue_, encoded_chunk, pdMS_TO_TICKS(20))) {
       if (encoded_chunk->codec_header) {
-        auto result = flac_decoder->read_header(encoded_chunk->data, encoded_chunk->size);
+        auto result = flac_decoder->read_header(encoded_chunk->data + encoded_chunk->offset, encoded_chunk->size);
 
         if (result == esp_audio_libs::flac::FLAC_DECODER_HEADER_OUT_OF_DATA) {
           printf("need more data\n");
@@ -575,7 +629,7 @@ void SnapcastPlayer::decode_task(void *params) {
 
       } else if (flac_decoder != nullptr) {
         uint32_t output_samples = 0;
-        auto result = flac_decoder->decode_frame(encoded_chunk->data, encoded_chunk->size,
+        auto result = flac_decoder->decode_frame(encoded_chunk->data + encoded_chunk->offset, encoded_chunk->size,
                                                  reinterpret_cast<int16_t *>(decoded_chunk->data), &output_samples);
 
         if (result == esp_audio_libs::flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
