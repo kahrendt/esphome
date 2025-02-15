@@ -188,6 +188,8 @@ class SnapcastPlayer : public Component {
 
   esp_err_t send_time_message_();
 
+  optional<uint16_t> volume_;
+
   bool first_audio_played_{true};
   int64_t initial_playback_timestamp_{0};
 

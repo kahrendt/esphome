@@ -95,6 +95,10 @@ void SnapcastPlayer::loop() {
       this->speaker_->stop();
     }
   }
+  if (this->volume_.has_value()) {
+    this->speaker_->set_volume(static_cast<float>(this->volume_.value()) / 100.0f);
+    this->volume_.reset();
+  }
 }
 
 esp_err_t SnapcastPlayer::send_client_message_() {
@@ -138,8 +142,13 @@ esp_err_t SnapcastPlayer::send_time_message_() {
   this->base_message_serialize_(&base_msg_for_time, time_msg_buffer);
   time_msg_buffer.put_int32(0);
   time_msg_buffer.put_int32(0);
-  if (this->socket_->write((void *) time_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + TIME_MESSAGE_SIZE) == -1) {
+  ssize_t time_msg_written =
+      this->socket_->write((void *) time_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + TIME_MESSAGE_SIZE);
+  if (time_msg_written == -1) {
     return ESP_FAIL;
+  }
+  if (time_msg_written < BASE_MESSAGE_SIZE + TIME_MESSAGE_SIZE) {
+    ESP_LOGE(TAG, "Time message didn't fully send!");
   }
   return ESP_OK;
 }
@@ -302,7 +311,10 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       offset = 0;
       size_t base_msg_size = base_msg.size;
       if (base_msg_size > MAX_CHUNK_SIZE) {
-        ESP_LOGE(TAG, "message size is bigger than the max chunk size, problematic! Message size = %d", base_msg_size);
+        ESP_LOGE(TAG,
+                 "message size is bigger than the max chunk size, problematic! Message size = %" PRIu32
+                 ". Message type = %d",
+                 base_msg_size, base_msg.type);
         continue;
       }
       while (base_msg_size > 0) {
@@ -445,7 +457,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             }
             this_snapcast->snapcast_latency_ms_ = server_settings_msg.latency;
 
-            this_snapcast->speaker_->set_volume(static_cast<float>(server_settings_msg.volume) / 100.0f);
+            this_snapcast->volume_ = server_settings_msg.volume;
+            // this_snapcast->speaker_->set_volume(static_cast<float>(server_settings_msg.volume) / 100.0f);
             this_snapcast->speaker_->set_mute_state(server_settings_msg.muted);
             this_snapcast->external_mute_ = server_settings_msg.muted;
           }
