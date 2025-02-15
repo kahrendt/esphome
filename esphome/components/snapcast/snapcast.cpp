@@ -286,7 +286,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
       size_t offset = 0;
       while (read_amount > 0) {
-        ssize_t bytes_read = this_snapcast->socket_->read((void *) base_msg_buffer.get_raw_data(), read_amount);
+        ssize_t bytes_read =
+            this_snapcast->socket_->read((void *) (base_msg_buffer.get_raw_data() + offset), read_amount);
 
         if (bytes_read == -1) {
           no_socket_error = false;
