@@ -37,6 +37,7 @@ class ResamplerSpeaker : public Component, public speaker::Speaker {
 
   /// @brief Volume state changes are passed to the parent's output speaker
   void set_volume(float volume) override;
+  float get_volume() override;
 
   void set_output_speaker(speaker::Speaker *speaker) { this->output_speaker_ = speaker; }
   void set_task_stack_in_psram(bool task_stack_in_psram) { this->task_stack_in_psram_ = task_stack_in_psram; }

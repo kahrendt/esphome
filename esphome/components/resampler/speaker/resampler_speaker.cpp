@@ -252,6 +252,8 @@ void ResamplerSpeaker::set_volume(float volume) {
   this->output_speaker_->set_volume(volume);
 }
 
+float ResamplerSpeaker::get_volume() { return this->output_speaker_->get_volume(); }
+
 bool ResamplerSpeaker::requires_resampling_() const {
   return (this->audio_stream_info_.get_sample_rate() != this->target_sample_rate_) ||
          (this->audio_stream_info_.get_bits_per_sample() != this->target_bits_per_sample_);

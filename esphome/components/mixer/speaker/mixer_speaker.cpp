@@ -194,6 +194,7 @@ void SourceSpeaker::set_volume(float volume) {
   this->volume_ = volume;
   this->parent_->get_output_speaker()->set_volume(volume);
 }
+float SourceSpeaker::get_volume() { return this->parent_->get_output_speaker()->get_volume(); }
 
 size_t SourceSpeaker::process_data_from_source(TickType_t ticks_to_wait) {
   std::shared_ptr<audio::AudioSourceTransferBuffer> temp_transfer_buffer = this->transfer_buffer_;

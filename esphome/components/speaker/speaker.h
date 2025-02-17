@@ -76,7 +76,7 @@ class Speaker {
     }
 #endif
   };
-  float get_volume() { return this->volume_; }
+  virtual float get_volume() { return this->volume_; }
 
   virtual void set_mute_state(bool mute_state) {
     this->mute_state_ = mute_state;
