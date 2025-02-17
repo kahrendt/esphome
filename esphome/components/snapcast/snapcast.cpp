@@ -86,7 +86,7 @@ void SnapcastPlayer::start() {
 
 void SnapcastPlayer::loop() {
   EventBits_t event_bits = xEventGroupGetBits(this->event_group_);
-  if ((event_bits & (DECODE_FINISHED | SYNC_FINISHED)) && this->speaker_->is_stopped()) {
+  if (event_bits & (DECODE_FINISHED | SYNC_FINISHED)) {
     if (this->speaker_->is_stopped()) {
       xQueueReset(this->playback_info_queue_);
       xEventGroupClearBits(this->event_group_, (COMMAND_STOP | DECODE_FINISHED | SYNC_FINISHED));
@@ -100,26 +100,32 @@ void SnapcastPlayer::loop() {
   }
 }
 
-esp_err_t SnapcastPlayer::send_client_message_() {
-  ClientInfoMessage client_msg = {.volume = static_cast<uint32_t>(this->speaker_->get_volume() * 100.0f),
-                                  .muted = this->external_mute_};
-  std::string json_client_msg = this->client_message_serialize_(&client_msg);
-  int64_t now = esp_timer_get_time();
-  bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE);
-  BaseMessage base_msg_for_client_info = {
-      .type = SNAPCAST_MESSAGE_CLIENT_INFO,
-      .id = 0x0000,
-      .refers_to = 0x0000,
-      .sent = {.sec = static_cast<int32_t>(now / 1000000LL),
-               .usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL)},
-      .received = {.sec = 0, .usec = 0},
-      .size = json_client_msg.size(),
-  };
-  this->base_message_serialize_(&base_msg_for_client_info, base_msg_buffer);
+esp_err_t SnapcastPlayer::send_client_message() {
+  if (this->connected_) {
+    ClientInfoMessage client_msg = {.volume = static_cast<uint32_t>(this->speaker_->get_volume() * 100.0f),
+                                    .muted = this->external_mute_};
+    std::string json_client_msg = this->client_message_serialize_(&client_msg);
+    size_t client_message_size = json_client_msg.size() + sizeof(uint32_t);
 
-  if ((this->socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE) == -1) ||
-      (this->socket_->write((void *) json_client_msg.data(), json_client_msg.size()) == -1)) {
-    return ESP_FAIL;
+    int64_t now = esp_timer_get_time();
+    bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE + sizeof(uint32_t));
+    BaseMessage base_msg_for_client_info = {
+        .type = SNAPCAST_MESSAGE_CLIENT_INFO,
+        .id = 0x0000,
+        .refers_to = 0x0000,
+        .sent = {.sec = static_cast<int32_t>(now / 1000000LL),
+                 .usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL)},
+        .received = {.sec = 0, .usec = 0},
+        .size = client_message_size,
+    };
+    this->base_message_serialize_(&base_msg_for_client_info, base_msg_buffer);
+    base_msg_buffer.put_uint32(json_client_msg.size());
+
+    if ((this->socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + sizeof(uint32_t)) == -1) ||
+        (this->socket_->write((void *) json_client_msg.data(), json_client_msg.size()) == -1)) {
+      return ESP_FAIL;
+    }
+    printf("Sent client message: %s", json_client_msg.c_str());
   }
   return ESP_OK;
 }
@@ -150,6 +156,11 @@ esp_err_t SnapcastPlayer::send_time_message_() {
     ESP_LOGE(TAG, "Time message didn't fully send!");
   }
   return ESP_OK;
+}
+
+void SnapcastPlayer::timesync_callback(void *params) {
+  SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
+  this_snapcast->send_time_message_();
 }
 
 esp_err_t SnapcastPlayer::send_hello_message_() {
@@ -244,7 +255,19 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
 void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
   RAMAllocator<AudioSyncChunk> chunk_allocator(ExternalRAMAllocator<AudioSyncChunk>::ALLOW_FAILURE);
+  esp_timer_handle_t timesync_message_timer;
+  static const esp_timer_create_args_t timer_for_syncing_args = {.callback = &timesync_callback,
+                                                                 .arg = (void *) this_snapcast,
+                                                                 .dispatch_method = ESP_TIMER_TASK,
+                                                                 .name = "time_sync",
+                                                                 .skip_unhandled_events = false};
+  // create a timer to send time sync messages every x µs
+  esp_timer_create(&timer_for_syncing_args, &timesync_message_timer);
+
   while (true) {
+    this_snapcast->connected_ = false;
+    esp_timer_stop(timesync_message_timer);
+
     if (this_snapcast->connect_to_server_() != ESP_OK) {
       ESP_LOGW(TAG, "Failed to connect to snapcast server, retrying in 5 seconds\n");
       vTaskDelay(pdMS_TO_TICKS(5000));
@@ -257,6 +280,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       this_snapcast->socket_->close();
       continue;
     }
+
+    this_snapcast->connected_ = true;
 
     bool low_speed_timer_started = false;
     bool high_speed_timer_started = false;
@@ -342,6 +367,10 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
         high_speed_timer_started = false;
         low_speed_timer_started = true;
         time_message_delay = NORMAL_SYNC_LATENCY_BUF;
+        esp_timer_stop(timesync_message_timer);
+        if (!esp_timer_is_active(timesync_message_timer)) {
+          esp_timer_start_periodic(timesync_message_timer, time_message_delay);
+        }
       }
 
       switch (base_msg.type) {
@@ -388,6 +417,10 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
           if (!low_speed_timer_started) {
             time_message_delay = FAST_SYNC_LATENCY_BUF;
+            esp_timer_stop(timesync_message_timer);
+            if (!esp_timer_is_active(timesync_message_timer)) {
+              esp_timer_start_periodic(timesync_message_timer, time_message_delay);
+            }
             high_speed_timer_started = true;
           }
           break;
@@ -460,7 +493,6 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             this_snapcast->snapcast_latency_ms_ = server_settings_msg.latency;
 
             this_snapcast->volume_ = server_settings_msg.volume;
-            // this_snapcast->speaker_->set_volume(static_cast<float>(server_settings_msg.volume) / 100.0f);
             this_snapcast->speaker_->set_mute_state(server_settings_msg.muted);
             this_snapcast->external_mute_ = server_settings_msg.muted;
           }
@@ -501,13 +533,13 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           break;
       }
 
-      if (now - last_time_sync_message > time_message_delay) {
-        if (this_snapcast->send_time_message_() == ESP_OK) {
-          last_time_sync_message = now;
-        } else {
-          no_socket_error = false;
-        }
-      }
+      // if (now - last_time_sync_message > time_message_delay) {
+      //   if (this_snapcast->send_time_message_() == ESP_OK) {
+      //     last_time_sync_message = now;
+      //   } else {
+      //     no_socket_error = false;
+      //   }
+      // }
 
       // if (now - last_client_settings_message > client_message_delay) {
       //   ESP_LOGD(TAG, "Sending client settings message.");
@@ -712,7 +744,7 @@ void SnapcastPlayer::sync_task(void *params) {
           int64_t new_error = equivalent_client_timestamp - write_timestamp;
 
           this_snapcast->actual_offsets_.update(new_error);
-          this_snapcast->internal_latency_.update(internal_latency_written - write_timestamp);
+          // this_snapcast->internal_latency_.update(internal_latency_written - write_timestamp);
         }
       }
 

@@ -141,7 +141,7 @@ class SnapcastPlayer : public Component {
   SnapcastPlayer()
       : internal_latency_(MedianFilter(50)),
         server_internal_clock_offset_(MedianFilter(50)),
-        actual_offsets_(MedianFilter(3)){};
+        actual_offsets_(MedianFilter(1)){};
   float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
   void setup() override { this->start(); }
   void loop() override;
@@ -151,6 +151,8 @@ class SnapcastPlayer : public Component {
   void set_speaker(speaker::Speaker *speaker) { this->speaker_ = speaker; }
   void set_server_address(std::string server_address) { this->server_address_ = std::move(server_address); }
   void set_server_port(uint16_t server_port) { this->server_port_ = server_port; }
+
+  esp_err_t send_client_message();
 
  protected:
   speaker::Speaker *speaker_{nullptr};
@@ -172,8 +174,9 @@ class SnapcastPlayer : public Component {
 
   std::string client_message_serialize_(ClientInfoMessage *msg);
   esp_err_t connect_to_server_();
-  esp_err_t send_client_message_();
+
   esp_err_t send_hello_message_();
+  static void timesync_callback(void *params);
   static void snapcast_task(void *params);
   static void decode_task(void *params);
   static void sync_task(void *params);
@@ -189,6 +192,8 @@ class SnapcastPlayer : public Component {
   esp_err_t send_time_message_();
 
   optional<uint16_t> volume_;
+
+  bool connected_{false};
 
   bool first_audio_played_{true};
   int64_t initial_playback_timestamp_{0};
