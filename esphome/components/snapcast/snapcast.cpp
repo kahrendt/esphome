@@ -125,7 +125,6 @@ esp_err_t SnapcastPlayer::send_client_message() {
         (this->socket_->write((void *) json_client_msg.data(), json_client_msg.size()) == -1)) {
       return ESP_FAIL;
     }
-    printf("Sent client message: %s", json_client_msg.c_str());
   }
   return ESP_OK;
 }
