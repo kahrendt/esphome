@@ -16,7 +16,7 @@
 namespace esphome {
 namespace i2s_audio {
 
-static const uint8_t DMA_BUFFER_DURATION_MS = 15;
+static const uint8_t DMA_BUFFER_DURATION_MS = 10;
 static const size_t DMA_BUFFERS_COUNT = 4;
 
 static const size_t TASK_DELAY_MS = DMA_BUFFER_DURATION_MS * DMA_BUFFERS_COUNT / 2;
@@ -508,6 +508,9 @@ esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_strea
   if (this->i2s_role_ & I2S_ROLE_SLAVE) {
     clk_config.clk_src = I2S_CLK_SRC_XTAL;
     clk_config.mclk_multiple = (i2s_mclk_multiple_t) 512;
+  } else {
+    clk_config.clk_src = I2S_CLK_SRC_XTAL;
+    clk_config.mclk_multiple = (i2s_mclk_multiple_t) 256;
   }
 
   i2s_std_slot_config_t slot_config =
