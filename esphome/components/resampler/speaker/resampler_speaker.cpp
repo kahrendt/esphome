@@ -44,13 +44,9 @@ void ResamplerSpeaker::setup() {
   }
 
   this->output_speaker_->add_audio_output_callback([this](uint32_t new_frames, int64_t write_timestamp) {
-    // int32_t adjustment = this->playback_differential_ms_;
-    // this->playback_differential_ms_ -= adjustment;
-    // int32_t adjusted_playback_ms = static_cast<int32_t>(new_playback_ms) + adjustment;
-
     if (this->audio_stream_info_.get_sample_rate() != this->target_stream_info_.get_sample_rate()) {
-      const uint32_t numerator = new_frames * this->audio_stream_info_.get_sample_rate() + this->callback_remainder_;
-      const uint32_t denominator = this->target_stream_info_.get_sample_rate();
+      const uint64_t numerator = new_frames * this->audio_stream_info_.get_sample_rate() + this->callback_remainder_;
+      const uint64_t denominator = this->target_stream_info_.get_sample_rate();
       this->callback_remainder_ = numerator % denominator;
       this->audio_output_callback_(numerator / denominator, write_timestamp);
     } else {
@@ -58,6 +54,55 @@ void ResamplerSpeaker::setup() {
     }
   });
 }
+
+/* Example calculations
+First batch has played 4001 frames of the target 48 kHz audio while the current input sample rate is 44.1kHz
+4001 * 44100/48000 = 3675.91875
+
+4001 * 44100 = 176,444,100
+4001 * 44100 % 48000 = 44100
+
+So by normal integer rules, we round down and say we consumed 3675 frames
+
+Second batch has played 3999 frames of the target 48 kHz auido while the current input sample rate is 441.kHz
+3999 * 44100/48000 = 3674.08125
+
+3999 * 44100 = 176,355,900
+ + remainder = 176,355,900 + 44100 = 176,400,000
+(3999*44100 + remainder)/ 48000 = 3675 frames played
+
+Between the two batches, we outputted 8000 frames of audio so 8000*44100/48000 = 7350 source frames
+We said in batch 1 we sent 3675 frames of audio and in batch 2 we said we sent 3675 frames as well, so we are equivalent
+
+--------
+
+Experiment 2
+
+First batch is 4001 frames
+4001 * 44100/48000 = 3675.91875
+
+4001 * 44100 = 176,444,100
+4001 * 44100 % 48000 = 44100
+
+So by normal integer rules, we round down and say we consumed 3675 frames
+
+Batch 2 is 3998 frames
+3998 * 44100 + 44100 = 176355900
+(3998 * 44100 + 44100)/48000 = 3674.08125
+(3998 * 44100 + 44100)%48000 = 3900
+
+Say we played 3674 frames
+
+Batch 3 is 4001 frames
+4001 * 44100 + 3900 = 176,448,000
+(4001 * 44100 + 3900)/48000 = 3676
+(4001 * 44100 + 3900)%48000 = 0
+
+Say we played 3676 frames
+
+Total output frames played 4001+3998+4001 = 12000 which is 11025 source frames
+we said we played 3675+3674+3676 = 11025 source frames
+*/
 
 void ResamplerSpeaker::loop() {
   uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
