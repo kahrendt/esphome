@@ -47,7 +47,7 @@ class BSDSocketImpl : public Socket {
     }
   }
 
-  int connect(const struct sockaddr *addr, socklen_t addrlen) override { return lwip_connect(fd_, addr, addrlen); }
+  int connect(const struct sockaddr *addr, socklen_t addrlen) override { return ::connect(fd_, addr, addrlen); }
 
   std::unique_ptr<Socket> accept(struct sockaddr *addr, socklen_t *addrlen) override {
     int fd = ::accept(fd_, addr, addrlen);
