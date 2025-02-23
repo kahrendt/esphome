@@ -725,9 +725,7 @@ void SnapcastPlayer::sync_task(void *params) {
               (frames_played * 1000000LL) /
               static_cast<int64_t>(this_snapcast->current_audio_stream_info_.value().get_sample_rate());
           int64_t server_timestamp_finished = front_chunk.server_timestamp + full_precision_microseconds;
-          int64_t equivalent_client_timestamp =
-              server_timestamp_finished - this_snapcast->server_internal_clock_offset_.get_most_recent_median() +
-              (this_snapcast->snapcast_buffer_duration_ms_ - this_snapcast->snapcast_latency_ms_) * 1000;
+          int64_t equivalent_client_timestamp = this_snapcast->server_timestamp_to_client_(server_timestamp_finished);
           this_snapcast->chunk_timings_.front().total_frames -= frames_played;
           this_snapcast->chunk_timings_.front().server_timestamp = server_timestamp_finished;
 
@@ -765,10 +763,8 @@ void SnapcastPlayer::sync_task(void *params) {
             (pending_frame_corrections * 1000000L) /
             static_cast<int64_t>(this_snapcast->current_audio_stream_info_.value().get_sample_rate());
 
-        int64_t front_chunk_plays_at = this_snapcast->chunk_timings_.front().server_timestamp -
-                                       this_snapcast->server_internal_clock_offset_.get_most_recent_median() +
-                                       this_snapcast->snapcast_buffer_duration_ms_ * 1000 -
-                                       this_snapcast->snapcast_latency_ms_ * 1000;
+        int64_t front_chunk_plays_at =
+            this_snapcast->server_timestamp_to_client_(this_snapcast->chunk_timings_.front().server_timestamp);
         int64_t us_to_start = front_chunk_plays_at - esp_timer_get_time();
         if (us_to_start - signed_pending_duration_corrections > 200000) {
           this_snapcast->speaker_->set_pause_state(true);
@@ -879,6 +875,11 @@ void SnapcastPlayer::sync_task(void *params) {
       this_snapcast->chunk_timings_.push_back(timings);
     }
   }
+}
+
+int64_t SnapcastPlayer::server_timestamp_to_client_(int64_t server_timestamp) {
+  return server_timestamp - this_snapcast->server_internal_clock_offset_.get_most_recent_median() +
+         (this_snapcast->snapcast_buffer_duration_ms_ - this_snapcast->snapcast_latency_ms_) * 1000;
 }
 
 void SnapcastPlayer::base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer) {
