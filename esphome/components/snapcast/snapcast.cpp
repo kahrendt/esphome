@@ -261,11 +261,13 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
     ESP_LOGE(TAG, "Socket unable to connect: errno %d", err);
     return ESP_FAIL;
   }
-  // err = this->control_socket_->connect((struct sockaddr *) &server_control, sizeof(server_control));
-  // if (err != 0) {
-  //   ESP_LOGE(TAG, "Control socket unable to connect: errno %d", err);
-  //   return ESP_FAIL;
-  // }
+  err = this->control_socket_->connect((struct sockaddr *) &server_control, sizeof(server_control));
+  if (err != 0) {
+    ESP_LOGE(TAG, "Control socket unable to connect: errno %d", err);
+    return ESP_FAIL;
+  }
+  this->control_rpc_version_();
+  printf("received control rpc version\n");
 
   int nodelay = 1;
   if (this->socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
@@ -282,6 +284,17 @@ media_player::MediaPlayerTraits SnapcastPlayer::get_traits() {
   traits.set_supports_pause(true);
 
   return traits;
+}
+
+void SnapcastPlayer::setup() {
+  char mac_address[18];
+  uint8_t base_mac[6];
+  esp_read_mac(base_mac, ESP_MAC_WIFI_STA);
+  sprintf(mac_address, "%02X:%02X:%02X:%02X:%02X:%02X", base_mac[0], base_mac[1], base_mac[2], base_mac[3], base_mac[4],
+          base_mac[5]);
+
+  this->player_id_ = std::string(mac_address);
+  this->start();
 }
 
 void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
@@ -321,32 +334,31 @@ std::string SnapcastPlayer::read_until_newline_(socket::Socket *socket) {
   std::string buffer;
   char new_char = ' ';
   while (new_char != '\n') {
-    ssize_t bytes_read = socket->read((void *) &new_char, 1);
+    ssize_t bytes_read = socket->read((void *) &new_char, sizeof(char));
     if (bytes_read == -1) {
       printf("reading from control socket had an issue!\n");
       break;
     }
     buffer.push_back(new_char);
+    printf("%c", new_char);
   }
 
   return buffer;
 }
 
-// void SnapcastPlayer::control_rpc_version() {
-//   std::string SnapcastPlayer::build_hello_message_(HelloMessage *msg) {
-//     return json::build_json([msg](JsonObject root) {
-//       root["MAC"] = msg->mac;
-//       root["HostName"] = msg->hostname;
-//       root["Version"] = msg->version;
-//       root["ClientName"] = msg->client_name;
-//       root["OS"] = msg->os;
-//       root["Arch"] = msg->arch;
-//       root["Instance"] = msg->instance;
-//       root["ID"] = msg->id;
-//       root["SnapStreamProtocolVersion"] = msg->protocol_version;
-//     });
-//   }
-// }
+void SnapcastPlayer::control_rpc_version_() {
+  std::string control_rpc_version_message = json::build_json([](JsonObject root) {
+    root["id"] = 8;
+    root["jsonrpc"] = "2.0";
+    root["method"] = "Server.GetRPCVersion";
+  });
+
+  control_rpc_version_message.push_back('\n');
+
+  this->control_socket_->write((void *) control_rpc_version_message.data(), control_rpc_version_message.size());
+  std::string response = this->read_until_newline_(this->control_socket_.get());
+  ESP_LOGD(TAG, "control_rpc_version_message: %s", response.c_str());
+}
 
 void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
@@ -1004,20 +1016,15 @@ void SnapcastPlayer::base_message_deserialize_(BaseMessage *msg, bytebuffer::Byt
 }
 
 std::string SnapcastPlayer::hello_message_serialize_() {
-  char mac_address[18];
-  uint8_t base_mac[6];
-  esp_read_mac(base_mac, ESP_MAC_WIFI_STA);
-  sprintf(mac_address, "%02X:%02X:%02X:%02X:%02X:%02X", base_mac[0], base_mac[1], base_mac[2], base_mac[3], base_mac[4],
-          base_mac[5]);
   HelloMessage hello_message;
-  hello_message.mac = mac_address;
+  hello_message.mac = this->player_id_.c_str();
   hello_message.hostname = App.get_name().c_str();
   hello_message.version = "0.0.1";
   hello_message.client_name = "esphome";
   hello_message.os = "esp32";
   hello_message.arch = "xtensa";
   hello_message.instance = 1;
-  hello_message.id = mac_address;
+  hello_message.id = this->player_id_.c_str();
   hello_message.protocol_version = 2;
   return this->build_hello_message_(&hello_message);
 }

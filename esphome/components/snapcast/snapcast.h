@@ -65,14 +65,14 @@ struct BaseMessage {
 };
 
 struct HelloMessage {
-  char *mac;
+  const char *mac;
   const char *hostname;
   const char *version;
   const char *client_name;
   const char *os;
   const char *arch;
   int instance;
-  char *id;
+  const char *id;
   int protocol_version;
 };
 
@@ -144,7 +144,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
         server_internal_clock_offset_(MedianFilter(50)),
         actual_offsets_(MedianFilter(1)){};
   float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
-  void setup() override { this->start(); }
+  void setup() override;
   void loop() override;
 
   // MediaPlayer implementations
@@ -163,6 +163,8 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   // Receives commands from HA or from the voice assistant component
   void control(const media_player::MediaPlayerCall &call) override;
 
+  std::string player_id_;
+
   speaker::Speaker *speaker_{nullptr};
   std::unique_ptr<socket::Socket> socket_;
   std::unique_ptr<socket::Socket> control_socket_;
@@ -176,6 +178,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   int64_t server_timestamp_to_client_(int64_t server_timestamp);
   ssize_t read_from_socket_(socket::Socket *socket, uint8_t *buffer, size_t length);
   std::string read_until_newline_(socket::Socket *socket);
+  void control_rpc_version_();
 
   void base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
   void base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
