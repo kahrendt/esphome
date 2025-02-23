@@ -264,6 +264,10 @@ void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
     // Ignore any commands sent before the media player is setup
     return;
   }
+
+  if (call.get_command().has_value()) {
+    media_player::MediaPlayerCommand command = call.get_command().value();
+  }
 }
 
 void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
