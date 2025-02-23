@@ -251,6 +251,21 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
   return ESP_OK;
 }
 
+media_player::MediaPlayerTraits SnapcastPlayer::get_traits() {
+  auto traits = media_player::MediaPlayerTraits();
+
+  traits.set_supports_pause(false);
+
+  return traits;
+}
+
+void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
+  if (!this->is_ready()) {
+    // Ignore any commands sent before the media player is setup
+    return;
+  }
+}
+
 void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
   RAMAllocator<AudioSyncChunk> chunk_allocator(ExternalRAMAllocator<AudioSyncChunk>::ALLOW_FAILURE);

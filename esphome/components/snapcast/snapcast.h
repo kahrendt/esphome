@@ -5,6 +5,7 @@
 
 #include "esphome/components/audio/audio.h"
 #include "esphome/components/bytebuffer/bytebuffer.h"
+#include "esphome/components/media_player/media_player.h"
 #include "esphome/components/socket/socket.h"
 #include "esphome/components/speaker/speaker.h"
 
@@ -136,7 +137,7 @@ class MedianFilter {
   uint8_t capacity_;
 };
 
-class SnapcastPlayer : public Component {
+class SnapcastPlayer : public Component, public media_player::MediaPlayer {
  public:
   SnapcastPlayer()
       : internal_latency_(MedianFilter(50)),
@@ -145,6 +146,10 @@ class SnapcastPlayer : public Component {
   float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
   void setup() override { this->start(); }
   void loop() override;
+
+  // MediaPlayer implementations
+  media_player::MediaPlayerTraits get_traits() override;
+  bool is_muted() const override { return this->is_muted_; }
 
   void start();
 
@@ -155,6 +160,9 @@ class SnapcastPlayer : public Component {
   esp_err_t send_client_message();
 
  protected:
+  // Receives commands from HA or from the voice assistant component
+  void control(const media_player::MediaPlayerCall &call) override;
+
   speaker::Speaker *speaker_{nullptr};
   std::unique_ptr<socket::Socket> socket_;
 
@@ -198,6 +206,8 @@ class SnapcastPlayer : public Component {
   bool connected_{false};
 
   bool first_audio_played_{true};
+
+  bool is_muted_{false};
   int64_t initial_playback_timestamp_{0};
 
   QueueHandle_t encoded_chunk_data_queue_;
