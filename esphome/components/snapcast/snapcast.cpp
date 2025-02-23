@@ -85,6 +85,9 @@ void SnapcastPlayer::start() {
 }
 
 void SnapcastPlayer::loop() {
+  // Determine state of the media player
+  media_player::MediaPlayerState old_state = this->state;
+
   EventBits_t event_bits = xEventGroupGetBits(this->event_group_);
   if (event_bits & (DECODE_FINISHED | SYNC_FINISHED)) {
     if (this->speaker_->is_stopped()) {
@@ -95,8 +98,18 @@ void SnapcastPlayer::loop() {
     }
   }
   if (this->volume_.has_value()) {
-    this->speaker_->set_volume(static_cast<float>(this->volume_.value()) / 100.0f);
+    this->volume = static_cast<float>(this->volume_.value()) / 100.0f;
+    this->speaker_->set_volume(this->volume);
+    this->send_client_message();
+    this->publish_state();
     this->volume_.reset();
+  }
+
+  this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
+
+  if (this->state != old_state) {
+    this->publish_state();
+    ESP_LOGD(TAG, "State changed to %s", media_player::media_player_state_to_string(this->state));
   }
 }
 
@@ -202,7 +215,9 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
   esp_err_t err = ESP_OK;
 
   socklen_t sl = 0;
+  socklen_t sl_control = 0;
   struct sockaddr_storage server;
+  struct sockaddr_storage server_control;
 
   if (!this->server_address_.has_value()) {
     mdns_result_t *mdns_result;
@@ -226,21 +241,31 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
     }
 
     sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), (const char *) ip_address, port);
+    sl_control = socket::set_sockaddr((struct sockaddr *) &server_control, sizeof(server_control),
+                                      (const char *) ip_address, this->server_control_port_);
   } else {
     sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), this->server_address_.value().c_str(), port);
+    sl_control = socket::set_sockaddr((struct sockaddr *) &server_control, sizeof(server_control),
+                                      this->server_address_.value().c_str(), this->server_control_port_);
   }
 
-  if (sl == 0) {
+  if ((sl == 0) || (sl_control == 0)) {
     ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);
     return ESP_FAIL;
   }
   this->socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
+  this->control_socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
 
   err = this->socket_->connect((struct sockaddr *) &server, sizeof(server));
   if (err != 0) {
     ESP_LOGE(TAG, "Socket unable to connect: errno %d", err);
     return ESP_FAIL;
   }
+  // err = this->control_socket_->connect((struct sockaddr *) &server_control, sizeof(server_control));
+  // if (err != 0) {
+  //   ESP_LOGE(TAG, "Control socket unable to connect: errno %d", err);
+  //   return ESP_FAIL;
+  // }
 
   int nodelay = 1;
   if (this->socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
@@ -254,7 +279,7 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
 media_player::MediaPlayerTraits SnapcastPlayer::get_traits() {
   auto traits = media_player::MediaPlayerTraits();
 
-  traits.set_supports_pause(false);
+  traits.set_supports_pause(true);
 
   return traits;
 }
@@ -265,10 +290,63 @@ void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
     return;
   }
 
+  if (call.get_volume().has_value()) {
+    this->volume_ = round(call.get_volume().value() * 100.0f);
+  }
+
   if (call.get_command().has_value()) {
-    media_player::MediaPlayerCommand command = call.get_command().value();
+    switch (call.get_command().value()) {
+      default:
+        break;
+    }
   }
 }
+
+ssize_t SnapcastPlayer::read_from_socket_(socket::Socket *socket, uint8_t *buffer, size_t length) {
+  size_t offset = 0;
+  while (length > 0) {
+    ssize_t bytes_read = socket->read((void *) (buffer + offset), length);
+
+    if (bytes_read == -1) {
+      return -1;
+    }
+    length -= bytes_read;
+    offset += bytes_read;
+  }
+
+  return offset;
+}
+
+std::string SnapcastPlayer::read_until_newline_(socket::Socket *socket) {
+  std::string buffer;
+  char new_char = ' ';
+  while (new_char != '\n') {
+    ssize_t bytes_read = socket->read((void *) &new_char, 1);
+    if (bytes_read == -1) {
+      printf("reading from control socket had an issue!\n");
+      break;
+    }
+    buffer.push_back(new_char);
+  }
+
+  return buffer;
+}
+
+// void SnapcastPlayer::control_rpc_version() {
+//   std::string SnapcastPlayer::build_hello_message_(HelloMessage *msg) {
+//     return json::build_json([msg](JsonObject root) {
+//       root["MAC"] = msg->mac;
+//       root["HostName"] = msg->hostname;
+//       root["Version"] = msg->version;
+//       root["ClientName"] = msg->client_name;
+//       root["OS"] = msg->os;
+//       root["Arch"] = msg->arch;
+//       root["Instance"] = msg->instance;
+//       root["ID"] = msg->id;
+//       root["SnapStreamProtocolVersion"] = msg->protocol_version;
+//     });
+//   }
+// }
 
 void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
@@ -296,6 +374,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       ESP_LOGW(TAG, "Failed to send the hello message, trying in 5 seconds.");
       this_snapcast->socket_->shutdown(0);
       this_snapcast->socket_->close();
+      this_snapcast->control_socket_->shutdown(0);
+      this_snapcast->control_socket_->close();
       continue;
     }
 
@@ -312,6 +392,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       ESP_LOGE(TAG, "Failed to allocate audio chunk");
       this_snapcast->socket_->shutdown(0);
       this_snapcast->socket_->close();
+      this_snapcast->control_socket_->shutdown(0);
+      this_snapcast->control_socket_->close();
       continue;
     }
 
@@ -326,23 +408,16 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
     while (true) {
       bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE);
 
-      size_t read_amount = BASE_MESSAGE_SIZE;
-
-      size_t offset = 0;
-      while (read_amount > 0) {
-        ssize_t bytes_read =
-            this_snapcast->socket_->read((void *) (base_msg_buffer.get_raw_data() + offset), read_amount);
-
-        if (bytes_read == -1) {
-          no_socket_error = false;
-          ESP_LOGE(TAG, "Failed to read from the socket, closing the connection.");
-          this_snapcast->socket_->shutdown(0);
-          this_snapcast->socket_->close();
-          break;
-        }
-
-        read_amount -= bytes_read;
-        offset += bytes_read;
+      ssize_t bytes_read = this_snapcast->read_from_socket_(this_snapcast->socket_.get(),
+                                                            base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
+      if (bytes_read == -1) {
+        no_socket_error = false;
+        ESP_LOGE(TAG, "Failed to read from the socket, closing the connection.");
+        this_snapcast->socket_->shutdown(0);
+        this_snapcast->socket_->close();
+        this_snapcast->control_socket_->shutdown(0);
+        this_snapcast->control_socket_->close();
+        break;
       }
 
       int64_t now = esp_timer_get_time();
@@ -353,7 +428,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       base_msg.received.sec = static_cast<int32_t>(now / 1000000LL);
       base_msg.received.usec = static_cast<int32_t>(now - now / 1000000LL);
 
-      offset = 0;
+      size_t offset = 0;
       size_t base_msg_size = base_msg.size;
       if (base_msg_size > MAX_CHUNK_SIZE) {
         ESP_LOGE(TAG,
@@ -378,6 +453,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
         ESP_LOGE(TAG, "Failed to read from the socket, closing the connection.");
         this_snapcast->socket_->shutdown(0);
         this_snapcast->socket_->close();
+        this_snapcast->control_socket_->shutdown(0);
+        this_snapcast->control_socket_->close();
         break;
       }
 
@@ -485,7 +562,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
           if (server_settings_len != audio_chunk->size) {
             ESP_LOGE(TAG,
-                     "Server settings messag size doesn't match base size! Base size = %d; server settings size = %d",
+                     "Server settings message size doesn't match base size! Base size = %d; server settings size = %d",
                      audio_chunk->size, server_settings_len);
             no_socket_error = false;
             break;
@@ -579,6 +656,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
         ESP_LOGD(TAG, "Failed to read from the socket, closing the connection.");
         this_snapcast->socket_->shutdown(0);
         this_snapcast->socket_->close();
+        this_snapcast->control_socket_->shutdown(0);
+        this_snapcast->control_socket_->close();
         break;
       }
     }

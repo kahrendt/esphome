@@ -165,13 +165,17 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
 
   speaker::Speaker *speaker_{nullptr};
   std::unique_ptr<socket::Socket> socket_;
+  std::unique_ptr<socket::Socket> control_socket_;
 
   optional<std::string> server_address_;
   uint16_t server_port_;
+  uint16_t server_control_port_{1705};
 
   QueueHandle_t playback_info_queue_;
 
   int64_t server_timestamp_to_client_(int64_t server_timestamp);
+  ssize_t read_from_socket_(socket::Socket *socket, uint8_t *buffer, size_t length);
+  std::string read_until_newline_(socket::Socket *socket);
 
   void base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
   void base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
