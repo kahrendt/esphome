@@ -512,7 +512,7 @@ media_player::MediaPlayerTraits SpeakerMediaPlayer::get_traits() {
   }
 
   return traits;
-};
+}
 
 void SpeakerMediaPlayer::save_volume_restore_state_() {
   VolumeRestoreState volume_restore_state;
