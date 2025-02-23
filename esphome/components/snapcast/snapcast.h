@@ -158,7 +158,7 @@ class SnapcastPlayer : public Component {
   speaker::Speaker *speaker_{nullptr};
   std::unique_ptr<socket::Socket> socket_;
 
-  std::string server_address_;
+  optional<std::string> server_address_;
   uint16_t server_port_;
 
   QueueHandle_t playback_info_queue_;

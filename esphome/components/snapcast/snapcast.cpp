@@ -196,45 +196,45 @@ esp_err_t SnapcastPlayer::send_hello_message_() {
 }
 
 esp_err_t SnapcastPlayer::connect_to_server_() {
-  // Connect to first snapcast server found
-
-  mdns_result_t *mdns_result;
-
-  mdns_init();
-
-  ESP_LOGI(TAG, "Lookup snapcast service on network");
-  esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
+  // Connect to configured server, if set. Otherwise, use mdns to discover a server
 
   char ip_address[16];
-  bool use_mdns = false;
   uint16_t port = this->server_port_;
 
-  if (!mdns_result) {
-    ESP_LOGW(TAG, "No results found for snapcast service!");
+  if (this->server_address_.has_value()) {
+    ip_address = this->server_address_.value().c_str();
   } else {
-    if (mdns_result->addr) {
-      use_mdns = true;
-      sprintf(ip_address, "%d.%d.%d.%d", IP2STR(mdns_result->addr));
-      port = mdns_result->port;
-      ESP_LOGD(TAG, "Found a snapcast server via mdns: " IPSTR, IP2STR(mdns_result->addr));
+    mdns_result_t *mdns_result;
+
+    mdns_init();
+
+    ESP_LOGI(TAG, "Lookup snapcast service on network");
+    esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
+
+    if (!mdns_result) {
+      ESP_LOGW(TAG, "No results found for snapcast service!");
+      return ESP_FAIL;
+    } else {
+      if (mdns_result->addr) {
+        use_mdns = true;
+        sprintf(ip_address, "%d.%d.%d.%d", IP2STR(mdns_result->addr));
+        port = mdns_result->port;
+        ESP_LOGD(TAG, "Found a snapcast server via mdns: " IPSTR, IP2STR(mdns_result->addr));
+      }
+      mdns_query_results_free(mdns_result);
     }
-    mdns_query_results_free(mdns_result);
   }
 
   this->socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
   struct sockaddr_storage server;
 
-  socklen_t sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), this->server_address_.c_str(),
-                                      this->server_port_);
-  if (use_mdns) {
-    ESP_LOGD(TAG, "Connecting to the snapcast server found vida mdns\n");
-    sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), (const char *) ip_address, port);
-  }
+  socklen_t sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), (const char *) ip_address, port);
 
   if (sl == 0) {
     ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);
     return ESP_FAIL;
   }
+
   err = this->socket_->connect((struct sockaddr *) &server, sizeof(server));
   if (err != 0) {
     ESP_LOGE(TAG, "Socket unable to connect: errno %d", err);
@@ -243,8 +243,7 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
 
   int nodelay = 1;
   if (this->socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
-    /* If failed to turn on TCP_NODELAY, throw warning and continue */
-    ESP_LOGW(TAG, "Failed to turn on TCP_NODELAY");
+    ESP_LOGW(TAG, "Failed to turn on TCP_NODELAY, syncing may not be accurate");
     nodelay = 0;
   }
 

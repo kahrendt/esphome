@@ -1,14 +1,10 @@
 """Snapcast Player Setup."""
 
-import logging
-
 import esphome.codegen as cg
 from esphome.components import esp32, speaker
 import esphome.config_validation as cv
 from esphome.const import CONF_ID, CONF_PORT, CONF_SPEAKER, PLATFORM_ESP32
 from esphome.core import CORE
-
-_LOGGER = logging.getLogger(__name__)
 
 AUTO_LOAD = ["audio", "bytebuffer", "json", "psram", "socket"]
 
@@ -32,7 +28,7 @@ CONFIG_SCHEMA = cv.All(
         {
             cv.GenerateID(): cv.declare_id(SnapcastPlayer),
             cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
-            cv.Required(CONF_SERVER_ADDRESS): cv.string,
+            cv.Optional(CONF_SERVER_ADDRESS): cv.ipv4address,
             cv.Optional(CONF_PORT, default=1704): cv.int_range(1, 65535),
         }
     ).extend(cv.COMPONENT_SCHEMA),
@@ -79,5 +75,6 @@ async def to_code(config):
     await cg.register_component(var, config)
     spkr = await cg.get_variable(config[CONF_SPEAKER])
     cg.add(var.set_speaker(spkr))
-    cg.add(var.set_server_address(config[CONF_SERVER_ADDRESS]))
+    if server_address := config.get[CONF_SERVER_ADDRESS]:
+        cg.add(var.set_server_address(server_address))
     cg.add(var.set_server_port(config[CONF_PORT]))
