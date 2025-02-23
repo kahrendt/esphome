@@ -198,42 +198,43 @@ esp_err_t SnapcastPlayer::send_hello_message_() {
 esp_err_t SnapcastPlayer::connect_to_server_() {
   // Connect to configured server, if set. Otherwise, use mdns to discover a server
 
-  char ip_address[16];
   uint16_t port = this->server_port_;
+  esp_err_t err = ESP_OK;
 
-  if (this->server_address_.has_value()) {
-    ip_address = this->server_address_.value().c_str();
-  } else {
+  socklen_t sl = 0;
+  struct sockaddr_storage server;
+
+  if (!this->server_address_.has_value()) {
     mdns_result_t *mdns_result;
+    char ip_address[16];
 
     mdns_init();
 
     ESP_LOGI(TAG, "Lookup snapcast service on network");
-    esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
+    err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
 
     if (!mdns_result) {
       ESP_LOGW(TAG, "No results found for snapcast service!");
       return ESP_FAIL;
     } else {
       if (mdns_result->addr) {
-        use_mdns = true;
         sprintf(ip_address, "%d.%d.%d.%d", IP2STR(mdns_result->addr));
         port = mdns_result->port;
         ESP_LOGD(TAG, "Found a snapcast server via mdns: " IPSTR, IP2STR(mdns_result->addr));
       }
       mdns_query_results_free(mdns_result);
     }
+
+    sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), (const char *) ip_address, port);
+  } else {
+    sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), this->server_address_.value().c_str(), port);
   }
-
-  this->socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
-  struct sockaddr_storage server;
-
-  socklen_t sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), (const char *) ip_address, port);
 
   if (sl == 0) {
     ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);
     return ESP_FAIL;
   }
+  this->socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
 
   err = this->socket_->connect((struct sockaddr *) &server, sizeof(server));
   if (err != 0) {
@@ -878,8 +879,8 @@ void SnapcastPlayer::sync_task(void *params) {
 }
 
 int64_t SnapcastPlayer::server_timestamp_to_client_(int64_t server_timestamp) {
-  return server_timestamp - this_snapcast->server_internal_clock_offset_.get_most_recent_median() +
-         (this_snapcast->snapcast_buffer_duration_ms_ - this_snapcast->snapcast_latency_ms_) * 1000;
+  return server_timestamp - this->server_internal_clock_offset_.get_most_recent_median() +
+         (this->snapcast_buffer_duration_ms_ - this->snapcast_latency_ms_) * 1000;
 }
 
 void SnapcastPlayer::base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer) {

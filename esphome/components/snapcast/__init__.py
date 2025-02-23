@@ -75,6 +75,6 @@ async def to_code(config):
     await cg.register_component(var, config)
     spkr = await cg.get_variable(config[CONF_SPEAKER])
     cg.add(var.set_speaker(spkr))
-    if server_address := config.get[CONF_SERVER_ADDRESS]:
-        cg.add(var.set_server_address(server_address))
+    if server_address := config.get(CONF_SERVER_ADDRESS):
+        cg.add(var.set_server_address(str(server_address)))
     cg.add(var.set_server_port(config[CONF_PORT]))
