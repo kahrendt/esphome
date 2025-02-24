@@ -175,6 +175,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   std::string client_message_serialize_(ClientInfoMessage *msg);
 
   esp_err_t connect_to_server_();
+  void disconnect_from_server_();
 
   esp_err_t send_client_message_();
   esp_err_t send_hello_message_();

@@ -283,6 +283,13 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
   return ESP_OK;
 }
 
+void SnapcastPlayer::disconnect_from_server_() {
+  this->client_socket_->shutdown(0);
+  this->client_socket_->close();
+  this->control_socket_->shutdown(0);
+  this->control_socket_->close();
+}
+
 media_player::MediaPlayerTraits SnapcastPlayer::get_traits() {
   auto traits = media_player::MediaPlayerTraits();
 
@@ -373,7 +380,7 @@ void SnapcastPlayer::control_task(void *params) {
     printf("Control task received a notification %s\n", notification.c_str());
 
     bool valid = json::parse_json(notification, [this_snapcast](JsonObject root) -> bool {
-      if (!root.containsKey("jsonrpc")) {
+      if (!root.containsKey("jsonrpc") || !root.containsKey("method")) {
         ESP_LOGE(TAG, "JSON RPC notification isn't valid");
         return false;
       }
@@ -409,10 +416,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
     if (this_snapcast->send_hello_message_() != ESP_OK) {
       ESP_LOGW(TAG, "Failed to send the hello message, trying in 5 seconds.");
-      this_snapcast->client_socket_->shutdown(0);
-      this_snapcast->client_socket_->close();
-      this_snapcast->control_socket_->shutdown(0);
-      this_snapcast->control_socket_->close();
+      this_snapcast->disconnect_from_server_();
       continue;
     }
 
@@ -427,10 +431,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
     if (audio_chunk == nullptr) {
       ESP_LOGE(TAG, "Failed to allocate audio chunk");
-      this_snapcast->client_socket_->shutdown(0);
-      this_snapcast->client_socket_->close();
-      this_snapcast->control_socket_->shutdown(0);
-      this_snapcast->control_socket_->close();
+      this_snapcast->disconnect_from_server_();
       continue;
     }
 
@@ -450,11 +451,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       if (bytes_read == -1) {
         no_socket_error = false;
         ESP_LOGE(TAG, "Failed to read from the socket, closing the connection.");
-        this_snapcast->client_socket_->shutdown(0);
-        this_snapcast->client_socket_->close();
-        this_snapcast->control_socket_->shutdown(0);
-        this_snapcast->control_socket_->close();
-        break;
+        this_snapcast->disconnect_from_server_();
       }
 
       int64_t now = esp_timer_get_time();
@@ -472,7 +469,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
                  "message size is bigger than the max chunk size, problematic! Message size = %" PRIu32
                  ". Message type = %d",
                  base_msg_size, base_msg.type);
-        continue;
+        this_snapcast->disconnect_from_server_();
+        break;
       }
 
       bytes_read =
@@ -480,24 +478,12 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       if (bytes_read != base_msg_size) {
         no_socket_error = false;
         ESP_LOGE(TAG, "Problem reading from the socket, closing the connection.");
-        this_snapcast->client_socket_->shutdown(0);
-        this_snapcast->client_socket_->close();
-        this_snapcast->control_socket_->shutdown(0);
-        this_snapcast->control_socket_->close();
+        this_snapcast->disconnect_from_server_();
         break;
       }
 
       audio_chunk->offset = 0;
       audio_chunk->size = base_msg.size;
-
-      if (!no_socket_error) {
-        ESP_LOGE(TAG, "Failed to read from the socket, closing the connection.");
-        this_snapcast->client_socket_->shutdown(0);
-        this_snapcast->client_socket_->close();
-        this_snapcast->control_socket_->shutdown(0);
-        this_snapcast->control_socket_->close();
-        break;
-      }
 
       if (high_speed_timer_started && this_snapcast->network_latency_filter_.is_full()) {
         high_speed_timer_started = false;
@@ -673,10 +659,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
       if (!no_socket_error) {
         ESP_LOGD(TAG, "Failed to read from the socket, closing the connection.");
-        this_snapcast->client_socket_->shutdown(0);
-        this_snapcast->client_socket_->close();
-        this_snapcast->control_socket_->shutdown(0);
-        this_snapcast->control_socket_->close();
+        this_snapcast->disconnect_from_server_();
         break;
       }
     }
