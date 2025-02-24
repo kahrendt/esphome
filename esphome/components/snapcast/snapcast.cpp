@@ -79,12 +79,12 @@ void SnapcastPlayer::start() {
   this->decoded_chunk_data_queue_ =
       xQueueCreateStatic(DECODED_CHUNK_QUEUE_SIZE, sizeof(AudioSyncChunk), this->decoded_chunk_data_queue_storage_,
                          &decoded_chunk_data_queue_buffer_);
-  // this->encoded_chunk_data_queue_ = xQueueCreate(20, sizeof(AudioSyncChunk));
-  xTaskCreate(snapcast_task, "snapcast", SNAPCAST_TASK_STACK_SIZE, (void *) this, 5, &this->snapcast_task_handle_);
-  xTaskCreate(control_task, "snap_control", CONTROL_TASK_STACK_SIZE, (void *) this, 1, &this->control_task_handle_);
 
   this->playback_info_queue_ = xQueueCreate(10, sizeof(PlaybackInfo));
   this->event_group_ = xEventGroupCreate();
+
+  xTaskCreate(snapcast_task, "snapcast", SNAPCAST_TASK_STACK_SIZE, (void *) this, 5, &this->snapcast_task_handle_);
+  xTaskCreate(control_task, "snap_control", CONTROL_TASK_STACK_SIZE, (void *) this, 1, &this->control_task_handle_);
 }
 
 void SnapcastPlayer::loop() {
@@ -117,32 +117,35 @@ void SnapcastPlayer::loop() {
 }
 
 esp_err_t SnapcastPlayer::send_client_message_() {
-  if (this->connected_) {
-    ClientInfoMessage client_msg = {.volume = static_cast<uint32_t>(this->speaker_->get_volume() * 100.0f),
-                                    .muted = this->external_mute_};
-    std::string json_client_msg = this->client_message_serialize_(&client_msg);
-    size_t client_message_size = json_client_msg.size() + sizeof(uint32_t);
-
-    int64_t now = esp_timer_get_time();
-    bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE + sizeof(uint32_t));
-    BaseMessage base_msg_for_client_info = {
-        .type = SNAPCAST_MESSAGE_CLIENT_INFO,
-        .id = 0x0000,
-        .refers_to = 0x0000,
-        .sent = {.sec = static_cast<int32_t>(now / 1000000LL),
-                 .usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL)},
-        .received = {.sec = 0, .usec = 0},
-        .size = client_message_size,
-    };
-    this->base_message_serialize_(&base_msg_for_client_info, base_msg_buffer);
-    base_msg_buffer.put_uint32(json_client_msg.size());
-
-    if ((this->client_socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + sizeof(uint32_t)) ==
-         -1) ||
-        (this->client_socket_->write((void *) json_client_msg.data(), json_client_msg.size()) == -1)) {
-      return ESP_FAIL;
-    }
+  if (!this->connected_) {
+    return ESP_OK;
   }
+
+  ClientInfoMessage client_msg = {.volume = static_cast<uint32_t>(this->speaker_->get_volume() * 100.0f),
+                                  .muted = this->external_mute_};
+  std::string json_client_msg = this->client_message_serialize_(&client_msg);
+  size_t client_message_size = json_client_msg.size() + sizeof(uint32_t);
+
+  int64_t now = esp_timer_get_time();
+  bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE + sizeof(uint32_t));
+  BaseMessage base_msg_for_client_info = {
+      .type = SNAPCAST_MESSAGE_CLIENT_INFO,
+      .id = 0x0000,
+      .refers_to = 0x0000,
+      .sent = {.sec = static_cast<int32_t>(now / 1000000LL),
+               .usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL)},
+      .received = {.sec = 0, .usec = 0},
+      .size = client_message_size,
+  };
+  this->base_message_serialize_(&base_msg_for_client_info, base_msg_buffer);
+  base_msg_buffer.put_uint32(json_client_msg.size());
+
+  if ((this->client_socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + sizeof(uint32_t)) ==
+       -1) ||
+      (this->client_socket_->write((void *) json_client_msg.data(), json_client_msg.size()) == -1)) {
+    return ESP_FAIL;
+  }
+
   return ESP_OK;
 }
 
@@ -229,7 +232,7 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
 
     mdns_init();
 
-    ESP_LOGI(TAG, "Lookup snapcast service on network");
+    ESP_LOGD(TAG, "Looking for a snapcast service on network");
     err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
 
     if (!mdns_result) {
@@ -343,12 +346,15 @@ ssize_t SnapcastPlayer::read_from_socket_(socket::Socket *socket, uint8_t *buffe
 }
 
 std::string SnapcastPlayer::read_until_newline_(socket::Socket *socket) {
+  if (!this->connected_) {
+    return "";
+  }
   std::string buffer;
   char new_char = ' ';
   while (new_char != '\n') {
     ssize_t bytes_read = socket->read((void *) &new_char, sizeof(new_char));
     if (bytes_read == -1) {
-      printf("reading from control socket had an issue!\n");
+      ESP_LOGW(TAG, "Couldn't read from control socket");
       return "";
     }
     buffer.push_back(new_char);
@@ -376,18 +382,20 @@ void SnapcastPlayer::control_task(void *params) {
 
   xEventGroupWaitBits(this_snapcast->event_group_, EventGroupBits::CONTROL_START, true, false, portMAX_DELAY);
   while (true) {
-    std::string notification = this_snapcast->read_until_newline_(this_snapcast->control_socket_.get());
-    printf("Control task received a notification %s\n", notification.c_str());
+    std::string message = this_snapcast->read_until_newline_(this_snapcast->control_socket_.get());
+    ESP_LOGV(TAG, "Control task received a message: %s", message.c_str());
 
-    bool valid = json::parse_json(notification, [this_snapcast](JsonObject root) -> bool {
-      if (!root.containsKey("jsonrpc") || !root.containsKey("method")) {
-        ESP_LOGE(TAG, "JSON RPC notification isn't valid");
-        return false;
-      }
-      std::string method = root["method"].as<std::string>();
-      printf("method: %s\n", method.c_str());
-      return true;
-    });
+    if (!message.empty()) {
+      bool valid = json::parse_json(message, [this_snapcast](JsonObject root) -> bool {
+        if (!root.containsKey("jsonrpc") || !root.containsKey("method")) {
+          ESP_LOGE(TAG, "Control JSON RPC notification isn't valid");
+          return false;
+        }
+        std::string method = root["method"].as<std::string>();
+        return true;
+      });
+    }
+
     delay(10);
   }
 }
@@ -583,6 +591,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           break;
         }
         case SNAPCAST_MESSAGE_SERVER_SETTINGS: {
+          ESP_LOGD(TAG, "Received a server settings message");
           uint32_t server_settings_len = *reinterpret_cast<uint32_t *>(audio_chunk->data + audio_chunk->offset);
           audio_chunk->offset += sizeof(uint32_t);
           audio_chunk->size -= sizeof(uint32_t);
@@ -603,10 +612,6 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
             ServerSettingsMessage server_settings_msg;
             this_snapcast->server_settings_message_deserialize_(&server_settings_msg, server_msg_read_data.c_str());
-
-            printf("Server settings json: %s\n Server settings buffer ms: %d\n latency: %d\n muted: %d\n volume %d\n",
-                   server_msg_read_data.c_str(), server_settings_msg.buffer_ms, server_settings_msg.latency,
-                   server_settings_msg.muted, server_settings_msg.volume);
 
             this_snapcast->snapcast_buffer_duration_ms_ = server_settings_msg.buffer_ms;
             if (server_settings_msg.latency != this_snapcast->snapcast_latency_ms_) {
@@ -653,7 +658,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       static uint32_t high_water_mark = 8192;
       uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
       if (new_high_water_mark < high_water_mark) {
-        ESP_LOGD(TAG, "Snapcast task - High water mark increased from %d to %d.", high_water_mark, new_high_water_mark);
+        ESP_LOGV(TAG, "Snapcast task - High water mark changed from %d to %d.", high_water_mark, new_high_water_mark);
         high_water_mark = new_high_water_mark;
       }
 
@@ -700,12 +705,12 @@ void SnapcastPlayer::decode_task(void *params) {
         auto result = flac_decoder->read_header(encoded_chunk->data + encoded_chunk->offset, encoded_chunk->size);
 
         if (result == esp_audio_libs::flac::FLAC_DECODER_HEADER_OUT_OF_DATA) {
-          printf("Need more data to decode FLAC header\n");
+          ESP_LOGW(TAG, "Need more data to decode FLAC header");
           continue;
         }
 
         if (result != esp_audio_libs::flac::FLAC_DECODER_SUCCESS) {
-          printf("Serious error decoding flac header\n");
+          ESP_LOGE(TAG, "Serious error decoding FLAC header");
           continue;
         }
 
@@ -727,12 +732,12 @@ void SnapcastPlayer::decode_task(void *params) {
                                                  reinterpret_cast<int16_t *>(decoded_chunk->data), &output_samples);
 
         if (result == esp_audio_libs::flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
-          printf("flac decoder ran out of a data\n");
+          ESP_LOGE(TAG, "FLAC decoder ran out of data");
           continue;
         }
 
         if (result > esp_audio_libs::flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
-          printf(" more serious flac decoder error\n");
+          ESP_LOGE(TAG, "Serious error decoding FLAC header");
           continue;
         }
 
@@ -750,7 +755,7 @@ void SnapcastPlayer::decode_task(void *params) {
     static uint32_t high_water_mark = 8192;
     uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
     if (new_high_water_mark < high_water_mark) {
-      ESP_LOGD(TAG, "Decode task - High water mark increased from %d to %d.", high_water_mark, new_high_water_mark);
+      ESP_LOGV(TAG, "Decode task - High water mark changed from %d to %d.", high_water_mark, new_high_water_mark);
       high_water_mark = new_high_water_mark;
     }
   }
@@ -777,7 +782,7 @@ void SnapcastPlayer::sync_task(void *params) {
       static uint32_t high_water_mark = 8192;
       uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
       if (new_high_water_mark < high_water_mark) {
-        ESP_LOGD(TAG, "Sync task - High water mark increased from %d to %d.", high_water_mark, new_high_water_mark);
+        ESP_LOGV(TAG, "Sync task - High water mark changed from %d to %d.", high_water_mark, new_high_water_mark);
         high_water_mark = new_high_water_mark;
       }
 
@@ -869,8 +874,8 @@ void SnapcastPlayer::sync_task(void *params) {
         if (us_to_start - signed_pending_duration_corrections > 200000) {
           this_snapcast->speaker_->set_pause_state(true);
           uint32_t pause_time_ms = us_to_start / 2000;
-          printf("Hard sync: chunk doesn't play for %" PRId64 "ms, so pausing for %d ms\n", us_to_start / 1000,
-                 pause_time_ms);
+          ESP_LOGV(TAG, "Hard sync: chunk doesn't play for %" PRId64 "ms, so pausing for %d ms\n", us_to_start / 1000,
+                   pause_time_ms);
           vTaskDelay(pdMS_TO_TICKS(pause_time_ms));
           this_snapcast->speaker_->set_pause_state(false);
         }
@@ -892,11 +897,11 @@ void SnapcastPlayer::sync_task(void *params) {
       }
 
       if ((synced_chunks < 10) && (!this_snapcast->speaker_->get_mute_state())) {
-        printf("Hard sync: muting while until synced\n");
+        ESP_LOGD(TAG, "Out of sync, muting output until corrected");
         this_snapcast->speaker_->set_mute_state(true);
       } else if ((synced_chunks >= 10) &&
                  (this_snapcast->external_mute_ != this_snapcast->speaker_->get_mute_state())) {
-        printf("Successfully synced, setting to external mute state\n");
+        ESP_LOGD(TAG, "In sync with server, setting mute state to existing setting");
         this_snapcast->speaker_->set_mute_state(this_snapcast->external_mute_);
       }
 
@@ -922,8 +927,8 @@ void SnapcastPlayer::sync_task(void *params) {
         output_transfer_buffer->increase_buffer_length(actual_silence_bytes);
         frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_silence_bytes);
 
-        printf("Hard sync: adding %d frames of silence to hard sync. Current error is %" PRId64 "us\n",
-               frame_corrections, recent_error_us);
+        ESP_LOGV(TAG, "Hard sync: adding %" PRId32 " frames of silence. Current error is %" PRId64 "us",
+                 frame_corrections, recent_error_us);
 
       } else if (recent_error_us < -5000) {
         size_t bytes_to_remove =
@@ -931,8 +936,8 @@ void SnapcastPlayer::sync_task(void *params) {
         size_t actual_bytes_to_remove = std::min(bytes_to_remove, chunk->size - bytes_per_frame);
         output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
         frame_corrections = -this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
-        printf("Hard sync: removing %d frames from a chunk. Current error is % " PRId64 "us\n", frame_corrections,
-               recent_error_us);
+        ESP_LOGV(TAG, "Hard sync: removing %" PRId32 " frames. Current error is % " PRId64 "us", frame_corrections,
+                 recent_error_us);
 
       } else if (recent_error_us < -25) {
         const uint32_t num_channels = this_snapcast->audio_stream_info_.value().get_channels();
