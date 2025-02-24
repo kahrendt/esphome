@@ -194,6 +194,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
 
   esp_err_t send_hello_message_();
   static void timesync_callback(void *params);
+  static void control_task(void *params);
   static void snapcast_task(void *params);
   static void decode_task(void *params);
   static void sync_task(void *params);

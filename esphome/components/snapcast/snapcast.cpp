@@ -269,7 +269,7 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
     ESP_LOGE(TAG, "Control socket unable to connect: errno %d", err);
     return ESP_FAIL;
   }
-  xEventGroupSetBits(this_snapcast->event_group_, CONTROL_START);
+  xEventGroupSetBits(this->event_group_, CONTROL_START);
   // this->control_rpc_version_();
   // printf("received control rpc version\n");
 
@@ -367,9 +367,9 @@ void SnapcastPlayer::control_rpc_version_() {
 void SnapcastPlayer::control_task(void *params) {
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
 
-  xEventGroupWaitBits(this->event_group_, EventGroupBits::CONTROL_START, true, false, portMAX_DELAY);
+  xEventGroupWaitBits(this_snapcast->event_group_, EventGroupBits::CONTROL_START, true, false, portMAX_DELAY);
   while (true) {
-    std::string notification = this_snapcast->read_until_newline_(this_snapcast->control_socket_);
+    std::string notification = this_snapcast->read_until_newline_(this_snapcast->control_socket_.get());
     printf("Control task received a notification %s\n", notification.c_str());
 
     bool valid = json::parse_json(notification, [this_snapcast](JsonObject root) -> bool {
@@ -377,7 +377,7 @@ void SnapcastPlayer::control_task(void *params) {
         ESP_LOGE(TAG, "JSON RPC notification isn't valid");
         return false;
       }
-      std::string method = root["method"].as<std::string>;
+      std::string method = root["method"].as<std::string>();
       printf("method: %s\n", method.c_str());
       return true;
     });
