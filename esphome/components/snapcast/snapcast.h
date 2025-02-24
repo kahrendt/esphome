@@ -139,10 +139,7 @@ class MedianFilter {
 
 class SnapcastPlayer : public Component, public media_player::MediaPlayer {
  public:
-  SnapcastPlayer()
-      : internal_latency_(MedianFilter(50)),
-        server_internal_clock_offset_(MedianFilter(50)),
-        actual_offsets_(MedianFilter(1)){};
+  SnapcastPlayer() : network_latency_filter_(MedianFilter(50)), actual_offsets_(MedianFilter(1)){};
   float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
   void setup() override;
   void loop() override;
@@ -157,23 +154,9 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   void set_server_address(std::string server_address) { this->server_address_ = std::move(server_address); }
   void set_server_port(uint16_t server_port) { this->server_port_ = server_port; }
 
-  esp_err_t send_client_message();
-
  protected:
   // Receives commands from HA or from the voice assistant component
   void control(const media_player::MediaPlayerCall &call) override;
-
-  std::string player_id_;
-
-  speaker::Speaker *speaker_{nullptr};
-  std::unique_ptr<socket::Socket> socket_;
-  std::unique_ptr<socket::Socket> control_socket_;
-
-  optional<std::string> server_address_;
-  uint16_t server_port_;
-  uint16_t server_control_port_{1705};
-
-  QueueHandle_t playback_info_queue_;
 
   int64_t server_timestamp_to_client_(int64_t server_timestamp);
   ssize_t read_from_socket_(socket::Socket *socket, uint8_t *buffer, size_t length);
@@ -190,34 +173,48 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   bool server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str);
 
   std::string client_message_serialize_(ClientInfoMessage *msg);
+
   esp_err_t connect_to_server_();
 
+  esp_err_t send_client_message_();
   esp_err_t send_hello_message_();
-  static void timesync_callback(void *params);
+  esp_err_t send_time_message_();
+
   static void control_task(void *params);
-  static void snapcast_task(void *params);
   static void decode_task(void *params);
+  static void snapcast_task(void *params);
   static void sync_task(void *params);
-  TaskHandle_t snapcast_task_handle_{nullptr};
-  TaskHandle_t decode_task_handle_{nullptr};
-  TaskHandle_t sync_task_handle_{nullptr};
+
   TaskHandle_t control_task_handle_{nullptr};
+  TaskHandle_t decode_task_handle_{nullptr};
+  TaskHandle_t snapcast_task_handle_{nullptr};
+  TaskHandle_t sync_task_handle_{nullptr};
+
+  static void timesync_callback(void *params);
   uint16_t time_sync_counter_{0};
 
   EventGroupHandle_t event_group_{nullptr};
 
-  optional<audio::AudioStreamInfo> current_audio_stream_info_;
-
-  esp_err_t send_time_message_();
+  optional<audio::AudioStreamInfo> audio_stream_info_;
 
   optional<uint16_t> volume_;
 
   bool connected_{false};
-
-  bool first_audio_played_{true};
-
   bool is_muted_{false};
-  int64_t initial_playback_timestamp_{0};
+  bool external_mute_{false};
+
+  std::string player_id_;
+
+  speaker::Speaker *speaker_{nullptr};
+
+  std::unique_ptr<socket::Socket> client_socket_;
+  std::unique_ptr<socket::Socket> control_socket_;
+
+  optional<std::string> server_address_;
+  uint16_t server_port_;
+  uint16_t server_control_port_{1705};
+
+  QueueHandle_t playback_info_queue_;
 
   QueueHandle_t encoded_chunk_data_queue_;
   StaticQueue_t encoded_chunk_data_queue_buffer_;
@@ -227,17 +224,10 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   StaticQueue_t decoded_chunk_data_queue_buffer_;
   uint8_t *decoded_chunk_data_queue_storage_{nullptr};
 
-  std::deque<AudioSyncChunkTimings> chunk_timings_;
-
   size_t snapcast_buffer_duration_ms_{0};
   uint32_t snapcast_latency_ms_{0};
 
-  int32_t pending_frame_corrections_{0};
-
-  bool external_mute_{false};
-
-  MedianFilter internal_latency_;
-  MedianFilter server_internal_clock_offset_;
+  MedianFilter network_latency_filter_;
   MedianFilter actual_offsets_;
 };
 

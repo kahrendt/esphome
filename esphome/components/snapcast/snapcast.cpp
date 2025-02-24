@@ -103,7 +103,7 @@ void SnapcastPlayer::loop() {
   if (this->volume_.has_value()) {
     this->volume = static_cast<float>(this->volume_.value()) / 100.0f;
     this->speaker_->set_volume(this->volume);
-    this->send_client_message();
+    this->send_client_message_();
     this->publish_state();
     this->volume_.reset();
   }
@@ -116,7 +116,7 @@ void SnapcastPlayer::loop() {
   }
 }
 
-esp_err_t SnapcastPlayer::send_client_message() {
+esp_err_t SnapcastPlayer::send_client_message_() {
   if (this->connected_) {
     ClientInfoMessage client_msg = {.volume = static_cast<uint32_t>(this->speaker_->get_volume() * 100.0f),
                                     .muted = this->external_mute_};
@@ -137,8 +137,9 @@ esp_err_t SnapcastPlayer::send_client_message() {
     this->base_message_serialize_(&base_msg_for_client_info, base_msg_buffer);
     base_msg_buffer.put_uint32(json_client_msg.size());
 
-    if ((this->socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + sizeof(uint32_t)) == -1) ||
-        (this->socket_->write((void *) json_client_msg.data(), json_client_msg.size()) == -1)) {
+    if ((this->client_socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + sizeof(uint32_t)) ==
+         -1) ||
+        (this->client_socket_->write((void *) json_client_msg.data(), json_client_msg.size()) == -1)) {
       return ESP_FAIL;
     }
   }
@@ -163,7 +164,7 @@ esp_err_t SnapcastPlayer::send_time_message_() {
   time_msg_buffer.put_int32(0);
   time_msg_buffer.put_int32(0);
   ssize_t time_msg_written =
-      this->socket_->write((void *) time_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + TIME_MESSAGE_SIZE);
+      this->client_socket_->write((void *) time_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + TIME_MESSAGE_SIZE);
   if (time_msg_written == -1) {
     return ESP_FAIL;
   }
@@ -204,8 +205,8 @@ esp_err_t SnapcastPlayer::send_hello_message_() {
 
   this->base_message_serialize_(&base_msg, base_msg_buffer);
 
-  if ((this->socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE) == -1) ||
-      (this->socket_->write((void *) hello_msg_buffer.get_raw_data(), base_msg.size) == -1)) {
+  if ((this->client_socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE) == -1) ||
+      (this->client_socket_->write((void *) hello_msg_buffer.get_raw_data(), base_msg.size) == -1)) {
     return ESP_FAIL;
   }
   return ESP_OK;
@@ -256,10 +257,10 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
     ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);
     return ESP_FAIL;
   }
-  this->socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
+  this->client_socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
   this->control_socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
 
-  err = this->socket_->connect((struct sockaddr *) &server, sizeof(server));
+  err = this->client_socket_->connect((struct sockaddr *) &server, sizeof(server));
   if (err != 0) {
     ESP_LOGE(TAG, "Socket unable to connect: errno %d", err);
     return ESP_FAIL;
@@ -274,7 +275,7 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
   // printf("received control rpc version\n");
 
   int nodelay = 1;
-  if (this->socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
+  if (this->client_socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
     ESP_LOGW(TAG, "Failed to turn on TCP_NODELAY, syncing may not be accurate");
     nodelay = 0;
   }
@@ -409,8 +410,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
     if (this_snapcast->send_hello_message_() != ESP_OK) {
       ESP_LOGW(TAG, "Failed to send the hello message, trying in 5 seconds.");
-      this_snapcast->socket_->shutdown(0);
-      this_snapcast->socket_->close();
+      this_snapcast->client_socket_->shutdown(0);
+      this_snapcast->client_socket_->close();
       this_snapcast->control_socket_->shutdown(0);
       this_snapcast->control_socket_->close();
       continue;
@@ -427,8 +428,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
     if (audio_chunk == nullptr) {
       ESP_LOGE(TAG, "Failed to allocate audio chunk");
-      this_snapcast->socket_->shutdown(0);
-      this_snapcast->socket_->close();
+      this_snapcast->client_socket_->shutdown(0);
+      this_snapcast->client_socket_->close();
       this_snapcast->control_socket_->shutdown(0);
       this_snapcast->control_socket_->close();
       continue;
@@ -445,13 +446,13 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
     while (true) {
       bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE);
 
-      ssize_t bytes_read = this_snapcast->read_from_socket_(this_snapcast->socket_.get(),
+      ssize_t bytes_read = this_snapcast->read_from_socket_(this_snapcast->client_socket_.get(),
                                                             base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
       if (bytes_read == -1) {
         no_socket_error = false;
         ESP_LOGE(TAG, "Failed to read from the socket, closing the connection.");
-        this_snapcast->socket_->shutdown(0);
-        this_snapcast->socket_->close();
+        this_snapcast->client_socket_->shutdown(0);
+        this_snapcast->client_socket_->close();
         this_snapcast->control_socket_->shutdown(0);
         this_snapcast->control_socket_->close();
         break;
@@ -475,7 +476,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
         continue;
       }
       while (base_msg_size > 0) {
-        ssize_t bytes_read = this_snapcast->socket_->read(audio_chunk->data + offset, base_msg_size);
+        ssize_t bytes_read = this_snapcast->client_socket_->read(audio_chunk->data + offset, base_msg_size);
         if (bytes_read == -1) {
           no_socket_error = false;
           break;
@@ -488,14 +489,14 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
       if (!no_socket_error) {
         ESP_LOGE(TAG, "Failed to read from the socket, closing the connection.");
-        this_snapcast->socket_->shutdown(0);
-        this_snapcast->socket_->close();
+        this_snapcast->client_socket_->shutdown(0);
+        this_snapcast->client_socket_->close();
         this_snapcast->control_socket_->shutdown(0);
         this_snapcast->control_socket_->close();
         break;
       }
 
-      if (high_speed_timer_started && this_snapcast->server_internal_clock_offset_.is_full()) {
+      if (high_speed_timer_started && this_snapcast->network_latency_filter_.is_full()) {
         high_speed_timer_started = false;
         low_speed_timer_started = true;
         time_message_delay = NORMAL_SYNC_LATENCY_BUF;
@@ -558,7 +559,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           break;
         }
         case SNAPCAST_MESSAGE_WIRE_CHUNK: {
-          bool valid_chunk = this_snapcast->current_audio_stream_info_.has_value();
+          bool valid_chunk = this_snapcast->audio_stream_info_.has_value();
 
           int32_t timestamp_s = *reinterpret_cast<int32_t *>(audio_chunk->data + audio_chunk->offset);
           audio_chunk->offset += sizeof(int32_t);
@@ -650,7 +651,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
           const int64_t network_latency_us = (latency_client_to_server_us - latency_server_to_client_us) / 2;
 
-          this_snapcast->server_internal_clock_offset_.update(network_latency_us);
+          this_snapcast->network_latency_filter_.update(network_latency_us);
 
           break;
         }
@@ -659,23 +660,6 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
           break;
       }
-
-      // if (now - last_time_sync_message > time_message_delay) {
-      //   if (this_snapcast->send_time_message_() == ESP_OK) {
-      //     last_time_sync_message = now;
-      //   } else {
-      //     no_socket_error = false;
-      //   }
-      // }
-
-      // if (now - last_client_settings_message > client_message_delay) {
-      //   ESP_LOGD(TAG, "Sending client settings message.");
-      //   if (this_snapcast->send_client_message_() == ESP_OK) {
-      //     last_client_settings_message = now;
-      //   } else {
-      //     no_socket_error = false;
-      //   }
-      // }
 
       static uint32_t high_water_mark = 8192;
       uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
@@ -686,8 +670,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
       if (!no_socket_error) {
         ESP_LOGD(TAG, "Failed to read from the socket, closing the connection.");
-        this_snapcast->socket_->shutdown(0);
-        this_snapcast->socket_->close();
+        this_snapcast->client_socket_->shutdown(0);
+        this_snapcast->client_socket_->close();
         this_snapcast->control_socket_->shutdown(0);
         this_snapcast->control_socket_->close();
         break;
@@ -741,7 +725,7 @@ void SnapcastPlayer::decode_task(void *params) {
 
         size_t free_buffer_required = flac_decoder->get_output_buffer_size_bytes();
 
-        this_snapcast->current_audio_stream_info_ = audio::AudioStreamInfo(
+        this_snapcast->audio_stream_info_ = audio::AudioStreamInfo(
             flac_decoder->get_sample_depth(), flac_decoder->get_num_channels(), flac_decoder->get_sample_rate());
 
         if (this_snapcast->sync_task_handle_ == nullptr) {
@@ -749,7 +733,7 @@ void SnapcastPlayer::decode_task(void *params) {
                       &this_snapcast->sync_task_handle_);
         }
 
-        this_snapcast->speaker_->set_audio_stream_info(this_snapcast->current_audio_stream_info_.value());
+        this_snapcast->speaker_->set_audio_stream_info(this_snapcast->audio_stream_info_.value());
 
       } else if (flac_decoder != nullptr) {
         uint32_t output_samples = 0;
@@ -766,16 +750,15 @@ void SnapcastPlayer::decode_task(void *params) {
           continue;
         }
 
-        size_t new_bytes = this_snapcast->current_audio_stream_info_.value().samples_to_bytes(output_samples);
+        size_t new_bytes = this_snapcast->audio_stream_info_.value().samples_to_bytes(output_samples);
         decoded_chunk->size = new_bytes;
 
         decoded_chunk->codec_header = false;
         decoded_chunk->server_timestamp = encoded_chunk->server_timestamp;
         xQueueSend(this_snapcast->decoded_chunk_data_queue_, decoded_chunk, pdMS_TO_TICKS(20));
 
-        const uint32_t new_frames = this_snapcast->current_audio_stream_info_.value().bytes_to_frames(new_bytes);
-        const uint32_t new_duration_us =
-            this_snapcast->current_audio_stream_info_.value().frames_to_microseconds(new_frames);
+        const uint32_t new_frames = this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes);
+        const uint32_t new_duration_us = this_snapcast->audio_stream_info_.value().frames_to_microseconds(new_frames);
       }
     }
     static uint32_t high_water_mark = 8192;
@@ -792,13 +775,18 @@ void SnapcastPlayer::sync_task(void *params) {
 
   RAMAllocator<AudioSyncChunk> chunk_allocator(ExternalRAMAllocator<AudioSyncChunk>::ALLOW_FAILURE);
   AudioSyncChunk *chunk = chunk_allocator.allocate(1);
-  uint8_t chunks_since_last_adjustment = 25;
+
+  std::deque<AudioSyncChunkTimings> chunk_timings;
+
   while (true) {
     std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
         audio::AudioSinkTransferBuffer::create(OUTPUT_BUFFER_SIZE);
     output_transfer_buffer->set_sink(this_snapcast->speaker_);
     bool run_once = false;
     uint8_t synced_chunks = 0;
+
+    int64_t pending_frame_corrections = 0;
+
     while (true) {
       static uint32_t high_water_mark = 8192;
       uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
@@ -822,8 +810,8 @@ void SnapcastPlayer::sync_task(void *params) {
         this_snapcast->speaker_->stop();
 
         this_snapcast->actual_offsets_.reset();
-        this_snapcast->pending_frame_corrections_ = 0;
-        this_snapcast->chunk_timings_.clear();
+        pending_frame_corrections = 0;
+        chunk_timings.clear();
 
         xEventGroupSetBits(this_snapcast->event_group_, SYNC_FINISHED);
         continue;
@@ -833,19 +821,19 @@ void SnapcastPlayer::sync_task(void *params) {
 
       PlaybackInfo playback_info;
       while (xQueueReceive(this_snapcast->playback_info_queue_, &playback_info, 0) == pdTRUE) {
-        if (!this_snapcast->chunk_timings_.empty()) {
+        if (!chunk_timings.empty()) {
           uint32_t frames_played = playback_info.frames_played;
           int64_t write_timestamp = playback_info.write_timestamp;
 
           bool new_chunk = false;
           int32_t accumulated_chunk_corrections = 0;
-          AudioSyncChunkTimings front_chunk = this_snapcast->chunk_timings_.front();
+          AudioSyncChunkTimings front_chunk = chunk_timings.front();
           while (front_chunk.total_frames < frames_played) {
             frames_played -= front_chunk.total_frames;
             accumulated_chunk_corrections += front_chunk.frame_corrections;
 
-            this_snapcast->chunk_timings_.pop_front();
-            front_chunk = this_snapcast->chunk_timings_.front();
+            chunk_timings.pop_front();
+            front_chunk = chunk_timings.front();
 
             new_chunk = true;
           }
@@ -854,24 +842,21 @@ void SnapcastPlayer::sync_task(void *params) {
 
           int64_t full_precision_microseconds =
               (frames_played * 1000000LL) /
-              static_cast<int64_t>(this_snapcast->current_audio_stream_info_.value().get_sample_rate());
+              static_cast<int64_t>(this_snapcast->audio_stream_info_.value().get_sample_rate());
           int64_t server_timestamp_finished = front_chunk.server_timestamp + full_precision_microseconds;
           int64_t equivalent_client_timestamp = this_snapcast->server_timestamp_to_client_(server_timestamp_finished);
-          this_snapcast->chunk_timings_.front().total_frames -= frames_played;
-          this_snapcast->chunk_timings_.front().server_timestamp = server_timestamp_finished;
+          chunk_timings.front().total_frames -= frames_played;
+          chunk_timings.front().server_timestamp = server_timestamp_finished;
 
           if (abs(accumulated_chunk_corrections) > 10) {
             // Very large change, our median filter will be slow to a adapt
             this_snapcast->actual_offsets_.reset();
           }
-          this_snapcast->pending_frame_corrections_ -= accumulated_chunk_corrections;
-
-          int64_t internal_latency_written = front_chunk.internal_timestamp + full_precision_microseconds;
+          pending_frame_corrections -= accumulated_chunk_corrections;
 
           int64_t new_error = equivalent_client_timestamp - write_timestamp;
 
           this_snapcast->actual_offsets_.update(new_error);
-          // this_snapcast->internal_latency_.update(internal_latency_written - write_timestamp);
         }
       }
 
@@ -887,15 +872,13 @@ void SnapcastPlayer::sync_task(void *params) {
         this_snapcast->speaker_->start();
       }
 
-      if (!this_snapcast->chunk_timings_.empty()) {
-        int64_t pending_frame_corrections = this_snapcast->pending_frame_corrections_;
-
+      if (!chunk_timings.empty()) {
         int64_t signed_pending_duration_corrections =
             (pending_frame_corrections * 1000000L) /
-            static_cast<int64_t>(this_snapcast->current_audio_stream_info_.value().get_sample_rate());
+            static_cast<int64_t>(this_snapcast->audio_stream_info_.value().get_sample_rate());
 
         int64_t front_chunk_plays_at =
-            this_snapcast->server_timestamp_to_client_(this_snapcast->chunk_timings_.front().server_timestamp);
+            this_snapcast->server_timestamp_to_client_(chunk_timings.front().server_timestamp);
         int64_t us_to_start = front_chunk_plays_at - esp_timer_get_time();
         if (us_to_start - signed_pending_duration_corrections > 200000) {
           this_snapcast->speaker_->set_pause_state(true);
@@ -907,11 +890,9 @@ void SnapcastPlayer::sync_task(void *params) {
         }
       }
 
-      int64_t pending_frame_corrections = this_snapcast->pending_frame_corrections_;
-
       int64_t signed_pending_duration_corrections =
           (pending_frame_corrections * 1000000L) /
-          static_cast<int64_t>(this_snapcast->current_audio_stream_info_.value().get_sample_rate());
+          static_cast<int64_t>(this_snapcast->audio_stream_info_.value().get_sample_rate());
 
       int64_t recent_error_us = 0;
 
@@ -942,34 +923,33 @@ void SnapcastPlayer::sync_task(void *params) {
       std::memcpy(output_transfer_buffer->get_buffer_end(), chunk->data, chunk->size);
       output_transfer_buffer->increase_buffer_length(chunk->size);
 
-      uint32_t chunk_frame_count = this_snapcast->current_audio_stream_info_.value().bytes_to_frames(chunk->size);
+      uint32_t chunk_frame_count = this_snapcast->audio_stream_info_.value().bytes_to_frames(chunk->size);
       int32_t frame_corrections = 0;
 
-      const size_t bytes_per_frame = this_snapcast->current_audio_stream_info_.value().frames_to_bytes(1);
+      const size_t bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
 
       if (recent_error_us > 5000) {
-        size_t silence_bytes =
-            this_snapcast->current_audio_stream_info_.value().ms_to_bytes((recent_error_us - 25) / 1000);
+        size_t silence_bytes = this_snapcast->audio_stream_info_.value().ms_to_bytes((recent_error_us - 25) / 1000);
         size_t actual_silence_bytes = std::min(silence_bytes, output_transfer_buffer->free());
         std::memset((void *) (output_transfer_buffer->get_buffer_end() - chunk->size), 0,
                     actual_silence_bytes + chunk->size);
         output_transfer_buffer->increase_buffer_length(actual_silence_bytes);
-        frame_corrections = this_snapcast->current_audio_stream_info_.value().bytes_to_frames(actual_silence_bytes);
+        frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_silence_bytes);
 
         printf("Hard sync: adding %d frames of silence to hard sync. Current error is %" PRId64 "us\n",
                frame_corrections, recent_error_us);
 
       } else if (recent_error_us < -5000) {
         size_t bytes_to_remove =
-            this_snapcast->current_audio_stream_info_.value().ms_to_bytes((abs(recent_error_us) - 25) / 1000);
+            this_snapcast->audio_stream_info_.value().ms_to_bytes((abs(recent_error_us) - 25) / 1000);
         size_t actual_bytes_to_remove = std::min(bytes_to_remove, chunk->size - bytes_per_frame);
         output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
-        frame_corrections = -this_snapcast->current_audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
+        frame_corrections = -this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
         printf("Hard sync: removing %d frames from a chunk. Current error is % " PRId64 "us\n", frame_corrections,
                recent_error_us);
 
       } else if (recent_error_us < -25) {
-        const uint32_t num_channels = this_snapcast->current_audio_stream_info_.value().get_channels();
+        const uint32_t num_channels = this_snapcast->audio_stream_info_.value().get_channels();
         int16_t *samples = reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
         for (int chan = 0; chan < num_channels; ++chan) {
           const int16_t left_sample = samples[chan];
@@ -980,7 +960,7 @@ void SnapcastPlayer::sync_task(void *params) {
         frame_corrections = -1;
       } else if (recent_error_us > 25) {
         if (output_transfer_buffer->free() >= bytes_per_frame) {
-          const uint32_t num_channels = this_snapcast->current_audio_stream_info_.value().get_channels();
+          const uint32_t num_channels = this_snapcast->audio_stream_info_.value().get_channels();
           int16_t *samples =
               reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
           for (int chan = 0; chan < num_channels; ++chan) {
@@ -996,20 +976,20 @@ void SnapcastPlayer::sync_task(void *params) {
       }
 
       chunk_frame_count += frame_corrections;
-      this_snapcast->pending_frame_corrections_ += frame_corrections;
+      pending_frame_corrections += frame_corrections;
 
       AudioSyncChunkTimings timings;
       timings.server_timestamp = chunk->server_timestamp;
       timings.internal_timestamp = esp_timer_get_time();
       timings.total_frames = chunk_frame_count;
       timings.frame_corrections = frame_corrections;
-      this_snapcast->chunk_timings_.push_back(timings);
+      chunk_timings.push_back(timings);
     }
   }
 }
 
 int64_t SnapcastPlayer::server_timestamp_to_client_(int64_t server_timestamp) {
-  return server_timestamp - this->server_internal_clock_offset_.get_most_recent_median() +
+  return server_timestamp - this->network_latency_filter_.get_most_recent_median() +
          (this->snapcast_buffer_duration_ms_ - this->snapcast_latency_ms_) * 1000;
 }
 
