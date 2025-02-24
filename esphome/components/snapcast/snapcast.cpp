@@ -475,15 +475,19 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
                  base_msg_size, base_msg.type);
         continue;
       }
-      while (base_msg_size > 0) {
-        ssize_t bytes_read = this_snapcast->client_socket_->read(audio_chunk->data + offset, base_msg_size);
-        if (bytes_read == -1) {
-          no_socket_error = false;
-          break;
-        }
-        base_msg_size -= bytes_read;
-        offset += bytes_read;
+
+      bytes_read =
+          this_snapcast->read_from_socket_(this_snapcast->client_socket_.get(), audio_chunk->data, base_msg_size);
+      if (bytes_read != base_msg_size) {
+        no_socket_error = false;
+        ESP_LOGE(TAG, "Problem reading from the socket, closing the connection.");
+        this_snapcast->client_socket_->shutdown(0);
+        this_snapcast->client_socket_->close();
+        this_snapcast->control_socket_->shutdown(0);
+        this_snapcast->control_socket_->close();
+        break;
       }
+
       audio_chunk->offset = 0;
       audio_chunk->size = base_msg.size;
 
