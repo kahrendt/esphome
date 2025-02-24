@@ -339,13 +339,12 @@ std::string SnapcastPlayer::read_until_newline_(socket::Socket *socket) {
   std::string buffer;
   char new_char = ' ';
   while (new_char != '\n') {
-    ssize_t bytes_read = socket->read((void *) &new_char, sizeof(char));
+    ssize_t bytes_read = socket->read((void *) &new_char, sizeof(new_char));
     if (bytes_read == -1) {
       printf("reading from control socket had an issue!\n");
-      break;
+      return "";
     }
     buffer.push_back(new_char);
-    printf("%c", new_char);
   }
 
   return buffer;
