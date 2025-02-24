@@ -505,11 +505,15 @@ esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_strea
 
   i2s_std_clk_config_t clk_config = I2S_STD_CLK_DEFAULT_CONFIG(audio_stream_info.get_sample_rate());
 
+#if defined(USE_ESP32_VARIANT_ESP32S3)
+  clk_config.clk_src = I2S_CLK_SRC_XTAL;
+#elif defined(USE_ESP32_VARIANT_ESP32)
+  clk_config.clk_src = I2S_CLK_SRC_APLL;
+#endif
+
   if (this->i2s_role_ & I2S_ROLE_SLAVE) {
-    clk_config.clk_src = I2S_CLK_SRC_XTAL;
     clk_config.mclk_multiple = (i2s_mclk_multiple_t) 512;
   } else {
-    clk_config.clk_src = I2S_CLK_SRC_XTAL;
     clk_config.mclk_multiple = (i2s_mclk_multiple_t) 256;
   }
 
