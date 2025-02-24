@@ -639,23 +639,18 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           audio_chunk->offset += sizeof(int32_t);
           audio_chunk->size -= sizeof(int32_t);
 
-          int64_t time_rx_us = now;
+          const int64_t latency_client_to_server_us =
+              static_cast<int64_t>(latency_s) * 1000000LL + static_cast<int64_t>(latency_us);
 
-          int64_t time_tx_us =
+          const int64_t time_rx_us = now;
+          const int64_t time_tx_us =
               static_cast<int64_t>(base_msg.sent.sec) * 1000000LL + static_cast<int64_t>(base_msg.sent.usec);
-          int64_t t_dif = time_rx_us - time_tx_us;
 
-          int64_t latency = static_cast<int64_t>(latency_s) * 1000000LL + static_cast<int64_t>(latency_us);
+          const int64_t latency_server_to_client_us = time_rx_us - time_tx_us;
 
-          int64_t tmp_dif = (latency - t_dif) / 2;
+          const int64_t network_latency_us = (latency_client_to_server_us - latency_server_to_client_us) / 2;
 
-          int64_t server_clock_offset = this_snapcast->server_internal_clock_offset_.update(tmp_dif);
-
-          // printf("median offset %" PRId64 " with server mismatch %" PRId64 " internal latency is %" PRId64
-          //        "; pending frames to be corrected %d\n",
-          //        server_clock_offset, this_snapcast->actual_offsets_.get_most_recent_median(),
-          //        this_snapcast->internal_latency_.get_most_recent_median(),
-          //        this_snapcast->pending_frame_corrections_);
+          this_snapcast->server_internal_clock_offset_.update(network_latency_us);
 
           break;
         }
