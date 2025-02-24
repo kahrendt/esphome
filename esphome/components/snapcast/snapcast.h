@@ -200,6 +200,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   TaskHandle_t snapcast_task_handle_{nullptr};
   TaskHandle_t decode_task_handle_{nullptr};
   TaskHandle_t sync_task_handle_{nullptr};
+  TaskHandle_t control_task_handle_{nullptr};
   uint16_t time_sync_counter_{0};
 
   EventGroupHandle_t event_group_{nullptr};

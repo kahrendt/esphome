@@ -40,6 +40,7 @@ static const uint32_t DECODED_CHUNK_QUEUE_SIZE = 50;
 static const uint32_t FAST_SYNC_LATENCY_BUF = 10000;      // in µs
 static const uint32_t NORMAL_SYNC_LATENCY_BUF = 1000000;  // in µs
 
+static const size_t CONTROL_TASK_STACK_SIZE = 3 * 1024;
 static const size_t SNAPCAST_TASK_STACK_SIZE = 3 * 1024;
 static const size_t DECODE_TASK_STACK_SIZE = 3 * 1024;
 static const size_t SYNC_TASK_STACK_SIZE = 3 * 1024;
@@ -48,6 +49,7 @@ enum EventGroupBits : uint32_t {
   COMMAND_STOP = (1 << 0),
   DECODE_FINISHED = (1 << 3),
   SYNC_FINISHED = (1 << 5),
+  CONTROL_START = (1 << 7),
 };
 
 void SnapcastPlayer::start() {
@@ -79,6 +81,7 @@ void SnapcastPlayer::start() {
                          &decoded_chunk_data_queue_buffer_);
   // this->encoded_chunk_data_queue_ = xQueueCreate(20, sizeof(AudioSyncChunk));
   xTaskCreate(snapcast_task, "snapcast", SNAPCAST_TASK_STACK_SIZE, (void *) this, 5, &this->snapcast_task_handle_);
+  xTaskCreate(control_task, "snap_control", CONTROL_TASK_STACK_SIZE, (void *) this, 1, &this->control_task_handle_);
 
   this->playback_info_queue_ = xQueueCreate(10, sizeof(PlaybackInfo));
   this->event_group_ = xEventGroupCreate();
@@ -266,8 +269,9 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
     ESP_LOGE(TAG, "Control socket unable to connect: errno %d", err);
     return ESP_FAIL;
   }
-  this->control_rpc_version_();
-  printf("received control rpc version\n");
+  xEventGroupSetBits(this_snapcast->event_group_, CONTROL_START);
+  // this->control_rpc_version_();
+  // printf("received control rpc version\n");
 
   int nodelay = 1;
   if (this->socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
@@ -358,6 +362,27 @@ void SnapcastPlayer::control_rpc_version_() {
   this->control_socket_->write((void *) control_rpc_version_message.data(), control_rpc_version_message.size());
   std::string response = this->read_until_newline_(this->control_socket_.get());
   ESP_LOGD(TAG, "control_rpc_version_message: %s", response.c_str());
+}
+
+void SnapcastPlayer::control_task(void *params) {
+  SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
+
+  xEventGroupWaitBits(this->event_group_, EventGroupBits::CONTROL_START, true, false, portMAX_DELAY);
+  while (true) {
+    std::string notification = this_snapcast->read_until_newline_(this_snapcast->control_socket_);
+    printf("Control task received a notification %s\n", notification.c_str());
+
+    bool valid = json::parse_json(notification, [this_snapcast](JsonObject root) -> bool {
+      if (!root.containsKey("jsonrpc")) {
+        ESP_LOGE(TAG, "JSON RPC notification isn't valid");
+        return false;
+      }
+      std::string method = root["method"].as<std::string>;
+      printf("method: %s\n", method.c_str());
+      return true;
+    });
+    delay(10);
+  }
 }
 
 void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
