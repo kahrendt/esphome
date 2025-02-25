@@ -36,11 +36,11 @@ struct PlaybackInfo {
 };
 
 struct AudioSyncChunk {
-  int64_t server_timestamp;
-  size_t size;
-  bool codec_header = false;
   uint8_t data[MAX_CHUNK_SIZE];
   size_t offset{0};
+  size_t size;
+  int64_t server_timestamp;
+  bool codec_header = false;
 };
 
 struct AudioSyncChunkTimings {
@@ -90,6 +90,7 @@ struct ClientInfoMessage {
 
 static const size_t BASE_MESSAGE_SIZE = 26;
 static const size_t TIME_MESSAGE_SIZE = 8;
+static const size_t WIRE_CHUNK_HEADER_SIZE = 12;
 
 class MedianFilter {
  public:
