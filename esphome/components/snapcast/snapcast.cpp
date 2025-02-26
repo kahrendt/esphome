@@ -81,7 +81,7 @@ void SnapcastPlayer::start() {
       xQueueCreateStatic(DECODED_CHUNK_QUEUE_SIZE, sizeof(AudioSyncChunk), this->decoded_chunk_data_queue_storage_,
                          &decoded_chunk_data_queue_buffer_);
 
-  this->playback_info_queue_ = xQueueCreate(10, sizeof(PlaybackInfo));
+  this->playback_info_queue_ = xQueueCreate(50, sizeof(PlaybackInfo));
   this->event_group_ = xEventGroupCreate();
 
   xTaskCreate(snapcast_task, "snapcast", SNAPCAST_TASK_STACK_SIZE, (void *) this, 5, &this->snapcast_task_handle_);
@@ -111,6 +111,14 @@ void SnapcastPlayer::loop() {
     this->send_client_message_();
     this->publish_state();
     this->volume_.reset();
+  }
+
+  if (this->stream_is_idle_.has_value()) {
+    if (this->stream_is_idle_.value()) {
+      this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
+    } else {
+      this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
+    }
   }
 
   if (this->state != old_state) {
@@ -277,6 +285,7 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
     return ESP_FAIL;
   }
   xEventGroupSetBits(this->event_group_, CONTROL_START);
+  this->control_get_server_status();
   // this->control_rpc_version_();
   // printf("received control rpc version\n");
 
@@ -291,10 +300,16 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
 
 void SnapcastPlayer::disconnect_from_server_() {
   this->connected_ = false;
+
   this->client_socket_->shutdown(0);
   this->client_socket_->close();
   this->control_socket_->shutdown(0);
   this->control_socket_->close();
+
+  this->stream_is_idle_.reset();
+  this->group_id_ = "";
+  this->player_id_ = "";
+  this->stream_id_ = "";
 }
 
 media_player::MediaPlayerTraits SnapcastPlayer::get_traits() {
@@ -323,7 +338,8 @@ void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
   }
 
   if (call.get_volume().has_value()) {
-    this->volume_ = round(call.get_volume().value() * 100.0f);
+    this->control_set_stream_volume_(round(call.get_volume().value() * 100.0f));
+    // this->volume_ = round(call.get_volume().value() * 100.0f);
   }
 
   if (call.get_command().has_value()) {
@@ -381,26 +397,127 @@ void SnapcastPlayer::control_rpc_version_() {
   ESP_LOGD(TAG, "control_rpc_version_message: %s", response.c_str());
 }
 
+void SnapcastPlayer::control_get_server_status() {
+  std::string control_rpc_version_message = json::build_json([](JsonObject root) {
+    root["id"] = 8;
+    root["jsonrpc"] = "2.0";
+    root["method"] = "Server.GetStatus";
+  });
+
+  control_rpc_version_message.push_back('\n');
+
+  this->control_socket_->write((void *) control_rpc_version_message.data(), control_rpc_version_message.size());
+}
+void SnapcastPlayer::control_set_stream_volume_(int volume) {
+  std::string control_stream_volume_message = json::build_json([this, volume](JsonObject root) {
+    JsonObject params;
+    params["id"] = this->stream_id_;
+    params["property"] = "volume";
+    params["value"] = volume;
+    root["id"] = 1;
+    root["jsonrpc"] = "2.0";
+    root["method"] = "Stream.SetProperty";
+    root["params"] = params;
+  });
+
+  control_stream_volume_message.push_back('\n');
+
+  this->control_socket_->write((void *) control_stream_volume_message.data(), control_stream_volume_message.size());
+}
+
 void SnapcastPlayer::control_task(void *params) {
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
 
   xEventGroupWaitBits(this_snapcast->event_group_, EventGroupBits::CONTROL_START, true, false, portMAX_DELAY);
   while (true) {
     std::string message = this_snapcast->read_until_newline_(this_snapcast->control_socket_.get());
+    if (message.empty()) {
+      delay(10);
+    }
 
     if (!message.empty()) {
       ESP_LOGV(TAG, "Control task received a message: %s", message.c_str());
       bool valid = json::parse_json(message, [this_snapcast](JsonObject root) -> bool {
-        if (!root.containsKey("jsonrpc") || !root.containsKey("method")) {
+        if (!root.containsKey("jsonrpc")) {
           ESP_LOGE(TAG, "Control JSON RPC notification isn't valid");
           return false;
         }
-        std::string method = root["method"].as<std::string>();
+        std::string method = "";
+        if (root.containsKey("method")) {
+          method = root["method"].as<std::string>();
+        }
+
+        std::string result = "";
+        if (root.containsKey("result")) {
+          JsonObject params = root["result"].as<JsonObject>();
+          if (params.containsKey("server")) {
+            JsonObject server = params["server"].as<JsonObject>();
+            if (server.containsKey("groups")) {
+              JsonArray groups = server["groups"].as<JsonArray>();
+              for (const JsonObject &group : groups) {
+                if (group.containsKey("clients")) {
+                  JsonArray clients = group["clients"].as<JsonArray>();
+                  for (const JsonObject &client : clients) {
+                    if (client["id"].as<std::string>().compare(this_snapcast->player_id_) == 0) {
+                      this_snapcast->group_id_ = group["id"].as<std::string>();
+                      this_snapcast->stream_id_ = group["stream_id"].as<std::string>();
+                      ESP_LOGV(TAG, "Found which group we are in, current group id is %s streaming %s",
+                               this_snapcast->group_id_.c_str(), this_snapcast->stream_id_.c_str());
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        if (method.compare("Server.OnUpdate") == 0) {
+          if (root.containsKey("params")) {
+            JsonObject params = root["params"].as<JsonObject>();
+            if (params.containsKey("server")) {
+              JsonObject server = params["server"].as<JsonObject>();
+              if (server.containsKey("groups")) {
+                JsonArray groups = server["groups"].as<JsonArray>();
+                for (const JsonObject &group : groups) {
+                  if (group.containsKey("clients")) {
+                    JsonArray clients = group["clients"].as<JsonArray>();
+                    for (const JsonObject &client : clients) {
+                      if (client["id"].as<std::string>().compare(this_snapcast->player_id_) == 0) {
+                        this_snapcast->group_id_ = group["id"].as<std::string>();
+                        this_snapcast->stream_id_ = group["stream_id"].as<std::string>();
+                        ESP_LOGV(TAG, "Found which group we are in, current group id is %s streaming %s",
+                                 this_snapcast->group_id_.c_str(), this_snapcast->stream_id_.c_str());
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        if (method.compare("Group.OnStreamChanged") == 0) {
+          JsonObject group_stream_params = root["params"];
+          if (group_stream_params["id"].as<std::string>().compare(this_snapcast->group_id_) == 0) {
+            this_snapcast->stream_id_ = group_stream_params["stream_id"].as<std::string>();
+            ESP_LOGV(TAG, "Current group changed stream id to %s", this_snapcast->stream_id_.c_str());
+          }
+        }
+        if (method.compare("Stream.OnUpdate") == 0) {
+          JsonObject stream_params = root["params"];
+          if (stream_params["id"].as<std::string>().compare(this_snapcast->stream_id_) == 0) {
+            std::string state = stream_params["stream"]["status"].as<std::string>();
+            if (state.compare("idle") == 0) {
+              this_snapcast->stream_is_idle_ = true;
+            } else if (state.compare("playing") == 0) {
+              this_snapcast->stream_is_idle_ = false;
+            }
+            ESP_LOGV(TAG, "Current stream state is %s", state.c_str());
+          }
+        }
         return true;
       });
     }
-
-    delay(10);
   }
 }
 

@@ -155,6 +155,8 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   void set_server_address(std::string server_address) { this->server_address_ = std::move(server_address); }
   void set_server_port(uint16_t server_port) { this->server_port_ = server_port; }
 
+  void control_get_server_status();
+
  protected:
   // Receives commands from HA or from the voice assistant component
   void control(const media_player::MediaPlayerCall &call) override;
@@ -163,6 +165,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   ssize_t read_from_socket_(socket::Socket *socket, uint8_t *buffer, size_t length);
   std::string read_until_newline_(socket::Socket *socket);
   void control_rpc_version_();
+  void control_set_stream_volume_(int volume);
 
   void base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
   void base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
@@ -205,7 +208,10 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   bool is_muted_{false};
   bool external_mute_{false};
 
+  std::string group_id_;
   std::string player_id_;
+  std::string stream_id_;
+  optional<bool> stream_is_idle_;
 
   speaker::Speaker *speaker_{nullptr};
 
