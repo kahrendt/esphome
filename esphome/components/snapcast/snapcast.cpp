@@ -338,8 +338,8 @@ void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
   }
 
   if (call.get_volume().has_value()) {
-    this->control_set_stream_volume_(round(call.get_volume().value() * 100.0f));
-    // this->volume_ = round(call.get_volume().value() * 100.0f);
+    // this->control_set_stream_volume_(round(call.get_volume().value() * 100.0f));
+    this->volume_ = round(call.get_volume().value() * 100.0f);
   }
 
   if (call.get_command().has_value()) {
