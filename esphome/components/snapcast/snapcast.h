@@ -18,7 +18,7 @@
 namespace esphome {
 namespace snapcast {
 
-static const size_t MAX_CHUNK_SIZE = 8000;
+static const size_t MAX_CHUNK_SIZE = 6000;
 
 enum MessageType {
   SNAPCAST_MESSAGE_BASE = 0,
@@ -47,7 +47,6 @@ struct AudioSyncChunkTimings {
   int64_t server_timestamp;
   uint32_t total_frames;
   int32_t frame_corrections = 0;
-  int64_t internal_timestamp;
 };
 
 struct TimeMessage {

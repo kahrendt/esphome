@@ -35,7 +35,7 @@ static const size_t INPUT_BUFFER_SIZE = 1024 * 50;
 static const size_t OUTPUT_BUFFER_SIZE = 1024 * 50;
 
 static const uint32_t ENCODED_CHUNK_QUEUE_SIZE = 50;
-static const uint32_t DECODED_CHUNK_QUEUE_SIZE = 50;
+static const uint32_t DECODED_CHUNK_QUEUE_SIZE = 5;
 
 static const uint32_t FAST_SYNC_LATENCY_BUF = 10000;      // in µs
 static const uint32_t NORMAL_SYNC_LATENCY_BUF = 1000000;  // in µs
@@ -44,6 +44,122 @@ static const size_t CONTROL_TASK_STACK_SIZE = 3 * 1024;
 static const size_t SNAPCAST_TASK_STACK_SIZE = 3 * 1024;
 static const size_t DECODE_TASK_STACK_SIZE = 3 * 1024;
 static const size_t SYNC_TASK_STACK_SIZE = 3 * 1024;
+
+static const int GOOD_SYNCS_BEFORE_UNMUTE = 5;
+static const int64_t HARD_SYNC_THRESHOLD_US = 5000;
+
+#define STATS_TASK_PRIO 3
+#define STATS_TICKS pdMS_TO_TICKS(5000)
+#define ARRAY_SIZE_OFFSET 5  // Increase this if print_real_time_stats returns ESP_ERR_INVALID_SIZE
+#define configRUN_TIME_COUNTER_TYPE uint32_t
+#define CONFIG_FREERTOS_NUMBER_OF_CORES 2
+static esp_err_t print_real_time_stats(TickType_t xTicksToWait) {
+  TaskStatus_t *start_array = NULL, *end_array = NULL;
+  UBaseType_t start_array_size, end_array_size;
+  configRUN_TIME_COUNTER_TYPE start_run_time, end_run_time;
+  esp_err_t ret;
+
+  // Allocate array to store current task states
+  start_array_size = uxTaskGetNumberOfTasks() + ARRAY_SIZE_OFFSET;
+  size_t size = start_array_size * sizeof(TaskStatus_t);
+  start_array = static_cast<TaskStatus_t *>(malloc(size));
+  if (start_array == NULL) {
+    ret = ESP_ERR_NO_MEM;
+    free(start_array);
+    free(end_array);
+    return ret;
+  }
+  // Get current task states
+  start_array_size = uxTaskGetSystemState(start_array, start_array_size, &start_run_time);
+  if (start_array_size == 0) {
+    ret = ESP_ERR_INVALID_SIZE;
+    free(start_array);
+    free(end_array);
+    return ret;
+  }
+
+  vTaskDelay(xTicksToWait);
+
+  // Allocate array to store tasks states post delay
+  end_array_size = uxTaskGetNumberOfTasks() + ARRAY_SIZE_OFFSET;
+  end_array = static_cast<TaskStatus_t *>(malloc(sizeof(TaskStatus_t) * end_array_size));
+  if (end_array == NULL) {
+    ret = ESP_ERR_NO_MEM;
+    free(start_array);
+    free(end_array);
+    return ret;
+  }
+  // Get post delay task states
+  end_array_size = uxTaskGetSystemState(end_array, end_array_size, &end_run_time);
+  if (end_array_size == 0) {
+    ret = ESP_ERR_INVALID_SIZE;
+    free(start_array);
+    free(end_array);
+    return ret;
+  }
+
+  // Calculate total_elapsed_time in units of run time stats clock period.
+  uint32_t total_elapsed_time = (end_run_time - start_run_time);
+  if (total_elapsed_time == 0) {
+    ret = ESP_ERR_INVALID_STATE;
+    free(start_array);
+    free(end_array);
+    return ret;
+  }
+
+  printf("| Task | Run Time | Percentage\n");
+  // Match each task in start_array to those in the end_array
+  for (int i = 0; i < start_array_size; i++) {
+    int k = -1;
+    for (int j = 0; j < end_array_size; j++) {
+      if (start_array[i].xHandle == end_array[j].xHandle) {
+        k = j;
+        // Mark that task have been matched by overwriting their handles
+        start_array[i].xHandle = NULL;
+        end_array[j].xHandle = NULL;
+        break;
+      }
+    }
+    // Check if matching task found
+    if (k >= 0) {
+      uint32_t task_elapsed_time = end_array[k].ulRunTimeCounter - start_array[i].ulRunTimeCounter;
+      uint32_t percentage_time = (task_elapsed_time * 100UL) / (total_elapsed_time * CONFIG_FREERTOS_NUMBER_OF_CORES);
+      printf("| %s | %" PRIu32 " | %" PRIu32 "%%\n", start_array[i].pcTaskName, task_elapsed_time, percentage_time);
+    }
+  }
+
+  // Print unmatched tasks
+  for (int i = 0; i < start_array_size; i++) {
+    if (start_array[i].xHandle != NULL) {
+      printf("| %s | Deleted\n", start_array[i].pcTaskName);
+    }
+  }
+  for (int i = 0; i < end_array_size; i++) {
+    if (end_array[i].xHandle != NULL) {
+      printf("| %s | Created\n", end_array[i].pcTaskName);
+    }
+  }
+  ret = ESP_OK;
+
+  // exit:  // Common return path
+  free(start_array);
+  free(end_array);
+  return ret;
+}
+
+static void stats_task(void *arg) {
+  // Print real time stats periodically
+  while (1) {
+    printf("\n\nGetting real time stats over %" PRIu32 " ticks\n", STATS_TICKS);
+    esp_err_t err = print_real_time_stats(STATS_TICKS);
+    if (err == ESP_OK) {
+      printf("Real time stats obtained\n");
+    } else {
+      printf("Error getting real time stats\n");
+      printf("Error: %s", esp_err_to_name(err));
+    }
+  }
+}
 
 enum EventGroupBits : uint32_t {
   COMMAND_STOP = (1 << 0),
@@ -54,6 +170,7 @@ enum EventGroupBits : uint32_t {
 };
 
 void SnapcastPlayer::start() {
+  xTaskCreatePinnedToCore(stats_task, "stats", 4096, NULL, STATS_TASK_PRIO, NULL, tskNO_AFFINITY);
   this->speaker_->add_audio_output_callback([this](uint32_t frames_played, int64_t write_timestamp) {
     PlaybackInfo playback_info = {.frames_played = frames_played, .write_timestamp = write_timestamp};
     if (!xQueueSend(this->playback_info_queue_, &playback_info, 0)) {
@@ -71,6 +188,7 @@ void SnapcastPlayer::start() {
       xQueueCreateStatic(ENCODED_CHUNK_QUEUE_SIZE, sizeof(AudioSyncChunk), this->encoded_chunk_data_queue_storage_,
                          &encoded_chunk_data_queue_buffer_);
 
+  RAMAllocator<uint8_t> internal_allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
   this->decoded_chunk_data_queue_storage_ = allocator.allocate(DECODED_CHUNK_QUEUE_SIZE * sizeof(AudioSyncChunk));
   if (this->decoded_chunk_data_queue_storage_ == nullptr) {
     this->mark_failed();
@@ -94,7 +212,7 @@ void SnapcastPlayer::loop() {
 
   EventBits_t event_bits = xEventGroupGetBits(this->event_group_);
 
-  if (event_bits & (DECODE_FINISHED | SYNC_FINISHED)) {
+  if ((event_bits & DECODE_FINISHED) && (event_bits & SYNC_FINISHED)) {
     this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
     if (this->speaker_->is_stopped()) {
       xQueueReset(this->playback_info_queue_);
@@ -523,7 +641,7 @@ void SnapcastPlayer::control_task(void *params) {
 
 void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
-  RAMAllocator<AudioSyncChunk> chunk_allocator(ExternalRAMAllocator<AudioSyncChunk>::ALLOW_FAILURE);
+  RAMAllocator<AudioSyncChunk> chunk_allocator(RAMAllocator<AudioSyncChunk>::ALLOC_INTERNAL);
   esp_timer_handle_t timesync_message_timer;
   static const esp_timer_create_args_t timer_for_syncing_args = {.callback = &timesync_callback,
                                                                  .arg = (void *) this_snapcast,
@@ -794,7 +912,8 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 void SnapcastPlayer::decode_task(void *params) {
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
 
-  RAMAllocator<AudioSyncChunk> chunk_allocator(ExternalRAMAllocator<AudioSyncChunk>::ALLOW_FAILURE);
+  RAMAllocator<AudioSyncChunk> chunk_allocator(RAMAllocator<AudioSyncChunk>::ALLOW_FAILURE);
+  // RAMAllocator<AudioSyncChunk> chunk_allocator(RAMAllocator<AudioSyncChunk>::ALLOC_INTERNAL);
   AudioSyncChunk *encoded_chunk = chunk_allocator.allocate(1);
   AudioSyncChunk *decoded_chunk = chunk_allocator.allocate(1);
   std::unique_ptr<esp_audio_libs::flac::FLACDecoder> flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
@@ -802,11 +921,6 @@ void SnapcastPlayer::decode_task(void *params) {
   while (true) {
     EventBits_t event_bits = xEventGroupGetBits(this_snapcast->event_group_);
     if ((event_bits & COMMAND_STOP) && !(event_bits & DECODE_FINISHED)) {
-      // if (flac_decoder != nullptr) {
-      //   flac_decoder.reset();
-      // }
-      // flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
-
       this_snapcast->audio_stream_info_.reset();
       xQueueReset(this_snapcast->decoded_chunk_data_queue_);
 
@@ -820,9 +934,12 @@ void SnapcastPlayer::decode_task(void *params) {
 
     if (xQueueReceive(this_snapcast->encoded_chunk_data_queue_, encoded_chunk, pdMS_TO_TICKS(20))) {
       if (encoded_chunk->codec_header) {
-        ESP_LOGV(TAG, "Decoding FLAC header");
+        ESP_LOGD(TAG, "Decoding FLAC header");
+
+        // Restart FLAC decoder
         flac_decoder.reset();
         flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
+
         auto result = flac_decoder->read_header(encoded_chunk->data + encoded_chunk->offset, encoded_chunk->size);
 
         if (result == esp_audio_libs::flac::FLAC_DECODER_HEADER_OUT_OF_DATA) {
@@ -863,14 +980,19 @@ void SnapcastPlayer::decode_task(void *params) {
         }
 
         size_t new_bytes = this_snapcast->audio_stream_info_.value().samples_to_bytes(output_samples);
+
+        uint32_t new_frames = this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes);
+        const uint32_t new_duration_ms =
+            this_snapcast->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&new_frames);
+        const int64_t new_duration_us =
+            new_duration_ms * 1000 + this_snapcast->audio_stream_info_.value().frames_to_microseconds(new_frames);
+
         decoded_chunk->size = new_bytes;
 
         decoded_chunk->codec_header = false;
-        decoded_chunk->server_timestamp = encoded_chunk->server_timestamp;
-        xQueueSend(this_snapcast->decoded_chunk_data_queue_, decoded_chunk, pdMS_TO_TICKS(20));
-
-        const uint32_t new_frames = this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes);
-        const uint32_t new_duration_us = this_snapcast->audio_stream_info_.value().frames_to_microseconds(new_frames);
+        decoded_chunk->server_timestamp =
+            encoded_chunk->server_timestamp + new_duration_us;  // encoded_chunk->server_timestamp;
+        xQueueSend(this_snapcast->decoded_chunk_data_queue_, decoded_chunk, pdMS_TO_TICKS(200));
       }
     }
     static uint32_t high_water_mark = 8192;
@@ -885,7 +1007,8 @@ void SnapcastPlayer::decode_task(void *params) {
 void SnapcastPlayer::sync_task(void *params) {
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
 
-  RAMAllocator<AudioSyncChunk> chunk_allocator(ExternalRAMAllocator<AudioSyncChunk>::ALLOW_FAILURE);
+  RAMAllocator<AudioSyncChunk> chunk_allocator(RAMAllocator<AudioSyncChunk>::ALLOC_INTERNAL);
+  ;
   AudioSyncChunk *chunk = chunk_allocator.allocate(1);
 
   std::deque<AudioSyncChunkTimings> chunk_timings;
@@ -894,12 +1017,12 @@ void SnapcastPlayer::sync_task(void *params) {
     std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
         audio::AudioSinkTransferBuffer::create(OUTPUT_BUFFER_SIZE);
     output_transfer_buffer->set_sink(this_snapcast->speaker_);
-    bool run_once = false;
-    uint8_t synced_chunks = 0;
+    int synced_chunks = 0;
 
     int64_t pending_frame_corrections = 0;
 
     while (true) {
+      delay(5);
       static uint32_t high_water_mark = 8192;
       uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
       if (new_high_water_mark < high_water_mark) {
@@ -938,34 +1061,34 @@ void SnapcastPlayer::sync_task(void *params) {
           uint32_t frames_played = playback_info.frames_played;
           int64_t write_timestamp = playback_info.write_timestamp;
 
-          bool new_chunk = false;
-          int32_t accumulated_chunk_corrections = 0;
-          AudioSyncChunkTimings front_chunk = chunk_timings.front();
-          while (front_chunk.total_frames < frames_played) {
-            frames_played -= front_chunk.total_frames;
-            accumulated_chunk_corrections += front_chunk.frame_corrections;
+          AudioSyncChunkTimings *front_chunk = &chunk_timings.front();
+
+          pending_frame_corrections -= front_chunk->frame_corrections;
+          front_chunk->frame_corrections = 0;
+
+          while (front_chunk->total_frames < frames_played) {
+            frames_played -= front_chunk->total_frames;
 
             chunk_timings.pop_front();
-            front_chunk = chunk_timings.front();
+            front_chunk = &chunk_timings.front();
 
-            new_chunk = true;
+            pending_frame_corrections -= front_chunk->frame_corrections;
+            front_chunk->frame_corrections = 0;
           }
 
           // Now we are in the middle of the current audio chunk
 
-          int64_t full_precision_microseconds =
-              (frames_played * 1000000LL) /
-              static_cast<int64_t>(this_snapcast->audio_stream_info_.value().get_sample_rate());
-          int64_t server_timestamp_finished = front_chunk.server_timestamp + full_precision_microseconds;
-          int64_t equivalent_client_timestamp = this_snapcast->server_timestamp_to_client_(server_timestamp_finished);
           chunk_timings.front().total_frames -= frames_played;
-          chunk_timings.front().server_timestamp = server_timestamp_finished;
 
-          if (abs(accumulated_chunk_corrections) > 10) {
-            // Very large change, our median filter will be slow to a adapt
-            this_snapcast->actual_offsets_.reset();
-          }
-          pending_frame_corrections -= accumulated_chunk_corrections;
+          uint32_t unplayed_frames = chunk_timings.front().total_frames;
+
+          int64_t unplayed_ms =
+              this_snapcast->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&unplayed_frames);
+          int64_t unplayed_us =
+              1000 * unplayed_ms + this_snapcast->audio_stream_info_.value().frames_to_microseconds(unplayed_frames);
+
+          int64_t server_timestamp_finished = front_chunk->server_timestamp - unplayed_us;
+          int64_t equivalent_client_timestamp = this_snapcast->server_timestamp_to_client_(server_timestamp_finished);
 
           int64_t new_error = equivalent_client_timestamp - write_timestamp;
 
@@ -977,62 +1100,57 @@ void SnapcastPlayer::sync_task(void *params) {
         continue;
       }
 
-      // if (chunk->size > output_transfer_buffer->free()) {
-      //   continue;
-      // }
-
       if (this_snapcast->speaker_->is_stopped()) {
         xEventGroupSetBits(this_snapcast->event_group_, EventGroupBits::SYNC_PROCESSING);
         this_snapcast->speaker_->start();
       }
 
-      if (!chunk_timings.empty()) {
-        int64_t signed_pending_duration_corrections =
-            (pending_frame_corrections * 1000000L) /
-            static_cast<int64_t>(this_snapcast->audio_stream_info_.value().get_sample_rate());
+      // if (chunk_timings.empty()) {
+      //   // We don't have any pending chunks, see how long before the peeked chunk should play
+      //   const int64_t peeked_chunk_start_playback =
+      //   this_snapcast->server_timestamp_to_client_(chunk->server_timestamp); const int64_t us_to_start =
+      //   peeked_chunk_start_playback - esp_timer_get_time();
 
-        int64_t front_chunk_plays_at =
-            this_snapcast->server_timestamp_to_client_(chunk_timings.front().server_timestamp);
-        int64_t us_to_start = front_chunk_plays_at - esp_timer_get_time();
-        if (us_to_start - signed_pending_duration_corrections > 200000) {
-          this_snapcast->speaker_->set_pause_state(true);
-          uint32_t pause_time_ms = us_to_start / 2000;
-          ESP_LOGV(TAG, "Hard sync: chunk doesn't play for %" PRId64 "ms, so pausing for %d ms\n", us_to_start / 1000,
-                   pause_time_ms);
-          vTaskDelay(pdMS_TO_TICKS(pause_time_ms));
-          this_snapcast->speaker_->set_pause_state(false);
-          continue;
-        }
-      }
+      //   if (us_to_start > 500000) {
+      //     this_snapcast->speaker_->set_pause_state(true);
+      //     uint32_t pause_time_ms = us_to_start / 2000;  // Only pause for half the duration, there is some overhead
+      //     for
+      //                                                   // the initial audio to reach the speaker
+      //     ESP_LOGV(TAG, "Initial sync: chunk doesn't play for %" PRId64 "ms, so pausing for %d ms\n",
+      //              us_to_start / 1000, pause_time_ms);
+      //     vTaskDelay(pdMS_TO_TICKS(pause_time_ms));
+      //     this_snapcast->speaker_->set_pause_state(false);
+      //     continue;
+      //   }
+      // }
 
       int64_t signed_pending_duration_corrections =
-          (pending_frame_corrections * 1000000L) /
+          (pending_frame_corrections * 1000000LL) /
           static_cast<int64_t>(this_snapcast->audio_stream_info_.value().get_sample_rate());
 
-      int64_t recent_error_us = 0;
+      // Takes into account the pending error
+      int64_t recent_error_us = recent_error_us =
+          this_snapcast->actual_offsets_.get_most_recent_median() - signed_pending_duration_corrections;
 
-      if (this_snapcast->actual_offsets_.is_full()) {
-        recent_error_us = this_snapcast->actual_offsets_.get_most_recent_median() - signed_pending_duration_corrections;
-        if (abs(recent_error_us) < 5000) {
-          synced_chunks = std::min(synced_chunks + 1, 10);
-        } else {
-          synced_chunks = 0;
-        }
+      if (abs(this_snapcast->actual_offsets_.get_most_recent_median()) < HARD_SYNC_THRESHOLD_US) {
+        synced_chunks = std::min(synced_chunks + 1, GOOD_SYNCS_BEFORE_UNMUTE);
+      } else {
+        synced_chunks = 0;
       }
 
-      if ((synced_chunks < 10) && (!this_snapcast->speaker_->get_mute_state())) {
-        ESP_LOGD(TAG, "Out of sync, muting output until corrected");
+      if ((synced_chunks < GOOD_SYNCS_BEFORE_UNMUTE) && (!this_snapcast->speaker_->get_mute_state())) {
+        ESP_LOGV(TAG, "Out of sync, muting output until corrected");
         this_snapcast->speaker_->set_mute_state(true);
-      } else if ((synced_chunks >= 10) &&
+      } else if ((synced_chunks >= GOOD_SYNCS_BEFORE_UNMUTE) &&
                  (this_snapcast->external_mute_ != this_snapcast->speaker_->get_mute_state())) {
-        ESP_LOGD(TAG, "In sync with server, setting mute state to existing setting");
+        ESP_LOGV(TAG, "In sync with server, setting mute state to existing setting");
         this_snapcast->speaker_->set_mute_state(this_snapcast->external_mute_);
       }
 
       if (chunk->size > output_transfer_buffer->free()) {
         continue;
       } else {
-        xQueueReceive(this_snapcast->decoded_chunk_data_queue_, chunk, pdMS_TO_TICKS(20));
+        xQueueReceive(this_snapcast->decoded_chunk_data_queue_, chunk, portMAX_DELAY);
       }
 
       std::memcpy(output_transfer_buffer->get_buffer_end(), chunk->data, chunk->size);
@@ -1043,27 +1161,32 @@ void SnapcastPlayer::sync_task(void *params) {
 
       const size_t bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
 
-      if (recent_error_us > 5000) {
-        size_t silence_bytes = this_snapcast->audio_stream_info_.value().ms_to_bytes((recent_error_us - 25) / 1000);
+      const int64_t us_per_frame_margin = 2 * this_snapcast->audio_stream_info_.value().frames_to_microseconds(1) + 1;
+
+      if (recent_error_us > HARD_SYNC_THRESHOLD_US) {
+        size_t silence_bytes = this_snapcast->audio_stream_info_.value().ms_to_bytes(recent_error_us / 1000);
         size_t actual_silence_bytes = std::min(silence_bytes, output_transfer_buffer->free());
         std::memset((void *) (output_transfer_buffer->get_buffer_end() - chunk->size), 0,
                     actual_silence_bytes + chunk->size);
         output_transfer_buffer->increase_buffer_length(actual_silence_bytes);
         frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_silence_bytes);
 
-        ESP_LOGV(TAG, "Hard sync: adding %" PRId32 " frames of silence. Current error is %" PRId64 "us",
-                 frame_corrections, recent_error_us);
+        ESP_LOGV(TAG,
+                 "Hard sync: adding %" PRId32 " frames of silence. Current error is %" PRId64 "us. There are %" PRId64
+                 "pending frames for correction",
+                 frame_corrections, recent_error_us, pending_frame_corrections);
 
-      } else if (recent_error_us < -5000) {
-        size_t bytes_to_remove =
-            this_snapcast->audio_stream_info_.value().ms_to_bytes((abs(recent_error_us) - 25) / 1000);
+      } else if (recent_error_us < -HARD_SYNC_THRESHOLD_US) {
+        size_t bytes_to_remove = this_snapcast->audio_stream_info_.value().ms_to_bytes(abs(recent_error_us) / 1000);
         size_t actual_bytes_to_remove = std::min(bytes_to_remove, chunk->size - bytes_per_frame);
         output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
         frame_corrections = -this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
-        ESP_LOGV(TAG, "Hard sync: removing %" PRId32 " frames. Current error is % " PRId64 "us", frame_corrections,
-                 recent_error_us);
+        ESP_LOGV(TAG,
+                 "Hard sync: removing %" PRId32 " frames. Current error is %" PRId64 "us. There are %" PRId64
+                 "pending frames for correction",
+                 frame_corrections, recent_error_us, pending_frame_corrections);
 
-      } else if (recent_error_us < -25) {
+      } else if (recent_error_us < -us_per_frame_margin) {
         const uint32_t num_channels = this_snapcast->audio_stream_info_.value().get_channels();
         int16_t *samples = reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
         for (int chan = 0; chan < num_channels; ++chan) {
@@ -1073,7 +1196,7 @@ void SnapcastPlayer::sync_task(void *params) {
         }
         output_transfer_buffer->decrease_buffer_length(bytes_per_frame);
         frame_corrections = -1;
-      } else if (recent_error_us > 25) {
+      } else if (recent_error_us > us_per_frame_margin) {
         if (output_transfer_buffer->free() >= bytes_per_frame) {
           const uint32_t num_channels = this_snapcast->audio_stream_info_.value().get_channels();
           int16_t *samples =
@@ -1093,11 +1216,20 @@ void SnapcastPlayer::sync_task(void *params) {
       chunk_frame_count += frame_corrections;
       pending_frame_corrections += frame_corrections;
 
+      static uint16_t last_err_log_count = 0;
+      ++last_err_log_count;
+      if (last_err_log_count > 40) {
+        ESP_LOGV(TAG, "current error on this chunk is %" PRId64 ". Current server client offset %" PRId64,
+                 recent_error_us, this_snapcast->network_latency_filter_.get_most_recent_median());
+        last_err_log_count = 0;
+      }
+
       AudioSyncChunkTimings timings;
+
       timings.server_timestamp = chunk->server_timestamp;
-      timings.internal_timestamp = esp_timer_get_time();
       timings.total_frames = chunk_frame_count;
       timings.frame_corrections = frame_corrections;
+
       chunk_timings.push_back(timings);
     }
   }
