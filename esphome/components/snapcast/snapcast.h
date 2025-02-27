@@ -187,12 +187,12 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   static void control_task(void *params);
   static void decode_task(void *params);
   static void snapcast_task(void *params);
-  static void sync_task(void *params);
+  // static void sync_task(void *params);
 
   TaskHandle_t control_task_handle_{nullptr};
   TaskHandle_t decode_task_handle_{nullptr};
   TaskHandle_t snapcast_task_handle_{nullptr};
-  TaskHandle_t sync_task_handle_{nullptr};
+  // TaskHandle_t sync_task_handle_{nullptr};
 
   static void timesync_callback(void *params);
   uint16_t time_sync_counter_{0};
@@ -227,9 +227,9 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   StaticQueue_t encoded_chunk_data_queue_buffer_;
   uint8_t *encoded_chunk_data_queue_storage_{nullptr};
 
-  QueueHandle_t decoded_chunk_data_queue_;
-  StaticQueue_t decoded_chunk_data_queue_buffer_;
-  uint8_t *decoded_chunk_data_queue_storage_{nullptr};
+  // QueueHandle_t decoded_chunk_data_queue_;
+  // StaticQueue_t decoded_chunk_data_queue_buffer_;
+  // uint8_t *decoded_chunk_data_queue_storage_{nullptr};
 
   size_t snapcast_buffer_duration_ms_{0};
   uint32_t snapcast_latency_ms_{0};

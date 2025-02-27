@@ -32,7 +32,7 @@ namespace snapcast {
 static const char *TAG = "snapcast";
 
 static const size_t INPUT_BUFFER_SIZE = 1024 * 50;
-static const size_t OUTPUT_BUFFER_SIZE = 1024 * 50;
+static const size_t OUTPUT_BUFFER_SIZE = 1024 * 10;
 
 static const uint32_t ENCODED_CHUNK_QUEUE_SIZE = 50;
 static const uint32_t DECODED_CHUNK_QUEUE_SIZE = 5;
@@ -43,7 +43,6 @@ static const uint32_t NORMAL_SYNC_LATENCY_BUF = 1000000;  // in µs
 static const size_t CONTROL_TASK_STACK_SIZE = 3 * 1024;
 static const size_t SNAPCAST_TASK_STACK_SIZE = 3 * 1024;
 static const size_t DECODE_TASK_STACK_SIZE = 3 * 1024;
-static const size_t SYNC_TASK_STACK_SIZE = 3 * 1024;
 
 static const int GOOD_SYNCS_BEFORE_UNMUTE = 5;
 static const int64_t HARD_SYNC_THRESHOLD_US = 5000;
@@ -53,6 +52,7 @@ static const int64_t HARD_SYNC_THRESHOLD_US = 5000;
 #define ARRAY_SIZE_OFFSET 5  // Increase this if print_real_time_stats returns ESP_ERR_INVALID_SIZE
 #define configRUN_TIME_COUNTER_TYPE uint32_t
 #define CONFIG_FREERTOS_NUMBER_OF_CORES 2
+#include "esp_private/esp_clk.h"
 static esp_err_t print_real_time_stats(TickType_t xTicksToWait) {
   TaskStatus_t *start_array = NULL, *end_array = NULL;
   UBaseType_t start_array_size, end_array_size;
@@ -153,7 +153,7 @@ static void stats_task(void *arg) {
     printf("\n\nGetting real time stats over %" PRIu32 " ticks\n", STATS_TICKS);
     esp_err_t err = print_real_time_stats(STATS_TICKS);
     if (err == ESP_OK) {
-      printf("Real time stats obtained\n");
+      printf("Real time stats obtained at a CPU frequency of %" PRIu32 "Hz\n", esp_clk_cpu_freq());
     } else {
       printf("Error getting real time stats\n");
       printf("Error: %s", esp_err_to_name(err));
@@ -170,7 +170,7 @@ enum EventGroupBits : uint32_t {
 };
 
 void SnapcastPlayer::start() {
-  xTaskCreatePinnedToCore(stats_task, "stats", 4096, NULL, STATS_TASK_PRIO, NULL, tskNO_AFFINITY);
+  // xTaskCreatePinnedToCore(stats_task, "stats", 4096, NULL, STATS_TASK_PRIO, NULL, tskNO_AFFINITY);
   this->speaker_->add_audio_output_callback([this](uint32_t frames_played, int64_t write_timestamp) {
     PlaybackInfo playback_info = {.frames_played = frames_played, .write_timestamp = write_timestamp};
     if (!xQueueSend(this->playback_info_queue_, &playback_info, 0)) {
@@ -188,16 +188,16 @@ void SnapcastPlayer::start() {
       xQueueCreateStatic(ENCODED_CHUNK_QUEUE_SIZE, sizeof(AudioSyncChunk), this->encoded_chunk_data_queue_storage_,
                          &encoded_chunk_data_queue_buffer_);
 
-  RAMAllocator<uint8_t> internal_allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
-  this->decoded_chunk_data_queue_storage_ = allocator.allocate(DECODED_CHUNK_QUEUE_SIZE * sizeof(AudioSyncChunk));
-  if (this->decoded_chunk_data_queue_storage_ == nullptr) {
-    this->mark_failed();
-    return;
-  }
+  // RAMAllocator<uint8_t> internal_allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
+  // this->decoded_chunk_data_queue_storage_ = allocator.allocate(DECODED_CHUNK_QUEUE_SIZE * sizeof(AudioSyncChunk));
+  // if (this->decoded_chunk_data_queue_storage_ == nullptr) {
+  //   this->mark_failed();
+  //   return;
+  // }
 
-  this->decoded_chunk_data_queue_ =
-      xQueueCreateStatic(DECODED_CHUNK_QUEUE_SIZE, sizeof(AudioSyncChunk), this->decoded_chunk_data_queue_storage_,
-                         &decoded_chunk_data_queue_buffer_);
+  // this->decoded_chunk_data_queue_ =
+  //     xQueueCreateStatic(DECODED_CHUNK_QUEUE_SIZE, sizeof(AudioSyncChunk), this->decoded_chunk_data_queue_storage_,
+  //                        &decoded_chunk_data_queue_buffer_);
 
   this->playback_info_queue_ = xQueueCreate(50, sizeof(PlaybackInfo));
   this->event_group_ = xEventGroupCreate();
@@ -212,7 +212,8 @@ void SnapcastPlayer::loop() {
 
   EventBits_t event_bits = xEventGroupGetBits(this->event_group_);
 
-  if ((event_bits & DECODE_FINISHED) && (event_bits & SYNC_FINISHED)) {
+  // if ((event_bits & DECODE_FINISHED) && (event_bits & SYNC_FINISHED)) {
+  if ((event_bits & DECODE_FINISHED)) {
     this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
     if (this->speaker_->is_stopped()) {
       xQueueReset(this->playback_info_queue_);
@@ -915,15 +916,38 @@ void SnapcastPlayer::decode_task(void *params) {
   RAMAllocator<AudioSyncChunk> chunk_allocator(RAMAllocator<AudioSyncChunk>::ALLOW_FAILURE);
   // RAMAllocator<AudioSyncChunk> chunk_allocator(RAMAllocator<AudioSyncChunk>::ALLOC_INTERNAL);
   AudioSyncChunk *encoded_chunk = chunk_allocator.allocate(1);
-  AudioSyncChunk *decoded_chunk = chunk_allocator.allocate(1);
+  // AudioSyncChunk *decoded_chunk = chunk_allocator.allocate(1);
   std::unique_ptr<esp_audio_libs::flac::FLACDecoder> flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
+  size_t free_buffer_required = 8000;
+
+  std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
+      audio::AudioSinkTransferBuffer::create(OUTPUT_BUFFER_SIZE);
+  output_transfer_buffer->set_sink(this_snapcast->speaker_);
+
+  int64_t pending_frame_corrections = 0;
+
+  int synced_chunks = 0;
+
+  std::deque<AudioSyncChunkTimings> chunk_timings;
 
   while (true) {
     EventBits_t event_bits = xEventGroupGetBits(this_snapcast->event_group_);
     if ((event_bits & COMMAND_STOP) && !(event_bits & DECODE_FINISHED)) {
       this_snapcast->audio_stream_info_.reset();
-      xQueueReset(this_snapcast->decoded_chunk_data_queue_);
+      // xQueueReset(this_snapcast->decoded_chunk_data_queue_);
 
+      // clear things we own as well
+      output_transfer_buffer.reset();
+      output_transfer_buffer = audio::AudioSinkTransferBuffer::create(OUTPUT_BUFFER_SIZE);
+      output_transfer_buffer->set_sink(this_snapcast->speaker_);
+
+      this_snapcast->speaker_->stop();
+
+      this_snapcast->actual_offsets_.reset();
+      pending_frame_corrections = 0;
+      chunk_timings.clear();
+
+      xEventGroupClearBits(this_snapcast->event_group_, EventGroupBits::SYNC_PROCESSING);
       xEventGroupSetBits(this_snapcast->event_group_, DECODE_FINISHED);
     }
 
@@ -932,7 +956,94 @@ void SnapcastPlayer::decode_task(void *params) {
       continue;
     }
 
-    if (xQueueReceive(this_snapcast->encoded_chunk_data_queue_, encoded_chunk, pdMS_TO_TICKS(20))) {
+    const size_t bytes_written = output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
+
+    if (output_transfer_buffer->free() < free_buffer_required) {
+      uint32_t frames_written = this_snapcast->audio_stream_info_.value().bytes_to_frames(bytes_written);
+      uint32_t ms_written =
+          this_snapcast->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&frames_written) +
+          this_snapcast->audio_stream_info_.value().frames_to_microseconds(frames_written) / 1000;
+      delay(ms_written / 2);
+      continue;
+    }
+
+    /** Use the information from the speaker on frames played to update teh current error */
+
+    PlaybackInfo playback_info;
+    while (xQueueReceive(this_snapcast->playback_info_queue_, &playback_info, 0) == pdTRUE) {
+      if (!chunk_timings.empty()) {
+        uint32_t frames_played = playback_info.frames_played;
+        int64_t write_timestamp = playback_info.write_timestamp;
+
+        AudioSyncChunkTimings *front_chunk = &chunk_timings.front();
+
+        pending_frame_corrections -= front_chunk->frame_corrections;
+        front_chunk->frame_corrections = 0;
+
+        while (front_chunk->total_frames < frames_played) {
+          frames_played -= front_chunk->total_frames;
+
+          chunk_timings.pop_front();
+          front_chunk = &chunk_timings.front();
+
+          pending_frame_corrections -= front_chunk->frame_corrections;
+          front_chunk->frame_corrections = 0;
+        }
+
+        // Now we are in the middle of the current audio chunk
+
+        chunk_timings.front().total_frames -= frames_played;
+
+        uint32_t unplayed_frames = chunk_timings.front().total_frames;
+
+        int64_t unplayed_ms =
+            this_snapcast->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&unplayed_frames);
+        int64_t unplayed_us =
+            1000 * unplayed_ms + this_snapcast->audio_stream_info_.value().frames_to_microseconds(unplayed_frames);
+
+        int64_t server_timestamp_finished = front_chunk->server_timestamp - unplayed_us;
+        int64_t equivalent_client_timestamp = this_snapcast->server_timestamp_to_client_(server_timestamp_finished);
+
+        int64_t new_error = equivalent_client_timestamp - write_timestamp;
+
+        this_snapcast->actual_offsets_.update(new_error);
+      }
+    }
+
+    // if (this_snapcast->speaker_->is_stopped()) {
+    //   xEventGroupSetBits(this_snapcast->event_group_, EventGroupBits::SYNC_PROCESSING);
+    //   this_snapcast->speaker_->start();
+    // }
+
+    /*******************/
+    /*****Determine teh current error with pending correction */
+
+    int64_t signed_pending_duration_corrections =
+        (pending_frame_corrections * 1000000LL) /
+        static_cast<int64_t>(this_snapcast->audio_stream_info_.value().get_sample_rate());
+
+    // Takes into account the pending error
+    int64_t recent_error_us =
+        this_snapcast->actual_offsets_.get_most_recent_median() - signed_pending_duration_corrections;
+
+    if (abs(this_snapcast->actual_offsets_.get_most_recent_median()) < HARD_SYNC_THRESHOLD_US) {
+      synced_chunks = std::min(synced_chunks + 1, GOOD_SYNCS_BEFORE_UNMUTE);
+    } else {
+      synced_chunks = 0;
+    }
+
+    if ((synced_chunks < GOOD_SYNCS_BEFORE_UNMUTE) && (!this_snapcast->speaker_->get_mute_state())) {
+      ESP_LOGV(TAG, "Out of sync, muting output until corrected");
+      this_snapcast->speaker_->set_mute_state(true);
+    } else if ((synced_chunks >= GOOD_SYNCS_BEFORE_UNMUTE) &&
+               (this_snapcast->external_mute_ != this_snapcast->speaker_->get_mute_state())) {
+      ESP_LOGV(TAG, "In sync with server, setting mute state to existing setting");
+      this_snapcast->speaker_->set_mute_state(this_snapcast->external_mute_);
+    }
+    /******* */
+
+    if ((output_transfer_buffer->free() >= free_buffer_required) &&
+        xQueueReceive(this_snapcast->encoded_chunk_data_queue_, encoded_chunk, pdMS_TO_TICKS(20))) {
       if (encoded_chunk->codec_header) {
         ESP_LOGD(TAG, "Decoding FLAC header");
 
@@ -952,22 +1063,22 @@ void SnapcastPlayer::decode_task(void *params) {
           continue;
         }
 
-        size_t free_buffer_required = flac_decoder->get_output_buffer_size_bytes();
+        free_buffer_required = flac_decoder->get_output_buffer_size_bytes();
+        if (!output_transfer_buffer->reallocate(3 * free_buffer_required / 2)) {
+          ESP_LOGE(TAG, "Failed to reallocate buffer for decoding FLAC");
+          continue;
+        }
 
         this_snapcast->audio_stream_info_ = audio::AudioStreamInfo(
             flac_decoder->get_sample_depth(), flac_decoder->get_num_channels(), flac_decoder->get_sample_rate());
-
-        if (this_snapcast->sync_task_handle_ == nullptr) {
-          xTaskCreate(sync_task, "sync", SYNC_TASK_STACK_SIZE, (void *) this_snapcast, 1,
-                      &this_snapcast->sync_task_handle_);
-        }
 
         this_snapcast->speaker_->set_audio_stream_info(this_snapcast->audio_stream_info_.value());
 
       } else if (flac_decoder != nullptr) {
         uint32_t output_samples = 0;
         auto result = flac_decoder->decode_frame(encoded_chunk->data + encoded_chunk->offset, encoded_chunk->size,
-                                                 reinterpret_cast<int16_t *>(decoded_chunk->data), &output_samples);
+                                                 reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
+                                                 &output_samples);
 
         if (result == esp_audio_libs::flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
           ESP_LOGE(TAG, "FLAC decoder ran out of data");
@@ -979,7 +1090,8 @@ void SnapcastPlayer::decode_task(void *params) {
           continue;
         }
 
-        size_t new_bytes = this_snapcast->audio_stream_info_.value().samples_to_bytes(output_samples);
+        const size_t new_bytes = this_snapcast->audio_stream_info_.value().samples_to_bytes(output_samples);
+        output_transfer_buffer->increase_buffer_length(new_bytes);
 
         uint32_t new_frames = this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes);
         const uint32_t new_duration_ms =
@@ -987,250 +1099,85 @@ void SnapcastPlayer::decode_task(void *params) {
         const int64_t new_duration_us =
             new_duration_ms * 1000 + this_snapcast->audio_stream_info_.value().frames_to_microseconds(new_frames);
 
-        decoded_chunk->size = new_bytes;
+        int32_t frame_corrections = 0;
 
-        decoded_chunk->codec_header = false;
-        decoded_chunk->server_timestamp =
-            encoded_chunk->server_timestamp + new_duration_us;  // encoded_chunk->server_timestamp;
-        xQueueSend(this_snapcast->decoded_chunk_data_queue_, decoded_chunk, pdMS_TO_TICKS(200));
-      }
-    }
-    static uint32_t high_water_mark = 8192;
-    uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
-    if (new_high_water_mark < high_water_mark) {
-      ESP_LOGV(TAG, "Decode task - High water mark changed from %d to %d.", high_water_mark, new_high_water_mark);
-      high_water_mark = new_high_water_mark;
-    }
-  }
-}
+        const size_t bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
+        const int64_t us_per_frame_margin = 3 * this_snapcast->audio_stream_info_.value().frames_to_microseconds(1) / 2;
 
-void SnapcastPlayer::sync_task(void *params) {
-  SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
+        if (recent_error_us > HARD_SYNC_THRESHOLD_US) {
+          size_t silence_bytes = this_snapcast->audio_stream_info_.value().ms_to_bytes(recent_error_us / 1000);
+          size_t actual_silence_bytes = std::min(silence_bytes, output_transfer_buffer->free());
+          std::memset((void *) (output_transfer_buffer->get_buffer_end() - new_bytes), 0,
+                      actual_silence_bytes + new_bytes);
+          output_transfer_buffer->increase_buffer_length(actual_silence_bytes);
+          frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_silence_bytes);
 
-  RAMAllocator<AudioSyncChunk> chunk_allocator(RAMAllocator<AudioSyncChunk>::ALLOC_INTERNAL);
-  ;
-  AudioSyncChunk *chunk = chunk_allocator.allocate(1);
+          ESP_LOGV(TAG,
+                   "Hard sync: adding %" PRId32 " frames of silence. Current error is %" PRId64 "us. There are %" PRId64
+                   "pending frames for correction",
+                   frame_corrections, recent_error_us, pending_frame_corrections);
 
-  std::deque<AudioSyncChunkTimings> chunk_timings;
+        } else if (recent_error_us < -HARD_SYNC_THRESHOLD_US) {
+          size_t bytes_to_remove = this_snapcast->audio_stream_info_.value().ms_to_bytes(abs(recent_error_us) / 1000);
+          size_t actual_bytes_to_remove = std::min(bytes_to_remove, new_bytes - bytes_per_frame);
+          output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
+          frame_corrections = -this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
+          ESP_LOGV(TAG,
+                   "Hard sync: removing %" PRId32 " frames. Current error is %" PRId64 "us. There are %" PRId64
+                   "pending frames for correction",
+                   frame_corrections, recent_error_us, pending_frame_corrections);
 
-  while (true) {
-    std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
-        audio::AudioSinkTransferBuffer::create(OUTPUT_BUFFER_SIZE);
-    output_transfer_buffer->set_sink(this_snapcast->speaker_);
-    int synced_chunks = 0;
-
-    int64_t pending_frame_corrections = 0;
-
-    while (true) {
-      delay(5);
-      static uint32_t high_water_mark = 8192;
-      uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
-      if (new_high_water_mark < high_water_mark) {
-        ESP_LOGV(TAG, "Sync task - High water mark changed from %d to %d.", high_water_mark, new_high_water_mark);
-        high_water_mark = new_high_water_mark;
-      }
-
-      EventBits_t event_bits = xEventGroupGetBits(this_snapcast->event_group_);
-
-      if (event_bits & SYNC_FINISHED) {
-        delay(20);
-        continue;
-      }
-      if (event_bits & COMMAND_STOP) {
-        // clear things we own as well
-        output_transfer_buffer.reset();
-        output_transfer_buffer = audio::AudioSinkTransferBuffer::create(OUTPUT_BUFFER_SIZE);
-        output_transfer_buffer->set_sink(this_snapcast->speaker_);
-
-        this_snapcast->speaker_->stop();
-
-        this_snapcast->actual_offsets_.reset();
-        pending_frame_corrections = 0;
-        chunk_timings.clear();
-
-        xEventGroupClearBits(this_snapcast->event_group_, EventGroupBits::SYNC_PROCESSING);
-        xEventGroupSetBits(this_snapcast->event_group_, SYNC_FINISHED);
-        continue;
-      }
-
-      output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
-
-      PlaybackInfo playback_info;
-      while (xQueueReceive(this_snapcast->playback_info_queue_, &playback_info, 0) == pdTRUE) {
-        if (!chunk_timings.empty()) {
-          uint32_t frames_played = playback_info.frames_played;
-          int64_t write_timestamp = playback_info.write_timestamp;
-
-          AudioSyncChunkTimings *front_chunk = &chunk_timings.front();
-
-          pending_frame_corrections -= front_chunk->frame_corrections;
-          front_chunk->frame_corrections = 0;
-
-          while (front_chunk->total_frames < frames_played) {
-            frames_played -= front_chunk->total_frames;
-
-            chunk_timings.pop_front();
-            front_chunk = &chunk_timings.front();
-
-            pending_frame_corrections -= front_chunk->frame_corrections;
-            front_chunk->frame_corrections = 0;
-          }
-
-          // Now we are in the middle of the current audio chunk
-
-          chunk_timings.front().total_frames -= frames_played;
-
-          uint32_t unplayed_frames = chunk_timings.front().total_frames;
-
-          int64_t unplayed_ms =
-              this_snapcast->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&unplayed_frames);
-          int64_t unplayed_us =
-              1000 * unplayed_ms + this_snapcast->audio_stream_info_.value().frames_to_microseconds(unplayed_frames);
-
-          int64_t server_timestamp_finished = front_chunk->server_timestamp - unplayed_us;
-          int64_t equivalent_client_timestamp = this_snapcast->server_timestamp_to_client_(server_timestamp_finished);
-
-          int64_t new_error = equivalent_client_timestamp - write_timestamp;
-
-          this_snapcast->actual_offsets_.update(new_error);
-        }
-      }
-
-      if (!xQueuePeek(this_snapcast->decoded_chunk_data_queue_, chunk, pdMS_TO_TICKS(20))) {
-        continue;
-      }
-
-      if (this_snapcast->speaker_->is_stopped()) {
-        xEventGroupSetBits(this_snapcast->event_group_, EventGroupBits::SYNC_PROCESSING);
-        this_snapcast->speaker_->start();
-      }
-
-      // if (chunk_timings.empty()) {
-      //   // We don't have any pending chunks, see how long before the peeked chunk should play
-      //   const int64_t peeked_chunk_start_playback =
-      //   this_snapcast->server_timestamp_to_client_(chunk->server_timestamp); const int64_t us_to_start =
-      //   peeked_chunk_start_playback - esp_timer_get_time();
-
-      //   if (us_to_start > 500000) {
-      //     this_snapcast->speaker_->set_pause_state(true);
-      //     uint32_t pause_time_ms = us_to_start / 2000;  // Only pause for half the duration, there is some overhead
-      //     for
-      //                                                   // the initial audio to reach the speaker
-      //     ESP_LOGV(TAG, "Initial sync: chunk doesn't play for %" PRId64 "ms, so pausing for %d ms\n",
-      //              us_to_start / 1000, pause_time_ms);
-      //     vTaskDelay(pdMS_TO_TICKS(pause_time_ms));
-      //     this_snapcast->speaker_->set_pause_state(false);
-      //     continue;
-      //   }
-      // }
-
-      int64_t signed_pending_duration_corrections =
-          (pending_frame_corrections * 1000000LL) /
-          static_cast<int64_t>(this_snapcast->audio_stream_info_.value().get_sample_rate());
-
-      // Takes into account the pending error
-      int64_t recent_error_us = recent_error_us =
-          this_snapcast->actual_offsets_.get_most_recent_median() - signed_pending_duration_corrections;
-
-      if (abs(this_snapcast->actual_offsets_.get_most_recent_median()) < HARD_SYNC_THRESHOLD_US) {
-        synced_chunks = std::min(synced_chunks + 1, GOOD_SYNCS_BEFORE_UNMUTE);
-      } else {
-        synced_chunks = 0;
-      }
-
-      if ((synced_chunks < GOOD_SYNCS_BEFORE_UNMUTE) && (!this_snapcast->speaker_->get_mute_state())) {
-        ESP_LOGV(TAG, "Out of sync, muting output until corrected");
-        this_snapcast->speaker_->set_mute_state(true);
-      } else if ((synced_chunks >= GOOD_SYNCS_BEFORE_UNMUTE) &&
-                 (this_snapcast->external_mute_ != this_snapcast->speaker_->get_mute_state())) {
-        ESP_LOGV(TAG, "In sync with server, setting mute state to existing setting");
-        this_snapcast->speaker_->set_mute_state(this_snapcast->external_mute_);
-      }
-
-      if (chunk->size > output_transfer_buffer->free()) {
-        continue;
-      } else {
-        xQueueReceive(this_snapcast->decoded_chunk_data_queue_, chunk, portMAX_DELAY);
-      }
-
-      std::memcpy(output_transfer_buffer->get_buffer_end(), chunk->data, chunk->size);
-      output_transfer_buffer->increase_buffer_length(chunk->size);
-
-      uint32_t chunk_frame_count = this_snapcast->audio_stream_info_.value().bytes_to_frames(chunk->size);
-      int32_t frame_corrections = 0;
-
-      const size_t bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
-
-      const int64_t us_per_frame_margin = 2 * this_snapcast->audio_stream_info_.value().frames_to_microseconds(1) + 1;
-
-      if (recent_error_us > HARD_SYNC_THRESHOLD_US) {
-        size_t silence_bytes = this_snapcast->audio_stream_info_.value().ms_to_bytes(recent_error_us / 1000);
-        size_t actual_silence_bytes = std::min(silence_bytes, output_transfer_buffer->free());
-        std::memset((void *) (output_transfer_buffer->get_buffer_end() - chunk->size), 0,
-                    actual_silence_bytes + chunk->size);
-        output_transfer_buffer->increase_buffer_length(actual_silence_bytes);
-        frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_silence_bytes);
-
-        ESP_LOGV(TAG,
-                 "Hard sync: adding %" PRId32 " frames of silence. Current error is %" PRId64 "us. There are %" PRId64
-                 "pending frames for correction",
-                 frame_corrections, recent_error_us, pending_frame_corrections);
-
-      } else if (recent_error_us < -HARD_SYNC_THRESHOLD_US) {
-        size_t bytes_to_remove = this_snapcast->audio_stream_info_.value().ms_to_bytes(abs(recent_error_us) / 1000);
-        size_t actual_bytes_to_remove = std::min(bytes_to_remove, chunk->size - bytes_per_frame);
-        output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
-        frame_corrections = -this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
-        ESP_LOGV(TAG,
-                 "Hard sync: removing %" PRId32 " frames. Current error is %" PRId64 "us. There are %" PRId64
-                 "pending frames for correction",
-                 frame_corrections, recent_error_us, pending_frame_corrections);
-
-      } else if (recent_error_us < -us_per_frame_margin) {
-        const uint32_t num_channels = this_snapcast->audio_stream_info_.value().get_channels();
-        int16_t *samples = reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
-        for (int chan = 0; chan < num_channels; ++chan) {
-          const int16_t left_sample = samples[chan];
-          const int16_t right_sample = samples[num_channels + chan];
-          samples[chan] = left_sample / 2 + right_sample / 2;
-        }
-        output_transfer_buffer->decrease_buffer_length(bytes_per_frame);
-        frame_corrections = -1;
-      } else if (recent_error_us > us_per_frame_margin) {
-        if (output_transfer_buffer->free() >= bytes_per_frame) {
+        } else if (recent_error_us < -us_per_frame_margin) {
           const uint32_t num_channels = this_snapcast->audio_stream_info_.value().get_channels();
           int16_t *samples =
               reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
           for (int chan = 0; chan < num_channels; ++chan) {
             const int16_t left_sample = samples[chan];
             const int16_t right_sample = samples[num_channels + chan];
-            const int16_t inserted_sample = left_sample / 2 + right_sample / 2;
-            samples[num_channels + chan] = inserted_sample;
-            samples[2 * num_channels + chan] = right_sample;
+            samples[chan] = left_sample / 2 + right_sample / 2;
           }
-          output_transfer_buffer->increase_buffer_length(bytes_per_frame);
-          frame_corrections = 1;
+          output_transfer_buffer->decrease_buffer_length(bytes_per_frame);
+          frame_corrections = -1;
+        } else if (recent_error_us > us_per_frame_margin) {
+          if (output_transfer_buffer->free() >= bytes_per_frame) {
+            const uint32_t num_channels = this_snapcast->audio_stream_info_.value().get_channels();
+            int16_t *samples =
+                reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
+            for (int chan = 0; chan < num_channels; ++chan) {
+              const int16_t left_sample = samples[chan];
+              const int16_t right_sample = samples[num_channels + chan];
+              const int16_t inserted_sample = left_sample / 2 + right_sample / 2;
+              samples[num_channels + chan] = inserted_sample;
+              samples[2 * num_channels + chan] = right_sample;
+            }
+            output_transfer_buffer->increase_buffer_length(bytes_per_frame);
+            frame_corrections = 1;
+          }
         }
+
+        pending_frame_corrections += frame_corrections;
+
+        AudioSyncChunkTimings timings;
+
+        timings.server_timestamp = encoded_chunk->server_timestamp + new_duration_us;
+        timings.total_frames = this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes) + frame_corrections;
+        timings.frame_corrections = frame_corrections;
+
+        chunk_timings.push_back(timings);
+
+        // static int log_count = 0;
+        // ++log_count;
+        // if (log_count > 50) {
+        //   printf("Current sync error: %" PRId64 "\n", this_snapcast->actual_offsets_.get_most_recent_median());
+        //   log_count = 0;
+        // }
       }
-
-      chunk_frame_count += frame_corrections;
-      pending_frame_corrections += frame_corrections;
-
-      static uint16_t last_err_log_count = 0;
-      ++last_err_log_count;
-      if (last_err_log_count > 40) {
-        ESP_LOGV(TAG, "current error on this chunk is %" PRId64 ". Current server client offset %" PRId64,
-                 recent_error_us, this_snapcast->network_latency_filter_.get_most_recent_median());
-        last_err_log_count = 0;
-      }
-
-      AudioSyncChunkTimings timings;
-
-      timings.server_timestamp = chunk->server_timestamp;
-      timings.total_frames = chunk_frame_count;
-      timings.frame_corrections = frame_corrections;
-
-      chunk_timings.push_back(timings);
+    }
+    static uint32_t high_water_mark = 8192;
+    uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
+    if (new_high_water_mark < high_water_mark) {
+      ESP_LOGD(TAG, "Decode task - High water mark changed from %d to %d.", high_water_mark, new_high_water_mark);
+      high_water_mark = new_high_water_mark;
     }
   }
 }
