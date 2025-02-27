@@ -345,31 +345,46 @@ void I2SAudioSpeaker::speaker_task(void *params) {
           q15_multiplication((int16_t *) this_speaker->data_buffer_, (int16_t *) this_speaker->data_buffer_,
                              bytes_read / sizeof(int16_t), this_speaker->q15_volume_factor_);
         }
+        size_t bytes_written = 0;
 
-        // Write the audio data to a single DMA buffer at a time to reduce latency for the audio duration played
-        // callback.
-        const uint32_t batches = (bytes_read + single_dma_buffer_input_size - 1) / single_dma_buffer_input_size;
-
-        for (uint32_t i = 0; i < batches; ++i) {
-          size_t bytes_written = 0;
-          size_t bytes_to_write = std::min(single_dma_buffer_input_size, bytes_read);
-
-          i2s_channel_write(this_speaker->tx_handle_, this_speaker->data_buffer_ + i * single_dma_buffer_input_size,
-                            bytes_to_write, &bytes_written, DMA_BUFFER_DURATION_MS * 5);
-          int64_t now = esp_timer_get_time();
-          if (bytes_written != bytes_to_write) {
-            xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE);
-          }
-
-          xQueueSend(this_speaker->pending_dma_write_sizes_queue_, &bytes_to_write, 0);
-
-          bytes_read -= bytes_written;
-
-          this_speaker->tx_dma_buffer_underflow_ = false;
-          last_data_received_time = millis();
-          this_speaker->audio_output_callback_(audio_stream_info.bytes_to_frames(bytes_written),
-                                               now + dma_buffers_duration_ms * 1000);
+        i2s_channel_write(this_speaker->tx_handle_, this_speaker->data_buffer_, bytes_read, &bytes_written,
+                          DMA_BUFFER_DURATION_MS * 5);
+        int64_t now = esp_timer_get_time();
+        if (bytes_written != bytes_read) {
+          xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE);
         }
+
+        // xQueueSend(this_speaker->pending_dma_write_sizes_queue_, &bytes_to_write, 0);
+
+        this_speaker->tx_dma_buffer_underflow_ = false;
+        last_data_received_time = millis();
+        this_speaker->audio_output_callback_(audio_stream_info.bytes_to_frames(bytes_written),
+                                             now + dma_buffers_duration_ms * 1000);
+
+        // // Write the audio data to a single DMA buffer at a time to reduce latency for the audio duration played
+        // // callback.
+        // const uint32_t batches = (bytes_read + single_dma_buffer_input_size - 1) / single_dma_buffer_input_size;
+
+        // for (uint32_t i = 0; i < batches; ++i) {
+        //   size_t bytes_written = 0;
+        //   size_t bytes_to_write = std::min(single_dma_buffer_input_size, bytes_read);
+
+        //   i2s_channel_write(this_speaker->tx_handle_, this_speaker->data_buffer_ + i * single_dma_buffer_input_size,
+        //                     bytes_to_write, &bytes_written, DMA_BUFFER_DURATION_MS * 5);
+        //   int64_t now = esp_timer_get_time();
+        //   if (bytes_written != bytes_to_write) {
+        //     xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE);
+        //   }
+
+        //   xQueueSend(this_speaker->pending_dma_write_sizes_queue_, &bytes_to_write, 0);
+
+        //   bytes_read -= bytes_written;
+
+        //   this_speaker->tx_dma_buffer_underflow_ = false;
+        //   last_data_received_time = millis();
+        //   this_speaker->audio_output_callback_(audio_stream_info.bytes_to_frames(bytes_written),
+        //                                        now + dma_buffers_duration_ms * 1000);
+        // }
       } else {
         // No data received
         if (stop_gracefully && this_speaker->tx_dma_buffer_underflow_) {
