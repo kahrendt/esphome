@@ -34,8 +34,7 @@ static const char *TAG = "snapcast";
 static const size_t INPUT_BUFFER_SIZE = 1024 * 50;
 static const size_t OUTPUT_BUFFER_SIZE = 1024 * 10;
 
-static const uint32_t ENCODED_CHUNK_QUEUE_SIZE = 50;
-static const uint32_t DECODED_CHUNK_QUEUE_SIZE = 5;
+static const uint32_t ENCODED_CHUNK_QUEUE_SIZE = 100;
 
 static const uint32_t FAST_SYNC_LATENCY_BUF = 10000;      // in µs
 static const uint32_t NORMAL_SYNC_LATENCY_BUF = 1000000;  // in µs
@@ -622,6 +621,7 @@ void SnapcastPlayer::control_task(void *params) {
 }
 
 void SnapcastPlayer::clear_chunk_queue_() {
+  // RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
   RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOW_FAILURE);
   AudioSyncChunk chunk;
   while (xQueueReceive(this->encoded_chunk_data_queue_, &chunk, pdMS_TO_TICKS(1))) {
@@ -631,6 +631,7 @@ void SnapcastPlayer::clear_chunk_queue_() {
 
 void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
+  // RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
   RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOW_FAILURE);
   esp_timer_handle_t timesync_message_timer;
   static const esp_timer_create_args_t timer_for_syncing_args = {.callback = &timesync_callback,
@@ -926,6 +927,7 @@ void SnapcastPlayer::decode_task(void *params) {
 
   std::deque<AudioSyncChunkTimings> chunk_timings;
 
+  // RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
   RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOW_FAILURE);
 
   while (true) {
@@ -1084,7 +1086,7 @@ void SnapcastPlayer::decode_task(void *params) {
         }
 
         if (result > esp_audio_libs::flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
-          ESP_LOGE(TAG, "Serious error decoding FLAC header");
+          ESP_LOGE(TAG, "Serious error decoding FLAC file");
           continue;
         }
 
