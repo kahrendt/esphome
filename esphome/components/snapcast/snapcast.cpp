@@ -44,7 +44,7 @@ static const size_t CONTROL_TASK_STACK_SIZE = 3 * 1024;
 static const size_t SNAPCAST_TASK_STACK_SIZE = 3 * 1024;
 static const size_t DECODE_TASK_STACK_SIZE = 3 * 1024;
 
-static const int GOOD_SYNCS_BEFORE_UNMUTE = 5;
+static const int GOOD_SYNCS_BEFORE_UNMUTE = 2;
 static const int64_t HARD_SYNC_THRESHOLD_US = 5000;
 
 #define STATS_TASK_PRIO 3
@@ -1043,7 +1043,8 @@ void SnapcastPlayer::decode_task(void *params) {
     /******* */
 
     if ((output_transfer_buffer->free() >= free_buffer_required) &&
-        xQueueReceive(this_snapcast->encoded_chunk_data_queue_, encoded_chunk, pdMS_TO_TICKS(20))) {
+        xQueuePeek(this_snapcast->encoded_chunk_data_queue_, encoded_chunk, pdMS_TO_TICKS(20))) {
+      bool receive_chunk = true;
       if (encoded_chunk->codec_header) {
         ESP_LOGD(TAG, "Decoding FLAC header");
 
@@ -1116,6 +1117,7 @@ void SnapcastPlayer::decode_task(void *params) {
                    "Hard sync: adding %" PRId32 " frames of silence. Current error is %" PRId64 "us. There are %" PRId64
                    "pending frames for correction",
                    frame_corrections, recent_error_us, pending_frame_corrections);
+          receive_chunk = false;  // Don't actually process this frame since it was completely silenced
 
         } else if (recent_error_us < -HARD_SYNC_THRESHOLD_US) {
           size_t bytes_to_remove = this_snapcast->audio_stream_info_.value().ms_to_bytes(abs(recent_error_us) / 1000);
@@ -1126,7 +1128,6 @@ void SnapcastPlayer::decode_task(void *params) {
                    "Hard sync: removing %" PRId32 " frames. Current error is %" PRId64 "us. There are %" PRId64
                    "pending frames for correction",
                    frame_corrections, recent_error_us, pending_frame_corrections);
-
         } else if (recent_error_us < -us_per_frame_margin) {
           const uint32_t num_channels = this_snapcast->audio_stream_info_.value().get_channels();
           int16_t *samples =
@@ -1155,13 +1156,18 @@ void SnapcastPlayer::decode_task(void *params) {
           }
         }
 
-        pending_frame_corrections += frame_corrections;
-
         AudioSyncChunkTimings timings;
 
-        timings.server_timestamp = encoded_chunk->server_timestamp + new_duration_us;
         timings.total_frames = this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes) + frame_corrections;
-        timings.frame_corrections = frame_corrections;
+        if (receive_chunk) {
+          timings.server_timestamp = encoded_chunk->server_timestamp + new_duration_us;
+          timings.frame_corrections = frame_corrections;
+          pending_frame_corrections += frame_corrections;
+        } else {
+          timings.server_timestamp = encoded_chunk->server_timestamp;
+          timings.frame_corrections = timings.total_frames;
+          pending_frame_corrections += timings.total_frames;
+        }
 
         chunk_timings.push_back(timings);
 
@@ -1171,6 +1177,9 @@ void SnapcastPlayer::decode_task(void *params) {
         //   printf("Current sync error: %" PRId64 "\n", this_snapcast->actual_offsets_.get_most_recent_median());
         //   log_count = 0;
         // }
+      }
+      if (receive_chunk) {
+        xQueueReceive(this_snapcast->encoded_chunk_data_queue_, encoded_chunk, portMAX_DELAY);
       }
     }
     static uint32_t high_water_mark = 8192;
