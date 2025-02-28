@@ -118,4 +118,10 @@ def final_validate_audio_schema(
 
 
 async def to_code(config):
-    cg.add_library("esphome/esp-audio-libs", "1.1.1")
+    cg.add_library(
+        # "esphome/esp-audio-libs",
+        # "1.1.1",
+        None,
+        None,
+        "https://github.com/kahrendt/esp-audio-libs#fallback-to-internal-memory",
+    )
