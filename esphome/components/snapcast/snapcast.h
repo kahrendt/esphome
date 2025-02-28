@@ -36,7 +36,8 @@ struct PlaybackInfo {
 };
 
 struct AudioSyncChunk {
-  uint8_t data[MAX_CHUNK_SIZE];
+  // uint8_t data[MAX_CHUNK_SIZE];
+  uint8_t *data;
   size_t offset{0};
   size_t size;
   int64_t server_timestamp;
@@ -184,6 +185,8 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   esp_err_t send_hello_message_();
   esp_err_t send_time_message_();
 
+  void clear_chunk_queue_();
+
   static void control_task(void *params);
   static void decode_task(void *params);
   static void snapcast_task(void *params);
@@ -224,12 +227,8 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   QueueHandle_t playback_info_queue_;
 
   QueueHandle_t encoded_chunk_data_queue_;
-  StaticQueue_t encoded_chunk_data_queue_buffer_;
-  uint8_t *encoded_chunk_data_queue_storage_{nullptr};
-
-  // QueueHandle_t decoded_chunk_data_queue_;
-  // StaticQueue_t decoded_chunk_data_queue_buffer_;
-  // uint8_t *decoded_chunk_data_queue_storage_{nullptr};
+  // StaticQueue_t encoded_chunk_data_queue_buffer_;
+  // uint8_t *encoded_chunk_data_queue_storage_{nullptr};
 
   size_t snapcast_buffer_duration_ms_{0};
   uint32_t snapcast_latency_ms_{0};
