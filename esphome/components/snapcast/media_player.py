@@ -10,6 +10,7 @@ AUTO_LOAD = ["audio", "bytebuffer", "json", "psram", "socket"]
 CODEOWNERS = ["@kahrendt"]
 DEPENDENCIES = ["speaker"]
 
+CONF_OPTIMIZE_WIFI = "optimize_wifi"
 CONF_SERVER_ADDRESS = "server_address"
 
 snapcast_ns = cg.esphome_ns.namespace("snapcast")
@@ -27,6 +28,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
             cv.Optional(CONF_SERVER_ADDRESS): cv.ipv4address,
             cv.Optional(CONF_PORT, default=1704): cv.int_range(1, 65535),
+            cv.Optional(CONF_OPTIMIZE_WIFI, default=True): cv.boolean,
         }
     ),
     cv.only_on([PLATFORM_ESP32]),
@@ -36,7 +38,7 @@ CONFIG_SCHEMA = cv.All(
 async def to_code(config):
     cg.add_define("USE_AUDIO_FLAC_SUPPORT", True)
 
-    if CORE.using_esp_idf:
+    if CORE.using_esp_idf and config[CONF_OPTIMIZE_WIFI]:
         # Wifi settings based on https://github.com/espressif/esp-adf/issues/297#issuecomment-783811702
         esp32.add_idf_sdkconfig_option("CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM", 16)
         esp32.add_idf_sdkconfig_option("CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM", 512)
