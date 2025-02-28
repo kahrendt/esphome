@@ -1027,7 +1027,8 @@ void SnapcastPlayer::decode_task(void *params) {
 
     if (abs(this_snapcast->actual_offsets_.get_most_recent_median()) < HARD_SYNC_THRESHOLD_US) {
       synced_chunks = std::min(synced_chunks + 1, GOOD_SYNCS_BEFORE_UNMUTE);
-    } else {
+    } else if (recent_error_us > HARD_SYNC_THRESHOLD_US) {
+      // Even with the upcoming adjustments we are out of sync, reset the count
       synced_chunks = 0;
     }
 
