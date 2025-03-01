@@ -81,8 +81,8 @@ bool AudioTransferBuffer::reallocate(size_t new_buffer_size) {
 bool AudioTransferBuffer::allocate_buffer_(size_t buffer_size) {
   this->buffer_size_ = buffer_size;
 
-  // RAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
-  RAMAllocator<uint8_t> allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
+  RAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
+  // RAMAllocator<uint8_t> allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
 
   this->buffer_ = allocator.allocate(this->buffer_size_);
   if (this->buffer_ == nullptr) {
@@ -97,7 +97,8 @@ bool AudioTransferBuffer::allocate_buffer_(size_t buffer_size) {
 
 void AudioTransferBuffer::deallocate_buffer_() {
   if (this->buffer_ != nullptr) {
-    RAMAllocator<uint8_t> allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
+    RAMAllocator<uint8_t> allocator(ExternalRAMAllocator<uint8_t>::ALLOW_FAILURE);
+    // RAMAllocator<uint8_t> allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
     allocator.deallocate(this->buffer_, this->buffer_size_);
     this->buffer_ = nullptr;
     this->data_start_ = nullptr;
