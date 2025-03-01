@@ -141,7 +141,7 @@ class MedianFilter {
 class SnapcastPlayer : public Component, public media_player::MediaPlayer {
  public:
   SnapcastPlayer() : network_latency_filter_(MedianFilter(50)), actual_offsets_(MedianFilter(1)){};
-  float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
+  float get_setup_priority() const override { return esphome::setup_priority::AFTER_CONNECTION; }
   void setup() override;
   void loop() override;
 
