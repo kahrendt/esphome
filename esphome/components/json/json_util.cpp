@@ -1,13 +1,28 @@
 #include "json_util.h"
 #include "esphome/core/log.h"
 
+#ifdef USE_ESP32
+#include <esp_heap_caps.h>
+#endif
+
 namespace esphome {
 namespace json {
 
 static const char *const TAG = "json";
 
 static std::vector<char> global_json_build_buffer;  // NOLINT
-static const auto ALLOCATOR = RAMAllocator<uint8_t>(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
+static const auto ALLOCATOR = RAMAllocator<uint8_t>(RAMAllocator<uint8_t>::ALLOW_FAILURE);
+// static const auto ALLOCATOR = RAMAllocator<uint8_t>(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
+
+struct SpiRamAllocator {
+  void *allocate(size_t size) { return heap_caps_malloc(size, MALLOC_CAP_SPIRAM); }
+
+  void deallocate(void *pointer) { heap_caps_free(pointer); }
+
+  void *reallocate(void *ptr, size_t new_size) { return heap_caps_realloc(ptr, new_size, MALLOC_CAP_SPIRAM); }
+};
+
+using SpiRamJsonDocument = BasicJsonDocument<SpiRamAllocator>;
 
 std::string build_json(const json_build_t &f) {
   // Here we are allocating up to 5kb of memory,
@@ -18,7 +33,8 @@ std::string build_json(const json_build_t &f) {
   size_t request_size = std::min(free_heap, (size_t) 512);
   while (true) {
     ESP_LOGV(TAG, "Attempting to allocate %zu bytes for JSON serialization", request_size);
-    DynamicJsonDocument json_document(request_size);
+    // DynamicJsonDocument json_document(request_size);
+    SpiRamJsonDocument json_document(request_size);
     if (json_document.capacity() == 0) {
       ESP_LOGE(TAG,
                "Could not allocate memory for JSON document! Requested %zu bytes, largest free heap block: %zu bytes",
@@ -52,7 +68,8 @@ bool parse_json(const std::string &data, const json_parse_t &f) {
   auto free_heap = ALLOCATOR.get_max_free_block_size();
   size_t request_size = std::min(free_heap, (size_t) (data.size() * 1.5));
   while (true) {
-    DynamicJsonDocument json_document(request_size);
+    // DynamicJsonDocument json_document(request_size);
+    SpiRamJsonDocument json_document(request_size);
     if (json_document.capacity() == 0) {
       ESP_LOGE(TAG, "Could not allocate memory for JSON document! Requested %zu bytes, free heap: %zu", request_size,
                free_heap);
