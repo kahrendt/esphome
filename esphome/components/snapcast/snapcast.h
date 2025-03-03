@@ -18,8 +18,6 @@
 namespace esphome {
 namespace snapcast {
 
-static const size_t MAX_CHUNK_SIZE = 6000;
-
 enum MessageType {
   SNAPCAST_MESSAGE_BASE = 0,
   SNAPCAST_MESSAGE_CODEC_HEADER = 1,
@@ -35,19 +33,20 @@ struct PlaybackInfo {
   int64_t write_timestamp;
 };
 
-struct AudioSyncChunk {
-  // uint8_t data[MAX_CHUNK_SIZE];
-  uint8_t *data;
-  size_t offset{0};
-  size_t size;
-  int64_t server_timestamp;
-  bool codec_header = false;
+// Stores encoded audio chunks sent from the server
+struct AudioChunk {
+  uint8_t *data;             // Pointer to encoded audio data. Must be deallocated after receiving
+  size_t offset;             // Number of bytes to skip in the data pointer to skip
+  size_t size;               // Number of bytes to read from the data pointer after the offset
+  int64_t server_timestamp;  // Server timestamp when this part of the stream was recorded
+  bool codec_header;         // True of this chunk contains only the codec header, not audio data
 };
 
-struct AudioSyncChunkTimings {
-  int64_t server_timestamp;
-  uint32_t total_frames;
-  int32_t frame_corrections = 0;
+// Stores the timing information for decoded chunks of audio sent to the ESPHome speaker
+struct InternalAudioTiming {
+  int64_t server_timestamp;   // Server timestamp when this audio chunk should finish playing
+  uint32_t total_frames;      // Total number of audio frames in this chunk, including corrections
+  int32_t frame_corrections;  // Number of frames in this added/removed by the decoder to maintain sync
 };
 
 struct TimeMessage {
@@ -190,12 +189,10 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   static void control_task(void *params);
   static void decode_task(void *params);
   static void snapcast_task(void *params);
-  // static void sync_task(void *params);
 
   TaskHandle_t control_task_handle_{nullptr};
   TaskHandle_t decode_task_handle_{nullptr};
   TaskHandle_t snapcast_task_handle_{nullptr};
-  // TaskHandle_t sync_task_handle_{nullptr};
 
   static void timesync_callback(void *params);
   uint16_t time_sync_counter_{0};
@@ -227,8 +224,6 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   QueueHandle_t playback_info_queue_;
 
   QueueHandle_t encoded_chunk_data_queue_;
-  // StaticQueue_t encoded_chunk_data_queue_buffer_;
-  // uint8_t *encoded_chunk_data_queue_storage_{nullptr};
 
   size_t snapcast_buffer_duration_ms_{0};
   uint32_t snapcast_latency_ms_{0};

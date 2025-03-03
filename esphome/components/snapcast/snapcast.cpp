@@ -62,7 +62,7 @@ void SnapcastPlayer::start() {
     }
   });
 
-  this->encoded_chunk_data_queue_ = xQueueCreate(ENCODED_CHUNK_QUEUE_SIZE, sizeof(AudioSyncChunk));
+  this->encoded_chunk_data_queue_ = xQueueCreate(ENCODED_CHUNK_QUEUE_SIZE, sizeof(AudioChunk));
 
   this->playback_info_queue_ = xQueueCreate(50, sizeof(PlaybackInfo));
   this->event_group_ = xEventGroupCreate();
@@ -506,9 +506,8 @@ void SnapcastPlayer::control_task(void *params) {
 }
 
 void SnapcastPlayer::clear_chunk_queue_() {
-  // RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
   RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOW_FAILURE);
-  AudioSyncChunk chunk;
+  AudioChunk chunk;
   while (xQueueReceive(this->encoded_chunk_data_queue_, &chunk, pdMS_TO_TICKS(1))) {
     data_allocator.deallocate(chunk.data, chunk.offset + chunk.size);
   }
@@ -516,7 +515,6 @@ void SnapcastPlayer::clear_chunk_queue_() {
 
 void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
-  // RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
   RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOW_FAILURE);
   esp_timer_handle_t timesync_message_timer;
   static const esp_timer_create_args_t timer_for_syncing_args = {.callback = &timesync_callback,
@@ -550,13 +548,10 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 
     bool new_file_start = true;
 
-    AudioSyncChunk audio_chunk;
+    AudioChunk audio_chunk;
 
     int64_t last_time_sync_message = 0;
     uint32_t time_message_delay = FAST_SYNC_LATENCY_BUF;
-
-    int64_t last_client_settings_message = 0;
-    uint32_t client_message_delay = 60000000;
 
     bool no_socket_error = true;
 
@@ -580,14 +575,6 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
       base_msg.received.usec = static_cast<int32_t>(now - now / 1000000LL);
 
       size_t follow_up_msg_size = base_msg.size;
-      if (follow_up_msg_size > MAX_CHUNK_SIZE) {
-        ESP_LOGE(TAG,
-                 "message size is bigger than the max chunk size, problematic! Message size = %" PRIu32
-                 ". Message type = %d",
-                 follow_up_msg_size, base_msg.type);
-        this_snapcast->disconnect_from_server_();
-        break;
-      }
 
       uint8_t *follow_up_data = data_allocator.allocate(follow_up_msg_size);
       if (follow_up_data == nullptr) {
@@ -627,9 +614,9 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           int32_t timestamp_us;
           uint32_t chunk_size;
 
-          memcpy(&timestamp_s, audio_chunk.data, sizeof(int32_t));
-          memcpy(&timestamp_us, audio_chunk.data + sizeof(int32_t), sizeof(int32_t));
-          memcpy(&chunk_size, audio_chunk.data + 2 * sizeof(int32_t), sizeof(uint32_t));
+          std::memcpy((void *) &timestamp_s, (void *) audio_chunk.data, sizeof(int32_t));
+          std::memcpy((void *) &timestamp_us, (void *) audio_chunk.data + sizeof(int32_t), sizeof(int32_t));
+          std::memcpy((void *) &chunk_size, (void *) audio_chunk.data + 2 * sizeof(int32_t), sizeof(uint32_t));
 
           audio_chunk.offset = WIRE_CHUNK_HEADER_SIZE;
           audio_chunk.size -= audio_chunk.offset;
@@ -659,18 +646,25 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
         case SNAPCAST_MESSAGE_CODEC_HEADER: {
           ESP_LOGD(TAG, "Received a new codec header message.");
 
-          uint32_t codec_len = *reinterpret_cast<uint32_t *>(audio_chunk.data + audio_chunk.offset);
+          uint32_t codec_len;
+          std::string codec_type;
+
+          std::memcpy((void *) &codec_len, (void *) audio_chunk.data + audio_chunk.offset, sizeof(uint32_t));
           audio_chunk.offset += sizeof(uint32_t);
           audio_chunk.size -= sizeof(uint32_t);
 
-          std::string codec_type;
           codec_type.resize(codec_len);
           std::memcpy((void *) codec_type.data(), (void *) (audio_chunk.data + audio_chunk.offset), codec_len);
-
           audio_chunk.offset += codec_len;
           audio_chunk.size -= codec_len;
 
-          codec_len = *reinterpret_cast<uint32_t *>(audio_chunk.data + audio_chunk.offset);
+          if (codec_type.compare("flac") != 0) {
+            ESP_LOGE(TAG, "Unsupported codec type: %s", codec_type.c_str());
+            no_socket_error = false;
+            break;
+          }
+
+          std::memcpy((void *) &codec_len, (void *) audio_chunk.data + audio_chunk.offset, sizeof(uint32_t));
           audio_chunk.offset += sizeof(uint32_t);
           audio_chunk.size -= sizeof(uint32_t);
 
@@ -745,10 +739,13 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           break;
         }
         case SNAPCAST_MESSAGE_TIME: {
-          int32_t latency_s = *reinterpret_cast<int32_t *>(audio_chunk.data + audio_chunk.offset);
+          int32_t latency_s;
+          int32_t latency_us;
+
+          std::memcpy((void *) &latency_s, (void *) audio_chunk.data + audio_chunk.offset, sizeof(int32_t));
           audio_chunk.offset += sizeof(int32_t);
           audio_chunk.size -= sizeof(int32_t);
-          int32_t latency_us = *reinterpret_cast<int32_t *>(audio_chunk.data + audio_chunk.offset);
+          std::memcpy((void *) &latency_us, (void *) audio_chunk.data + audio_chunk.offset, sizeof(int32_t));
           audio_chunk.offset += sizeof(int32_t);
           audio_chunk.size -= sizeof(int32_t);
 
@@ -798,7 +795,7 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
 void SnapcastPlayer::decode_task(void *params) {
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
 
-  AudioSyncChunk encoded_chunk;
+  AudioChunk encoded_chunk;
   std::unique_ptr<esp_audio_libs::flac::FLACDecoder> flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
   size_t free_buffer_required = 8000;
 
@@ -810,7 +807,7 @@ void SnapcastPlayer::decode_task(void *params) {
 
   int synced_chunks = 0;
 
-  std::deque<AudioSyncChunkTimings> chunk_timings;
+  std::deque<InternalAudioTiming> chunk_timings;
 
   RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOW_FAILURE);
 
@@ -861,7 +858,7 @@ void SnapcastPlayer::decode_task(void *params) {
         uint32_t frames_played = playback_info.frames_played;
         int64_t write_timestamp = playback_info.write_timestamp;
 
-        AudioSyncChunkTimings *front_chunk = &chunk_timings.front();
+        InternalAudioTiming *front_chunk = &chunk_timings.front();
 
         pending_frame_corrections -= front_chunk->frame_corrections;
         front_chunk->frame_corrections = 0;
@@ -1038,7 +1035,7 @@ void SnapcastPlayer::decode_task(void *params) {
           }
         }
 
-        AudioSyncChunkTimings timings;
+        InternalAudioTiming timings;
 
         timings.total_frames = this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes) + frame_corrections;
         if (receive_chunk) {
