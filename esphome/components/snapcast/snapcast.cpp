@@ -812,8 +812,9 @@ void SnapcastPlayer::decode_task(void *params) {
 
   std::deque<AudioSyncChunkTimings> chunk_timings;
 
-  // RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
   RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOW_FAILURE);
+
+  bool initial_decode = true;
 
   while (true) {
     EventBits_t event_bits = xEventGroupGetBits(this_snapcast->event_group_);
@@ -855,6 +856,7 @@ void SnapcastPlayer::decode_task(void *params) {
 
     PlaybackInfo playback_info;
     while (xQueueReceive(this_snapcast->playback_info_queue_, &playback_info, 0) == pdTRUE) {
+      initial_decode = false;  // Some sent audio chunks have been played by the speaker
       if (!chunk_timings.empty()) {
         uint32_t frames_played = playback_info.frames_played;
         int64_t write_timestamp = playback_info.write_timestamp;
@@ -893,11 +895,6 @@ void SnapcastPlayer::decode_task(void *params) {
         this_snapcast->actual_offsets_.update(new_error);
       }
     }
-
-    // if (this_snapcast->speaker_->is_stopped()) {
-    //   xEventGroupSetBits(this_snapcast->event_group_, EventGroupBits::SYNC_PROCESSING);
-    //   this_snapcast->speaker_->start();
-    // }
 
     /*******************/
     /*****Determine teh current error with pending correction */
@@ -959,7 +956,7 @@ void SnapcastPlayer::decode_task(void *params) {
             flac_decoder->get_sample_depth(), flac_decoder->get_num_channels(), flac_decoder->get_sample_rate());
 
         this_snapcast->speaker_->set_audio_stream_info(this_snapcast->audio_stream_info_.value());
-
+        initial_decode = true;
       } else if (flac_decoder != nullptr) {
         uint32_t output_samples = 0;
         auto result = flac_decoder->decode_frame(encoded_chunk.data + encoded_chunk.offset, encoded_chunk.size,
@@ -990,7 +987,7 @@ void SnapcastPlayer::decode_task(void *params) {
         const size_t bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
         const int64_t us_per_frame_margin = 3 * this_snapcast->audio_stream_info_.value().frames_to_microseconds(1) / 2;
 
-        if (recent_error_us > HARD_SYNC_THRESHOLD_US) {
+        if (initial_decode || (recent_error_us > HARD_SYNC_THRESHOLD_US)) {
           size_t silence_bytes = this_snapcast->audio_stream_info_.value().ms_to_bytes(recent_error_us / 1000);
           size_t actual_silence_bytes = std::min(silence_bytes, output_transfer_buffer->free());
           std::memset((void *) (output_transfer_buffer->get_buffer_end() - new_bytes), 0,
