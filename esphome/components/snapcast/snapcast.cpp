@@ -55,15 +55,15 @@ enum EventGroupBits : uint32_t {
 
 void SnapcastPlayer::start() {
   this->speaker_->add_audio_output_callback([this](uint32_t frames_played, int64_t write_timestamp) {
-    PlaybackInfo playback_info = {.frames_played = frames_played, .write_timestamp = write_timestamp};
-    if (!xQueueSend(this->playback_info_queue_, &playback_info, 0)) {
+    PlaybackProgress playback_progress = {.frames_played = frames_played, .write_timestamp = write_timestamp};
+    if (!xQueueSend(this->playback_progress_queue_, &playback_progress, 0)) {
       ESP_LOGE(TAG, "Playback info queue was full");
     }
   });
 
   this->encoded_chunk_data_queue_ = xQueueCreate(ENCODED_CHUNK_QUEUE_SIZE, sizeof(AudioChunk));
 
-  this->playback_info_queue_ = xQueueCreate(50, sizeof(PlaybackInfo));
+  this->playback_progress_queue_ = xQueueCreate(50, sizeof(PlaybackProgress));
   this->event_group_ = xEventGroupCreate();
 
   xTaskCreate(snapcast_task, "snapcast", SNAPCAST_TASK_STACK_SIZE, (void *) this, 5, &this->snapcast_task_handle_);
@@ -79,7 +79,7 @@ void SnapcastPlayer::loop() {
   if ((event_bits & DECODE_FINISHED)) {
     this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
     if (this->speaker_->is_stopped()) {
-      xQueueReset(this->playback_info_queue_);
+      xQueueReset(this->playback_progress_queue_);
       xEventGroupClearBits(this->event_group_, (COMMAND_STOP | DECODE_FINISHED));
     } else {
       this->speaker_->stop();
@@ -856,12 +856,12 @@ void SnapcastPlayer::decode_task(void *params) {
 
     /** Use the information from the speaker on frames played to update teh current error */
 
-    PlaybackInfo playback_info;
-    while (xQueueReceive(this_snapcast->playback_info_queue_, &playback_info, 0) == pdTRUE) {
+    PlaybackProgress playback_progress;
+    while (xQueueReceive(this_snapcast->playback_progress_queue_, &playback_progress, 0) == pdTRUE) {
       initial_decode = false;  // Some sent audio chunks have been played by the speaker
       if (!chunk_timings.empty()) {
-        uint32_t frames_played = playback_info.frames_played;
-        int64_t write_timestamp = playback_info.write_timestamp;
+        uint32_t frames_played = playback_progress.frames_played;
+        int64_t write_timestamp = playback_progress.write_timestamp;
 
         InternalAudioTiming *front_chunk = &chunk_timings.front();
 

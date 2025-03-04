@@ -34,7 +34,7 @@ enum class SnapcastCodecFormat {
   SNAPCAST_CODEC_UNSUPPORTED,
 };
 
-struct PlaybackInfo {
+struct PlaybackProgress {
   uint32_t frames_played;
   int64_t write_timestamp;
 };
@@ -228,7 +228,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   uint16_t server_port_;
   uint16_t server_control_port_{1705};
 
-  QueueHandle_t playback_info_queue_;
+  QueueHandle_t playback_progress_queue_;
 
   QueueHandle_t encoded_chunk_data_queue_;
 
