@@ -301,13 +301,7 @@ media_player::MediaPlayerTraits SnapcastPlayer::get_traits() {
 }
 
 void SnapcastPlayer::setup() {
-  char mac_address[18];
-  uint8_t base_mac[6];
-  esp_read_mac(base_mac, ESP_MAC_WIFI_STA);
-  sprintf(mac_address, "%02X:%02X:%02X:%02X:%02X:%02X", base_mac[0], base_mac[1], base_mac[2], base_mac[3], base_mac[4],
-          base_mac[5]);
-
-  this->player_id_ = std::string(mac_address);
+  this->player_id_ = get_mac_address_pretty();
   this->start();
 }
 
