@@ -6,7 +6,7 @@ import esphome.config_validation as cv
 from esphome.const import CONF_ID, CONF_PORT, CONF_SPEAKER, PLATFORM_ESP32
 from esphome.core import CORE
 
-AUTO_LOAD = ["audio", "bytebuffer", "json", "psram", "socket"]
+AUTO_LOAD = ["audio", "bytebuffer", "json", "network", "psram", "socket"]
 CODEOWNERS = ["@kahrendt"]
 DEPENDENCIES = ["speaker"]
 

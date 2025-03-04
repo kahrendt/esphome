@@ -1,9 +1,10 @@
 #include "snapcast.h"
+
 #ifdef USE_NETWORK
-// #include "esphome/components/network/ip_address.h"
-#include "esphome/components/json/json_util.h"
 #include "esphome/components/audio/audio.h"
 #include "esphome/components/audio/audio_transfer_buffer.h"
+#include "esphome/components/network/ip_address.h"
+#include "esphome/components/json/json_util.h"
 
 #include "esphome/core/application.h"
 #include "esphome/core/log.h"
@@ -210,10 +211,8 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
   struct sockaddr_storage server_control;
 
   if (!this->server_address_.has_value()) {
-    mdns_result_t *mdns_result;
-    char ip_address[16];
-
     mdns_init();
+    mdns_result_t *mdns_result;
 
     ESP_LOGD(TAG, "Looking for a snapcast service on network");
     err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
@@ -223,16 +222,16 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
       return ESP_FAIL;
     } else {
       if (mdns_result->addr) {
-        sprintf(ip_address, "%d.%d.%d.%d", IP2STR(mdns_result->addr));
-        port = mdns_result->port;
-        ESP_LOGD(TAG, "Found a snapcast server via mdns: " IPSTR, IP2STR(mdns_result->addr));
+        network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
+        ESP_LOGD(TAG, "Found a snapcast server via mdns: %s", discovered_address.str().c_str());
+
+        sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), discovered_address.str().c_str(), port);
+        sl_control = socket::set_sockaddr((struct sockaddr *) &server_control, sizeof(server_control),
+                                          discovered_address.str().c_str(), this->server_control_port_);
       }
       mdns_query_results_free(mdns_result);
     }
 
-    sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), (const char *) ip_address, port);
-    sl_control = socket::set_sockaddr((struct sockaddr *) &server_control, sizeof(server_control),
-                                      (const char *) ip_address, this->server_control_port_);
   } else {
     sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), this->server_address_.value().c_str(), port);
     sl_control = socket::set_sockaddr((struct sockaddr *) &server_control, sizeof(server_control),
