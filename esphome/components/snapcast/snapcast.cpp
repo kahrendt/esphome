@@ -4,7 +4,6 @@
 #include "esphome/components/json/json_util.h"
 #include "esphome/components/audio/audio.h"
 #include "esphome/components/audio/audio_transfer_buffer.h"
-#include "esphome/components/audio/audio_decoder.h"
 
 #include "esphome/core/application.h"
 #include "esphome/core/log.h"
@@ -14,17 +13,10 @@
 
 #include "mdns.h"
 
-#include "lwip/api.h"
-#include "lwip/dns.h"
-#include "lwip/err.h"
-#include "lwip/netdb.h"
-#include "lwip/sockets.h"
-#include "lwip/sys.h"
-#include "esp_mac.h"
-
 #include <esp_timer.h>
 
 #include <flac_decoder.h>
+#include <wav_decoder.h>
 
 namespace esphome {
 namespace snapcast {
