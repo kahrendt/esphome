@@ -49,9 +49,8 @@ static const int64_t HARD_SYNC_THRESHOLD_US = 5000;
 enum EventGroupBits : uint32_t {
   COMMAND_STOP = (1 << 0),
   DECODE_FINISHED = (1 << 3),
-  SYNC_FINISHED = (1 << 5),
-  SYNC_PROCESSING = (1 << 6),
   CONTROL_START = (1 << 7),
+  WARNING_ENCODED_CHUNK_FULL = (1 << 11),
 };
 
 void SnapcastPlayer::start() {
@@ -77,17 +76,14 @@ void SnapcastPlayer::loop() {
 
   EventBits_t event_bits = xEventGroupGetBits(this->event_group_);
 
-  // if ((event_bits & DECODE_FINISHED) && (event_bits & SYNC_FINISHED)) {
   if ((event_bits & DECODE_FINISHED)) {
     this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
     if (this->speaker_->is_stopped()) {
       xQueueReset(this->playback_info_queue_);
-      xEventGroupClearBits(this->event_group_, (COMMAND_STOP | DECODE_FINISHED | SYNC_FINISHED | SYNC_PROCESSING));
+      xEventGroupClearBits(this->event_group_, (COMMAND_STOP | DECODE_FINISHED));
     } else {
       this->speaker_->stop();
     }
-  } else if (event_bits & SYNC_PROCESSING) {
-    this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
   }
   if (this->volume_.has_value()) {
     this->volume = static_cast<float>(this->volume_.value()) / 100.0f;
@@ -635,8 +631,10 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           audio_chunk.server_timestamp = total_timestamp_us;
           if ((chunk_size > 0) && low_speed_timer_started && no_socket_error) {
             if (!xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, 0)) {
+              xEventGroupSetBits(this_snapcast->event_group_, WARNING_ENCODED_CHUNK_FULL);
               ESP_LOGW(TAG, "Encoded chunk queue is full, dropping audio chunk.");
             } else {
+              xEventGroupClearBits(this_snapcast->event_group_, WARNING_ENCODED_CHUNK_FULL);
               follow_up_data = nullptr;
             }
           }
@@ -658,7 +656,11 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
           audio_chunk.offset += codec_len;
           audio_chunk.size -= codec_len;
 
-          if (codec_type.compare("flac") != 0) {
+          if (codec_type.compare("flac") == 0) {
+            this_snapcast->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_FLAC;
+          } else if (codec_type.compare("pcm") == 0) {
+            this_snapcast->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_PCM;
+          } else {
             ESP_LOGE(TAG, "Unsupported codec type: %s", codec_type.c_str());
             no_socket_error = false;
             break;
@@ -796,7 +798,8 @@ void SnapcastPlayer::decode_task(void *params) {
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
 
   AudioChunk encoded_chunk;
-  std::unique_ptr<esp_audio_libs::flac::FLACDecoder> flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
+  std::unique_ptr<esp_audio_libs::flac::FLACDecoder> flac_decoder;
+  std::unique_ptr<esp_audio_libs::wav_decoder::WAVDecoder> wav_decoder;
   size_t free_buffer_required = 8000;
 
   std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
@@ -829,7 +832,6 @@ void SnapcastPlayer::decode_task(void *params) {
       pending_frame_corrections = 0;
       chunk_timings.clear();
 
-      xEventGroupClearBits(this_snapcast->event_group_, EventGroupBits::SYNC_PROCESSING);
       xEventGroupSetBits(this_snapcast->event_group_, DECODE_FINISHED);
     }
 
@@ -840,14 +842,17 @@ void SnapcastPlayer::decode_task(void *params) {
 
     const size_t bytes_written = output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
 
-    if (output_transfer_buffer->free() < free_buffer_required) {
-      uint32_t frames_written = this_snapcast->audio_stream_info_.value().bytes_to_frames(bytes_written);
-      uint32_t ms_written =
-          this_snapcast->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&frames_written) +
-          this_snapcast->audio_stream_info_.value().frames_to_microseconds(frames_written) / 1000;
-      delay(ms_written / 2);
+    if (output_transfer_buffer->available() > 0) {
       continue;
     }
+    // if (output_transfer_buffer->free() < free_buffer_required) {
+    //   uint32_t frames_written = this_snapcast->audio_stream_info_.value().bytes_to_frames(bytes_written);
+    //   uint32_t ms_written =
+    //       this_snapcast->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&frames_written) +
+    //       this_snapcast->audio_stream_info_.value().frames_to_microseconds(frames_written) / 1000;
+    //   delay(ms_written / 2);
+    //   continue;
+    // }
 
     /** Use the information from the speaker on frames played to update teh current error */
 
@@ -921,56 +926,93 @@ void SnapcastPlayer::decode_task(void *params) {
     }
     /******* */
 
-    if ((output_transfer_buffer->free() >= free_buffer_required) &&
-        xQueuePeek(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, pdMS_TO_TICKS(20))) {
+    size_t bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
+
+    if (xQueuePeek(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, pdMS_TO_TICKS(20))) {
       bool receive_chunk = true;
       if (encoded_chunk.codec_header) {
-        ESP_LOGD(TAG, "Decoding FLAC header");
+        if (this_snapcast->codec_format_ == SnapcastCodecFormat::SNAPCAST_CODEC_FLAC) {
+          ESP_LOGD(TAG, "Decoding FLAC header");
 
-        // Restart FLAC decoder
-        flac_decoder.reset();
-        flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
+          // Restart FLAC decoder
+          flac_decoder.reset();
+          flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
 
-        auto result = flac_decoder->read_header(encoded_chunk.data + encoded_chunk.offset, encoded_chunk.size);
+          auto result = flac_decoder->read_header(encoded_chunk.data + encoded_chunk.offset, encoded_chunk.size);
 
-        if (result == esp_audio_libs::flac::FLAC_DECODER_HEADER_OUT_OF_DATA) {
-          ESP_LOGW(TAG, "Need more data to decode FLAC header");
-          continue;
+          if (result == esp_audio_libs::flac::FLAC_DECODER_HEADER_OUT_OF_DATA) {
+            ESP_LOGW(TAG, "Need more data to decode FLAC header");
+            continue;
+          }
+
+          if (result != esp_audio_libs::flac::FLAC_DECODER_SUCCESS) {
+            ESP_LOGE(TAG, "Serious error decoding FLAC header");
+            continue;
+          }
+
+          this_snapcast->audio_stream_info_ = audio::AudioStreamInfo(
+              flac_decoder->get_sample_depth(), flac_decoder->get_num_channels(), flac_decoder->get_sample_rate());
+
+          bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
+
+          free_buffer_required = flac_decoder->get_output_buffer_size_bytes();
+          if (!output_transfer_buffer->reallocate(free_buffer_required + bytes_per_frame)) {
+            ESP_LOGE(TAG, "Failed to reallocate buffer for decoding FLAC");
+            continue;
+          }
+        } else if (this_snapcast->codec_format_ == SnapcastCodecFormat::SNAPCAST_CODEC_PCM) {
+          ESP_LOGD(TAG, "Decoding WAV header");
+
+          // Restart the WAV decoder
+          wav_decoder.reset();
+          wav_decoder = make_unique<esp_audio_libs::wav_decoder::WAVDecoder>();
+          wav_decoder->reset();
+
+          esp_audio_libs::wav_decoder::WAVDecoderResult result =
+              wav_decoder->decode_header(encoded_chunk.data + encoded_chunk.offset, encoded_chunk.size);
+
+          if (result == esp_audio_libs::wav_decoder::WAV_DECODER_SUCCESS_IN_DATA) {
+            this_snapcast->audio_stream_info_ = audio::AudioStreamInfo(
+                wav_decoder->bits_per_sample(), wav_decoder->num_channels(), wav_decoder->sample_rate());
+            bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
+          } else {
+            ESP_LOGE(TAG, "Failed to parse WAV header");
+            continue;
+          }
         }
-
-        if (result != esp_audio_libs::flac::FLAC_DECODER_SUCCESS) {
-          ESP_LOGE(TAG, "Serious error decoding FLAC header");
-          continue;
-        }
-
-        free_buffer_required = flac_decoder->get_output_buffer_size_bytes();
-        if (!output_transfer_buffer->reallocate(3 * free_buffer_required / 2)) {
-          ESP_LOGE(TAG, "Failed to reallocate buffer for decoding FLAC");
-          continue;
-        }
-
-        this_snapcast->audio_stream_info_ = audio::AudioStreamInfo(
-            flac_decoder->get_sample_depth(), flac_decoder->get_num_channels(), flac_decoder->get_sample_rate());
-
         this_snapcast->speaker_->set_audio_stream_info(this_snapcast->audio_stream_info_.value());
         initial_decode = true;
-      } else if (flac_decoder != nullptr) {
-        uint32_t output_samples = 0;
-        auto result = flac_decoder->decode_frame(encoded_chunk.data + encoded_chunk.offset, encoded_chunk.size,
-                                                 reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()),
-                                                 &output_samples);
+      } else {
+        size_t new_bytes;
+        if ((flac_decoder != nullptr) && (this_snapcast->codec_format_ == SnapcastCodecFormat::SNAPCAST_CODEC_FLAC)) {
+          uint32_t output_samples = 0;
+          auto result = flac_decoder->decode_frame(
+              encoded_chunk.data + encoded_chunk.offset, encoded_chunk.size,
+              reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end()), &output_samples);
 
-        if (result == esp_audio_libs::flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
-          ESP_LOGE(TAG, "FLAC decoder ran out of data");
-          continue;
+          if (result == esp_audio_libs::flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
+            ESP_LOGE(TAG, "FLAC decoder ran out of data");
+            continue;
+          }
+
+          if (result > esp_audio_libs::flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
+            ESP_LOGE(TAG, "Serious error decoding FLAC file");
+            continue;
+          }
+          new_bytes = this_snapcast->audio_stream_info_.value().samples_to_bytes(output_samples);
+        } else if ((wav_decoder != nullptr) &&
+                   (this_snapcast->codec_format_ == SnapcastCodecFormat::SNAPCAST_CODEC_PCM)) {
+          if (output_transfer_buffer->capacity() < encoded_chunk.size + bytes_per_frame) {
+            if (!output_transfer_buffer->reallocate(encoded_chunk.size + bytes_per_frame)) {
+              ESP_LOGE(TAG, "Failed to reallocate buffer for the PCM audio chunk");
+              continue;
+            }
+          }
+          std::memcpy((void *) output_transfer_buffer->get_buffer_end(),
+                      (void *) (encoded_chunk.data + encoded_chunk.offset), encoded_chunk.size);
+          new_bytes = encoded_chunk.size;
         }
 
-        if (result > esp_audio_libs::flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
-          ESP_LOGE(TAG, "Serious error decoding FLAC file");
-          continue;
-        }
-
-        const size_t new_bytes = this_snapcast->audio_stream_info_.value().samples_to_bytes(output_samples);
         output_transfer_buffer->increase_buffer_length(new_bytes);
 
         uint32_t new_frames = this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes);
@@ -981,7 +1023,6 @@ void SnapcastPlayer::decode_task(void *params) {
 
         int32_t frame_corrections = 0;
 
-        const size_t bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
         const int64_t us_per_frame_margin = 3 * this_snapcast->audio_stream_info_.value().frames_to_microseconds(1) / 2;
 
         if (initial_decode || (recent_error_us > HARD_SYNC_THRESHOLD_US)) {

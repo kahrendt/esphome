@@ -28,6 +28,12 @@ enum MessageType {
   SNAPCAST_MESSAGE_CLIENT_INFO = 7,
 };
 
+enum class SnapcastCodecFormat {
+  SNAPCAST_CODEC_FLAC,
+  SNAPCAST_CODEC_PCM,
+  SNAPCAST_CODEC_UNSUPPORTED,
+};
+
 struct PlaybackInfo {
   uint32_t frames_played;
   int64_t write_timestamp;
@@ -200,6 +206,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   EventGroupHandle_t event_group_{nullptr};
 
   optional<audio::AudioStreamInfo> audio_stream_info_;
+  optional<SnapcastCodecFormat> codec_format_{SnapcastCodecFormat::SNAPCAST_CODEC_UNSUPPORTED};
 
   optional<uint16_t> volume_;
 
