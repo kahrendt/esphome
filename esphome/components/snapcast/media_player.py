@@ -3,7 +3,13 @@
 import esphome.codegen as cg
 from esphome.components import esp32, media_player, speaker
 import esphome.config_validation as cv
-from esphome.const import CONF_ID, CONF_PORT, CONF_SPEAKER, PLATFORM_ESP32
+from esphome.const import (
+    CONF_ID,
+    CONF_PORT,
+    CONF_SPEAKER,
+    CONF_TASK_STACK_IN_PSRAM,
+    PLATFORM_ESP32,
+)
 from esphome.core import CORE
 
 AUTO_LOAD = ["audio", "bytebuffer", "json", "network", "psram", "socket"]
@@ -29,6 +35,9 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_SERVER_ADDRESS): cv.ipv4address,
             cv.Optional(CONF_PORT, default=1704): cv.int_range(1, 65535),
             cv.Optional(CONF_OPTIMIZE_WIFI, default=True): cv.boolean,
+            cv.SplitDefault(CONF_TASK_STACK_IN_PSRAM, esp32_idf=False): cv.All(
+                cv.boolean, cv.only_with_esp_idf
+            ),
         }
     ),
     cv.only_on([PLATFORM_ESP32]),
@@ -80,3 +89,11 @@ async def to_code(config):
     if server_address := config.get(CONF_SERVER_ADDRESS):
         cg.add(var.set_server_address(str(server_address)))
     cg.add(var.set_server_port(config[CONF_PORT]))
+
+    if task_stack_in_psram := config.get(CONF_TASK_STACK_IN_PSRAM):
+        cg.add(var.set_task_stack_in_psram(task_stack_in_psram))
+        if task_stack_in_psram:
+            if config[CONF_TASK_STACK_IN_PSRAM]:
+                esp32.add_idf_sdkconfig_option(
+                    "CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY", True
+                )

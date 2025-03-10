@@ -39,6 +39,10 @@ static const size_t DECODE_TASK_STACK_SIZE = 3 * 1024;
 static const int GOOD_SYNCS_BEFORE_UNMUTE = 2;
 static const int64_t HARD_SYNC_THRESHOLD_US = 5000;
 
+static const UBaseType_t SNAPCAST_TASK_PRIORITY = 5;
+static const UBaseType_t CONTROL_TASK_PRIORITY = 1;
+static const UBaseType_t DECODE_TASK_PRIORITY = 1;
+
 enum EventGroupBits : uint32_t {
   COMMAND_STOP = (1 << 0),
   DECODE_FINISHED = (1 << 3),
@@ -59,8 +63,45 @@ void SnapcastPlayer::start() {
   this->playback_progress_queue_ = xQueueCreate(50, sizeof(PlaybackProgress));
   this->event_group_ = xEventGroupCreate();
 
-  xTaskCreate(snapcast_task, "snapcast", SNAPCAST_TASK_STACK_SIZE, (void *) this, 5, &this->snapcast_task_handle_);
-  xTaskCreate(control_task, "snap_control", CONTROL_TASK_STACK_SIZE, (void *) this, 1, &this->control_task_handle_);
+  if (this->snapcast_task_stack_buffer_ == nullptr) {
+    if (this->task_stack_in_psram_) {
+      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
+      this->snapcast_task_stack_buffer_ = stack_allocator.allocate(SNAPCAST_TASK_STACK_SIZE);
+    } else {
+      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
+      this->snapcast_task_stack_buffer_ = stack_allocator.allocate(SNAPCAST_TASK_STACK_SIZE);
+    }
+  }
+
+  if (this->control_task_stack_buffer_ == nullptr) {
+    if (this->task_stack_in_psram_) {
+      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
+      this->control_task_stack_buffer_ = stack_allocator.allocate(CONTROL_TASK_STACK_SIZE);
+    } else {
+      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
+      this->control_task_stack_buffer_ = stack_allocator.allocate(CONTROL_TASK_STACK_SIZE);
+    }
+  }
+
+  if (this->decode_task_stack_buffer_ == nullptr) {
+    if (this->task_stack_in_psram_) {
+      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
+      this->decode_task_stack_buffer_ = stack_allocator.allocate(DECODE_TASK_STACK_SIZE);
+    } else {
+      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
+      this->decode_task_stack_buffer_ = stack_allocator.allocate(DECODE_TASK_STACK_SIZE);
+    }
+  }
+
+  this->snapcast_task_handle_ =
+      xTaskCreateStatic(snapcast_task, "snap_client", SNAPCAST_TASK_STACK_SIZE, (void *) this, SNAPCAST_TASK_PRIORITY,
+                        this->snapcast_task_stack_buffer_, &this->snapcast_task_stack_);
+  this->control_task_handle_ =
+      xTaskCreateStatic(control_task, "snap_control", CONTROL_TASK_STACK_SIZE, (void *) this, CONTROL_TASK_PRIORITY,
+                        this->control_task_stack_buffer_, &this->control_task_stack_);
+  this->decode_task_handle_ =
+      xTaskCreateStatic(decode_task, "snap_decode", DECODE_TASK_STACK_SIZE, (void *) this, DECODE_TASK_PRIORITY,
+                        this->decode_task_stack_buffer_, &this->decode_task_stack_);
 }
 
 void SnapcastPlayer::loop() {
@@ -671,11 +712,6 @@ void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
             this_snapcast->clear_chunk_queue_();
             xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, portMAX_DELAY);
             follow_up_data = nullptr;  // Don't deallocate the data at end of this loop
-
-            if (this_snapcast->decode_task_handle_ == nullptr) {
-              xTaskCreate(decode_task, "decode", DECODE_TASK_STACK_SIZE, (void *) this_snapcast, 1,
-                          &this_snapcast->decode_task_handle_);
-            }
           }
 
           if (!low_speed_timer_started) {

@@ -159,6 +159,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   void set_speaker(speaker::Speaker *speaker) { this->speaker_ = speaker; }
   void set_server_address(std::string server_address) { this->server_address_ = std::move(server_address); }
   void set_server_port(uint16_t server_port) { this->server_port_ = server_port; }
+  void set_task_stack_in_psram(bool task_stack_in_psram) { this->task_stack_in_psram_ = task_stack_in_psram; }
 
   void control_get_server_status();
 
@@ -197,8 +198,16 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   static void snapcast_task(void *params);
 
   TaskHandle_t control_task_handle_{nullptr};
+  StaticTask_t control_task_stack_;
+  StackType_t *control_task_stack_buffer_{nullptr};
+
   TaskHandle_t decode_task_handle_{nullptr};
+  StaticTask_t decode_task_stack_;
+  StackType_t *decode_task_stack_buffer_{nullptr};
+
   TaskHandle_t snapcast_task_handle_{nullptr};
+  StaticTask_t snapcast_task_stack_;
+  StackType_t *snapcast_task_stack_buffer_{nullptr};
 
   static void timesync_callback(void *params);
   uint16_t time_sync_counter_{0};
@@ -209,6 +218,8 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   optional<SnapcastCodecFormat> codec_format_{SnapcastCodecFormat::SNAPCAST_CODEC_UNSUPPORTED};
 
   optional<uint16_t> volume_;
+
+  bool task_stack_in_psram_{false};
 
   bool connected_{false};
   bool is_muted_{false};
