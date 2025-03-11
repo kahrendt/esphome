@@ -11,15 +11,17 @@ namespace json {
 static const char *const TAG = "json";
 
 static std::vector<char> global_json_build_buffer;  // NOLINT
-static const auto ALLOCATOR = RAMAllocator<uint8_t>(RAMAllocator<uint8_t>::ALLOW_FAILURE);
-// static const auto ALLOCATOR = RAMAllocator<uint8_t>(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
+static auto ALLOCATOR = RAMAllocator<uint8_t>(
+    RAMAllocator<uint8_t>::NONE);  // Attempt to allocate in PSRAM before falling back into internal
 
 struct SpiRamAllocator {
-  void *allocate(size_t size) { return heap_caps_malloc(size, MALLOC_CAP_SPIRAM); }
+  void *allocate(size_t size) { return ALLOCATOR.allocate(size); }
 
-  void deallocate(void *pointer) { heap_caps_free(pointer); }
+  void deallocate(void *pointer) {
+    free(pointer);
+  }  // NOLINT(cppcoreguidelines-owning-memory,cppcoreguidelines-no-malloc)
 
-  void *reallocate(void *ptr, size_t new_size) { return heap_caps_realloc(ptr, new_size, MALLOC_CAP_SPIRAM); }
+  void *reallocate(void *ptr, size_t new_size) { return ALLOCATOR.reallocate(static_cast<uint8_t *>(ptr), new_size); }
 };
 
 using SpiRamJsonDocument = BasicJsonDocument<SpiRamAllocator>;
