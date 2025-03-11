@@ -24,8 +24,8 @@ namespace snapcast {
 
 static const char *TAG = "snapcast";
 
-static const size_t INPUT_BUFFER_SIZE = 1024 * 50;
-static const size_t OUTPUT_BUFFER_SIZE = 1024 * 10;
+static const size_t INITIAL_BUFFER_SIZE =
+    1024 * 10;  // Initial buffer size for the transfer buffer, will be reallocated to the minimum required size
 
 static const uint32_t ENCODED_CHUNK_QUEUE_SIZE = 100;
 
@@ -33,13 +33,13 @@ static const uint32_t FAST_SYNC_LATENCY_BUF = 10000;      // in µs
 static const uint32_t NORMAL_SYNC_LATENCY_BUF = 1000000;  // in µs
 
 static const size_t CONTROL_TASK_STACK_SIZE = 3 * 1024;
-static const size_t SNAPCAST_TASK_STACK_SIZE = 3 * 1024;
+static const size_t CLIENT_TASK_STACK_SIZE = 3 * 1024;
 static const size_t DECODE_TASK_STACK_SIZE = 3 * 1024;
 
 static const int GOOD_SYNCS_BEFORE_UNMUTE = 2;
 static const int64_t HARD_SYNC_THRESHOLD_US = 5000;
 
-static const UBaseType_t SNAPCAST_TASK_PRIORITY = 5;
+static const UBaseType_t CLIENT_TASK_PRIORITY = 5;
 static const UBaseType_t CONTROL_TASK_PRIORITY = 1;
 static const UBaseType_t DECODE_TASK_PRIORITY = 1;
 
@@ -63,13 +63,13 @@ void SnapcastPlayer::start() {
   this->playback_progress_queue_ = xQueueCreate(50, sizeof(PlaybackProgress));
   this->event_group_ = xEventGroupCreate();
 
-  if (this->snapcast_task_stack_buffer_ == nullptr) {
+  if (this->client_task_stack_buffer_ == nullptr) {
     if (this->task_stack_in_psram_) {
       RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
-      this->snapcast_task_stack_buffer_ = stack_allocator.allocate(SNAPCAST_TASK_STACK_SIZE);
+      this->client_task_stack_buffer_ = stack_allocator.allocate(CLIENT_TASK_STACK_SIZE);
     } else {
       RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
-      this->snapcast_task_stack_buffer_ = stack_allocator.allocate(SNAPCAST_TASK_STACK_SIZE);
+      this->client_task_stack_buffer_ = stack_allocator.allocate(CLIENT_TASK_STACK_SIZE);
     }
   }
 
@@ -93,9 +93,9 @@ void SnapcastPlayer::start() {
     }
   }
 
-  this->snapcast_task_handle_ =
-      xTaskCreateStatic(snapcast_task, "snap_client", SNAPCAST_TASK_STACK_SIZE, (void *) this, SNAPCAST_TASK_PRIORITY,
-                        this->snapcast_task_stack_buffer_, &this->snapcast_task_stack_);
+  this->client_task_handle_ =
+      xTaskCreateStatic(client_task, "snap_client", CLIENT_TASK_STACK_SIZE, (void *) this, CLIENT_TASK_PRIORITY,
+                        this->client_task_stack_buffer_, &this->client_task_stack_);
   this->control_task_handle_ =
       xTaskCreateStatic(control_task, "snap_control", CONTROL_TASK_STACK_SIZE, (void *) this, CONTROL_TASK_PRIORITY,
                         this->control_task_stack_buffer_, &this->control_task_stack_);
@@ -535,7 +535,7 @@ void SnapcastPlayer::clear_chunk_queue_() {
   }
 }
 
-void SnapcastPlayer::snapcast_task(void *params) {  // // Find snapcast server
+void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
   RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOW_FAILURE);
   esp_timer_handle_t timesync_message_timer;
@@ -824,7 +824,7 @@ void SnapcastPlayer::decode_task(void *params) {
   size_t free_buffer_required = 8000;
 
   std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
-      audio::AudioSinkTransferBuffer::create(OUTPUT_BUFFER_SIZE);
+      audio::AudioSinkTransferBuffer::create(INITIAL_BUFFER_SIZE);
   output_transfer_buffer->set_sink(this_snapcast->speaker_);
 
   int64_t pending_frame_corrections = 0;
@@ -844,7 +844,7 @@ void SnapcastPlayer::decode_task(void *params) {
 
       // clear things we own as well
       output_transfer_buffer.reset();
-      output_transfer_buffer = audio::AudioSinkTransferBuffer::create(OUTPUT_BUFFER_SIZE);
+      output_transfer_buffer = audio::AudioSinkTransferBuffer::create(INITIAL_BUFFER_SIZE);
       output_transfer_buffer->set_sink(this_snapcast->speaker_);
 
       this_snapcast->speaker_->stop();

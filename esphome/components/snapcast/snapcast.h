@@ -193,21 +193,20 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
 
   void clear_chunk_queue_();
 
-  static void control_task(void *params);
-  static void decode_task(void *params);
-  static void snapcast_task(void *params);
+  static void client_task(void *params);
+  TaskHandle_t client_task_handle_{nullptr};
+  StaticTask_t client_task_stack_;
+  StackType_t *client_task_stack_buffer_{nullptr};
 
+  static void control_task(void *params);
   TaskHandle_t control_task_handle_{nullptr};
   StaticTask_t control_task_stack_;
   StackType_t *control_task_stack_buffer_{nullptr};
 
+  static void decode_task(void *params);
   TaskHandle_t decode_task_handle_{nullptr};
   StaticTask_t decode_task_stack_;
   StackType_t *decode_task_stack_buffer_{nullptr};
-
-  TaskHandle_t snapcast_task_handle_{nullptr};
-  StaticTask_t snapcast_task_stack_;
-  StackType_t *snapcast_task_stack_buffer_{nullptr};
 
   static void timesync_callback(void *params);
   uint16_t time_sync_counter_{0};
