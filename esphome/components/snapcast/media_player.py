@@ -12,9 +12,9 @@ from esphome.const import (
 )
 from esphome.core import CORE
 
-AUTO_LOAD = ["audio", "bytebuffer", "json", "network", "psram", "socket"]
+AUTO_LOAD = ["audio", "bytebuffer", "json", "psram", "socket"]
 CODEOWNERS = ["@kahrendt"]
-DEPENDENCIES = ["speaker"]
+DEPENDENCIES = ["network", "speaker"]
 
 CONF_OPTIMIZE_WIFI = "optimize_wifi"
 CONF_SERVER_ADDRESS = "server_address"
