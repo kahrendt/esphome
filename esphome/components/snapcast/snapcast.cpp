@@ -428,7 +428,7 @@ void SnapcastPlayer::control_task(void *params) {
     if (!message.empty()) {
       ESP_LOGV(TAG, "Control task received a message: %s", message.c_str());
       bool valid = json::parse_json(message, [this_snapcast](JsonObject root) -> bool {
-        if (root["jsonrpc"].is<JsonVariant>()) {
+        if (!root["jsonrpc"].is<JsonVariant>()) {
           ESP_LOGE(TAG, "Control JSON RPC notification isn't valid");
           return false;
         }
