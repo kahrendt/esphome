@@ -81,7 +81,7 @@ void HttpRequestUpdate::update_task(void *params) {
     container.reset();  // Release ownership of the container's shared_ptr
 
     valid = json::parse_json(response, [this_update](JsonObject root) -> bool {
-      if (!root.containsKey("name") || !root.containsKey("version") || !root.containsKey("builds")) {
+      if (!root["name"].is<JsonVariant>() || !root["version"].is<JsonVariant>() || !root["builds"].is<JsonVariant>()) {
         ESP_LOGE(TAG, "Manifest does not contain required fields");
         return false;
       }
@@ -89,26 +89,26 @@ void HttpRequestUpdate::update_task(void *params) {
       this_update->update_info_.latest_version = root["version"].as<std::string>();
 
       for (auto build : root["builds"].as<JsonArray>()) {
-        if (!build.containsKey("chipFamily")) {
+        if (!build["chipFamily"].is<JsonVariant>()) {
           ESP_LOGE(TAG, "Manifest does not contain required fields");
           return false;
         }
         if (build["chipFamily"] == ESPHOME_VARIANT) {
-          if (!build.containsKey("ota")) {
+          if (!build["ota"].is<JsonVariant>()) {
             ESP_LOGE(TAG, "Manifest does not contain required fields");
             return false;
           }
           auto ota = build["ota"];
-          if (!ota.containsKey("path") || !ota.containsKey("md5")) {
+          if (!ota["path"].is<JsonVariant>() || !ota["md5"].is<JsonVariant>()) {
             ESP_LOGE(TAG, "Manifest does not contain required fields");
             return false;
           }
           this_update->update_info_.firmware_url = ota["path"].as<std::string>();
           this_update->update_info_.md5 = ota["md5"].as<std::string>();
 
-          if (ota.containsKey("summary"))
+          if (ota["summary"].is<JsonVariant>())
             this_update->update_info_.summary = ota["summary"].as<std::string>();
-          if (ota.containsKey("release_url"))
+          if (ota["release_url"].is<JsonVariant>())
             this_update->update_info_.release_url = ota["release_url"].as<std::string>();
 
           return true;

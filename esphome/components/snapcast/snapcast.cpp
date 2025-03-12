@@ -444,24 +444,24 @@ void SnapcastPlayer::control_task(void *params) {
     if (!message.empty()) {
       ESP_LOGV(TAG, "Control task received a message: %s", message.c_str());
       bool valid = json::parse_json(message, [this_snapcast](JsonObject root) -> bool {
-        if (!root.containsKey("jsonrpc")) {
+        if (root["jsonrpc"].is<JsonVariant>()) {
           ESP_LOGE(TAG, "Control JSON RPC notification isn't valid");
           return false;
         }
         std::string method = "";
-        if (root.containsKey("method")) {
+        if (root["method"].is<JsonVariant>()) {
           method = root["method"].as<std::string>();
         }
 
         std::string result = "";
-        if (root.containsKey("result")) {
+        if (root["result"].is<JsonVariant>()) {
           JsonObject params = root["result"].as<JsonObject>();
-          if (params.containsKey("server")) {
+          if (params["server"].is<JsonVariant>()) {
             JsonObject server = params["server"].as<JsonObject>();
-            if (server.containsKey("groups")) {
+            if (server["groups"].is<JsonVariant>()) {
               JsonArray groups = server["groups"].as<JsonArray>();
               for (const JsonObject &group : groups) {
-                if (group.containsKey("clients")) {
+                if (group["clients"].is<JsonVariant>()) {
                   JsonArray clients = group["clients"].as<JsonArray>();
                   for (const JsonObject &client : clients) {
                     if (client["id"].as<std::string>().compare(this_snapcast->player_id_) == 0) {
@@ -478,14 +478,14 @@ void SnapcastPlayer::control_task(void *params) {
         }
 
         if (method.compare("Server.OnUpdate") == 0) {
-          if (root.containsKey("params")) {
+          if (root["params"].is<JsonVariant>()) {
             JsonObject params = root["params"].as<JsonObject>();
-            if (params.containsKey("server")) {
+            if (params["server"].is<JsonVariant>()) {
               JsonObject server = params["server"].as<JsonObject>();
-              if (server.containsKey("groups")) {
+              if (server["groups"].is<JsonVariant>()) {
                 JsonArray groups = server["groups"].as<JsonArray>();
                 for (const JsonObject &group : groups) {
-                  if (group.containsKey("clients")) {
+                  if (group["clients"].is<JsonVariant>()) {
                     JsonArray clients = group["clients"].as<JsonArray>();
                     for (const JsonObject &client : clients) {
                       if (client["id"].as<std::string>().compare(this_snapcast->player_id_) == 0) {
@@ -1197,8 +1197,8 @@ std::string SnapcastPlayer::build_hello_message_(HelloMessage *msg) {
 
 bool SnapcastPlayer::server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str) {
   bool valid = json::parse_json(json_str, [msg](JsonObject root) -> bool {
-    if (!root.containsKey("bufferMs") || !root.containsKey("latency") || !root.containsKey("muted") ||
-        !root.containsKey("volume")) {
+    if (!root["bufferMs"].is<JsonVariant>() || !root["latency"].is<JsonVariant>() || !root["muted"].is<JsonVariant>() ||
+        !root["volume"].is<JsonVariant>()) {
       ESP_LOGE(TAG, "Server settings message doesn't contain all the fields");
       return false;
     }
