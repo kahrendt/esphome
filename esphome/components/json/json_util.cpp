@@ -39,7 +39,7 @@ std::string build_json(const json_build_t &f) {
     ESP_LOGV(TAG, "Attempting to allocate %zu bytes for JSON serialization", request_size);
     // DynamicJsonDocument json_document(request_size);
     // SpiRamJsonDocument json_document(request_size);
-    JsonDocument json_document(&ALLOCATOR);
+    JsonDocument json_document;
     if (json_document.overflowed()) {
       ESP_LOGE(TAG, "Could not allocate memory for JSON document!");
       return "{}";
@@ -66,7 +66,7 @@ bool parse_json(const std::string &data, const json_parse_t &f) {
   // auto free_heap = ALLOCATOR.get_max_free_block_size();
   // size_t request_size = std::min(free_heap, (size_t) (data.size() * 1.5));
   while (true) {
-    JsonDocument json_document(&ALLOCATOR);
+    JsonDocument json_document;
     // DynamicJsonDocument json_document(request_size);
     // SpiRamJsonDocument json_document(request_size);
     if (json_document.overflowed()) {
