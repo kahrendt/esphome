@@ -166,6 +166,8 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
 
   Trigger<bool, float> *get_server_settings_trigger() const { return this->server_settings_trigger_; }
 
+  void publish_client_settings() { this->send_client_message_(); }
+
  protected:
   // Receives commands from HA or from the voice assistant component
   void control(const media_player::MediaPlayerCall &call) override;
@@ -254,7 +256,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
 };
 
 template<typename... Ts> class PublishClientSettingsAction : public Action<Ts...>, public Parented<SnapcastPlayer> {
-  void play(Ts... x) override { this->parent_->send_client_message_(); }
+  void play(Ts... x) override { this->parent_->publish_client_settings(); }
 };
 
 }  // namespace snapcast

@@ -30,7 +30,7 @@ SnapcastPlayer = snapcast_ns.class_(
 
 
 PublishClientSettingsAction = snapcast_ns.class_(
-    "PublishClientSettings",
+    "PublishClientSettingsAction",
     automation.Action,
     cg.Parented.template(SnapcastPlayer),
 )
