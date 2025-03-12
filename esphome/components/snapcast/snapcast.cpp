@@ -298,12 +298,10 @@ esp_err_t SnapcastPlayer::connect_to_server_() {
   }
   xEventGroupSetBits(this->event_group_, CONTROL_START);
   this->control_get_server_status();
-  // this->control_rpc_version_();
-  // printf("received control rpc version\n");
 
   int nodelay = 1;
   if (this->client_socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
-    ESP_LOGW(TAG, "Failed to turn on TCP_NODELAY, syncing may not be accurate");
+    ESP_LOGW(TAG, "Failed to turn on TCP_NODELAY, syncing may be inaccurate");
     nodelay = 0;
   }
 
@@ -389,30 +387,16 @@ std::string SnapcastPlayer::read_until_newline_(socket::Socket *socket) {
   return buffer;
 }
 
-void SnapcastPlayer::control_rpc_version_() {
-  std::string control_rpc_version_message = json::build_json([](JsonObject root) {
-    root["id"] = 8;
-    root["jsonrpc"] = "2.0";
-    root["method"] = "Server.GetRPCVersion";
-  });
-
-  control_rpc_version_message.push_back('\n');
-
-  this->control_socket_->write((void *) control_rpc_version_message.data(), control_rpc_version_message.size());
-  std::string response = this->read_until_newline_(this->control_socket_.get());
-  ESP_LOGD(TAG, "control_rpc_version_message: %s", response.c_str());
-}
-
 void SnapcastPlayer::control_get_server_status() {
-  std::string control_rpc_version_message = json::build_json([](JsonObject root) {
+  std::string control_message = json::build_json([](JsonObject root) {
     root["id"] = 8;
     root["jsonrpc"] = "2.0";
     root["method"] = "Server.GetStatus";
   });
 
-  control_rpc_version_message.push_back('\n');
+  control_message.push_back('\n');
 
-  this->control_socket_->write((void *) control_rpc_version_message.data(), control_rpc_version_message.size());
+  this->control_socket_->write((void *) control_message.data(), control_message.size());
 }
 void SnapcastPlayer::control_set_stream_volume_(int volume) {
   std::string control_stream_volume_message = json::build_json([this, volume](JsonObject root) {
@@ -748,10 +732,11 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
             ServerSettingsMessage server_settings_msg;
             this_snapcast->server_settings_message_deserialize_(&server_settings_msg, server_msg_read_data.c_str());
 
-            this_snapcast->snapcast_buffer_duration_ms_ = server_settings_msg.buffer_ms;
-            if (server_settings_msg.latency != this_snapcast->snapcast_latency_ms_) {
+            if ((server_settings_msg.latency != this_snapcast->snapcast_latency_ms_) ||
+                (server_settings_msg.buffer_ms != this_snapcast->snapcast_buffer_duration_ms_)) {
               this_snapcast->actual_offsets_.reset();
             }
+            this_snapcast->snapcast_buffer_duration_ms_ = server_settings_msg.buffer_ms;
             this_snapcast->snapcast_latency_ms_ = server_settings_msg.latency;
 
             this_snapcast->volume_ = server_settings_msg.volume;

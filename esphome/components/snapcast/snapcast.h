@@ -9,6 +9,7 @@
 #include "esphome/components/socket/socket.h"
 #include "esphome/components/speaker/speaker.h"
 
+#include "esphome/core/automation.h"
 #include "esphome/core/component.h"
 
 #include <freertos/event_groups.h>
@@ -163,6 +164,10 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
 
   void control_get_server_status();
 
+  Trigger<> *get_mute_trigger() const { return this->mute_trigger_; }
+  Trigger<> *get_unmute_trigger() const { return this->unmute_trigger_; }
+  Trigger<float> *get_volume_trigger() const { return this->volume_trigger_; }
+
  protected:
   // Receives commands from HA or from the voice assistant component
   void control(const media_player::MediaPlayerCall &call) override;
@@ -170,7 +175,6 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   int64_t server_timestamp_to_client_(int64_t server_timestamp);
   ssize_t read_from_socket_(socket::Socket *socket, uint8_t *buffer, size_t length);
   std::string read_until_newline_(socket::Socket *socket);
-  void control_rpc_version_();
   void control_set_stream_volume_(int volume);
 
   void base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
@@ -247,6 +251,14 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
 
   MedianFilter network_latency_filter_;
   MedianFilter actual_offsets_;
+
+  Trigger<> *mute_trigger_ = new Trigger<>();
+  Trigger<> *unmute_trigger_ = new Trigger<>();
+  Trigger<float> *volume_trigger_ = new Trigger<float>();
+};
+
+template<typename... Ts> class PublishClientSettingsAction : public Action<Ts...>, public Parented<SnapcastPlayer> {
+  void play(Ts... x) override { this->parent_->send_client_message_(); }
 };
 
 }  // namespace snapcast
