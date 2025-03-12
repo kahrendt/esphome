@@ -23,10 +23,6 @@
 #include <esp_heap_caps.h>
 #endif
 
-#ifdef USE_JSON
-#include <ArduinoJson.h>
-#endif
-
 #if defined(USE_ESP32)
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -684,11 +680,7 @@ void delay_microseconds_safe(uint32_t us);
  * - perform external allocation only
  * - perform internal allocation only
  */
-#ifdef USE_JSON
-template<class T> class RAMAllocator : ArduinoJson::Allocator {
-#else
 template<class T> class RAMAllocator {
-#endif
  public:
   using value_type = T;
 
@@ -759,11 +751,11 @@ template<class T> class RAMAllocator {
         this->flags_ & ALLOC_EXTERNAL ? heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM) : 0;
     return max_internal + max_external;
 #elif defined(USE_RP2040)
-  return ::rp2040.getFreeHeap();
+    return ::rp2040.getFreeHeap();
 #elif defined(USE_LIBRETINY)
-  return lt_heap_get_free();
+    return lt_heap_get_free();
 #else
-  return 100000;
+    return 100000;
 #endif
   }
 
@@ -780,7 +772,7 @@ template<class T> class RAMAllocator {
         this->flags_ & ALLOC_EXTERNAL ? heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM) : 0;
     return std::max(max_internal, max_external);
 #else
-  return this->get_free_heap_size();
+    return this->get_free_heap_size();
 #endif
   }
 
