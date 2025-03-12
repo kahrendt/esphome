@@ -621,8 +621,8 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
           uint32_t chunk_size;
 
           std::memcpy((void *) &timestamp_s, (void *) audio_chunk.data, sizeof(int32_t));
-          std::memcpy((void *) &timestamp_us, (void *) audio_chunk.data + sizeof(int32_t), sizeof(int32_t));
-          std::memcpy((void *) &chunk_size, (void *) audio_chunk.data + 2 * sizeof(int32_t), sizeof(uint32_t));
+          std::memcpy((void *) &timestamp_us, (void *) (audio_chunk.data + sizeof(int32_t)), sizeof(int32_t));
+          std::memcpy((void *) &chunk_size, (void *) (audio_chunk.data + 2 * sizeof(int32_t)), sizeof(uint32_t));
 
           audio_chunk.offset = WIRE_CHUNK_HEADER_SIZE;
           audio_chunk.size -= audio_chunk.offset;
@@ -657,7 +657,7 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
           uint32_t codec_len;
           std::string codec_type;
 
-          std::memcpy((void *) &codec_len, (void *) audio_chunk.data + audio_chunk.offset, sizeof(uint32_t));
+          std::memcpy((void *) &codec_len, (void *) (audio_chunk.data + audio_chunk.offset), sizeof(uint32_t));
           audio_chunk.offset += sizeof(uint32_t);
           audio_chunk.size -= sizeof(uint32_t);
 
@@ -676,7 +676,7 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
             break;
           }
 
-          std::memcpy((void *) &codec_len, (void *) audio_chunk.data + audio_chunk.offset, sizeof(uint32_t));
+          std::memcpy((void *) &codec_len, (void *) (audio_chunk.data + audio_chunk.offset), sizeof(uint32_t));
           audio_chunk.offset += sizeof(uint32_t);
           audio_chunk.size -= sizeof(uint32_t);
 
@@ -755,10 +755,10 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
           int32_t latency_s;
           int32_t latency_us;
 
-          std::memcpy((void *) &latency_s, (void *) audio_chunk.data + audio_chunk.offset, sizeof(int32_t));
+          std::memcpy((void *) &latency_s, (void *) (audio_chunk.data + audio_chunk.offset), sizeof(int32_t));
           audio_chunk.offset += sizeof(int32_t);
           audio_chunk.size -= sizeof(int32_t);
-          std::memcpy((void *) &latency_us, (void *) audio_chunk.data + audio_chunk.offset, sizeof(int32_t));
+          std::memcpy((void *) &latency_us, (void *) (audio_chunk.data + audio_chunk.offset), sizeof(int32_t));
           audio_chunk.offset += sizeof(int32_t);
           audio_chunk.size -= sizeof(int32_t);
 
