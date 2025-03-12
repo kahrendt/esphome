@@ -164,9 +164,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
 
   void control_get_server_status();
 
-  Trigger<> *get_mute_trigger() const { return this->mute_trigger_; }
-  Trigger<> *get_unmute_trigger() const { return this->unmute_trigger_; }
-  Trigger<float> *get_volume_trigger() const { return this->volume_trigger_; }
+  Trigger<bool, float> *get_server_settings_trigger() const { return this->server_settings_trigger_; }
 
  protected:
   // Receives commands from HA or from the voice assistant component
@@ -252,9 +250,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   MedianFilter network_latency_filter_;
   MedianFilter actual_offsets_;
 
-  Trigger<> *mute_trigger_ = new Trigger<>();
-  Trigger<> *unmute_trigger_ = new Trigger<>();
-  Trigger<float> *volume_trigger_ = new Trigger<float>();
+  Trigger<bool, float> *server_settings_trigger_ = new Trigger<bool, float>();
 };
 
 template<typename... Ts> class PublishClientSettingsAction : public Action<Ts...>, public Parented<SnapcastPlayer> {

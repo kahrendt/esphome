@@ -739,6 +739,11 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
             this_snapcast->snapcast_buffer_duration_ms_ = server_settings_msg.buffer_ms;
             this_snapcast->snapcast_latency_ms_ = server_settings_msg.latency;
 
+            this_snapcast->defer([this_snapcast, server_settings_msg]() {
+              this_snapcast->server_settings_trigger_->trigger(server_settings_msg.muted,
+                                                               server_settings_msg.volume / 100.0f);
+            });
+
             this_snapcast->volume_ = server_settings_msg.volume;
             this_snapcast->speaker_->set_mute_state(server_settings_msg.muted);
             this_snapcast->external_mute_ = server_settings_msg.muted;

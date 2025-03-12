@@ -17,9 +17,7 @@ AUTO_LOAD = ["audio", "bytebuffer", "json", "psram", "socket"]
 CODEOWNERS = ["@kahrendt"]
 DEPENDENCIES = ["network", "speaker"]
 
-CONF_ON_MUTE = "on_mute"
-CONF_ON_UNMUTE = "on_unmute"
-CONF_ON_VOLUME = "on_volume"
+CONF_ON_SERVER_SETTINGS = "on_server_settings"
 CONF_OPTIMIZE_WIFI = "optimize_wifi"
 CONF_SERVER_ADDRESS = "server_address"
 
@@ -48,9 +46,9 @@ CONFIG_SCHEMA = cv.All(
             cv.SplitDefault(CONF_TASK_STACK_IN_PSRAM, esp32_idf=False): cv.All(
                 cv.boolean, cv.only_with_esp_idf
             ),
-            cv.Optional(CONF_ON_MUTE): automation.validate_automation(single=True),
-            cv.Optional(CONF_ON_UNMUTE): automation.validate_automation(single=True),
-            cv.Optional(CONF_ON_VOLUME): automation.validate_automation(single=True),
+            cv.Optional(CONF_ON_SERVER_SETTINGS): automation.validate_automation(
+                single=True
+            ),
         }
     ),
     cv.only_on([PLATFORM_ESP32]),
@@ -111,23 +109,11 @@ async def to_code(config):
                     "CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY", True
                 )
 
-    if on_mute := config.get(CONF_ON_MUTE):
+    if on_server_settings := config.get(CONF_ON_SERVER_SETTINGS):
         await automation.build_automation(
-            var.get_mute_trigger(),
-            [],
-            on_mute,
-        )
-    if on_unmute := config.get(CONF_ON_UNMUTE):
-        await automation.build_automation(
-            var.get_unmute_trigger(),
-            [],
-            on_unmute,
-        )
-    if on_volume := config.get(CONF_ON_VOLUME):
-        await automation.build_automation(
-            var.get_volume_trigger(),
-            [(cg.float_, "x")],
-            on_volume,
+            var.get_server_settings_trigger(),
+            [(cg.bool_, "muted"), (cg.float_, "volume")],
+            on_server_settings,
         )
 
 
