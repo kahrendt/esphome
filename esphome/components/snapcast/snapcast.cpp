@@ -35,7 +35,7 @@ static const uint32_t NORMAL_SYNC_LATENCY_BUF = 1000000;  // in µs
 
 static const size_t CONTROL_TASK_STACK_SIZE = 3 * 1024;
 static const size_t CLIENT_TASK_STACK_SIZE = 3 * 1024;
-static const size_t DECODE_TASK_STACK_SIZE = 30 * 1024;
+static const size_t DECODE_TASK_STACK_SIZE = 3 * 1024;
 
 static const int GOOD_SYNCS_BEFORE_UNMUTE = 2;
 static const int64_t HARD_SYNC_THRESHOLD_US = 5000;
@@ -671,8 +671,8 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
             this_snapcast->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_FLAC;
           } else if (codec_type.compare("pcm") == 0) {
             this_snapcast->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_PCM;
-          } else if (codec_type.compare("opus") == 0) {
-            this_snapcast->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_OPUS;
+            // } else if (codec_type.compare("opus") == 0) {
+            //   this_snapcast->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_OPUS;
           } else {
             ESP_LOGE(TAG, "Unsupported codec type: %s", codec_type.c_str());
             no_socket_error = false;
