@@ -58,6 +58,23 @@ CONFIG_SCHEMA = cv.All(
 async def to_code(config):
     cg.add_define("USE_AUDIO_FLAC_SUPPORT", True)
 
+    # cg.add_library(
+    #     None, #"esp32_opus",
+    #     None,
+    #     None,  # "https://github.com/sh123/esp32_opus_arduino",
+    # )
+    # cg.add_library(
+    #     None,  # "esp32_opus",
+    #     None,
+    #     "https://github.com/mspitteler/esp-libopus",
+    # )
+    esp32.add_idf_component(
+        name="esp-libopus",
+        repo="https://github.com/kahrendt/esp-libopus.git",
+        ref="update-attempt2",
+        # path="components/esp-libopus",
+    )
+
     if CORE.using_esp_idf and config[CONF_OPTIMIZE_WIFI]:
         # Wifi settings based on https://github.com/espressif/esp-adf/issues/297#issuecomment-783811702
         esp32.add_idf_sdkconfig_option("CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM", 16)
