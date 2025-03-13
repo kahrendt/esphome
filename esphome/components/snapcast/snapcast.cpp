@@ -35,7 +35,7 @@ static const uint32_t NORMAL_SYNC_LATENCY_BUF = 1000000;  // in µs
 
 static const size_t CONTROL_TASK_STACK_SIZE = 3 * 1024;
 static const size_t CLIENT_TASK_STACK_SIZE = 3 * 1024;
-static const size_t DECODE_TASK_STACK_SIZE = 3 * 1024;
+static const size_t DECODE_TASK_STACK_SIZE = 30 * 1024;
 
 static const int GOOD_SYNCS_BEFORE_UNMUTE = 2;
 static const int64_t HARD_SYNC_THRESHOLD_US = 5000;
@@ -671,8 +671,8 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
             this_snapcast->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_FLAC;
           } else if (codec_type.compare("pcm") == 0) {
             this_snapcast->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_PCM;
-            // } else if (codec_type.compare("opus") == 0) {
-            //   this_snapcast->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_OPUS;
+          } else if (codec_type.compare("opus") == 0) {
+            this_snapcast->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_OPUS;
           } else {
             ESP_LOGE(TAG, "Unsupported codec type: %s", codec_type.c_str());
             no_socket_error = false;
@@ -859,16 +859,9 @@ void SnapcastPlayer::decode_task(void *params) {
     const size_t bytes_written = output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20));
 
     if (output_transfer_buffer->available() > 0) {
+      // Transfer buffer isn't empty, don't try to decode more
       continue;
     }
-    // if (output_transfer_buffer->free() < free_buffer_required) {
-    //   uint32_t frames_written = this_snapcast->audio_stream_info_.value().bytes_to_frames(bytes_written);
-    //   uint32_t ms_written =
-    //       this_snapcast->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&frames_written) +
-    //       this_snapcast->audio_stream_info_.value().frames_to_microseconds(frames_written) / 1000;
-    //   delay(ms_written / 2);
-    //   continue;
-    // }
 
     /** Use the information from the speaker on frames played to update teh current error */
 
@@ -1034,7 +1027,7 @@ void SnapcastPlayer::decode_task(void *params) {
         this_snapcast->speaker_->set_audio_stream_info(this_snapcast->audio_stream_info_.value());
         initial_decode = true;
       } else {
-        size_t new_bytes;
+        size_t new_bytes = 0;
         if ((flac_decoder != nullptr) && (this_snapcast->codec_format_ == SnapcastCodecFormat::SNAPCAST_CODEC_FLAC)) {
           uint32_t output_samples = 0;
           auto result = flac_decoder->decode_frame(
@@ -1064,10 +1057,15 @@ void SnapcastPlayer::decode_task(void *params) {
           new_bytes = encoded_chunk.size;
         } else if ((opus_decoder != nullptr) &&
                    (this_snapcast->codec_format_ == SnapcastCodecFormat::SNAPCAST_CODEC_OPUS)) {
-          uint32_t output_frames = opus_decode(opus_decoder, (encoded_chunk.data + encoded_chunk.offset),
-                                               encoded_chunk.size, (int16_t *) output_transfer_buffer->get_buffer_end(),
-                                               this_snapcast->audio_stream_info_.value().ms_to_frames(120), 0);
-          new_bytes = this_snapcast->audio_stream_info_.value().frames_to_bytes(output_frames);
+          int output_frames =
+              opus_decode(opus_decoder, (encoded_chunk.data + encoded_chunk.offset), encoded_chunk.size,
+                          (int16_t *) output_transfer_buffer->get_buffer_end(),
+                          this_snapcast->audio_stream_info_.value().bytes_to_frames(output_transfer_buffer->free()), 0);
+          if (output_frames < 0) {
+            printf("ran into an issue decoding opus error code %d\n", output_frames);
+          } else {
+            new_bytes = this_snapcast->audio_stream_info_.value().frames_to_bytes(output_frames);
+          }
         }
 
         output_transfer_buffer->increase_buffer_length(new_bytes);
