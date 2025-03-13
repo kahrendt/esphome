@@ -175,6 +175,12 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   // Receives commands from HA or from the voice assistant component
   void control(const media_player::MediaPlayerCall &call) override;
 
+  void control_snapcast_stream_(media_player::MediaPlayerCommand command);
+
+  void parse_snapcast_server_(JsonObject server);
+  void parse_snapcast_groups_(JsonArray groups);
+  void parse_snapcast_streams_(JsonArray streams);
+
   int64_t server_timestamp_to_client_(int64_t server_timestamp);
   ssize_t read_from_socket_(socket::Socket *socket, uint8_t *buffer, size_t length);
   std::string read_until_newline_(socket::Socket *socket);
@@ -231,9 +237,9 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   bool is_muted_{false};
   bool external_mute_{false};
 
-  std::string group_id_;
-  std::string player_id_;
-  std::string stream_id_;
+  std::string group_id_ = "";
+  std::string player_id_ = "";
+  std::string stream_id_ = "";
   optional<bool> stream_is_idle_;
 
   speaker::Speaker *speaker_{nullptr};

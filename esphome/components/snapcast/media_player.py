@@ -71,7 +71,9 @@ async def to_code(config):
     esp32.add_idf_component(
         name="esp-libopus",
         repo="https://github.com/kahrendt/esp-libopus.git",
-        ref="master",
+        ref="try-manual-psram-alloc",
+        # ref="define-experiments",
+        # ref="master",
         # ref="update-attempt2",
     )
 
