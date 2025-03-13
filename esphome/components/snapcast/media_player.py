@@ -71,8 +71,8 @@ async def to_code(config):
     esp32.add_idf_component(
         name="esp-libopus",
         repo="https://github.com/kahrendt/esp-libopus.git",
-        ref="update-attempt2",
-        # path="components/esp-libopus",
+        ref="master",
+        # ref="update-attempt2",
     )
 
     if CORE.using_esp_idf and config[CONF_OPTIMIZE_WIFI]:
