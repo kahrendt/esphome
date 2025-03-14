@@ -4,6 +4,8 @@
 #ifdef USE_NETWORK
 
 #include "median_filter.h"
+
+#include "snapcontrol.h"
 #include "snapclient.h"
 
 #include "esphome/components/audio/audio.h"
@@ -49,8 +51,6 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   void set_server_port(uint16_t server_port) { this->server_port_ = server_port; }
   void set_task_stack_in_psram(bool task_stack_in_psram) { this->task_stack_in_psram_ = task_stack_in_psram; }
 
-  void control_get_server_status();
-
   Trigger<bool, float> *get_server_settings_trigger() const { return this->server_settings_trigger_; }
 
   void publish_client_settings() { this->send_client_message_(); }
@@ -58,18 +58,6 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
  protected:
   // Receives commands from HA or from the voice assistant component
   void control(const media_player::MediaPlayerCall &call) override;
-
-  void control_snapcast_stream_(media_player::MediaPlayerCommand command);
-
-  void parse_snapcast_server_(JsonObject server);
-  void parse_snapcast_groups_(JsonArray groups);
-  void parse_snapcast_streams_(JsonArray streams);
-
-  std::string read_until_newline_(socket::Socket *socket);
-  void control_set_stream_volume_(int volume);
-
-  esp_err_t connect_to_server_();
-  void disconnect_from_server_();
 
   void clear_chunk_queue_();
 
@@ -102,23 +90,12 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
 
   bool task_stack_in_psram_{false};
 
-  bool connected_{false};
   bool is_muted_{false};
   bool external_mute_{false};
 
-  std::string group_id_{""};
   std::string player_id_{""};
-  std::string stream_id_{""};
-  optional<bool> stream_is_idle_;
-
-  std::string album_{""};
-  std::string artist_{""};
-  std::string track_{""};
 
   speaker::Speaker *speaker_{nullptr};
-
-  std::unique_ptr<socket::Socket> client_socket_;
-  std::unique_ptr<socket::Socket> control_socket_;
 
   optional<std::string> server_address_;
   uint16_t server_port_;
@@ -135,6 +112,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   MedianFilter actual_offsets_;
 
   std::unique_ptr<Snapclient> snapclient_;
+  std::unique_ptr<Snapcontrol> snapcontrol_;
 
   Trigger<bool, float> *server_settings_trigger_ = new Trigger<bool, float>();
 };

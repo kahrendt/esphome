@@ -70,13 +70,14 @@ esp_err_t Snapclient::connect_to_server(std::string server_address, uint16_t por
 }
 
 void Snapclient::disconnect_from_server() {
+  this->is_connected_ = false;
   this->client_socket_->shutdown(0);
   this->client_socket_->close();
 }
 
 esp_err_t Snapclient::send_client_message(float volume, bool muted) {
   if (!this->is_connected_) {
-    return ESP_OK;
+    return ESP_FAIL;
   }
 
   ClientInfoMessage client_msg = {.volume = static_cast<uint32_t>(volume * 100.0f), .muted = muted};
@@ -107,6 +108,10 @@ esp_err_t Snapclient::send_client_message(float volume, bool muted) {
 }
 
 esp_err_t Snapclient::send_hello_message() {
+  if (!this->is_connected_) {
+    return ESP_FAIL;
+  }
+
   std::string hello_msg = this->hello_message_serialize_();
 
   size_t total_hello_msg_size = hello_msg.size() + sizeof(uint32_t);
@@ -140,6 +145,10 @@ esp_err_t Snapclient::send_hello_message() {
 }
 
 esp_err_t Snapclient::send_time_message() {
+  if (!this->is_connected_) {
+    return ESP_FAIL;
+  }
+
   bytebuffer::ByteBuffer time_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE + TIME_MESSAGE_SIZE);
 
   int64_t now = esp_timer_get_time();
@@ -168,6 +177,10 @@ esp_err_t Snapclient::send_time_message() {
 }
 
 esp_err_t Snapclient::read_base_message(BaseMessage *base_msg) {
+  if (!this->is_connected_) {
+    return ESP_FAIL;
+  }
+
   bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE);
 
   ssize_t bytes_read =
@@ -187,6 +200,10 @@ esp_err_t Snapclient::read_base_message(BaseMessage *base_msg) {
 }
 
 ProcessMessageResponse Snapclient::process_messages(BaseMessage &base_msg, AudioChunk *audio_chunk) {
+  if (!this->is_connected_) {
+    return ProcessMessageResponse::ERROR_DISCONNECTED;
+  }
+
   size_t bytes_read = this->read_from_socket_(this->client_socket_.get(), audio_chunk->data, base_msg.size);
   if (bytes_read != base_msg.size) {
     ESP_LOGE(TAG, "Error reading from socket");

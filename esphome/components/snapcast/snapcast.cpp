@@ -64,8 +64,6 @@ void SnapcastPlayer::start() {
   this->playback_progress_queue_ = xQueueCreate(50, sizeof(PlaybackProgress));
   this->event_group_ = xEventGroupCreate();
 
-  this->snapclient_ = make_unique<Snapclient>(this->player_id_);
-
   if (this->client_task_stack_buffer_ == nullptr) {
     if (this->task_stack_in_psram_) {
       RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
@@ -142,8 +140,8 @@ void SnapcastPlayer::loop() {
     this->volume_.reset();
   }
 
-  if (this->stream_is_idle_.has_value()) {
-    if (this->stream_is_idle_.value()) {
+  if (this->snapcontrol_->get_stream_is_idle().has_value()) {
+    if (this->snapcontrol_->get_stream_is_idle().value()) {
       this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
     } else {
       this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
@@ -157,124 +155,16 @@ void SnapcastPlayer::loop() {
 }
 
 esp_err_t SnapcastPlayer::send_client_message_() {
-  if (!this->connected_) {
-    return ESP_OK;
-  }
-
-  return this->snapclient_->send_client_message(this->speaker_->get_volume(), this->external_mute_);
-  // ClientInfoMessage client_msg = {.volume = static_cast<uint32_t>(this->speaker_->get_volume() * 100.0f),
-  //                                 .muted = this->external_mute_};
-  // std::string json_client_msg = this->client_message_serialize_(&client_msg);
-  // size_t client_message_size = json_client_msg.size() + sizeof(uint32_t);
-
-  // int64_t now = esp_timer_get_time();
-  // bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE + sizeof(uint32_t));
-  // BaseMessage base_msg_for_client_info = {
-  //     .type = SNAPCAST_MESSAGE_CLIENT_INFO,
-  //     .id = 0x0000,
-  //     .refers_to = 0x0000,
-  //     .sent = {.sec = static_cast<int32_t>(now / 1000000LL),
-  //              .usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL)},
-  //     .received = {.sec = 0, .usec = 0},
-  //     .size = client_message_size,
-  // };
-  // this->base_message_serialize_(&base_msg_for_client_info, base_msg_buffer);
-  // base_msg_buffer.put_uint32(json_client_msg.size());
-
-  // if ((this->client_socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + sizeof(uint32_t)) ==
-  //      -1) ||
-  //     (this->client_socket_->write((void *) json_client_msg.data(), json_client_msg.size()) == -1)) {
-  //   return ESP_FAIL;
-  // }
-
-  // return ESP_OK;
-}
-
-void SnapcastPlayer::timesync_callback(void *params) {
-  SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
-  this_snapcast->snapclient_->send_time_message();
-}
-
-esp_err_t SnapcastPlayer::connect_to_server_() {
-  // Connect to configured server, if set. Otherwise, use mdns to discover a server
-
-  uint16_t port = this->server_port_;
-  esp_err_t err = ESP_OK;
-
-  socklen_t sl = 0;
-  socklen_t sl_control = 0;
-  struct sockaddr_storage server;
-  struct sockaddr_storage server_control;
-
-  if (!this->server_address_.has_value()) {
-    mdns_init();
-    mdns_result_t *mdns_result;
-
-    ESP_LOGD(TAG, "Looking for a snapcast service on network");
-    err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
-
-    if (!mdns_result) {
-      ESP_LOGW(TAG, "No results found for snapcast service!");
-      return ESP_FAIL;
-    } else {
-      if (mdns_result->addr) {
-        network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
-        ESP_LOGD(TAG, "Found a snapcast server via mdns: %s", discovered_address.str().c_str());
-
-        sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), discovered_address.str().c_str(), port);
-        sl_control = socket::set_sockaddr((struct sockaddr *) &server_control, sizeof(server_control),
-                                          discovered_address.str().c_str(), this->server_control_port_);
-      }
-      mdns_query_results_free(mdns_result);
-    }
-
-  } else {
-    sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), this->server_address_.value().c_str(), port);
-    sl_control = socket::set_sockaddr((struct sockaddr *) &server_control, sizeof(server_control),
-                                      this->server_address_.value().c_str(), this->server_control_port_);
-  }
-
-  if ((sl == 0) || (sl_control == 0)) {
-    ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);
-    return ESP_FAIL;
-  }
-  this->client_socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
-  this->control_socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
-
-  err = this->client_socket_->connect((struct sockaddr *) &server, sizeof(server));
-  if (err != 0) {
-    ESP_LOGE(TAG, "Socket unable to connect: errno %d", err);
-    return ESP_FAIL;
-  }
-  err = this->control_socket_->connect((struct sockaddr *) &server_control, sizeof(server_control));
-  if (err != 0) {
-    ESP_LOGE(TAG, "Control socket unable to connect: errno %d", err);
-    return ESP_FAIL;
-  }
-  // xEventGroupSetBits(this->event_group_, CONTROL_START);
-  // this->control_get_server_status();
-
-  int nodelay = 1;
-  if (this->client_socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
-    ESP_LOGW(TAG, "Failed to turn on TCP_NODELAY, syncing may be inaccurate");
-    nodelay = 0;
+  if (this->snapclient_ != nullptr) {
+    return this->snapclient_->send_client_message(this->speaker_->get_volume(), this->external_mute_);
   }
 
   return ESP_OK;
 }
 
-void SnapcastPlayer::disconnect_from_server_() {
-  this->connected_ = false;
-
-  this->client_socket_->shutdown(0);
-  this->client_socket_->close();
-  this->control_socket_->shutdown(0);
-  this->control_socket_->close();
-
-  this->stream_is_idle_.reset();
-  this->group_id_ = "";
-  this->player_id_ = "";
-  this->stream_id_ = "";
+void SnapcastPlayer::timesync_callback(void *params) {
+  SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
+  this_snapcast->snapclient_->send_time_message();
 }
 
 media_player::MediaPlayerTraits SnapcastPlayer::get_traits() {
@@ -287,6 +177,8 @@ media_player::MediaPlayerTraits SnapcastPlayer::get_traits() {
 
 void SnapcastPlayer::setup() {
   this->player_id_ = get_mac_address_pretty();
+  this->snapclient_ = make_unique<Snapclient>(this->player_id_);
+  this->snapcontrol_ = make_unique<Snapcontrol>(this->player_id_);
   this->start();
 }
 
@@ -307,7 +199,7 @@ void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
       case media_player::MEDIA_PLAYER_COMMAND_PAUSE:   // Intentional fallthrough
       case media_player::MEDIA_PLAYER_COMMAND_TOGGLE:  // Intentional fallthrough
       case media_player::MEDIA_PLAYER_COMMAND_STOP:
-        this->control_snapcast_stream_(call.get_command().value());
+        this->snapcontrol_->control_snapcast_stream(call.get_command().value());
         break;
       default:
         break;
@@ -315,219 +207,18 @@ void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
   }
 }
 
-std::string SnapcastPlayer::read_until_newline_(socket::Socket *socket) {
-  if (!this->connected_) {
-    return "";
-  }
-  std::string buffer;
-  char new_char = ' ';
-  while (new_char != '\n') {
-    ssize_t bytes_read = socket->read((void *) &new_char, sizeof(new_char));
-    if (bytes_read == -1) {
-      ESP_LOGW(TAG, "Couldn't read from control socket");
-      return "";
-    }
-    buffer.push_back(new_char);
-  }
-
-  return buffer;
-}
-
-void SnapcastPlayer::control_get_server_status() {
-  std::string control_message = json::build_json([](JsonObject root) {
-    root["id"] = 8;
-    root["jsonrpc"] = "2.0";
-    root["method"] = "Server.GetStatus";
-  });
-
-  control_message.push_back('\n');
-
-  this->control_socket_->write((void *) control_message.data(), control_message.size());
-}
-
-void SnapcastPlayer::control_snapcast_stream_(media_player::MediaPlayerCommand command) {
-  std::string snapcast_command = "";
-  switch (command) {
-    case media_player::MEDIA_PLAYER_COMMAND_PLAY:
-      snapcast_command = "play";
-      break;
-    case media_player::MEDIA_PLAYER_COMMAND_PAUSE:
-      snapcast_command = "pause";
-      break;
-    case media_player::MEDIA_PLAYER_COMMAND_TOGGLE:
-      snapcast_command = "playPause";
-      break;
-    case media_player::MEDIA_PLAYER_COMMAND_STOP:
-      snapcast_command = "stop";
-      break;
-    default:
-      break;
-  }
-
-  std::string control_message = json::build_json([this, snapcast_command](JsonObject root) {
-    root["id"] = 1;
-    root["jsonrpc"] = "2.0";
-    root["method"] = "Stream.Control";
-    JsonObject control_params = root.createNestedObject("params");
-    control_params["id"] = this->stream_id_;
-    control_params["command"] = snapcast_command;
-    JsonObject command_params = control_params.createNestedObject("params");
-  });
-
-  control_message.push_back('\n');
-  ESP_LOGD(TAG, "Sending stream control message to snapserver: %s", control_message.c_str());
-  this->control_socket_->write((void *) control_message.data(), control_message.size());
-}
-
-void SnapcastPlayer::control_set_stream_volume_(int volume) {
-  std::string control_stream_volume_message = json::build_json([this, volume](JsonObject root) {
-    JsonObject params;
-    params["id"] = this->stream_id_;
-    params["property"] = "volume";
-    params["value"] = volume;
-    root["id"] = 1;
-    root["jsonrpc"] = "2.0";
-    root["method"] = "Stream.SetProperty";
-    root["params"] = params;
-  });
-
-  control_stream_volume_message.push_back('\n');
-
-  this->control_socket_->write((void *) control_stream_volume_message.data(), control_stream_volume_message.size());
-}
-
 void SnapcastPlayer::control_task(void *params) {
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
 
-  xEventGroupWaitBits(this_snapcast->event_group_, EventGroupBits::CONTROL_START, true, false, portMAX_DELAY);
   while (true) {
-    std::string message = this_snapcast->read_until_newline_(this_snapcast->control_socket_.get());
-    if (message.empty()) {
-      delay(10);
+    if (this_snapcast->snapcontrol_->connect_to_server() != ESP_OK) {
+      ESP_LOGW(TAG, "Failed to connect to snapcontrol server, retrying in 5 seconds\n");
+      vTaskDelay(pdMS_TO_TICKS(5000));
+      continue;
     }
 
-    if (!message.empty()) {
-      ESP_LOGV(TAG, "Control task received a message: %s", message.c_str());
-      bool valid = json::parse_json(message, [this_snapcast](JsonObject root) -> bool {
-        if (!root["jsonrpc"].is<JsonVariant>()) {
-          ESP_LOGE(TAG, "Control JSON RPC notification isn't valid");
-          return false;
-        }
-        std::string method = "";
-        if (root["method"].is<JsonVariant>()) {
-          method = root["method"].as<std::string>();
-        }
-
-        std::string result = "";
-        if (root["result"].is<JsonVariant>()) {
-          JsonObject params = root["result"].as<JsonObject>();
-          if (params["server"].is<JsonVariant>()) {
-            JsonObject server = params["server"].as<JsonObject>();
-            this_snapcast->parse_snapcast_server_(server);
-          }
-        }
-
-        if (method.compare("Server.OnUpdate") == 0) {
-          if (root["params"].is<JsonVariant>()) {
-            JsonObject params = root["params"].as<JsonObject>();
-            if (params["server"].is<JsonVariant>()) {
-              JsonObject server = params["server"].as<JsonObject>();
-              this_snapcast->parse_snapcast_server_(server);
-            }
-          }
-        }
-
-        if (method.compare("Group.OnStreamChanged") == 0) {
-          JsonObject group_stream_params = root["params"];
-          if (group_stream_params["id"].as<std::string>().compare(this_snapcast->group_id_) == 0) {
-            this_snapcast->stream_id_ = group_stream_params["stream_id"].as<std::string>();
-            ESP_LOGV(TAG, "Current group changed stream id to %s", this_snapcast->stream_id_.c_str());
-          }
-        }
-        if (method.compare("Stream.OnUpdate") == 0) {
-          JsonObject stream_params = root["params"];
-          if (stream_params["id"].as<std::string>().compare(this_snapcast->stream_id_) == 0) {
-            std::string state = stream_params["stream"]["status"].as<std::string>();
-            if (state.compare("idle") == 0) {
-              this_snapcast->stream_is_idle_ = true;
-            } else if (state.compare("playing") == 0) {
-              this_snapcast->stream_is_idle_ = false;
-            }
-            ESP_LOGV(TAG, "Current stream state is %s", state.c_str());
-          }
-        }
-        if (method.compare("Stream.OnProperties") == 0) {
-          JsonObject stream_params = root["params"];
-          if (stream_params["id"].as<std::string>().compare(this_snapcast->stream_id_) == 0) {
-            JsonObject metadata = stream_params["metadata"];
-
-            if (metadata["album"].is<JsonVariant>()) {
-              this_snapcast->album_ = metadata["album"].as<std::string>();
-            } else {
-              this_snapcast->album_ = "";
-            }
-            if (metadata["artist"].is<JsonVariant>()) {
-              this_snapcast->artist_ = metadata["artist"].as<std::string>();
-            } else {
-              this_snapcast->artist_ = "";
-            }
-            if (metadata["track"].is<JsonVariant>()) {
-              this_snapcast->track_ = metadata["track"].as<std::string>();
-            } else {
-              this_snapcast->track_ = "";
-            }
-          }
-        }
-        return true;
-      });
-    }
-  }
-}
-
-void SnapcastPlayer::parse_snapcast_server_(JsonObject server) {
-  JsonArray groups = server["groups"].as<JsonArray>();
-  if (groups.size() > 0) {
-    this->parse_snapcast_groups_(groups);
-  }
-
-  JsonArray streams = server["streams"];
-  if (streams.size() > 0) {
-    this->parse_snapcast_streams_(streams);
-  }
-}
-
-void SnapcastPlayer::parse_snapcast_groups_(JsonArray groups) {
-  for (const JsonObject &group : groups) {
-    if (group["clients"].is<JsonVariant>()) {
-      JsonArray clients = group["clients"].as<JsonArray>();
-      for (const JsonObject &client : clients) {
-        if (client["id"].as<std::string>().compare(this->player_id_) == 0) {
-          this->group_id_ = group["id"].as<std::string>();
-          this->stream_id_ = group["stream_id"].as<std::string>();
-          ESP_LOGV(TAG, "Found which group we are in, current group id is %s streaming %s", this->group_id_.c_str(),
-                   this->stream_id_.c_str());
-          break;
-        }
-      }
-    }
-  }
-}
-
-void SnapcastPlayer::parse_snapcast_streams_(JsonArray streams) {
-  if (this->stream_id_.empty()) {
-    return;
-  }
-
-  for (const JsonObject &stream : streams) {
-    if (stream["id"].as<std::string>().compare(this->stream_id_) == 0) {
-      std::string state = stream["status"].as<std::string>();
-      if (state.compare("idle") == 0) {
-        this->stream_is_idle_ = true;
-      } else if (state.compare("playing") == 0) {
-        this->stream_is_idle_ = false;
-      }
-      ESP_LOGV(TAG, "Determined current stream state %s", state.c_str());
-      break;
+    while (true) {
+      this_snapcast->snapcontrol_->process_messages();
     }
   }
 }
@@ -553,7 +244,6 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
   esp_timer_create(&timer_for_syncing_args, &timesync_message_timer);
 
   while (true) {
-    this_snapcast->connected_ = false;
     esp_timer_stop(timesync_message_timer);
 
     if (this_snapcast->snapclient_->connect_to_server() != ESP_OK) {
@@ -567,8 +257,6 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
       this_snapcast->snapclient_->disconnect_from_server();
       continue;
     }
-
-    this_snapcast->connected_ = true;
 
     bool low_speed_timer_started = false;
     bool high_speed_timer_started = false;
@@ -642,6 +330,12 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
         case ProcessMessageResponse::PROCESSED_TIME:
           data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
           audio_chunk.data = nullptr;
+          break;
+        case ProcessMessageResponse::ERROR_SOCKET_READ:
+          data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
+          audio_chunk.data = nullptr;
+          this_snapcast->snapclient_->disconnect_from_server();
+          continue;
           break;
         default:
           ESP_LOGE(TAG, "received an error from the snapclient");
@@ -718,7 +412,7 @@ void SnapcastPlayer::decode_task(void *params) {
       if (initial_decode) {
         // Some sent audio chunks have now been played by the speaker
         initial_decode = false;
-        // this_snapcast->control_get_server_status();  // Determine what stream this client is playing
+        this_snapcast->snapcontrol_->control_get_server_status();  // Determine what stream this client is playing
       }
 
       if (!chunk_timings.empty()) {
