@@ -89,6 +89,8 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
 
   bool is_muted_{false};
 
+  bool force_publish_state_{false};
+
   std::string player_id_{""};
 
   speaker::Speaker *speaker_{nullptr};

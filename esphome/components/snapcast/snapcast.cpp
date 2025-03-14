@@ -153,7 +153,8 @@ void SnapcastPlayer::loop() {
     }
   }
 
-  if (this->state != old_state) {
+  if ((this->state != old_state) || (this->force_publish_state_)) {
+    this->force_publish_state_ = false;
     this->publish_state();
     ESP_LOGD(TAG, "State changed to %s", media_player::media_player_state_to_string(this->state));
   }
@@ -247,6 +248,16 @@ void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
       case media_player::MEDIA_PLAYER_COMMAND_TOGGLE:  // Intentional fallthrough
       case media_player::MEDIA_PLAYER_COMMAND_STOP:
         this->snapcontrol_->control_snapcast_stream(call.get_command().value());
+        break;
+      case media_player::MEDIA_PLAYER_COMMAND_MUTE:
+        this->speaker_->set_mute_state(true);
+        this->is_muted_ = true;
+        this->force_publish_state_ = true;
+        break;
+      case media_player::MEDIA_PLAYER_COMMAND_UNMUTE:
+        this->speaker_->set_mute_state(false);
+        this->is_muted_ = false;
+        this->force_publish_state_ = true;
         break;
       default:
         break;
