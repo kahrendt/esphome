@@ -182,7 +182,7 @@ void SnapcastPlayer::loop() {
 
 void SnapcastPlayer::publish_client_settings() {
   if (this->snapclient_ != nullptr) {
-    this->snapclient_->send_client_message(this->speaker_->get_volume(), this->external_mute_);
+    this->snapclient_->send_client_message(this->speaker_->get_volume(), this->is_muted_);
   }
 }
 
@@ -372,7 +372,7 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
 
           this_snapcast->volume_ = server_settings.volume;
           this_snapcast->speaker_->set_mute_state(server_settings.muted);
-          this_snapcast->external_mute_ = server_settings.muted;
+          this_snapcast->is_muted_ = server_settings.muted;
           data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
           audio_chunk.data = nullptr;
           break;
@@ -527,9 +527,9 @@ void SnapcastPlayer::decode_task(void *params) {
       ESP_LOGD(TAG, "Out of sync, muting output until corrected");
       this_snapcast->speaker_->set_mute_state(true);
     } else if ((synced_chunks >= GOOD_SYNCS_BEFORE_UNMUTE) &&
-               (this_snapcast->external_mute_ != this_snapcast->speaker_->get_mute_state())) {
+               (this_snapcast->is_muted_ != this_snapcast->speaker_->get_mute_state())) {
       ESP_LOGD(TAG, "In sync with server, setting mute state to existing setting");
-      this_snapcast->speaker_->set_mute_state(this_snapcast->external_mute_);
+      this_snapcast->speaker_->set_mute_state(this_snapcast->is_muted_);
     }
     /******* */
 

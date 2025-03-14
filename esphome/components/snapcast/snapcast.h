@@ -88,7 +88,6 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   bool task_stack_in_psram_{false};
 
   bool is_muted_{false};
-  bool external_mute_{false};
 
   std::string player_id_{""};
 
