@@ -193,14 +193,14 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   bool is_muted_{false};
   bool external_mute_{false};
 
-  std::string group_id_ = "";
-  std::string player_id_ = "";
-  std::string stream_id_ = "";
+  std::string group_id_{""};
+  std::string player_id_{""};
+  std::string stream_id_{""};
   optional<bool> stream_is_idle_;
 
-  std::string album_ = "";
-  std::string artsist_ = "";
-  std::string track_ = "";
+  std::string album_{""};
+  std::string artist_{""};
+  std::string track_{""};
 
   speaker::Speaker *speaker_{nullptr};
 
