@@ -223,8 +223,6 @@ ProcessMessageResponse Snapclient::process_messages(BaseMessage &base_msg, Audio
       break;
     }
     case SNAPCAST_MESSAGE_CODEC_HEADER: {
-      ESP_LOGD(TAG, "Received a new codec header message.");
-
       uint32_t codec_len;
       std::string codec_type;
 
@@ -269,7 +267,6 @@ ProcessMessageResponse Snapclient::process_messages(BaseMessage &base_msg, Audio
       break;
     }
     case SNAPCAST_MESSAGE_SERVER_SETTINGS: {
-      ESP_LOGD(TAG, "Received a server settings message");
       uint32_t server_settings_len = *reinterpret_cast<uint32_t *>(audio_chunk->data + audio_chunk->offset);
       audio_chunk->offset += sizeof(uint32_t);
       audio_chunk->size -= sizeof(uint32_t);

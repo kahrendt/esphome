@@ -403,6 +403,7 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
           this_snapcast->volume_ = server_settings.volume;
           this_snapcast->speaker_->set_mute_state(server_settings.muted);
           this_snapcast->is_muted_ = server_settings.muted;
+
           data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
           audio_chunk.data = nullptr;
           break;
@@ -414,6 +415,7 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
         case ProcessMessageResponse::ERROR_SOCKET_READ:
           data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
           audio_chunk.data = nullptr;
+
           this_snapcast->snapclient_->disconnect_from_server();
           break;
         default:
