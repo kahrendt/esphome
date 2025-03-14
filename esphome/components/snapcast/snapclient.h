@@ -104,7 +104,7 @@ class Snapclient {
  public:
   Snapclient(std::string player_id) : player_id_(player_id), network_latency_filter_(MedianFilter(50)){};
 
-  esp_err_t connect_to_server(std::string server_address = "", uint16_t port = 1704);
+  esp_err_t connect_to_server(std::string server_address, uint16_t port);
   void disconnect_from_server();
 
   esp_err_t send_client_message(float volume, bool muted);
@@ -119,6 +119,8 @@ class Snapclient {
   ProcessMessageResponse process_messages(BaseMessage &base_msg, AudioChunk *audio_chunk);
 
   int64_t server_timestamp_to_client(int64_t server_timestamp);
+
+  bool is_connected() { return this->is_connected_; }
 
  protected:
   void base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);

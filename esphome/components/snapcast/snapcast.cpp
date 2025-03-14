@@ -106,6 +106,32 @@ void SnapcastPlayer::start() {
 }
 
 void SnapcastPlayer::loop() {
+  if (!this->snapclient_->is_connected() && !this->server_address_.has_value() &&
+      !this->discovered_address_.has_value()) {
+    // Search for a server
+    mdns_init();
+    mdns_result_t *mdns_result;
+
+    ESP_LOGD(TAG, "Looking for a snapcast service on network");
+
+    esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
+
+    if (!mdns_result) {
+      ESP_LOGW(TAG, "No results found for snapcast service!");
+    } else {
+      if (mdns_result->addr) {
+        network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
+        this->discovered_address_ = discovered_address.str();
+        this->server_port_ = mdns_result->port;
+        // ESP_LOGD(TAG, "Found a snapcast server via mdns: %s", discovered_address.str().c_str());
+
+        // sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), discovered_address.str().c_str(),
+        // port);
+      }
+      mdns_query_results_free(mdns_result);
+    }
+  }
+
   // Determine state of the media player
   media_player::MediaPlayerState old_state = this->state;
 
@@ -189,7 +215,6 @@ void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
   }
 
   if (call.get_volume().has_value()) {
-    // this->control_set_stream_volume_(round(call.get_volume().value() * 100.0f));
     this->volume_ = round(call.get_volume().value() * 100.0f);
   }
 
@@ -210,9 +235,14 @@ void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
 void SnapcastPlayer::control_task(void *params) {
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
 
+  bool first_attempt = true;
   while (true) {
     if (this_snapcast->snapcontrol_->connect_to_server() != ESP_OK) {
-      ESP_LOGW(TAG, "Failed to connect to snapcontrol server, retrying in 5 seconds\n");
+      if (first_attempt) {
+        ESP_LOGW(TAG, "Failed to connect to snapcontrol server, retrying silently in 5 seconds\n");
+        first_attempt = false;
+      }
+
       vTaskDelay(pdMS_TO_TICKS(5000));
       continue;
     }
@@ -243,12 +273,34 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
   // create a timer to send time sync messages every x µs
   esp_timer_create(&timer_for_syncing_args, &timesync_message_timer);
 
+  uint8_t failed_discover_count = 0;
+
   while (true) {
     esp_timer_stop(timesync_message_timer);
 
-    if (this_snapcast->snapclient_->connect_to_server() != ESP_OK) {
-      ESP_LOGW(TAG, "Failed to connect to snapcast server, retrying in 5 seconds\n");
-      vTaskDelay(pdMS_TO_TICKS(5000));
+    if (this_snapcast->server_address_.has_value()) {
+      if (this_snapcast->snapclient_->connect_to_server(this_snapcast->server_address_.value(),
+                                                        this_snapcast->server_port_) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to connect to snapcast server configured in yaml, retrying in 5 seconds\n");
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        continue;
+      }
+    } else if (this_snapcast->discovered_address_.has_value()) {
+      if (this_snapcast->snapclient_->connect_to_server(this_snapcast->discovered_address_.value(),
+                                                        this_snapcast->server_port_) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to connect to discovered snapcast server, retrying in 5 seconds\n");
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        ++failed_discover_count;
+        if (failed_discover_count >= 5) {
+          // Repeatedly failed to connect to this server, search for a new one
+          this_snapcast->discovered_address_.reset();
+          failed_discover_count = 0;
+        }
+        continue;
+      }
+    } else {
+      // Silently wait until a server is discovered
+      delay(5);
       continue;
     }
 
@@ -712,7 +764,9 @@ void SnapcastPlayer::decode_task(void *params) {
         //   log_count = 0;
         // }
       }
-      if (receive_chunk) {
+      if (receive_chunk ||
+          this_snapcast->snapclient_->get_codec_format() == SnapcastCodecFormat::SNAPCAST_CODEC_UNSUPPORTED) {
+        // Pop the chunk off the queue if we actually sent the audio or if it is in an unsupported format
         xQueueReceive(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, portMAX_DELAY);
         data_allocator.deallocate(encoded_chunk.data, encoded_chunk.offset + encoded_chunk.size);
       }

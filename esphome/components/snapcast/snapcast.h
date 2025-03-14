@@ -84,7 +84,6 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   EventGroupHandle_t event_group_{nullptr};
 
   optional<audio::AudioStreamInfo> audio_stream_info_;
-  optional<SnapcastCodecFormat> codec_format_{SnapcastCodecFormat::SNAPCAST_CODEC_UNSUPPORTED};
 
   optional<uint16_t> volume_;
 
@@ -98,15 +97,13 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   speaker::Speaker *speaker_{nullptr};
 
   optional<std::string> server_address_;
+  optional<std::string> discovered_address_;
   uint16_t server_port_;
   uint16_t server_control_port_{1705};
 
   QueueHandle_t playback_progress_queue_;
 
   QueueHandle_t encoded_chunk_data_queue_;
-
-  size_t snapcast_buffer_duration_ms_{0};
-  uint32_t snapcast_latency_ms_{0};
 
   MedianFilter network_latency_filter_;
   MedianFilter actual_offsets_;

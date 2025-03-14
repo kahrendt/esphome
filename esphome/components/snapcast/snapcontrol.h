@@ -27,6 +27,8 @@ class Snapcontrol {
 
   optional<bool> get_stream_is_idle() { return this->stream_is_idle_; }
 
+  bool is_connected() { return this->is_connected_; }
+
  protected:
   void parse_snapcast_server_(JsonObject server);
   void parse_snapcast_groups_(JsonArray groups);
