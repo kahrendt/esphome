@@ -161,7 +161,7 @@ void SnapcastPlayer::loop() {
   if (this->volume_.has_value()) {
     this->volume = static_cast<float>(this->volume_.value()) / 100.0f;
     this->speaker_->set_volume(this->volume);
-    this->send_client_message_();
+    this->publish_client_settings();
     this->publish_state();
     this->volume_.reset();
   }
@@ -180,12 +180,10 @@ void SnapcastPlayer::loop() {
   }
 }
 
-esp_err_t SnapcastPlayer::send_client_message_() {
+void SnapcastPlayer::publish_client_settings() {
   if (this->snapclient_ != nullptr) {
-    return this->snapclient_->send_client_message(this->speaker_->get_volume(), this->external_mute_);
+    this->snapclient_->send_client_message(this->speaker_->get_volume(), this->external_mute_);
   }
-
-  return ESP_OK;
 }
 
 void SnapcastPlayer::timesync_callback(void *params) {

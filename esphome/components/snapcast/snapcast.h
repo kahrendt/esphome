@@ -53,15 +53,13 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
 
   Trigger<bool, float> *get_server_settings_trigger() const { return this->server_settings_trigger_; }
 
-  void publish_client_settings() { this->send_client_message_(); }
+  void publish_client_settings();
 
  protected:
   // Receives commands from HA or from the voice assistant component
   void control(const media_player::MediaPlayerCall &call) override;
 
   void clear_chunk_queue_();
-
-  esp_err_t send_client_message_();
 
   static void client_task(void *params);
   TaskHandle_t client_task_handle_{nullptr};
