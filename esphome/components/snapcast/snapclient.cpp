@@ -16,9 +16,6 @@ namespace snapcast {
 
 static const char *TAG = "snapcast.client";
 
-static auto ALLOCATOR = RAMAllocator<uint8_t>(
-    RAMAllocator<uint8_t>::NONE);  // Attempt to allocate in PSRAM before falling back into internal
-
 esp_err_t Snapclient::connect_to_server(std::string server_address, uint16_t port) {
   // Connect to configured server, if set. Otherwise, use mdns to discover a server
   esp_err_t err = ESP_OK;
@@ -170,43 +167,32 @@ esp_err_t Snapclient::send_time_message() {
   return ESP_OK;
 }
 
-ProcessMessageResponse Snapclient::process_messages(AudioChunk *audio_chunk) {
+esp_err_t Snapclient::read_base_message(BaseMessage *base_msg) {
   bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE);
 
   ssize_t bytes_read =
       this->read_from_socket_(this->client_socket_.get(), base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
   if (bytes_read == -1) {
-    ESP_LOGE(TAG, "Failed to read from the socket, closing the connection.");
-    this->disconnect_from_server();
-    return ProcessMessageResponse::ERROR_SOCKET_READ;
+    ESP_LOGE(TAG, "Failed to read from the socket");
+    return ESP_FAIL;
   }
 
   int64_t now = esp_timer_get_time();
 
-  BaseMessage base_msg;
-  this->base_message_deserialize_(&base_msg, base_msg_buffer);
+  this->base_message_deserialize_(base_msg, base_msg_buffer);
+  base_msg->received.sec = static_cast<int32_t>(now / 1000000LL);
+  base_msg->received.usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL);
 
-  base_msg.received.sec = static_cast<int32_t>(now / 1000000LL);
-  base_msg.received.usec = static_cast<int32_t>(now - now / 1000000LL);
+  return ESP_OK;
+}
 
-  size_t follow_up_msg_size = base_msg.size;
-
-  uint8_t *follow_up_data = ALLOCATOR.allocate(follow_up_msg_size);
-  if (follow_up_data == nullptr) {
-    ESP_LOGE(TAG, "Couldn't allocate enough space for snapcast message");
-    this->disconnect_from_server();
-    return ProcessMessageResponse::ERROR_OUT_OF_MEMORY;
-  }
-
-  bytes_read = this->read_from_socket_(this->client_socket_.get(), follow_up_data, follow_up_msg_size);
-  if (bytes_read != follow_up_msg_size) {
-    ALLOCATOR.deallocate(follow_up_data, follow_up_msg_size);
-    ESP_LOGE(TAG, "Problem reading from the socket, closing the connection.");
-    this->disconnect_from_server();
+ProcessMessageResponse Snapclient::process_messages(BaseMessage &base_msg, AudioChunk *audio_chunk) {
+  size_t bytes_read = this->read_from_socket_(this->client_socket_.get(), audio_chunk->data, base_msg.size);
+  if (bytes_read != base_msg.size) {
+    ESP_LOGE(TAG, "Error reading from socket");
     return ProcessMessageResponse::ERROR_SOCKET_READ;
   }
 
-  audio_chunk->data = follow_up_data;
   audio_chunk->offset = 0;
   audio_chunk->size = bytes_read;
 
@@ -228,7 +214,6 @@ ProcessMessageResponse Snapclient::process_messages(AudioChunk *audio_chunk) {
       if (chunk_size != audio_chunk->size) {
         ESP_LOGE(TAG, "Wire chunk size doesn't match base size! Base size = %d; wire chunk = %d; offset = %d",
                  audio_chunk->size, chunk_size, audio_chunk->offset);
-        follow_up_data = nullptr;  // Signal that we should deallocate the follow up data
         response = ProcessMessageResponse::ERROR_MISMATCHED_SIZES;
         break;
       }
@@ -240,12 +225,6 @@ ProcessMessageResponse Snapclient::process_messages(AudioChunk *audio_chunk) {
       audio_chunk->server_timestamp = total_timestamp_us;
       if (chunk_size > 0) {
         response = ProcessMessageResponse::PROCESSED_WIRE_CHUNK;
-        // if (!xQueueSend(this->chunk_data_queue_, &audio_chunk, 0)) {
-        //   ESP_LOGW(TAG, "Encoded chunk queue is full, dropping audio chunk.");
-        //   follow_up_data = nullptr;  // Signal that we should deallocate the follow up data
-        //   response = ProcessMessageResponse::ERROR_QUEUE_FULL;
-        //   break;
-        // }
       }
 
       break;
@@ -265,8 +244,6 @@ ProcessMessageResponse Snapclient::process_messages(AudioChunk *audio_chunk) {
       audio_chunk->offset += codec_len;
       audio_chunk->size -= codec_len;
 
-      printf("codec type code %s\n", codec_type.c_str());
-
       if (codec_type.compare("flac") == 0) {
         this->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_FLAC;
       } else if (codec_type.compare("pcm") == 0) {
@@ -275,7 +252,6 @@ ProcessMessageResponse Snapclient::process_messages(AudioChunk *audio_chunk) {
         //   this->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_OPUS;
       } else {
         ESP_LOGE(TAG, "Unsupported codec type: %s", codec_type.c_str());
-        follow_up_data = nullptr;  // Signal that we should deallocate the follow up data
         response = ProcessMessageResponse::ERROR_UNSUPPORTED_FORMAT;
         break;
       }
@@ -287,7 +263,6 @@ ProcessMessageResponse Snapclient::process_messages(AudioChunk *audio_chunk) {
       if (codec_len != audio_chunk->size) {
         ESP_LOGE(TAG, "Codec length doesn't match base size! Base size = %d; codec header = %d", audio_chunk->size,
                  codec_len);
-        follow_up_data = nullptr;  // Signal that we should deallocate the follow up data
         response = ProcessMessageResponse::ERROR_MISMATCHED_SIZES;
         break;
       }
@@ -295,25 +270,9 @@ ProcessMessageResponse Snapclient::process_messages(AudioChunk *audio_chunk) {
       audio_chunk->server_timestamp = 0;
       audio_chunk->codec_header = true;
       if (codec_len > 0) {
-        //   // xEventGroupSetBits(this_snapcast->event_group_, COMMAND_STOP);
-
-        //   // new_file_start = true;
-        //   // this_snapcast->clear_chunk_queue_();
-        // xQueueSend(this->chunk_data_queue_, &audio_chunk, portMAX_DELAY);
-        //   // follow_up_data = nullptr;  // Don't deallocate the data at end of this loop
-        // } else {
-        //   follow_up_data = nullptr;  // Signal that we should deallocate the follow up data
+        response = ProcessMessageResponse::PROCESSED_CODEC_HEADER;
       }
 
-      // if (!low_speed_timer_started) {
-      //   time_message_delay = FAST_SYNC_LATENCY_BUF;
-      //   esp_timer_stop(timesync_message_timer);
-      //   if (!esp_timer_is_active(timesync_message_timer)) {
-      //     esp_timer_start_periodic(timesync_message_timer, time_message_delay);
-      //   }
-      //   high_speed_timer_started = true;
-      // }
-      response = ProcessMessageResponse::PROCESSED_CODEC_HEADER;
       break;
     }
     case SNAPCAST_MESSAGE_SERVER_SETTINGS: {
@@ -325,7 +284,6 @@ ProcessMessageResponse Snapclient::process_messages(AudioChunk *audio_chunk) {
       if (server_settings_len != audio_chunk->size) {
         ESP_LOGE(TAG, "Server settings message size doesn't match base size! Base size = %d; server settings size = %d",
                  audio_chunk->size, server_settings_len);
-        follow_up_data = nullptr;  // Signal that we should deallocate the follow up data
         response = ProcessMessageResponse::ERROR_MISMATCHED_SIZES;
         break;
       }
@@ -336,29 +294,9 @@ ProcessMessageResponse Snapclient::process_messages(AudioChunk *audio_chunk) {
         std::memcpy((void *) server_msg_read_data.data(), (void *) (audio_chunk->data + audio_chunk->offset),
                     server_settings_len);
 
-        // ServerSettingsMessage server_settings_msg;
         this->server_settings_message_deserialize_(&this->server_settings_message_, server_msg_read_data.c_str());
-
-        // if ((server_settings_msg.latency != this->snapcast_latency_ms_) ||
-        //     (server_settings_msg.buffer_ms != this->snapcast_buffer_duration_ms_)) {
-        //   this->actual_offsets_.reset();
-        // }
-        // this->snapcast_buffer_duration_ms_ = server_settings_msg.buffer_ms;
-        // this->snapcast_latency_ms_ = server_settings_msg.latency;
-
-        // this->volume_ = server_settings_msg.volume;
-        // this->muted_ = server_settings_msg.muted;
-        // this->defer([this, server_settings_msg]() {
-        //   this->server_settings_trigger_->trigger(server_settings_msg.muted,
-        //                                                    server_settings_msg.volume / 100.0f);
-        // });
-
-        // this->volume_ = server_settings_msg.volume;
-        // this->speaker_->set_mute_state(server_settings_msg.muted);
-        // this->external_mute_ = server_settings_msg.muted;
       }
 
-      follow_up_data = nullptr;  // Signal that we should deallocate the follow up data
       response = ProcessMessageResponse::PROCESSED_SERVER_SETTINGS;
       break;
     }
@@ -376,7 +314,8 @@ ProcessMessageResponse Snapclient::process_messages(AudioChunk *audio_chunk) {
       const int64_t latency_client_to_server_us =
           static_cast<int64_t>(latency_s) * 1000000LL + static_cast<int64_t>(latency_us);
 
-      const int64_t time_rx_us = now;
+      const int64_t time_rx_us =
+          static_cast<int64_t>(base_msg.received.sec) * 1000000LL + static_cast<int64_t>(base_msg.received.usec);
       const int64_t time_tx_us =
           static_cast<int64_t>(base_msg.sent.sec) * 1000000LL + static_cast<int64_t>(base_msg.sent.usec);
 
@@ -386,16 +325,11 @@ ProcessMessageResponse Snapclient::process_messages(AudioChunk *audio_chunk) {
 
       this->network_latency_filter_.update(network_latency_us);
 
-      follow_up_data = nullptr;  // Signal that we should deallocate the follow up data
       response = ProcessMessageResponse::PROCESSED_TIME;
       break;
     }
     default:
       break;
-  }
-
-  if (follow_up_data == nullptr) {
-    ALLOCATOR.deallocate(follow_up_data, follow_up_msg_size);
   }
 
   return response;

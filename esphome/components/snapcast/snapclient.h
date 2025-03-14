@@ -43,9 +43,7 @@ enum class ProcessMessageResponse {
   PROCESSED_SERVER_SETTINGS,
   PROCESSED_TIME,
   ERROR_SOCKET_READ,
-  ERROR_OUT_OF_MEMORY,
   ERROR_MISMATCHED_SIZES,
-  ERROR_QUEUE_FULL,
   ERROR_UNSUPPORTED_FORMAT,
   ERROR_FAILURE,
 };
@@ -116,7 +114,8 @@ class Snapclient {
   bool get_network_latency_full() { return this->network_latency_filter_.is_full(); }
   SnapcastCodecFormat get_codec_format() { return this->codec_format_; }
 
-  ProcessMessageResponse process_messages(AudioChunk *audio_chunk);
+  esp_err_t read_base_message(BaseMessage *base_msg);
+  ProcessMessageResponse process_messages(BaseMessage &base_msg, AudioChunk *audio_chunk);
 
   int64_t server_timestamp_to_client(int64_t server_timestamp);
 
@@ -137,11 +136,6 @@ class Snapclient {
   MedianFilter network_latency_filter_;
 
   ServerSettingsMessage server_settings_message_;
-
-  // bool muted_;
-  // uint16_t volume_;
-  // uint32_t snapcast_buffer_duration_ms_{0};
-  // uint32_t snapcast_latency_ms_{0};
 
   uint16_t time_sync_counter_{0};
   bool is_connected_{false};

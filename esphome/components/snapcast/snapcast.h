@@ -23,15 +23,6 @@
 namespace esphome {
 namespace snapcast {
 
-// // Stores encoded audio chunks sent from the server
-// struct AudioChunk {
-//   uint8_t *data;             // Pointer to encoded audio data. Must be deallocated after receiving
-//   size_t offset;             // Number of bytes to skip in the data pointer to skip
-//   size_t size;               // Number of bytes to read from the data pointer after the offset
-//   int64_t server_timestamp;  // Server timestamp when this part of the stream was recorded
-//   bool codec_header;         // True of this chunk contains only the codec header, not audio data
-// };
-
 // Stores the timing information for decoded chunks of audio sent to the ESPHome speaker
 struct InternalAudioTiming {
   int64_t server_timestamp;   // Server timestamp when this audio chunk should finish playing

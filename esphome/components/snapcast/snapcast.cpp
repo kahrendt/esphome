@@ -583,8 +583,6 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
     }
     high_speed_timer_started = true;
 
-    // bool no_socket_error = true;
-
     while (true) {
       if (high_speed_timer_started && this_snapcast->snapclient_->get_network_latency_full()) {
         high_speed_timer_started = false;
@@ -595,11 +593,29 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
           esp_timer_start_periodic(timesync_message_timer, time_message_delay);
         }
       }
-      AudioChunk audio_chunk;
 
-      ProcessMessageResponse response = this_snapcast->snapclient_->process_messages(&audio_chunk);
+      BaseMessage base_msg;
+      if (this_snapcast->snapclient_->read_base_message(&base_msg) != ESP_OK) {
+        this_snapcast->snapclient_->disconnect_from_server();
+        continue;
+      }
+
+      AudioChunk audio_chunk;
+      audio_chunk.data = data_allocator.allocate(base_msg.size);
+
+      if (audio_chunk.data == nullptr) {
+        ESP_LOGE(TAG, "Failed to allocate memory for audio chunk");
+        this_snapcast->snapclient_->disconnect_from_server();
+        continue;
+      }
+
+      ProcessMessageResponse response = this_snapcast->snapclient_->process_messages(base_msg, &audio_chunk);
       switch (response) {
         case ProcessMessageResponse::PROCESSED_CODEC_HEADER: {
+          // Stop decoding and clear any existing chunks in the queue
+          xEventGroupSetBits(this_snapcast->event_group_, COMMAND_STOP);
+          this_snapcast->clear_chunk_queue_();
+
           xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, portMAX_DELAY);
           break;
         }
@@ -607,6 +623,7 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
           if (!xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, 0)) {
             ESP_LOGW(TAG, "Encoded chunk queue is full, dropping audio chunk.");
             data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
+            audio_chunk.data = nullptr;
           }
           break;
         case ProcessMessageResponse::PROCESSED_SERVER_SETTINGS: {
@@ -618,254 +635,20 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
           this_snapcast->volume_ = server_settings.volume;
           this_snapcast->speaker_->set_mute_state(server_settings.muted);
           this_snapcast->external_mute_ = server_settings.muted;
+          data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
+          audio_chunk.data = nullptr;
           break;
         }
         case ProcessMessageResponse::PROCESSED_TIME:
+          data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
+          audio_chunk.data = nullptr;
           break;
         default:
           ESP_LOGE(TAG, "received an error from the snapclient");
+          data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
+          audio_chunk.data = nullptr;
           break;
       }
-
-      // bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE);
-
-      // ssize_t bytes_read = this_snapcast->read_from_socket_(this_snapcast->client_socket_.get(),
-      //                                                       base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
-      // if (bytes_read == -1) {
-      //   no_socket_error = false;
-      //   ESP_LOGE(TAG, "Failed to read from the socket, closing the connection.");
-      //   this_snapcast->disconnect_from_server_();
-      // }
-
-      // int64_t now = esp_timer_get_time();
-
-      // BaseMessage base_msg;
-      // this_snapcast->base_message_deserialize_(&base_msg, base_msg_buffer);
-
-      // base_msg.received.sec = static_cast<int32_t>(now / 1000000LL);
-      // base_msg.received.usec = static_cast<int32_t>(now - now / 1000000LL);
-
-      // size_t follow_up_msg_size = base_msg.size;
-
-      // uint8_t *follow_up_data = data_allocator.allocate(follow_up_msg_size);
-      // if (follow_up_data == nullptr) {
-      //   no_socket_error = false;
-      //   ESP_LOGE(TAG, "Problem reading from the socket, closing the connection.");
-      //   this_snapcast->disconnect_from_server_();
-      //   break;
-      // }
-
-      // bytes_read =
-      //     this_snapcast->read_from_socket_(this_snapcast->client_socket_.get(), follow_up_data, follow_up_msg_size);
-      // if (bytes_read != follow_up_msg_size) {
-      //   data_allocator.deallocate(follow_up_data, follow_up_msg_size);
-      //   no_socket_error = false;
-      //   ESP_LOGE(TAG, "Problem reading from the socket, closing the connection.");
-      //   this_snapcast->disconnect_from_server_();
-      //   break;
-      // }
-
-      // audio_chunk.data = follow_up_data;
-      // audio_chunk.offset = 0;
-      // audio_chunk.size = bytes_read;
-
-      // if (high_speed_timer_started && this_snapcast->network_latency_filter_.is_full()) {
-      //   high_speed_timer_started = false;
-      //   low_speed_timer_started = true;
-      //   time_message_delay = NORMAL_SYNC_LATENCY_BUF;
-      //   esp_timer_stop(timesync_message_timer);
-      //   if (!esp_timer_is_active(timesync_message_timer)) {
-      //     esp_timer_start_periodic(timesync_message_timer, time_message_delay);
-      //   }
-      // }
-
-      // switch (base_msg.type) {
-      //   case SNAPCAST_MESSAGE_WIRE_CHUNK: {
-      //     int32_t timestamp_s;
-      //     int32_t timestamp_us;
-      //     uint32_t chunk_size;
-
-      //     std::memcpy((void *) &timestamp_s, (void *) audio_chunk.data, sizeof(int32_t));
-      //     std::memcpy((void *) &timestamp_us, (void *) (audio_chunk.data + sizeof(int32_t)), sizeof(int32_t));
-      //     std::memcpy((void *) &chunk_size, (void *) (audio_chunk.data + 2 * sizeof(int32_t)), sizeof(uint32_t));
-
-      //     audio_chunk.offset = WIRE_CHUNK_HEADER_SIZE;
-      //     audio_chunk.size -= audio_chunk.offset;
-
-      //     if (chunk_size != audio_chunk.size) {
-      //       ESP_LOGE(TAG, "Wire chunk size doesn't match base size! Base size = %d; wire chunk = %d; offset = %d",
-      //                audio_chunk.size, chunk_size, audio_chunk.offset);
-      //       no_socket_error = false;
-      //       break;
-      //     }
-
-      //     const int64_t total_timestamp_us =
-      //         static_cast<int64_t>(timestamp_s) * 1000000LL + static_cast<int64_t>(timestamp_us);
-
-      //     audio_chunk.codec_header = false;
-      //     audio_chunk.server_timestamp = total_timestamp_us;
-      //     if ((chunk_size > 0) && low_speed_timer_started && no_socket_error) {
-      //       if (!xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, 0)) {
-      //         xEventGroupSetBits(this_snapcast->event_group_, WARNING_ENCODED_CHUNK_FULL);
-      //         ESP_LOGW(TAG, "Encoded chunk queue is full, dropping audio chunk.");
-      //       } else {
-      //         xEventGroupClearBits(this_snapcast->event_group_, WARNING_ENCODED_CHUNK_FULL);
-      //         follow_up_data = nullptr;
-      //       }
-      //     }
-
-      //     break;
-      //   }
-      //   case SNAPCAST_MESSAGE_CODEC_HEADER: {
-      //     ESP_LOGD(TAG, "Received a new codec header message.");
-
-      //     uint32_t codec_len;
-      //     std::string codec_type;
-
-      //     std::memcpy((void *) &codec_len, (void *) (audio_chunk.data + audio_chunk.offset), sizeof(uint32_t));
-      //     audio_chunk.offset += sizeof(uint32_t);
-      //     audio_chunk.size -= sizeof(uint32_t);
-
-      //     codec_type.resize(codec_len);
-      //     std::memcpy((void *) codec_type.data(), (void *) (audio_chunk.data + audio_chunk.offset), codec_len);
-      //     audio_chunk.offset += codec_len;
-      //     audio_chunk.size -= codec_len;
-
-      //     if (codec_type.compare("flac") == 0) {
-      //       this_snapcast->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_FLAC;
-      //     } else if (codec_type.compare("pcm") == 0) {
-      //       this_snapcast->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_PCM;
-      //       // } else if (codec_type.compare("opus") == 0) {
-      //       //   this_snapcast->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_OPUS;
-      //     } else {
-      //       ESP_LOGE(TAG, "Unsupported codec type: %s", codec_type.c_str());
-      //       no_socket_error = false;
-      //       break;
-      //     }
-
-      //     std::memcpy((void *) &codec_len, (void *) (audio_chunk.data + audio_chunk.offset), sizeof(uint32_t));
-      //     audio_chunk.offset += sizeof(uint32_t);
-      //     audio_chunk.size -= sizeof(uint32_t);
-
-      //     if (codec_len != audio_chunk.size) {
-      //       ESP_LOGE(TAG, "Codec length doesn't match base size! Base size = %d; codec header = %d",
-      //       audio_chunk.size,
-      //                codec_len);
-      //       no_socket_error = false;
-      //       break;
-      //     }
-
-      //     audio_chunk.server_timestamp = 0;
-      //     audio_chunk.codec_header = true;
-      //     if (codec_len > 0) {
-      //       xEventGroupSetBits(this_snapcast->event_group_, COMMAND_STOP);
-
-      //       new_file_start = true;
-      //       this_snapcast->clear_chunk_queue_();
-      //       xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, portMAX_DELAY);
-      //       follow_up_data = nullptr;  // Don't deallocate the data at end of this loop
-      //     }
-
-      //     if (!low_speed_timer_started) {
-      //       time_message_delay = FAST_SYNC_LATENCY_BUF;
-      //       esp_timer_stop(timesync_message_timer);
-      //       if (!esp_timer_is_active(timesync_message_timer)) {
-      //         esp_timer_start_periodic(timesync_message_timer, time_message_delay);
-      //       }
-      //       high_speed_timer_started = true;
-      //     }
-      //     break;
-      //   }
-      //   case SNAPCAST_MESSAGE_SERVER_SETTINGS: {
-      //     ESP_LOGD(TAG, "Received a server settings message");
-      //     uint32_t server_settings_len = *reinterpret_cast<uint32_t *>(audio_chunk.data + audio_chunk.offset);
-      //     audio_chunk.offset += sizeof(uint32_t);
-      //     audio_chunk.size -= sizeof(uint32_t);
-
-      //     if (server_settings_len != audio_chunk.size) {
-      //       ESP_LOGE(TAG,
-      //                "Server settings message size doesn't match base size! Base size = %d; server settings size =
-      //                %d", audio_chunk.size, server_settings_len);
-      //       no_socket_error = false;
-
-      //       break;
-      //     }
-
-      //     if (server_settings_len > 0) {
-      //       std::string server_msg_read_data;
-      //       server_msg_read_data.resize(server_settings_len);
-      //       std::memcpy((void *) server_msg_read_data.data(), (void *) (audio_chunk.data + audio_chunk.offset),
-      //                   server_settings_len);
-
-      //       ServerSettingsMessage server_settings_msg;
-      //       this_snapcast->server_settings_message_deserialize_(&server_settings_msg, server_msg_read_data.c_str());
-
-      //       if ((server_settings_msg.latency != this_snapcast->snapcast_latency_ms_) ||
-      //           (server_settings_msg.buffer_ms != this_snapcast->snapcast_buffer_duration_ms_)) {
-      //         this_snapcast->actual_offsets_.reset();
-      //       }
-      //       this_snapcast->snapcast_buffer_duration_ms_ = server_settings_msg.buffer_ms;
-      //       this_snapcast->snapcast_latency_ms_ = server_settings_msg.latency;
-
-      //       this_snapcast->defer([this_snapcast, server_settings_msg]() {
-      //         this_snapcast->server_settings_trigger_->trigger(server_settings_msg.muted,
-      //                                                          server_settings_msg.volume / 100.0f);
-      //       });
-
-      //       this_snapcast->volume_ = server_settings_msg.volume;
-      //       this_snapcast->speaker_->set_mute_state(server_settings_msg.muted);
-      //       this_snapcast->external_mute_ = server_settings_msg.muted;
-      //     }
-
-      //     break;
-      //   }
-      //   case SNAPCAST_MESSAGE_TIME: {
-      //     int32_t latency_s;
-      //     int32_t latency_us;
-
-      //     std::memcpy((void *) &latency_s, (void *) (audio_chunk.data + audio_chunk.offset), sizeof(int32_t));
-      //     audio_chunk.offset += sizeof(int32_t);
-      //     audio_chunk.size -= sizeof(int32_t);
-      //     std::memcpy((void *) &latency_us, (void *) (audio_chunk.data + audio_chunk.offset), sizeof(int32_t));
-      //     audio_chunk.offset += sizeof(int32_t);
-      //     audio_chunk.size -= sizeof(int32_t);
-
-      //     const int64_t latency_client_to_server_us =
-      //         static_cast<int64_t>(latency_s) * 1000000LL + static_cast<int64_t>(latency_us);
-
-      //     const int64_t time_rx_us = now;
-      //     const int64_t time_tx_us =
-      //         static_cast<int64_t>(base_msg.sent.sec) * 1000000LL + static_cast<int64_t>(base_msg.sent.usec);
-
-      //     const int64_t latency_server_to_client_us = time_rx_us - time_tx_us;
-
-      //     const int64_t network_latency_us = (latency_client_to_server_us - latency_server_to_client_us) / 2;
-
-      //     this_snapcast->network_latency_filter_.update(network_latency_us);
-
-      //     break;
-      //   }
-      //   default:
-      //     break;
-      // }
-
-      // if (follow_up_data != nullptr) {
-      //   data_allocator.deallocate(follow_up_data, follow_up_msg_size);
-      //   follow_up_data = nullptr;
-      // }
-
-      // static uint32_t high_water_mark = 8192;
-      // uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
-      // if (new_high_water_mark < high_water_mark) {
-      //   ESP_LOGV(TAG, "Snapcast task - High water mark changed from %d to %d.", high_water_mark,
-      //   new_high_water_mark); high_water_mark = new_high_water_mark;
-      // }
-
-      // if (!no_socket_error) {
-      //   ESP_LOGD(TAG, "Failed to read from the socket, closing the connection.");
-      //   this_snapcast->disconnect_from_server_();
-      //   break;
-      // }
     }
   }
   while (true) {
