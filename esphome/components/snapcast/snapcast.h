@@ -242,6 +242,10 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   std::string stream_id_ = "";
   optional<bool> stream_is_idle_;
 
+  std::string album_ = "";
+  std::string artsist_ = "";
+  std::string track_ = "";
+
   speaker::Speaker *speaker_{nullptr};
 
   std::unique_ptr<socket::Socket> client_socket_;

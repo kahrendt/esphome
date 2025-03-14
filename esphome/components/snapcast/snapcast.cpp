@@ -497,22 +497,6 @@ void SnapcastPlayer::control_task(void *params) {
           if (params["server"].is<JsonVariant>()) {
             JsonObject server = params["server"].as<JsonObject>();
             this_snapcast->parse_snapcast_server_(server);
-            // if (server["groups"].is<JsonVariant>()) {
-            //   JsonArray groups = server["groups"].as<JsonArray>();
-            //   for (const JsonObject &group : groups) {
-            //     if (group["clients"].is<JsonVariant>()) {
-            //       JsonArray clients = group["clients"].as<JsonArray>();
-            //       for (const JsonObject &client : clients) {
-            //         if (client["id"].as<std::string>().compare(this_snapcast->player_id_) == 0) {
-            //           this_snapcast->group_id_ = group["id"].as<std::string>();
-            //           this_snapcast->stream_id_ = group["stream_id"].as<std::string>();
-            //           ESP_LOGV(TAG, "Found which group we are in, current group id is %s streaming %s",
-            //                    this_snapcast->group_id_.c_str(), this_snapcast->stream_id_.c_str());
-            //         }
-            //       }
-            //     }
-            //   }
-            // }
           }
         }
 
@@ -522,22 +506,6 @@ void SnapcastPlayer::control_task(void *params) {
             if (params["server"].is<JsonVariant>()) {
               JsonObject server = params["server"].as<JsonObject>();
               this_snapcast->parse_snapcast_server_(server);
-              // if (server["groups"].is<JsonVariant>()) {
-              //   JsonArray groups = server["groups"].as<JsonArray>();
-              //   for (const JsonObject &group : groups) {
-              //     if (group["clients"].is<JsonVariant>()) {
-              //       JsonArray clients = group["clients"].as<JsonArray>();
-              //       for (const JsonObject &client : clients) {
-              //         if (client["id"].as<std::string>().compare(this_snapcast->player_id_) == 0) {
-              //           this_snapcast->group_id_ = group["id"].as<std::string>();
-              //           this_snapcast->stream_id_ = group["stream_id"].as<std::string>();
-              //           ESP_LOGV(TAG, "Found which group we are in, current group id is %s streaming %s",
-              //                    this_snapcast->group_id_.c_str(), this_snapcast->stream_id_.c_str());
-              //         }
-              //       }
-              //     }
-              //   }
-              // }
             }
           }
         }
@@ -559,6 +527,28 @@ void SnapcastPlayer::control_task(void *params) {
               this_snapcast->stream_is_idle_ = false;
             }
             ESP_LOGV(TAG, "Current stream state is %s", state.c_str());
+          }
+        }
+        if (method.compare("Stream.OnProperties") == 0) {
+          JsonObject stream_params = root["params"];
+          if (stream_params["id"].as<std::string>().compare(this_snapcast->stream_id_) == 0) {
+            JsonObject metadata = stream_params["metadata"];
+
+            if (metadata["album"].is<JsonVariant>()) {
+              this_snapcast->album_ = metadata["album"].as<std::string>();
+            } else {
+              this_snapcast->album_ = "";
+            }
+            if (metadata["artist"].is<JsonVariant>()) {
+              this_snapcast->artist_ = metadata["artist"].as<std::string>();
+            } else {
+              this_snapcast->artist_ = "";
+            }
+            if (metadata["track"].is<JsonVariant>()) {
+              this_snapcast->track_ = metadata["track"].as<std::string>();
+            } else {
+              this_snapcast->track_ = "";
+            }
           }
         }
         return true;
