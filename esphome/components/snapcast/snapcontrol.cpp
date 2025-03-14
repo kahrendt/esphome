@@ -198,10 +198,10 @@ void Snapcontrol::control_snapcast_stream(media_player::MediaPlayerCommand comma
     root["id"] = 1;
     root["jsonrpc"] = "2.0";
     root["method"] = "Stream.Control";
-    JsonObject control_params = root.createNestedObject("params");
-    control_params["id"] = this->stream_id_;
-    control_params["command"] = snapcast_command;
-    JsonObject command_params = control_params.createNestedObject("params");
+    root["params"].to<JsonObject>();
+    root["params"]["id"] = this->stream_id_;
+    root["params"]["command"] = snapcast_command;
+    root["params"]["params"].to<JsonObject>();
   });
 
   control_message.push_back('\n');
