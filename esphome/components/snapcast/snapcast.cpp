@@ -51,58 +51,40 @@ enum EventGroupBits : uint32_t {
   WARNING_ENCODED_CHUNK_FULL = (1 << 11),
 };
 
-void SnapcastPlayer::start() {
-  this->speaker_->add_audio_output_callback([this](uint32_t frames_played, int64_t write_timestamp) {
-    PlaybackProgress playback_progress = {.frames_played = frames_played, .write_timestamp = write_timestamp};
-    if (!xQueueSend(this->playback_progress_queue_, &playback_progress, 0)) {
-      ESP_LOGE(TAG, "Playback info queue was full");
-    }
-  });
+void SnapcastPlayer::setup() {
+  this->player_id_ = get_mac_address_pretty();
+
+  this->snapclient_ = make_unique<Snapclient>(this->player_id_);
+  if (this->snapclient_ == nullptr) {
+    ESP_LOGE(TAG, "Couldn't create snapclient object.");
+    this->mark_failed();
+  }
+
+  this->snapcontrol_ = make_unique<Snapcontrol>(this->player_id_);
+  if (this->snapcontrol_ == nullptr) {
+    ESP_LOGE(TAG, "Couldn't create snapcontrol object.");
+    this->mark_failed();
+  }
 
   this->encoded_chunk_data_queue_ = xQueueCreate(ENCODED_CHUNK_QUEUE_SIZE, sizeof(AudioChunk));
+  if (this->encoded_chunk_data_queue_ == nullptr) {
+    ESP_LOGE(TAG, "Couldn't create encoded chunk data queue.");
+    this->mark_failed();
+  }
 
   this->playback_progress_queue_ = xQueueCreate(50, sizeof(PlaybackProgress));
+  if (this->playback_progress_queue_ == nullptr) {
+    ESP_LOGE(TAG, "Couldn't create playback progress queue.");
+    this->mark_failed();
+  }
+
   this->event_group_ = xEventGroupCreate();
-
-  if (this->client_task_stack_buffer_ == nullptr) {
-    if (this->task_stack_in_psram_) {
-      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
-      this->client_task_stack_buffer_ = stack_allocator.allocate(CLIENT_TASK_STACK_SIZE);
-    } else {
-      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
-      this->client_task_stack_buffer_ = stack_allocator.allocate(CLIENT_TASK_STACK_SIZE);
-    }
+  if (this->event_group_ == nullptr) {
+    ESP_LOGE(TAG, "Couldn't create event group.");
+    this->mark_failed();
   }
 
-  if (this->control_task_stack_buffer_ == nullptr) {
-    if (this->task_stack_in_psram_) {
-      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
-      this->control_task_stack_buffer_ = stack_allocator.allocate(CONTROL_TASK_STACK_SIZE);
-    } else {
-      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
-      this->control_task_stack_buffer_ = stack_allocator.allocate(CONTROL_TASK_STACK_SIZE);
-    }
-  }
-
-  if (this->decode_task_stack_buffer_ == nullptr) {
-    if (this->task_stack_in_psram_) {
-      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
-      this->decode_task_stack_buffer_ = stack_allocator.allocate(DECODE_TASK_STACK_SIZE);
-    } else {
-      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
-      this->decode_task_stack_buffer_ = stack_allocator.allocate(DECODE_TASK_STACK_SIZE);
-    }
-  }
-
-  this->client_task_handle_ =
-      xTaskCreateStatic(client_task, "snap_client", CLIENT_TASK_STACK_SIZE, (void *) this, CLIENT_TASK_PRIORITY,
-                        this->client_task_stack_buffer_, &this->client_task_stack_);
-  this->control_task_handle_ =
-      xTaskCreateStatic(control_task, "snap_control", CONTROL_TASK_STACK_SIZE, (void *) this, CONTROL_TASK_PRIORITY,
-                        this->control_task_stack_buffer_, &this->control_task_stack_);
-  this->decode_task_handle_ =
-      xTaskCreateStatic(decode_task, "snap_decode", DECODE_TASK_STACK_SIZE, (void *) this, DECODE_TASK_PRIORITY,
-                        this->decode_task_stack_buffer_, &this->decode_task_stack_);
+  this->start();
 }
 
 void SnapcastPlayer::loop() {
@@ -123,10 +105,7 @@ void SnapcastPlayer::loop() {
         network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
         this->discovered_address_ = discovered_address.str();
         this->server_port_ = mdns_result->port;
-        // ESP_LOGD(TAG, "Found a snapcast server via mdns: %s", discovered_address.str().c_str());
-
-        // sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), discovered_address.str().c_str(),
-        // port);
+        ESP_LOGD(TAG, "Discovered a snapcast server via mdns: %s", discovered_address.str().c_str());
       }
       mdns_query_results_free(mdns_result);
     }
@@ -180,10 +159,62 @@ void SnapcastPlayer::loop() {
   }
 }
 
-void SnapcastPlayer::publish_client_settings() {
-  if (this->snapclient_ != nullptr) {
-    this->snapclient_->send_client_message(this->speaker_->get_volume(), this->is_muted_);
+void SnapcastPlayer::start() {
+  this->speaker_->add_audio_output_callback([this](uint32_t frames_played, int64_t write_timestamp) {
+    PlaybackProgress playback_progress = {.frames_played = frames_played, .write_timestamp = write_timestamp};
+    if (!xQueueSend(this->playback_progress_queue_, &playback_progress, 0)) {
+      ESP_LOGE(TAG, "Playback info queue was full");
+    }
+  });
+
+  if (this->client_task_stack_buffer_ == nullptr) {
+    if (this->task_stack_in_psram_) {
+      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
+      this->client_task_stack_buffer_ = stack_allocator.allocate(CLIENT_TASK_STACK_SIZE);
+    } else {
+      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
+      this->client_task_stack_buffer_ = stack_allocator.allocate(CLIENT_TASK_STACK_SIZE);
+    }
   }
+
+  if (this->control_task_stack_buffer_ == nullptr) {
+    if (this->task_stack_in_psram_) {
+      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
+      this->control_task_stack_buffer_ = stack_allocator.allocate(CONTROL_TASK_STACK_SIZE);
+    } else {
+      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
+      this->control_task_stack_buffer_ = stack_allocator.allocate(CONTROL_TASK_STACK_SIZE);
+    }
+  }
+
+  if (this->decode_task_stack_buffer_ == nullptr) {
+    if (this->task_stack_in_psram_) {
+      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_EXTERNAL);
+      this->decode_task_stack_buffer_ = stack_allocator.allocate(DECODE_TASK_STACK_SIZE);
+    } else {
+      RAMAllocator<StackType_t> stack_allocator(RAMAllocator<StackType_t>::ALLOC_INTERNAL);
+      this->decode_task_stack_buffer_ = stack_allocator.allocate(DECODE_TASK_STACK_SIZE);
+    }
+  }
+
+  this->client_task_handle_ =
+      xTaskCreateStatic(client_task, "snap_client", CLIENT_TASK_STACK_SIZE, (void *) this, CLIENT_TASK_PRIORITY,
+                        this->client_task_stack_buffer_, &this->client_task_stack_);
+  this->control_task_handle_ =
+      xTaskCreateStatic(control_task, "snap_control", CONTROL_TASK_STACK_SIZE, (void *) this, CONTROL_TASK_PRIORITY,
+                        this->control_task_stack_buffer_, &this->control_task_stack_);
+  this->decode_task_handle_ =
+      xTaskCreateStatic(decode_task, "snap_decode", DECODE_TASK_STACK_SIZE, (void *) this, DECODE_TASK_PRIORITY,
+                        this->decode_task_stack_buffer_, &this->decode_task_stack_);
+}
+
+void SnapcastPlayer::publish_client_settings() {
+  if (!this->is_ready() || this->is_failed()) {
+    // Ignore request before the media player is setup
+    return;
+  }
+
+  this->snapclient_->send_client_message(this->speaker_->get_volume(), this->is_muted_);
 }
 
 void SnapcastPlayer::timesync_callback(void *params) {
@@ -199,15 +230,8 @@ media_player::MediaPlayerTraits SnapcastPlayer::get_traits() {
   return traits;
 }
 
-void SnapcastPlayer::setup() {
-  this->player_id_ = get_mac_address_pretty();
-  this->snapclient_ = make_unique<Snapclient>(this->player_id_);
-  this->snapcontrol_ = make_unique<Snapcontrol>(this->player_id_);
-  this->start();
-}
-
 void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
-  if (!this->is_ready()) {
+  if (!this->is_ready() || this->is_failed()) {
     // Ignore any commands sent before the media player is setup
     return;
   }
