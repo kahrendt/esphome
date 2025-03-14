@@ -322,6 +322,10 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
     high_speed_timer_started = true;
 
     while (true) {
+      if (!this_snapcast->snapclient_->is_connected()) {
+        break;
+      }
+
       if (high_speed_timer_started && this_snapcast->snapclient_->get_network_latency_full()) {
         high_speed_timer_started = false;
         low_speed_timer_started = true;
@@ -335,16 +339,18 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
       BaseMessage base_msg;
       if (this_snapcast->snapclient_->read_base_message(&base_msg) != ESP_OK) {
         this_snapcast->snapclient_->disconnect_from_server();
-        continue;
+        break;
       }
 
       AudioChunk audio_chunk;
       audio_chunk.data = data_allocator.allocate(base_msg.size);
 
       if (audio_chunk.data == nullptr) {
-        ESP_LOGE(TAG, "Failed to allocate memory for audio chunk");
+        ESP_LOGE(TAG, "Failed to allocate memory for audio chunk. Stopping playback and reconnecting to the server.");
+        xEventGroupSetBits(this_snapcast->event_group_, COMMAND_STOP);
+        this_snapcast->clear_chunk_queue_();
         this_snapcast->snapclient_->disconnect_from_server();
-        continue;
+        break;
       }
 
       ProcessMessageResponse response = this_snapcast->snapclient_->process_messages(base_msg, &audio_chunk);
@@ -385,7 +391,6 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
           data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
           audio_chunk.data = nullptr;
           this_snapcast->snapclient_->disconnect_from_server();
-          continue;
           break;
         default:
           ESP_LOGE(TAG, "received an error from the snapclient");
