@@ -733,21 +733,31 @@ void SnapcastPlayer::decode_task(void *params) {
         const int64_t us_per_frame_margin = 3 * this_snapcast->audio_stream_info_.value().frames_to_microseconds(1) / 2;
 
         if (initial_decode || (recent_error_us > HARD_SYNC_THRESHOLD_US)) {
-          // Hard sync because we just started decoding and haven't sent any audio or we are way behind
-          // Zero out all new audio data and any extra bytes free in the transfer buffer
-          size_t silence_bytes = this_snapcast->audio_stream_info_.value().ms_to_bytes(recent_error_us / 1000);
-          size_t actual_silence_bytes = std::min(silence_bytes, output_transfer_buffer->free());
-          std::memset((void *) (output_transfer_buffer->get_buffer_end() - new_bytes), 0,
-                      actual_silence_bytes + new_bytes);
-          output_transfer_buffer->increase_buffer_length(actual_silence_bytes);
-          frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_silence_bytes);
+          // // Hard sync because we just started decoding and haven't sent any audio or we are way behind
+          // // Zero out all new audio data and any extra bytes free in the transfer buffer
+          // size_t silence_bytes = this_snapcast->audio_stream_info_.value().ms_to_bytes(recent_error_us / 1000);
+          // size_t actual_silence_bytes = std::min(silence_bytes, output_transfer_buffer->free());
+          // std::memset((void *) (output_transfer_buffer->get_buffer_end() - new_bytes), 0,
+          //             actual_silence_bytes + new_bytes);
+          // output_transfer_buffer->increase_buffer_length(actual_silence_bytes);
+          // frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_silence_bytes);
+
+          // Zero out this chunks audio and any remaining free bytes in the transfer buffer
+          const size_t zeroed_bytes = new_bytes + output_transfer_buffer->free();
+          std::memset((void *) (output_transfer_buffer->get_buffer_end() - new_bytes), 0, zeroed_bytes);
+          output_transfer_buffer->decrease_buffer_length(new_bytes);  // Remove the newly added length
+
+          const size_t silence_bytes_for_correction =
+              this_snapcast->audio_stream_info_.value().ms_to_bytes(recent_error_us / 1000);
+          size_t actual_bytes_of_silence = std::min(silence_bytes_for_correction, zeroed_bytes);
+          output_transfer_buffer->increase_buffer_length(actual_bytes_of_silence);
+          frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_of_silence);
 
           ESP_LOGD(TAG,
                    "Hard sync: adding %" PRId32 " frames of silence. Current error is %" PRId64 "us. There are %" PRId64
                    "pending frames for correction",
                    frame_corrections, recent_error_us, pending_frame_corrections);
-          receive_chunk = false;  // Don't actually process this frame since it was completely silenced
-
+          receive_chunk = false;  // Don't actually process this frame since we didn't use any data from it
         } else if (recent_error_us < -HARD_SYNC_THRESHOLD_US) {
           // Hard sync because we have gotten ahead and need to skip some audio to get in sync
           // Removes newly decoded frames (but will always leave a minimum of 1 frame)
@@ -795,15 +805,17 @@ void SnapcastPlayer::decode_task(void *params) {
 
         InternalAudioTiming timings;
 
-        timings.total_frames = this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes) + frame_corrections;
         if (receive_chunk) {
           timings.server_timestamp = encoded_chunk.server_timestamp + new_duration_us;
+          timings.total_frames =
+              this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes) + frame_corrections;
           timings.frame_corrections = frame_corrections;
           pending_frame_corrections += frame_corrections;
         } else {
           timings.server_timestamp = encoded_chunk.server_timestamp;
-          timings.frame_corrections = timings.total_frames;
-          pending_frame_corrections += timings.total_frames;
+          timings.total_frames = frame_corrections;
+          timings.frame_corrections = frame_corrections;
+          pending_frame_corrections += frame_corrections;
         }
 
         chunk_timings.push_back(timings);
