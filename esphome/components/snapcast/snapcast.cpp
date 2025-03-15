@@ -147,7 +147,12 @@ void SnapcastPlayer::loop() {
   if (this->snapcontrol_->get_stream_is_idle().has_value()) {
     if (this->snapcontrol_->get_stream_is_idle().value()) {
       this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
-      this->speaker_->finish();
+      if ((old_state == media_player::MEDIA_PLAYER_STATE_PLAYING) && !this->speaker_->is_stopped()) {
+        this->speaker_->finish();
+
+        // Ensure we restore the proper mute state in case the stream was out of sync at the end
+        this->speaker_->set_mute_state(this->is_muted_);
+      }
     } else {
       this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
     }
