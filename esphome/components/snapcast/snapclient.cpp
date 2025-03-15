@@ -113,6 +113,8 @@ esp_err_t Snapclient::send_hello_message() {
 
   this->base_message_serialize_(&base_msg, base_msg_buffer);
 
+  ESP_LOGD(TAG, "Sent hello message: %s", hello_msb.c_str());
+
   if ((this->client_socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE) == -1) ||
       (this->client_socket_->write((void *) hello_msg_buffer.get_raw_data(), base_msg.size) == -1)) {
     return ESP_FAIL;
