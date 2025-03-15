@@ -32,11 +32,6 @@ enum class SnapcastCodecFormat {
   SNAPCAST_CODEC_UNSUPPORTED,
 };
 
-struct PlaybackProgress {
-  uint32_t frames_played;
-  int64_t write_timestamp;
-};
-
 enum class ProcessMessageResponse {
   PROCESSED_CODEC_HEADER,
   PROCESSED_WIRE_CHUNK,
@@ -55,7 +50,7 @@ struct AudioChunk {
   size_t offset;             // Number of bytes to skip in the data pointer to skip
   size_t size;               // Number of bytes to read from the data pointer after the offset
   int64_t server_timestamp;  // Server timestamp when this part of the stream was recorded
-  bool codec_header;         // True of this chunk contains only the codec header, not audio data
+  bool codec_header;         // True if this chunk contains only the codec header, not audio data
 };
 
 struct TimeMessage {
@@ -101,6 +96,22 @@ static const size_t TIME_MESSAGE_SIZE = 8;
 static const size_t WIRE_CHUNK_HEADER_SIZE = 12;
 
 class Snapclient {
+  /* Class that implements communication with a snapserver as snapclient.
+   *
+   * 1) First connect to the snapserver with ``connect_to_server``
+   * 2) Send a hello message with ``send_hello_message``
+   * 3) Regularly send time messages with ``send_time_message``
+   *   - a ``MedianFilter`` object uses a median over the last 50 time messages for computing the server client latency
+   *     - Use the ``get_network_latency_full`` function to determine if enough time messages have been sent to compute
+   *       an accurate latency
+   *   - Convert a server timestamp, in microseconds, to the client microsecond timestamp using
+   *     ``server_timestamp_to_client``
+   * 4) After a connection is established, regular call ``read_base_message`` and ``process_messages``
+   *   - The caller is responsible for allocating (and deallocating) an AudioChunk to store incoming data in
+   *     ``process_messages``
+   *
+   * Use ``send_client_message`` to inform the snapserver about the clients mute and volume states
+   */
  public:
   Snapclient(std::string player_id) : player_id_(player_id), network_latency_filter_(MedianFilter(50)){};
 

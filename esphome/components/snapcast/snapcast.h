@@ -25,6 +25,11 @@
 namespace esphome {
 namespace snapcast {
 
+struct PlaybackProgress {
+  uint32_t frames_played;
+  int64_t write_timestamp;
+};
+
 // Stores the timing information for decoded chunks of audio sent to the ESPHome speaker
 struct InternalAudioTiming {
   int64_t server_timestamp;   // Server timestamp when this audio chunk should finish playing

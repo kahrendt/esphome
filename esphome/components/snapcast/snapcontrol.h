@@ -14,6 +14,18 @@ namespace esphome {
 namespace snapcast {
 
 class Snapcontrol {
+  /* Class that communicates with the snapserver as a snapcontroller using a socket and the JSON-RPC API
+   *
+   * Attempts to find which group and stream the current player is
+   *  - ``parse_snapcast_groups`` determines which group the player is in
+   *  - ``parse_snapcast_streams`` determines which stream the group is playing
+   *
+   * 1) Connect to the snapserver via ``connect_to_server``
+   * 2) Regularly call ``process_messages`` to monitor the state of the snapserver
+   *
+   * Call ``control_get_server_status`` to get the current server state
+   * Call ``control_snapcast_stream`` to send commands to the current stream
+   */
  public:
   Snapcontrol(std::string player_id) : player_id_(player_id){};
 
