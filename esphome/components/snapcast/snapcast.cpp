@@ -727,11 +727,14 @@ void SnapcastPlayer::decode_task(void *params) {
         const int64_t new_duration_us =
             new_duration_ms * 1000 + this_snapcast->audio_stream_info_.value().frames_to_microseconds(new_frames);
 
+        // How many frames in this chunk that are added or removed to the actual frame count
         int32_t frame_corrections = 0;
 
         const int64_t us_per_frame_margin = 3 * this_snapcast->audio_stream_info_.value().frames_to_microseconds(1) / 2;
 
         if (initial_decode || (recent_error_us > HARD_SYNC_THRESHOLD_US)) {
+          // Hard sync because we just started decoding and haven't sent any audio or we are way behind
+          // Zero out all new audio data and any extra bytes free in the transfer buffer
           size_t silence_bytes = this_snapcast->audio_stream_info_.value().ms_to_bytes(recent_error_us / 1000);
           size_t actual_silence_bytes = std::min(silence_bytes, output_transfer_buffer->free());
           std::memset((void *) (output_transfer_buffer->get_buffer_end() - new_bytes), 0,
@@ -746,6 +749,8 @@ void SnapcastPlayer::decode_task(void *params) {
           receive_chunk = false;  // Don't actually process this frame since it was completely silenced
 
         } else if (recent_error_us < -HARD_SYNC_THRESHOLD_US) {
+          // Hard sync because we have gotten ahead and need to skip some audio to get in sync
+          // Removes newly decoded frames (but will always leave a minimum of 1 frame)
           size_t bytes_to_remove = this_snapcast->audio_stream_info_.value().ms_to_bytes(abs(recent_error_us) / 1000);
           size_t actual_bytes_to_remove = std::min(bytes_to_remove, new_bytes - bytes_per_frame);
           output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
@@ -755,6 +760,9 @@ void SnapcastPlayer::decode_task(void *params) {
                    "pending frames for correction",
                    frame_corrections, recent_error_us, pending_frame_corrections);
         } else if (recent_error_us < -us_per_frame_margin) {
+          // Small sync adjustment after getting slightly ahead.
+          // Removes the last frame in the chunk to get in sync. The second to last frame is replaced with the average
+          // of it and the removed frame to minimize audible glitches.
           const uint32_t num_channels = this_snapcast->audio_stream_info_.value().get_channels();
           int16_t *samples =
               reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
@@ -766,6 +774,9 @@ void SnapcastPlayer::decode_task(void *params) {
           output_transfer_buffer->decrease_buffer_length(bytes_per_frame);
           frame_corrections = -1;
         } else if (recent_error_us > us_per_frame_margin) {
+          // Small sync adjustment after getting slightly behind.
+          // Adds one new frame to get in sync. The new frame is inserted between the last and second to last frames.
+          // The new frame is the average of the last two frames in the chunk to minimize audible glitches.
           if (output_transfer_buffer->free() >= bytes_per_frame) {
             const uint32_t num_channels = this_snapcast->audio_stream_info_.value().get_channels();
             int16_t *samples =
