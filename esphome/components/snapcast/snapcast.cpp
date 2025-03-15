@@ -127,15 +127,6 @@ void SnapcastPlayer::loop() {
     }
   }
 
-  // if (this->state == media_player::MEDIA_PLAYER_STATE_IDLE) {
-  //   if (this->speaker_->is_stopped()) {
-  //     xQueueReset(this->playback_progress_queue_);
-  //     xEventGroupClearBits(this->event_group_, (COMMAND_STOP | DECODE_FINISHED));
-  //   } else {
-  //     this->speaker_->finish();
-  //   }
-  // }
-
   if (this->volume_.has_value()) {
     this->volume = static_cast<float>(this->volume_.value()) / 100.0f;
     this->speaker_->set_volume(this->volume);
@@ -534,84 +525,6 @@ void SnapcastPlayer::decode_task(void *params) {
       continue;
     }
 
-    /** Use the information from the speaker on frames played to update teh current error */
-
-    PlaybackProgress playback_progress;
-    while (xQueueReceive(this_snapcast->playback_progress_queue_, &playback_progress, 0) == pdTRUE) {
-      if (initial_decode) {
-        // Some sent audio chunks have now been played by the speaker
-        initial_decode = false;
-        this_snapcast->snapcontrol_->control_get_server_status();  // Determine what stream this client is playing
-      }
-
-      if (!chunk_timings.empty()) {
-        uint32_t frames_played = playback_progress.frames_played;
-        int64_t write_timestamp = playback_progress.write_timestamp;
-
-        InternalAudioTiming *front_chunk = &chunk_timings.front();
-
-        pending_frame_corrections -= front_chunk->frame_corrections;
-        front_chunk->frame_corrections = 0;
-
-        while (front_chunk->total_frames < frames_played) {
-          frames_played -= front_chunk->total_frames;
-
-          chunk_timings.pop_front();
-          front_chunk = &chunk_timings.front();
-
-          pending_frame_corrections -= front_chunk->frame_corrections;
-          front_chunk->frame_corrections = 0;
-        }
-
-        // Now we are in the middle of the current audio chunk
-
-        chunk_timings.front().total_frames -= frames_played;
-
-        uint32_t unplayed_frames = chunk_timings.front().total_frames;
-
-        int64_t unplayed_ms =
-            this_snapcast->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&unplayed_frames);
-        int64_t unplayed_us =
-            1000 * unplayed_ms + this_snapcast->audio_stream_info_.value().frames_to_microseconds(unplayed_frames);
-
-        int64_t server_timestamp_finished = front_chunk->server_timestamp - unplayed_us;
-        int64_t equivalent_client_timestamp =
-            this_snapcast->snapclient_->server_timestamp_to_client(server_timestamp_finished);
-
-        int64_t new_error = equivalent_client_timestamp - write_timestamp;
-
-        this_snapcast->actual_offsets_.update(new_error);
-      }
-    }
-
-    /*******************/
-    /*****Determine teh current error with pending correction */
-
-    int64_t signed_pending_duration_corrections =
-        (pending_frame_corrections * 1000000LL) /
-        static_cast<int64_t>(this_snapcast->audio_stream_info_.value().get_sample_rate());
-
-    // Takes into account the pending error
-    int64_t recent_error_us =
-        this_snapcast->actual_offsets_.get_most_recent_median() - signed_pending_duration_corrections;
-
-    if (abs(this_snapcast->actual_offsets_.get_most_recent_median()) < HARD_SYNC_THRESHOLD_US) {
-      synced_chunks = std::min(synced_chunks + 1, GOOD_SYNCS_BEFORE_UNMUTE);
-    } else if (recent_error_us > HARD_SYNC_THRESHOLD_US) {
-      // Even with the upcoming adjustments we are out of sync, reset the count
-      synced_chunks = 0;
-    }
-
-    if ((synced_chunks < GOOD_SYNCS_BEFORE_UNMUTE) && (!this_snapcast->speaker_->get_mute_state())) {
-      ESP_LOGD(TAG, "Out of sync, muting output until corrected");
-      this_snapcast->speaker_->set_mute_state(true);
-    } else if ((synced_chunks >= GOOD_SYNCS_BEFORE_UNMUTE) &&
-               (this_snapcast->is_muted_ != this_snapcast->speaker_->get_mute_state())) {
-      ESP_LOGD(TAG, "In sync with server, setting mute state to existing setting");
-      this_snapcast->speaker_->set_mute_state(this_snapcast->is_muted_);
-    }
-    /******* */
-
     size_t bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
 
     if (xQueuePeek(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, pdMS_TO_TICKS(20))) {
@@ -714,6 +627,84 @@ void SnapcastPlayer::decode_task(void *params) {
         this_snapcast->speaker_->set_audio_stream_info(this_snapcast->audio_stream_info_.value());
         initial_decode = true;
       } else {
+        /** Use the information from the speaker on frames played to update teh current error */
+
+        PlaybackProgress playback_progress;
+        while (xQueueReceive(this_snapcast->playback_progress_queue_, &playback_progress, 0) == pdTRUE) {
+          if (initial_decode) {
+            // Some sent audio chunks have now been played by the speaker
+            initial_decode = false;
+            this_snapcast->snapcontrol_->control_get_server_status();  // Determine what stream this client is playing
+          }
+
+          if (!chunk_timings.empty()) {
+            uint32_t frames_played = playback_progress.frames_played;
+            int64_t write_timestamp = playback_progress.write_timestamp;
+
+            InternalAudioTiming *front_chunk = &chunk_timings.front();
+
+            pending_frame_corrections -= front_chunk->frame_corrections;
+            front_chunk->frame_corrections = 0;
+
+            while (front_chunk->total_frames < frames_played) {
+              frames_played -= front_chunk->total_frames;
+
+              chunk_timings.pop_front();
+              front_chunk = &chunk_timings.front();
+
+              pending_frame_corrections -= front_chunk->frame_corrections;
+              front_chunk->frame_corrections = 0;
+            }
+
+            // Now we are in the middle of the current audio chunk
+
+            chunk_timings.front().total_frames -= frames_played;
+
+            uint32_t unplayed_frames = chunk_timings.front().total_frames;
+
+            int64_t unplayed_ms =
+                this_snapcast->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&unplayed_frames);
+            int64_t unplayed_us =
+                1000 * unplayed_ms + this_snapcast->audio_stream_info_.value().frames_to_microseconds(unplayed_frames);
+
+            int64_t server_timestamp_finished = front_chunk->server_timestamp - unplayed_us;
+            int64_t equivalent_client_timestamp =
+                this_snapcast->snapclient_->server_timestamp_to_client(server_timestamp_finished);
+
+            int64_t new_error = equivalent_client_timestamp - write_timestamp;
+
+            this_snapcast->actual_offsets_.update(new_error);
+          }
+        }
+
+        /*******************/
+        /*****Determine teh current error with pending correction */
+
+        int64_t signed_pending_duration_corrections =
+            (pending_frame_corrections * 1000000LL) /
+            static_cast<int64_t>(this_snapcast->audio_stream_info_.value().get_sample_rate());
+
+        // Takes into account the pending error
+        int64_t recent_error_us =
+            this_snapcast->actual_offsets_.get_most_recent_median() - signed_pending_duration_corrections;
+
+        if (abs(this_snapcast->actual_offsets_.get_most_recent_median()) < HARD_SYNC_THRESHOLD_US) {
+          synced_chunks = std::min(synced_chunks + 1, GOOD_SYNCS_BEFORE_UNMUTE);
+        } else if (recent_error_us > HARD_SYNC_THRESHOLD_US) {
+          // Even with the upcoming adjustments we are out of sync, reset the count
+          synced_chunks = 0;
+        }
+
+        // Only mute/unmute for out of sync if we are receiving audio data
+        if ((synced_chunks < GOOD_SYNCS_BEFORE_UNMUTE) && (!this_snapcast->speaker_->get_mute_state())) {
+          ESP_LOGD(TAG, "Out of sync, muting output until corrected");
+          this_snapcast->speaker_->set_mute_state(true);
+        } else if ((synced_chunks >= GOOD_SYNCS_BEFORE_UNMUTE) &&
+                   (this_snapcast->is_muted_ != this_snapcast->speaker_->get_mute_state())) {
+          ESP_LOGD(TAG, "In sync with server, setting mute state to existing setting");
+          this_snapcast->speaker_->set_mute_state(this_snapcast->is_muted_);
+        }
+
         size_t new_bytes = 0;
         if ((flac_decoder != nullptr) &&
             (this_snapcast->snapclient_->get_codec_format() == SnapcastCodecFormat::SNAPCAST_CODEC_FLAC)) {
