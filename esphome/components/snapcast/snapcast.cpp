@@ -424,7 +424,7 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
         case ProcessMessageResponse::PROCESSED_CODEC_HEADER: {
           // Stop decoding and clear any existing chunks in the queue
           xEventGroupSetBits(this_snapcast->event_group_, COMMAND_STOP);
-          // this_snapcast->clear_chunk_queue_();
+          this_snapcast->clear_chunk_queue_();
 
           xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, portMAX_DELAY);
           break;
