@@ -4,6 +4,7 @@
 #include "esphome/components/audio/audio.h"
 #include "esphome/components/audio/audio_transfer_buffer.h"
 #include "esphome/components/network/ip_address.h"
+#include "esphome/components/network/util.h"
 #include "esphome/components/json/json_util.h"
 
 #include "esphome/core/application.h"
@@ -88,28 +89,28 @@ void SnapcastPlayer::setup() {
 }
 
 void SnapcastPlayer::loop() {
-  if (!this->snapclient_->is_connected() && !this->server_address_.has_value() &&
-      !this->discovered_address_.has_value()) {
-    // Search for a server
-    mdns_init();
-    mdns_result_t *mdns_result;
+  // if (network::is_connected() && !this->snapclient_->is_connected() && !this->server_address_.has_value() &&
+  //     !this->discovered_address_.has_value()) {
+  // // Search for a server
+  // mdns_init();
+  // mdns_result_t *mdns_result;
 
-    ESP_LOGD(TAG, "Looking for a snapcast service on network");
+  // ESP_LOGD(TAG, "Looking for a snapcast service on network");
 
-    esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 3000, 20, &mdns_result);
+  // esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 50, 20, &mdns_result);
 
-    if (!mdns_result) {
-      ESP_LOGW(TAG, "No results found for snapcast service!");
-    } else {
-      if (mdns_result->addr) {
-        network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
-        this->discovered_address_ = discovered_address.str();
-        this->server_port_ = mdns_result->port;
-        ESP_LOGD(TAG, "Discovered a snapcast server via mdns: %s", discovered_address.str().c_str());
-      }
-      mdns_query_results_free(mdns_result);
-    }
-  }
+  // if (!mdns_result) {
+  //   ESP_LOGW(TAG, "No results found for snapcast service!");
+  // } else {
+  //   if (mdns_result->addr) {
+  //     network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
+  //     this->discovered_address_ = discovered_address.str();
+  //     this->server_port_ = mdns_result->port;
+  //     ESP_LOGD(TAG, "Discovered a snapcast server via mdns: %s", discovered_address.str().c_str());
+  //   }
+  //   mdns_query_results_free(mdns_result);
+  // }
+  // }
 
   // Determine state of the media player
   media_player::MediaPlayerState old_state = this->state;
@@ -117,25 +118,23 @@ void SnapcastPlayer::loop() {
   EventBits_t event_bits = xEventGroupGetBits(this->event_group_);
 
   if ((event_bits & DECODE_FINISHED)) {
-    this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
+    // this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
     if (this->speaker_->is_stopped()) {
-      if (uxQueueMessagesWaiting(this->playback_progress_queue_)) {
-        xQueueReset(this->playback_progress_queue_);
-      }
+      xQueueReset(this->playback_progress_queue_);
       xEventGroupClearBits(this->event_group_, (COMMAND_STOP | DECODE_FINISHED));
     } else {
       this->speaker_->stop();
     }
   }
 
-  if (this->state == media_player::MEDIA_PLAYER_STATE_IDLE) {
-    if (this->speaker_->is_stopped()) {
-      xQueueReset(this->playback_progress_queue_);
-      xEventGroupClearBits(this->event_group_, (COMMAND_STOP | DECODE_FINISHED));
-    } else {
-      this->speaker_->finish();
-    }
-  }
+  // if (this->state == media_player::MEDIA_PLAYER_STATE_IDLE) {
+  //   if (this->speaker_->is_stopped()) {
+  //     xQueueReset(this->playback_progress_queue_);
+  //     xEventGroupClearBits(this->event_group_, (COMMAND_STOP | DECODE_FINISHED));
+  //   } else {
+  //     this->speaker_->finish();
+  //   }
+  // }
 
   if (this->volume_.has_value()) {
     this->volume = static_cast<float>(this->volume_.value()) / 100.0f;
@@ -148,6 +147,7 @@ void SnapcastPlayer::loop() {
   if (this->snapcontrol_->get_stream_is_idle().has_value()) {
     if (this->snapcontrol_->get_stream_is_idle().value()) {
       this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
+      this->speaker_->finish();
     } else {
       this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
     }
@@ -269,6 +269,11 @@ void SnapcastPlayer::control_task(void *params) {
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
 
   bool first_attempt = true;
+
+  while (!network::is_connected()) {
+    delay(5000);
+  }
+
   while (true) {
     if (this_snapcast->snapcontrol_->connect_to_server() != ESP_OK) {
       if (first_attempt) {
@@ -308,8 +313,34 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
 
   uint8_t failed_discover_count = 0;
 
+  while (!network::is_connected()) {
+    delay(5000);
+  }
+
   while (true) {
     esp_timer_stop(timesync_message_timer);
+
+    while (!this_snapcast->discovered_address_.has_value()) {
+      // Search for a server
+      mdns_init();
+      mdns_result_t *mdns_result;
+
+      ESP_LOGD(TAG, "Looking for a snapcast service on network");
+
+      esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 1000, 20, &mdns_result);
+
+      if (!mdns_result) {
+        ESP_LOGW(TAG, "No results found for snapcast service!");
+      } else {
+        if (mdns_result->addr) {
+          network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
+          this_snapcast->discovered_address_ = discovered_address.str();
+          this_snapcast->server_port_ = mdns_result->port;
+          ESP_LOGD(TAG, "Discovered a snapcast server via mdns: %s", discovered_address.str().c_str());
+        }
+        mdns_query_results_free(mdns_result);
+      }
+    }
 
     if (this_snapcast->server_address_.has_value()) {
       if (this_snapcast->snapclient_->connect_to_server(this_snapcast->server_address_.value(),
@@ -393,7 +424,7 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
         case ProcessMessageResponse::PROCESSED_CODEC_HEADER: {
           // Stop decoding and clear any existing chunks in the queue
           xEventGroupSetBits(this_snapcast->event_group_, COMMAND_STOP);
-          this_snapcast->clear_chunk_queue_();
+          // this_snapcast->clear_chunk_queue_();
 
           xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, portMAX_DELAY);
           break;
@@ -469,15 +500,16 @@ void SnapcastPlayer::decode_task(void *params) {
   while (true) {
     EventBits_t event_bits = xEventGroupGetBits(this_snapcast->event_group_);
     if ((event_bits & COMMAND_STOP) && !(event_bits & DECODE_FINISHED)) {
+      // this_snapcast->speaker_->stop();
+
       this_snapcast->audio_stream_info_.reset();
+      this_snapcast->clear_chunk_queue_();
 
       // clear things we own as well
-      output_transfer_buffer.reset();
-      output_transfer_buffer = audio::AudioSinkTransferBuffer::create(INITIAL_BUFFER_SIZE);
-      output_transfer_buffer->set_sink(this_snapcast->speaker_);
-
-      this_snapcast->speaker_->stop();
-
+      output_transfer_buffer->decrease_buffer_length(output_transfer_buffer->available());
+      // output_transfer_buffer.reset();
+      // output_transfer_buffer = audio::AudioSinkTransferBuffer::create(INITIAL_BUFFER_SIZE);
+      // output_transfer_buffer->set_sink(this_snapcast->speaker_);
       this_snapcast->actual_offsets_.reset();
       pending_frame_corrections = 0;
       chunk_timings.clear();
@@ -750,6 +782,9 @@ void SnapcastPlayer::decode_task(void *params) {
           const size_t silence_bytes_for_correction =
               this_snapcast->audio_stream_info_.value().ms_to_bytes(recent_error_us / 1000);
           size_t actual_bytes_of_silence = std::min(silence_bytes_for_correction, zeroed_bytes);
+          if (initial_decode) {
+            actual_bytes_of_silence = zeroed_bytes;
+          }
           output_transfer_buffer->increase_buffer_length(actual_bytes_of_silence);
           frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_of_silence);
 
