@@ -241,8 +241,8 @@ ProcessMessageResponse Snapclient::process_messages(BaseMessage &base_msg, Audio
         this->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_FLAC;
       } else if (codec_type.compare("pcm") == 0) {
         this->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_PCM;
-        // } else if (codec_type.compare("opus") == 0) {
-        //   this->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_OPUS;
+      } else if (codec_type.compare("opus") == 0) {
+        this->codec_format_ = SnapcastCodecFormat::SNAPCAST_CODEC_OPUS;
       } else {
         ESP_LOGE(TAG, "Unsupported codec type: %s", codec_type.c_str());
         response = ProcessMessageResponse::ERROR_UNSUPPORTED_FORMAT;

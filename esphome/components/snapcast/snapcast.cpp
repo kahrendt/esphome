@@ -460,6 +460,8 @@ void SnapcastPlayer::decode_task(void *params) {
   std::unique_ptr<esp_audio_libs::wav_decoder::WAVDecoder> wav_decoder;
   // std::unique_ptr<OpusDecoder> opus_decoder;
   OpusDecoder *opus_decoder = nullptr;
+  size_t opus_decoder_size = 0;
+
   size_t free_buffer_required = 8000;
 
   std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer =
@@ -509,11 +511,19 @@ void SnapcastPlayer::decode_task(void *params) {
         (xQueuePeek(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, pdMS_TO_TICKS(20)))) {
       bool receive_chunk = true;
       if (encoded_chunk.codec_header) {
+        // Reset all decoders in case the format has changed
+        flac_decoder.reset();
+        wav_decoder.reset();
+
+        if (opus_decoder != nullptr) {
+          data_allocator.deallocate((uint8_t *) opus_decoder, opus_decoder_size);
+          opus_decoder = nullptr;
+        }
+
         if (this_snapcast->snapclient_->get_codec_format() == SnapcastCodecFormat::SNAPCAST_CODEC_FLAC) {
           ESP_LOGD(TAG, "Decoding FLAC header");
 
-          // Restart FLAC decoder
-          flac_decoder.reset();
+          // (Re)initialize the FLAC decoder
           flac_decoder = make_unique<esp_audio_libs::flac::FLACDecoder>();
 
           auto result = flac_decoder->read_header(encoded_chunk.data + encoded_chunk.offset, encoded_chunk.size);
@@ -541,8 +551,7 @@ void SnapcastPlayer::decode_task(void *params) {
         } else if (this_snapcast->snapclient_->get_codec_format() == SnapcastCodecFormat::SNAPCAST_CODEC_PCM) {
           ESP_LOGD(TAG, "Decoding WAV header");
 
-          // Restart the WAV decoder
-          wav_decoder.reset();
+          // (Re)initialize the WAV decoder
           wav_decoder = make_unique<esp_audio_libs::wav_decoder::WAVDecoder>();
           wav_decoder->reset();
 
@@ -573,15 +582,10 @@ void SnapcastPlayer::decode_task(void *params) {
           encoded_chunk.offset += sizeof(bit_depth);
           std::memcpy((void *) &channels, (void *) (encoded_chunk.data + encoded_chunk.offset), sizeof(channels));
 
-          printf("sample_rate =%d, bit_depth =%d, channels=%d\n", sample_rate, bit_depth, channels);
-          size_t decoder_size = opus_decoder_get_size(channels);
-          printf("dedocder size needed for opus %d\n", decoder_size);
-
-          opus_decoder = (OpusDecoder *) data_allocator.allocate(decoder_size);
+          // (Re)initialize OPUS decoder
+          opus_decoder_size = opus_decoder_get_size(channels);
+          opus_decoder = (OpusDecoder *) data_allocator.allocate(opus_decoder_size);
           int decoder_error = opus_decoder_init(opus_decoder, sample_rate, channels);
-
-          // int decoder_error;
-          // opus_decoder = opus_decoder_create(sample_rate, channels, &decoder_error);
 
           if (decoder_error == OPUS_OK) {
             this_snapcast->audio_stream_info_ = audio::AudioStreamInfo(bit_depth, channels, sample_rate);
@@ -594,6 +598,10 @@ void SnapcastPlayer::decode_task(void *params) {
             }
           } else {
             ESP_LOGE(TAG, "Failed to create OPUS decoder, error %d", decoder_error);
+            if (opus_decoder != nullptr) {
+              data_allocator.deallocate((uint8_t *) opus_decoder, opus_decoder_size);
+              opus_decoder = nullptr;
+            }
             continue;
           }
         }
