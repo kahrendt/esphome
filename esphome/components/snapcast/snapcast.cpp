@@ -92,6 +92,30 @@ void SnapcastPlayer::setup() {
 }
 
 void SnapcastPlayer::loop() {
+  if (network::is_connected() && !this->server_address_.has_value() && !this->discovered_address_.has_value()) {
+    if (this->snapclient_mdns_search_ == nullptr) {
+      this->snapclient_mdns_search_ =
+          mdns_query_async_new("snapclient", "_snapcast", "_tcp", MDNS_TYPE_PTR, 5000, 1, NULL);
+      if (this->snapclient_mdns_search_ == nullptr) {
+        ESP_LOGE(TAG, "Failed to start mdns search for a snapserver");
+      }
+    } else {
+      mdns_result_t *mdns_result = nullptr;
+      if (mdns_query_async_get_results(this->snapclient_mdns_search_, 0, &mdns_result)) {
+        if (mdns_result) {
+          if (mdns_result->addr) {
+            network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
+            this->discovered_address_ = discovered_address.str();
+            this->server_port_ = mdns_result->port;
+            ESP_LOGD(TAG, "Discovered a snapcast server via mdns: %s", discovered_address.str().c_str());
+          }
+          mdns_query_results_free(mdns_result);
+        }
+        mdns_query_async_delete(this->snapclient_mdns_search_);
+        this->snapclient_mdns_search_ = nullptr;
+      }
+    }
+  }
   // if (network::is_connected() && !this->snapclient_->is_connected() && !this->server_address_.has_value() &&
   //     !this->discovered_address_.has_value()) {
   // // Search for a server
@@ -321,27 +345,27 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
   while (true) {
     esp_timer_stop(timesync_message_timer);
 
-    while (!this_snapcast->discovered_address_.has_value()) {
-      // Search for a server
-      mdns_init();
-      mdns_result_t *mdns_result;
+    // while (!this_snapcast->discovered_address_.has_value()) {
+    //   // Search for a server
+    //   mdns_init();
+    //   mdns_result_t *mdns_result;
 
-      ESP_LOGD(TAG, "Looking for a snapcast service on network");
+    //   ESP_LOGD(TAG, "Looking for a snapcast service on network");
 
-      esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 1000, 20, &mdns_result);
+    //   esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 1000, 20, &mdns_result);
 
-      if (!mdns_result) {
-        ESP_LOGW(TAG, "No results found for snapcast service!");
-      } else {
-        if (mdns_result->addr) {
-          network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
-          this_snapcast->discovered_address_ = discovered_address.str();
-          this_snapcast->server_port_ = mdns_result->port;
-          ESP_LOGD(TAG, "Discovered a snapcast server via mdns: %s", discovered_address.str().c_str());
-        }
-        mdns_query_results_free(mdns_result);
-      }
-    }
+    //   if (!mdns_result) {
+    //     ESP_LOGW(TAG, "No results found for snapcast service!");
+    //   } else {
+    //     if (mdns_result->addr) {
+    //       network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
+    //       this_snapcast->discovered_address_ = discovered_address.str();
+    //       this_snapcast->server_port_ = mdns_result->port;
+    //       ESP_LOGD(TAG, "Discovered a snapcast server via mdns: %s", discovered_address.str().c_str());
+    //     }
+    //     mdns_query_results_free(mdns_result);
+    //   }
+    // }
 
     if (this_snapcast->server_address_.has_value()) {
       if (this_snapcast->snapclient_->connect_to_server(this_snapcast->server_address_.value(),

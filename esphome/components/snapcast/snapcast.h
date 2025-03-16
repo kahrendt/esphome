@@ -115,6 +115,8 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   std::unique_ptr<Snapclient> snapclient_;
   std::unique_ptr<Snapcontrol> snapcontrol_;
 
+  mdns_search_once_t *snapclient_mdns_search_{nullptr};
+
   Trigger<bool, float> *server_settings_trigger_ = new Trigger<bool, float>();
 };
 
