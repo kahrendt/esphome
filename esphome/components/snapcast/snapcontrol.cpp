@@ -135,11 +135,19 @@ esp_err_t Snapcontrol::process_messages() {
         }
         ESP_LOGV(TAG, "Current stream state is %s", state.c_str());
       }
+
+      if (stream["properties"].is<JsonVariant>()) {
+        JsonObject properties = stream["properties"];
+        this->parse_snapcast_stream_properties_(properties);
+      }
     }
     if (method.compare("Stream.OnProperties") == 0) {
       JsonObject stream = root["params"];
       if (stream["id"].as<std::string>().compare(this->stream_id_) == 0) {
-        this->parse_snapcast_stream_properties_(stream);
+        if (stream["properties"].is<JsonVariant>()) {
+          JsonObject properties = stream["properties"];
+          this->parse_snapcast_stream_properties_(properties);
+        }
       }
 
       // if (stream_params["id"].as<std::string>().compare(this->stream_id_) == 0) {
@@ -270,21 +278,23 @@ void Snapcontrol::parse_snapcast_streams_(JsonArray streams) {
 }
 
 void Snapcontrol::parse_snapcast_stream_properties_(JsonObject properties) {
-  if (properties["playback_status"].is<std::string>()) {
-    std::string playback_status = properties["playback_status"].as<std::string>();
+  if (properties["playbackStatus"].is<std::string>()) {
+    std::string playback_status = properties["playbackStatus"].as<std::string>();
     if (playback_status.compare("playing") == 0) {
       this->stream_is_playing_ = true;
     } else if (playback_status.compare("paused") == 0) {
       this->stream_is_playing_ = false;
     } else if (playback_status.compare("stopped") == 0) {
       this->stream_is_playing_ = false;
+    } else if (playback_status.compare("unknown") == 0) {
+      this->stream_is_playing_.reset();
     }
+
     ESP_LOGV(TAG, "Determined current stream playback status %s", playback_status.c_str());
   }
 
-  JsonObject metadata = properties["metadata"];
-  if (metadata) {
-    // printf("metadata raw json: %s\n", metadata.is<std::string>().c_str());
+  if (properties["metadata"].is<JsonVariant>()) {
+    JsonObject metadata = properties["metadata"];
 
     if (metadata["album"].is<std::string>()) {
       this->album_ = metadata["album"].as<std::string>();
