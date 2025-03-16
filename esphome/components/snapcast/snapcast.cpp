@@ -85,6 +85,9 @@ void SnapcastPlayer::setup() {
     this->mark_failed();
   }
 
+  this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
+  this->publish_state();
+
   this->start();
 }
 
