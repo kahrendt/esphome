@@ -120,28 +120,6 @@ void SnapcastPlayer::loop() {
       }
     }
   }
-  // if (network::is_connected() && !this->snapclient_->is_connected() && !this->server_address_.has_value() &&
-  //     !this->discovered_address_.has_value()) {
-  // // Search for a server
-  // mdns_init();
-  // mdns_result_t *mdns_result;
-
-  // ESP_LOGD(TAG, "Looking for a snapcast service on network");
-
-  // esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 50, 20, &mdns_result);
-
-  // if (!mdns_result) {
-  //   ESP_LOGW(TAG, "No results found for snapcast service!");
-  // } else {
-  //   if (mdns_result->addr) {
-  //     network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
-  //     this->discovered_address_ = discovered_address.str();
-  //     this->server_port_ = mdns_result->port;
-  //     ESP_LOGD(TAG, "Discovered a snapcast server via mdns: %s", discovered_address.str().c_str());
-  //   }
-  //   mdns_query_results_free(mdns_result);
-  // }
-  // }
 
   // Determine state of the media player
   media_player::MediaPlayerState old_state = this->state;
@@ -334,28 +312,6 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
 
   while (true) {
     esp_timer_stop(timesync_message_timer);
-
-    // while (!this_snapcast->discovered_address_.has_value()) {
-    //   // Search for a server
-    //   mdns_init();
-    //   mdns_result_t *mdns_result;
-
-    //   ESP_LOGD(TAG, "Looking for a snapcast service on network");
-
-    //   esp_err_t err = mdns_query_ptr("_snapcast", "_tcp", 1000, 20, &mdns_result);
-
-    //   if (!mdns_result) {
-    //     ESP_LOGW(TAG, "No results found for snapcast service!");
-    //   } else {
-    //     if (mdns_result->addr) {
-    //       network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
-    //       this_snapcast->discovered_address_ = discovered_address.str();
-    //       this_snapcast->server_port_ = mdns_result->port;
-    //       ESP_LOGD(TAG, "Discovered a snapcast server via mdns: %s", discovered_address.str().c_str());
-    //     }
-    //     mdns_query_results_free(mdns_result);
-    //   }
-    // }
 
     if (this_snapcast->server_address_.has_value()) {
       if (this_snapcast->snapclient_->connect_to_server(this_snapcast->server_address_.value(),
