@@ -94,14 +94,16 @@ void SnapcastPlayer::setup() {
 void SnapcastPlayer::loop() {
   if (network::is_connected() && !this->server_address_.has_value() && !this->discovered_address_.has_value()) {
     if (this->snapclient_mdns_search_ == nullptr) {
-      this->snapclient_mdns_search_ =
-          mdns_query_async_new("snapclient", "_snapcast", "_tcp", MDNS_TYPE_PTR, 5000, 1, NULL);
+      this->snapclient_mdns_search_ = mdns_query_async_new(NULL, "_snapcast", "_tcp", MDNS_TYPE_PTR, 5000, 2, NULL);
       if (this->snapclient_mdns_search_ == nullptr) {
         ESP_LOGE(TAG, "Failed to start mdns search for a snapserver");
+      } else {
+        ESP_LOGD(TAG, "Started mdns search for a snapserver");
       }
     } else {
       mdns_result_t *mdns_result = nullptr;
-      if (mdns_query_async_get_results(this->snapclient_mdns_search_, 0, &mdns_result, NULL)) {
+      uint8_t results = 0;
+      if (mdns_query_async_get_results(this->snapclient_mdns_search_, 0, &mdns_result, &results)) {
         if (mdns_result) {
           if (mdns_result->addr) {
             network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
@@ -109,7 +111,10 @@ void SnapcastPlayer::loop() {
             this->server_port_ = mdns_result->port;
             ESP_LOGD(TAG, "Discovered a snapcast server via mdns: %s", discovered_address.str().c_str());
           }
+          ESP_LOGD(TAG, "Discovered a snapcast server via mdns");
           mdns_query_results_free(mdns_result);
+        } else {
+          ESP_LOGD(TAG, "Didn't find a snapserver, got %" PRIu8 " results!", results);
         }
         mdns_query_async_delete(this->snapclient_mdns_search_);
         this->snapclient_mdns_search_ = nullptr;
@@ -163,7 +168,8 @@ void SnapcastPlayer::loop() {
   }
 
   if (this->snapcontrol_->get_stream_is_idle().has_value()) {
-    if (this->snapcontrol_->get_stream_is_idle().value()) {
+    if (this->snapcontrol_->get_stream_is_idle().value() || (this->snapcontrol_->get_stream_is_playing().has_value() &&
+                                                             !this->snapcontrol_->get_stream_is_playing().value())) {
       this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
       if ((old_state == media_player::MEDIA_PLAYER_STATE_PLAYING) && !this->speaker_->is_stopped()) {
         xEventGroupSetBits(this->event_group_, COMMAND_STOP);
@@ -813,7 +819,7 @@ void SnapcastPlayer::decode_task(void *params) {
           output_transfer_buffer->increase_buffer_length(actual_bytes_of_silence);
           frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_of_silence);
 
-          ESP_LOGD(TAG,
+          ESP_LOGV(TAG,
                    "Hard sync: adding %" PRId32 " frames of silence. Current error is %" PRId64 "us. There are %" PRId64
                    "pending frames for correction",
                    frame_corrections, recent_error_us, pending_frame_corrections);
@@ -825,7 +831,7 @@ void SnapcastPlayer::decode_task(void *params) {
           size_t actual_bytes_to_remove = std::min(bytes_to_remove, new_bytes - bytes_per_frame);
           output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
           frame_corrections = -this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
-          ESP_LOGD(TAG,
+          ESP_LOGV(TAG,
                    "Hard sync: removing %" PRId32 " frames. Current error is %" PRId64 "us. There are %" PRId64
                    "pending frames for correction",
                    frame_corrections, recent_error_us, pending_frame_corrections);

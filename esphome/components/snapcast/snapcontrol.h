@@ -38,6 +38,7 @@ class Snapcontrol {
   void control_get_server_status();
 
   optional<bool> get_stream_is_idle() { return this->stream_is_idle_; }
+  optional<bool> get_stream_is_playing() { return this->stream_is_playing_; }
 
   bool is_connected() { return this->is_connected_; }
 
@@ -45,7 +46,7 @@ class Snapcontrol {
   void parse_snapcast_server_(JsonObject server);
   void parse_snapcast_groups_(JsonArray groups);
   void parse_snapcast_streams_(JsonArray streams);
-  bool parse_snapcast_stream_(JsonObject stream);
+  void parse_snapcast_stream_properties_(JsonObject properties);
   std::string read_until_newline_(socket::Socket *socket);
 
   std::unique_ptr<socket::Socket> control_socket_;
@@ -55,6 +56,7 @@ class Snapcontrol {
   std::string group_id_{""};
   std::string stream_id_{""};
   optional<bool> stream_is_idle_;
+  optional<bool> stream_is_playing_;
 
   std::string album_{""};
   std::string artist_{""};

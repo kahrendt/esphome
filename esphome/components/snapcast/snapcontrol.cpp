@@ -123,23 +123,23 @@ esp_err_t Snapcontrol::process_messages() {
     }
     if (method.compare("Stream.OnUpdate") == 0) {
       JsonObject stream = root["params"];
-      if (stream) {
-        this->parse_snapcast_stream_(stream);
-      }
-      // if (stream_params["id"].as<std::string>().compare(this->stream_id_) == 0) {
-      //   std::string state = stream_params["stream"]["status"].as<std::string>();
-      //   if (state.compare("idle") == 0) {
-      //     this->stream_is_idle_ = true;
-      //   } else if (state.compare("playing") == 0) {
-      //     this->stream_is_idle_ = false;
-      //   }
-      //   ESP_LOGV(TAG, "Current stream state is %s", state.c_str());
+      // if (stream) {
+      //   this->parse_snapcast_stream_(stream);
       // }
+      if (stream["id"].as<std::string>().compare(this->stream_id_) == 0) {
+        std::string state = stream["stream"]["status"].as<std::string>();
+        if (state.compare("idle") == 0) {
+          this->stream_is_idle_ = true;
+        } else if (state.compare("playing") == 0) {
+          this->stream_is_idle_ = false;
+        }
+        ESP_LOGV(TAG, "Current stream state is %s", state.c_str());
+      }
     }
     if (method.compare("Stream.OnProperties") == 0) {
       JsonObject stream = root["params"];
-      if (stream) {
-        this->parse_snapcast_stream_(stream);
+      if (stream["id"].as<std::string>().compare(this->stream_id_) == 0) {
+        this->parse_snapcast_stream_properties_(stream);
       }
 
       // if (stream_params["id"].as<std::string>().compare(this->stream_id_) == 0) {
@@ -251,36 +251,38 @@ void Snapcontrol::parse_snapcast_streams_(JsonArray streams) {
   }
 
   for (const JsonObject &stream : streams) {
-    if (this->parse_snapcast_stream_(stream)) {
+    if (stream["id"].as<std::string>().compare(this->stream_id_) == 0) {
+      std::string state = stream["status"].as<std::string>();
+      if (state.compare("idle") == 0) {
+        this->stream_is_idle_ = true;
+      } else if (state.compare("playing") == 0) {
+        this->stream_is_idle_ = false;
+      }
+      ESP_LOGV(TAG, "Determined current stream state %s", state.c_str());
+
+      JsonObject properties = stream["properties"];
+      if (properties) {
+        this->parse_snapcast_stream_properties_(properties);
+      }
       break;
     }
-    // if (stream["id"].as<std::string>().compare(this->stream_id_) == 0) {
-    //   std::string state = stream["status"].as<std::string>();
-    //   if (state.compare("idle") == 0) {
-    //     this->stream_is_idle_ = true;
-    //   } else if (state.compare("playing") == 0) {
-    //     this->stream_is_idle_ = false;
-    //   }
-    //   ESP_LOGV(TAG, "Determined current stream state %s", state.c_str());
-    //   break;
-    // }
   }
 }
 
-bool Snapcontrol::parse_snapcast_stream_(JsonObject stream) {
-  if (stream["id"].as<std::string>().compare(this->stream_id_) != 0) {
-    return false;
+void Snapcontrol::parse_snapcast_stream_properties_(JsonObject properties) {
+  if (properties["playback_status"].is<std::string>()) {
+    std::string playback_status = properties["playback_status"].as<std::string>();
+    if (playback_status.compare("playing") == 0) {
+      this->stream_is_playing_ = true;
+    } else if (playback_status.compare("paused") == 0) {
+      this->stream_is_playing_ = false;
+    } else if (playback_status.compare("stopped") == 0) {
+      this->stream_is_playing_ = false;
+    }
+    ESP_LOGV(TAG, "Determined current stream playback status %s", playback_status.c_str());
   }
 
-  std::string state = stream["status"].as<std::string>();
-  if (state.compare("idle") == 0) {
-    this->stream_is_idle_ = true;
-  } else if (state.compare("playing") == 0) {
-    this->stream_is_idle_ = false;
-  }
-  ESP_LOGV(TAG, "Determined current stream state %s", state.c_str());
-
-  JsonObject metadata = stream["metadata"];
+  JsonObject metadata = properties["metadata"];
   if (metadata) {
     // printf("metadata raw json: %s\n", metadata.is<std::string>().c_str());
 
@@ -305,10 +307,8 @@ bool Snapcontrol::parse_snapcast_stream_(JsonObject stream) {
       this->art_url_ = "";
     }
 
-    ESP_LOGD(TAG, "Determined metadata: current track is %s", this->track_.c_str());
+    ESP_LOGV(TAG, "Determined metadata: current track is %s", this->track_.c_str());
   }
-
-  return true;
 }
 
 std::string Snapcontrol::read_until_newline_(socket::Socket *socket) {
@@ -326,6 +326,7 @@ std::string Snapcontrol::read_until_newline_(socket::Socket *socket) {
     buffer.push_back(new_char);
   }
 
+  // printf("snapcontrol received a message %s\n", buffer.c_str());
   return buffer;
 }
 
