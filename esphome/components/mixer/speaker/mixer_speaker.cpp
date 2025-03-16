@@ -506,7 +506,7 @@ void MixerSpeaker::audio_mixer_task(void *params) {
       break;
     }
 
-    output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(TASK_DELAY_MS));
+    output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(TASK_DELAY_MS), false);
 
     const uint32_t output_frames_free =
         this_mixer->audio_stream_info_.value().bytes_to_frames(output_transfer_buffer->free());
