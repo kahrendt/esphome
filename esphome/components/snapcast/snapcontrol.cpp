@@ -122,38 +122,45 @@ esp_err_t Snapcontrol::process_messages() {
       }
     }
     if (method.compare("Stream.OnUpdate") == 0) {
-      JsonObject stream_params = root["params"];
-      if (stream_params["id"].as<std::string>().compare(this->stream_id_) == 0) {
-        std::string state = stream_params["stream"]["status"].as<std::string>();
-        if (state.compare("idle") == 0) {
-          this->stream_is_idle_ = true;
-        } else if (state.compare("playing") == 0) {
-          this->stream_is_idle_ = false;
-        }
-        ESP_LOGV(TAG, "Current stream state is %s", state.c_str());
+      JsonObject stream = root["params"];
+      if (stream) {
+        this->parse_snapcast_stream_(stream);
       }
+      // if (stream_params["id"].as<std::string>().compare(this->stream_id_) == 0) {
+      //   std::string state = stream_params["stream"]["status"].as<std::string>();
+      //   if (state.compare("idle") == 0) {
+      //     this->stream_is_idle_ = true;
+      //   } else if (state.compare("playing") == 0) {
+      //     this->stream_is_idle_ = false;
+      //   }
+      //   ESP_LOGV(TAG, "Current stream state is %s", state.c_str());
+      // }
     }
     if (method.compare("Stream.OnProperties") == 0) {
-      JsonObject stream_params = root["params"];
-      if (stream_params["id"].as<std::string>().compare(this->stream_id_) == 0) {
-        JsonObject metadata = stream_params["metadata"];
-
-        if (metadata["album"].is<JsonVariant>()) {
-          this->album_ = metadata["album"].as<std::string>();
-        } else {
-          this->album_ = "";
-        }
-        if (metadata["artist"].is<JsonVariant>()) {
-          this->artist_ = metadata["artist"].as<std::string>();
-        } else {
-          this->artist_ = "";
-        }
-        if (metadata["track"].is<JsonVariant>()) {
-          this->track_ = metadata["track"].as<std::string>();
-        } else {
-          this->track_ = "";
-        }
+      JsonObject stream = root["params"];
+      if (stream) {
+        this->parse_snapcast_stream_(stream);
       }
+
+      // if (stream_params["id"].as<std::string>().compare(this->stream_id_) == 0) {
+      //   JsonObject metadata = stream_params["metadata"];
+
+      //   if (metadata["album"].is<JsonVariant>()) {
+      //     this->album_ = metadata["album"].as<std::string>();
+      //   } else {
+      //     this->album_ = "";
+      //   }
+      //   if (metadata["artist"].is<JsonVariant>()) {
+      //     this->artist_ = metadata["artist"].as<std::string>();
+      //   } else {
+      //     this->artist_ = "";
+      //   }
+      //   if (metadata["track"].is<JsonVariant>()) {
+      //     this->track_ = metadata["track"].as<std::string>();
+      //   } else {
+      //     this->track_ = "";
+      //   }
+      // }
     }
     return true;
   });
@@ -244,17 +251,61 @@ void Snapcontrol::parse_snapcast_streams_(JsonArray streams) {
   }
 
   for (const JsonObject &stream : streams) {
-    if (stream["id"].as<std::string>().compare(this->stream_id_) == 0) {
-      std::string state = stream["status"].as<std::string>();
-      if (state.compare("idle") == 0) {
-        this->stream_is_idle_ = true;
-      } else if (state.compare("playing") == 0) {
-        this->stream_is_idle_ = false;
-      }
-      ESP_LOGV(TAG, "Determined current stream state %s", state.c_str());
+    if (this->parse_snapcast_stream_(stream)) {
       break;
     }
+    // if (stream["id"].as<std::string>().compare(this->stream_id_) == 0) {
+    //   std::string state = stream["status"].as<std::string>();
+    //   if (state.compare("idle") == 0) {
+    //     this->stream_is_idle_ = true;
+    //   } else if (state.compare("playing") == 0) {
+    //     this->stream_is_idle_ = false;
+    //   }
+    //   ESP_LOGV(TAG, "Determined current stream state %s", state.c_str());
+    //   break;
+    // }
   }
+}
+
+bool Snapcontrol::parse_snapcast_stream_(JsonObject stream) {
+  if (stream["id"].as<std::string>().compare(this->stream_id_) != 0) {
+    return false;
+  }
+
+  std::string state = stream["status"].as<std::string>();
+  if (state.compare("idle") == 0) {
+    this->stream_is_idle_ = true;
+  } else if (state.compare("playing") == 0) {
+    this->stream_is_idle_ = false;
+  }
+  ESP_LOGV(TAG, "Determined current stream state %s", state.c_str());
+
+  JsonObject metadata = stream["metadata"];
+
+  if (metadata["album"].is<std::string>()) {
+    this->album_ = metadata["album"].as<std::string>();
+  } else {
+    this->album_ = "";
+  }
+  if (metadata["artist"].is<std::string>()) {
+    this->artist_ = metadata["artist"].as<std::string>();
+  } else {
+    this->artist_ = "";
+  }
+  if (metadata["track"].is<std::string>()) {
+    this->track_ = metadata["track"].as<std::string>();
+  } else {
+    this->track_ = "";
+  }
+  if (metadata["artUrl"].is<std::string>()) {
+    this->art_url_ = metadata["artUrl"].as<std::string>();
+  } else {
+    this->art_url_ = "";
+  }
+
+  ESP_LOGD(TAG, "Determined metadata: current track is %s", this->track_.c_str());
+
+  return true;
 }
 
 std::string Snapcontrol::read_until_newline_(socket::Socket *socket) {
