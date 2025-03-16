@@ -47,7 +47,6 @@ static const UBaseType_t DECODE_TASK_PRIORITY = 1;
 
 enum EventGroupBits : uint32_t {
   COMMAND_STOP = (1 << 0),
-  DECODE_FINISHED = (1 << 3),
   CONTROL_START = (1 << 7),
   WARNING_ENCODED_CHUNK_FULL = (1 << 11),
 };
@@ -147,18 +146,6 @@ void SnapcastPlayer::loop() {
   // Determine state of the media player
   media_player::MediaPlayerState old_state = this->state;
 
-  EventBits_t event_bits = xEventGroupGetBits(this->event_group_);
-
-  if ((event_bits & DECODE_FINISHED)) {
-    // this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
-    if (this->speaker_->is_stopped()) {
-      xQueueReset(this->playback_progress_queue_);
-      xEventGroupClearBits(this->event_group_, (COMMAND_STOP | DECODE_FINISHED));
-    } else {
-      this->speaker_->stop();
-    }
-  }
-
   if (this->volume_.has_value()) {
     this->volume = static_cast<float>(this->volume_.value()) / 100.0f;
     this->speaker_->set_volume(this->volume);
@@ -173,9 +160,6 @@ void SnapcastPlayer::loop() {
       this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
       if ((old_state == media_player::MEDIA_PLAYER_STATE_PLAYING) && !this->speaker_->is_stopped()) {
         xEventGroupSetBits(this->event_group_, COMMAND_STOP);
-        this->clear_chunk_queue_();
-        // Ensure we restore the proper mute state in case the stream was out of sync at the end
-        this->speaker_->set_mute_state(this->is_muted_);
       }
     } else {
       this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
@@ -423,6 +407,8 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
         break;
       }
 
+      EventBits_t event_bits = xEventGroupGetBits(this_snapcast->event_group_);
+
       if (high_speed_timer_started && this_snapcast->snapclient_->get_network_latency_full()) {
         high_speed_timer_started = false;
         low_speed_timer_started = true;
@@ -445,7 +431,6 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
       if (audio_chunk.data == nullptr) {
         ESP_LOGE(TAG, "Failed to allocate memory for audio chunk. Stopping playback and reconnecting to the server.");
         xEventGroupSetBits(this_snapcast->event_group_, COMMAND_STOP);
-        this_snapcast->clear_chunk_queue_();
         this_snapcast->snapclient_->disconnect_from_server();
         break;
       }
@@ -455,14 +440,20 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
         case ProcessMessageResponse::PROCESSED_CODEC_HEADER: {
           // Stop decoding and clear any existing chunks in the queue
           xEventGroupSetBits(this_snapcast->event_group_, COMMAND_STOP);
-          this_snapcast->clear_chunk_queue_();
 
           xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, portMAX_DELAY);
           break;
         }
         case ProcessMessageResponse::PROCESSED_WIRE_CHUNK:
-          if (!xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, 0)) {
-            ESP_LOGW(TAG, "Encoded chunk queue is full, dropping audio chunk.");
+          if (!(event_bits & COMMAND_STOP)) {
+            // Only send new audio chunks if the COMMAND_STOP flag isn't set
+            if (!xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, 0)) {
+              ESP_LOGW(TAG, "Encoded chunk queue is full, restarting stream.");
+              data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
+              audio_chunk.data = nullptr;
+              xEventGroupSetBits(this_snapcast->event_group_, COMMAND_STOP);
+            }
+          } else {
             data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
             audio_chunk.data = nullptr;
           }
@@ -530,29 +521,26 @@ void SnapcastPlayer::decode_task(void *params) {
 
   while (true) {
     EventBits_t event_bits = xEventGroupGetBits(this_snapcast->event_group_);
-    if ((event_bits & COMMAND_STOP) && !(event_bits & DECODE_FINISHED)) {
-      // this_snapcast->speaker_->stop();
+    if (event_bits & COMMAND_STOP) {
+      this_snapcast->speaker_->stop();
 
-      this_snapcast->audio_stream_info_.reset();
-      this_snapcast->clear_chunk_queue_();
+      while (!this_snapcast->speaker_->is_stopped()) {
+        delay(15);
+      }
 
-      // clear things we own as well
       output_transfer_buffer->decrease_buffer_length(output_transfer_buffer->available());
-      // output_transfer_buffer.reset();
-      // output_transfer_buffer = audio::AudioSinkTransferBuffer::create(INITIAL_BUFFER_SIZE);
-      // output_transfer_buffer->set_sink(this_snapcast->speaker_);
       this_snapcast->actual_offsets_.reset();
       pending_frame_corrections = 0;
       chunk_timings.clear();
+      xQueueReset(this_snapcast->playback_progress_queue_);
+      this_snapcast->clear_chunk_queue_();
 
       initial_decode = true;
 
-      xEventGroupSetBits(this_snapcast->event_group_, DECODE_FINISHED);
-    }
+      // Ensure we restore the proper mute state in case the stream was out of sync at the end
+      this_snapcast->speaker_->set_mute_state(this_snapcast->is_muted_);
 
-    if (event_bits & DECODE_FINISHED) {
-      delay(20);
-      continue;
+      xEventGroupClearBits(this_snapcast->event_group_, COMMAND_STOP);
     }
 
     const size_t bytes_written = output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20), false);
@@ -656,6 +644,7 @@ void SnapcastPlayer::decode_task(void *params) {
           }
         }
 
+        output_transfer_buffer->decrease_buffer_length(output_transfer_buffer->available());
         this_snapcast->actual_offsets_.reset();
         pending_frame_corrections = 0;
         chunk_timings.clear();
@@ -663,6 +652,12 @@ void SnapcastPlayer::decode_task(void *params) {
 
         this_snapcast->speaker_->set_audio_stream_info(this_snapcast->audio_stream_info_.value());
         initial_decode = true;
+
+        if (xQueueReceive(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, 0)) {
+          data_allocator.deallocate(encoded_chunk.data, encoded_chunk.offset + encoded_chunk.size);
+        } else {
+          ESP_LOGE(TAG, "Queue was reset before we finished proceessing the codec header");
+        }
       } else {
         /** Use the information from the speaker on frames played to update teh current error */
 
@@ -874,19 +869,31 @@ void SnapcastPlayer::decode_task(void *params) {
         InternalAudioTiming timings;
 
         if (receive_chunk) {
-          timings.server_timestamp = encoded_chunk.server_timestamp + new_duration_us;
-          timings.total_frames =
-              this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes) + frame_corrections;
-          timings.frame_corrections = frame_corrections;
-          pending_frame_corrections += frame_corrections;
+          if (xQueueReceive(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, portMAX_DELAY)) {
+            data_allocator.deallocate(encoded_chunk.data, encoded_chunk.offset + encoded_chunk.size);
+
+            timings.server_timestamp = encoded_chunk.server_timestamp + new_duration_us;
+            timings.total_frames =
+                this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes) + frame_corrections;
+            timings.frame_corrections = frame_corrections;
+            pending_frame_corrections += frame_corrections;
+
+            chunk_timings.push_back(timings);
+          } else {
+            // Didn't actually receive the chunk, so don't transfer the audio
+            output_transfer_buffer->decrease_buffer_length(
+                this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes) + frame_corrections);
+          }
         } else {
           timings.server_timestamp = encoded_chunk.server_timestamp;
           timings.total_frames = frame_corrections;
           timings.frame_corrections = frame_corrections;
           pending_frame_corrections += frame_corrections;
+
+          chunk_timings.push_back(timings);
         }
 
-        chunk_timings.push_back(timings);
+        // chunk_timings.push_back(timings);
 
         // static int log_count = 0;
         // ++log_count;
@@ -895,12 +902,12 @@ void SnapcastPlayer::decode_task(void *params) {
         //   log_count = 0;
         // }
       }
-      if (receive_chunk ||
-          this_snapcast->snapclient_->get_codec_format() == SnapcastCodecFormat::SNAPCAST_CODEC_UNSUPPORTED) {
-        // Pop the chunk off the queue if we actually sent the audio or if it is in an unsupported format
-        xQueueReceive(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, portMAX_DELAY);
-        data_allocator.deallocate(encoded_chunk.data, encoded_chunk.offset + encoded_chunk.size);
-      }
+      // if (receive_chunk ||
+      //     this_snapcast->snapclient_->get_codec_format() == SnapcastCodecFormat::SNAPCAST_CODEC_UNSUPPORTED) {
+      //   // Pop the chunk off the queue if we actually sent the audio or if it is in an unsupported format
+      //   xQueueReceive(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, portMAX_DELAY);
+      //   data_allocator.deallocate(encoded_chunk.data, encoded_chunk.offset + encoded_chunk.size);
+      // }
     }
     static uint32_t high_water_mark = 8192;
     uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
