@@ -47,7 +47,7 @@ class Snapcontrol {
   void parse_snapcast_groups_(JsonArray groups);
   void parse_snapcast_streams_(JsonArray streams);
   void parse_snapcast_stream_properties_(JsonObject properties);
-  std::string read_until_newline_(socket::Socket *socket);
+  esp_err_t read_until_newline_(std::string *buffer);
 
   std::unique_ptr<socket::Socket> control_socket_;
 

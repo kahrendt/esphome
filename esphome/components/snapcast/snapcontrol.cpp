@@ -79,8 +79,9 @@ void Snapcontrol::disconnect_from_server() {
 }
 
 esp_err_t Snapcontrol::process_messages() {
-  std::string message = this->read_until_newline_(this->control_socket_.get());
-  if (message.empty()) {
+  std::string message;
+  esp_err_t err = this->read_until_newline_(&message);
+  if (err == ESP_FAIL) {
     return ESP_FAIL;
   }
 
@@ -321,23 +322,23 @@ void Snapcontrol::parse_snapcast_stream_properties_(JsonObject properties) {
   }
 }
 
-std::string Snapcontrol::read_until_newline_(socket::Socket *socket) {
+esp_err_t Snapcontrol::read_until_newline_(std::string *buffer) {
   if (!this->is_connected_) {
-    return "";
+    *buffer = "";
+    return ESP_FAIL;
   }
-  std::string buffer;
   char new_char = ' ';
   while (new_char != '\n') {
-    ssize_t bytes_read = socket->read((void *) &new_char, sizeof(new_char));
+    ssize_t bytes_read = this->control_socket_->read((void *) &new_char, sizeof(new_char));
     if (bytes_read == -1) {
       ESP_LOGW(TAG, "Couldn't read from control socket");
-      return "";
+      *buffer = "";
+      return ESP_FAIL;
     }
-    buffer.push_back(new_char);
+    buffer->push_back(new_char);
   }
 
-  // printf("snapcontrol received a message %s\n", buffer.c_str());
-  return buffer;
+  return ESP_OK;
 }
 
 }  // namespace snapcast
