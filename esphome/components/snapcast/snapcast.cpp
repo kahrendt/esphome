@@ -545,6 +545,8 @@ void SnapcastPlayer::decode_task(void *params) {
       pending_frame_corrections = 0;
       chunk_timings.clear();
 
+      initial_decode = true;
+
       xEventGroupSetBits(this_snapcast->event_group_, DECODE_FINISHED);
     }
 
