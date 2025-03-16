@@ -276,8 +276,11 @@ void SnapcastPlayer::control_task(void *params) {
 
       vTaskDelay(pdMS_TO_TICKS(5000));
       continue;
+    } else {
+      ESP_LOGD(TAG, "Connected to snapserver's control interface");
     }
 
+    this_snapcast->snapcontrol_->control_get_server_status();
     while (this_snapcast->snapcontrol_->process_messages() == ESP_OK) {
     }
     this_snapcast->snapcontrol_->disconnect_from_server();

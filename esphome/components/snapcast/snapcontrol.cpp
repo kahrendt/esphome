@@ -73,6 +73,7 @@ void Snapcontrol::disconnect_from_server() {
   this->control_socket_->close();
 
   this->stream_is_idle_.reset();
+  this->stream_is_playing_.reset();
   this->group_id_ = "";
   this->player_id_ = "";
   this->stream_id_ = "";
