@@ -479,6 +479,7 @@ void SnapcastPlayer::decode_task(void *params) {
   while (true) {
     EventBits_t event_bits = xEventGroupGetBits(this_snapcast->event_group_);
     if (event_bits & COMMAND_STOP) {
+      // Processes the stop command by stopping the speaker and resetting all states
       this_snapcast->speaker_->stop();
 
       while (!this_snapcast->speaker_->is_stopped()) {
@@ -502,14 +503,10 @@ void SnapcastPlayer::decode_task(void *params) {
 
     const size_t bytes_written = output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20), false);
 
-    if (output_transfer_buffer->available() > 0) {
-      // Transfer buffer isn't empty, don't try to decode more
-      continue;
-    }
-
     size_t bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
 
-    if (xQueuePeek(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, pdMS_TO_TICKS(20))) {
+    if ((output_transfer_buffer->available() == 0) &&
+        (xQueuePeek(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, pdMS_TO_TICKS(20)))) {
       bool receive_chunk = true;
       if (encoded_chunk.codec_header) {
         if (this_snapcast->snapclient_->get_codec_format() == SnapcastCodecFormat::SNAPCAST_CODEC_FLAC) {
@@ -601,6 +598,7 @@ void SnapcastPlayer::decode_task(void *params) {
           }
         }
 
+        // Reset all the states
         output_transfer_buffer->decrease_buffer_length(output_transfer_buffer->available());
         this_snapcast->actual_offsets_.reset();
         pending_frame_corrections = 0;
@@ -616,8 +614,9 @@ void SnapcastPlayer::decode_task(void *params) {
           ESP_LOGE(TAG, "Queue was reset before we finished proceessing the codec header");
         }
       } else {
-        /** Use the information from the speaker on frames played to update teh current error */
-
+        /*
+         * Determine the current sync error using the playback information from the speaker.
+         */
         PlaybackProgress playback_progress;
         while (xQueueReceive(this_snapcast->playback_progress_queue_, &playback_progress, 0) == pdTRUE) {
           if (initial_decode) {
@@ -666,9 +665,6 @@ void SnapcastPlayer::decode_task(void *params) {
           }
         }
 
-        /*******************/
-        /*****Determine teh current error with pending correction */
-
         int64_t signed_pending_duration_corrections =
             (pending_frame_corrections * 1000000LL) /
             static_cast<int64_t>(this_snapcast->audio_stream_info_.value().get_sample_rate());
@@ -694,6 +690,9 @@ void SnapcastPlayer::decode_task(void *params) {
           this_snapcast->speaker_->set_mute_state(this_snapcast->is_muted_);
         }
 
+        /*
+         * Decode the audio chunk and write to the transfer buffer
+         */
         size_t new_bytes = 0;
         if ((flac_decoder != nullptr) &&
             (this_snapcast->snapclient_->get_codec_format() == SnapcastCodecFormat::SNAPCAST_CODEC_FLAC)) {
@@ -738,6 +737,9 @@ void SnapcastPlayer::decode_task(void *params) {
 
         output_transfer_buffer->increase_buffer_length(new_bytes);
 
+        /*
+         * Ensure the newly decode audio will play in sync
+         */
         uint32_t new_frames = this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes);
         const uint32_t new_duration_ms =
             this_snapcast->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&new_frames);
@@ -751,13 +753,6 @@ void SnapcastPlayer::decode_task(void *params) {
 
         if (initial_decode || (recent_error_us > HARD_SYNC_THRESHOLD_US)) {
           // // Hard sync because we just started decoding and haven't sent any audio or we are way behind
-          // // Zero out all new audio data and any extra bytes free in the transfer buffer
-          // size_t silence_bytes = this_snapcast->audio_stream_info_.value().ms_to_bytes(recent_error_us / 1000);
-          // size_t actual_silence_bytes = std::min(silence_bytes, output_transfer_buffer->free());
-          // std::memset((void *) (output_transfer_buffer->get_buffer_end() - new_bytes), 0,
-          //             actual_silence_bytes + new_bytes);
-          // output_transfer_buffer->increase_buffer_length(actual_silence_bytes);
-          // frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_silence_bytes);
 
           // Zero out this chunks audio and any remaining free bytes in the transfer buffer
           const size_t zeroed_bytes = new_bytes + output_transfer_buffer->free();
