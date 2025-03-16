@@ -101,7 +101,7 @@ void SnapcastPlayer::loop() {
       }
     } else {
       mdns_result_t *mdns_result = nullptr;
-      if (mdns_query_async_get_results(this->snapclient_mdns_search_, 0, &mdns_result)) {
+      if (mdns_query_async_get_results(this->snapclient_mdns_search_, 0, &mdns_result, NULL)) {
         if (mdns_result) {
           if (mdns_result->addr) {
             network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
