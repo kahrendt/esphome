@@ -150,6 +150,8 @@ void SnapcastPlayer::loop() {
     } else {
       this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
     }
+  } else {
+    this->snapcontrol_->control_get_server_status();
   }
 
   if ((this->state != old_state) || (this->force_publish_state_)) {

@@ -281,29 +281,32 @@ bool Snapcontrol::parse_snapcast_stream_(JsonObject stream) {
   ESP_LOGV(TAG, "Determined current stream state %s", state.c_str());
 
   JsonObject metadata = stream["metadata"];
+  if (metadata) {
+    // printf("metadata raw json: %s\n", metadata.is<std::string>().c_str());
 
-  if (metadata["album"].is<std::string>()) {
-    this->album_ = metadata["album"].as<std::string>();
-  } else {
-    this->album_ = "";
-  }
-  if (metadata["artist"].is<std::string>()) {
-    this->artist_ = metadata["artist"].as<std::string>();
-  } else {
-    this->artist_ = "";
-  }
-  if (metadata["track"].is<std::string>()) {
-    this->track_ = metadata["track"].as<std::string>();
-  } else {
-    this->track_ = "";
-  }
-  if (metadata["artUrl"].is<std::string>()) {
-    this->art_url_ = metadata["artUrl"].as<std::string>();
-  } else {
-    this->art_url_ = "";
-  }
+    if (metadata["album"].is<std::string>()) {
+      this->album_ = metadata["album"].as<std::string>();
+    } else {
+      this->album_ = "";
+    }
+    if (metadata["artist"].is<std::string>()) {
+      this->artist_ = metadata["artist"].as<std::string>();
+    } else {
+      this->artist_ = "";
+    }
+    if (metadata["track"].is<std::string>()) {
+      this->track_ = metadata["track"].as<std::string>();
+    } else {
+      this->track_ = "";
+    }
+    if (metadata["artUrl"].is<std::string>()) {
+      this->art_url_ = metadata["artUrl"].as<std::string>();
+    } else {
+      this->art_url_ = "";
+    }
 
-  ESP_LOGD(TAG, "Determined metadata: current track is %s", this->track_.c_str());
+    ESP_LOGD(TAG, "Determined metadata: current track is %s", this->track_.c_str());
+  }
 
   return true;
 }

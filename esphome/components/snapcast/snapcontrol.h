@@ -45,6 +45,7 @@ class Snapcontrol {
   void parse_snapcast_server_(JsonObject server);
   void parse_snapcast_groups_(JsonArray groups);
   void parse_snapcast_streams_(JsonArray streams);
+  bool parse_snapcast_stream_(JsonObject stream);
   std::string read_until_newline_(socket::Socket *socket);
 
   std::unique_ptr<socket::Socket> control_socket_;
