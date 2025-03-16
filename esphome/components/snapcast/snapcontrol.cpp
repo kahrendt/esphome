@@ -296,28 +296,28 @@ void Snapcontrol::parse_snapcast_stream_properties_(JsonObject properties) {
   if (properties["metadata"].is<JsonVariant>()) {
     JsonObject metadata = properties["metadata"];
 
-    if (metadata["album"].is<std::string>()) {
+    if (metadata["album"].is<JsonVariant>()) {
       this->album_ = metadata["album"].as<std::string>();
     } else {
       this->album_ = "";
     }
-    if (metadata["artist"].is<std::string>()) {
+    if (metadata["artist"].is<JsonVariant>()) {
       this->artist_ = metadata["artist"].as<std::string>();
     } else {
       this->artist_ = "";
     }
-    if (metadata["track"].is<std::string>()) {
-      this->track_ = metadata["track"].as<std::string>();
+    if (metadata["title"].is<JsonVariant>()) {
+      this->title_ = metadata["title"].as<std::string>();
     } else {
-      this->track_ = "";
+      this->title_ = "";
     }
-    if (metadata["artUrl"].is<std::string>()) {
+    if (metadata["artUrl"].is<JsonVariant>()) {
       this->art_url_ = metadata["artUrl"].as<std::string>();
     } else {
       this->art_url_ = "";
     }
 
-    ESP_LOGV(TAG, "Determined metadata: current track is %s", this->track_.c_str());
+    ESP_LOGV(TAG, "Received metadata: track title: %s", this->title_.c_str());
   }
 }
 

@@ -60,7 +60,7 @@ class Snapcontrol {
 
   std::string album_{""};
   std::string artist_{""};
-  std::string track_{""};
+  std::string title_{""};
   std::string art_url_{""};
 };
 }  // namespace snapcast
