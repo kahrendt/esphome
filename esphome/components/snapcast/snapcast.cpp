@@ -401,8 +401,9 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
           break;
         }
         case ProcessMessageResponse::PROCESSED_WIRE_CHUNK:
-          if (!(event_bits & COMMAND_STOP)) {
-            // Only send new audio chunks if the COMMAND_STOP flag isn't set
+          if (!(event_bits & COMMAND_STOP) &&
+              (this_snapcast->snapclient_->get_codec_format() != SnapcastCodecFormat::SNAPCAST_CODEC_UNSUPPORTED)) {
+            // Only send new audio chunks if the COMMAND_STOP flag isn't set and the codec format is supported
             if (!xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, 0)) {
               ESP_LOGW(TAG, "Encoded chunk queue is full, restarting stream.");
               data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
@@ -849,8 +850,6 @@ void SnapcastPlayer::decode_task(void *params) {
           chunk_timings.push_back(timings);
         }
 
-        // chunk_timings.push_back(timings);
-
         // static int log_count = 0;
         // ++log_count;
         // if (log_count > 50) {
@@ -858,12 +857,6 @@ void SnapcastPlayer::decode_task(void *params) {
         //   log_count = 0;
         // }
       }
-      // if (receive_chunk ||
-      //     this_snapcast->snapclient_->get_codec_format() == SnapcastCodecFormat::SNAPCAST_CODEC_UNSUPPORTED) {
-      //   // Pop the chunk off the queue if we actually sent the audio or if it is in an unsupported format
-      //   xQueueReceive(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, portMAX_DELAY);
-      //   data_allocator.deallocate(encoded_chunk.data, encoded_chunk.offset + encoded_chunk.size);
-      // }
     }
     static uint32_t high_water_mark = 8192;
     uint32_t new_high_water_mark = uxTaskGetStackHighWaterMark(nullptr);
