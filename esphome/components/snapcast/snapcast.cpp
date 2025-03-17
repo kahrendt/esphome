@@ -99,25 +99,66 @@ void SnapcastPlayer::loop() {
       } else {
         ESP_LOGD(TAG, "Started mdns search for a snapserver");
       }
-    } else {
-      mdns_result_t *mdns_result = nullptr;
-      uint8_t results = 0;
-      if (mdns_query_async_get_results(this->snapclient_mdns_search_, 0, &mdns_result, &results)) {
-        if (mdns_result) {
-          if (mdns_result->addr) {
-            network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
-            this->discovered_address_ = discovered_address.str();
-            this->server_port_ = mdns_result->port;
-            ESP_LOGD(TAG, "Discovered a snapcast server via mdns: %s", discovered_address.str().c_str());
-          }
-          ESP_LOGD(TAG, "Discovered a snapcast server via mdns");
-          mdns_query_results_free(mdns_result);
-        } else {
-          ESP_LOGD(TAG, "Didn't find a snapserver, got %" PRIu8 " results!", results);
+    }
+  }
+
+  if (this->snapclient_mdns_search_ != nullptr) {
+    mdns_result_t *mdns_result = nullptr;
+    uint8_t results = 0;
+    if (mdns_query_async_get_results(this->snapclient_mdns_search_, 0, &mdns_result, &results)) {
+      if (mdns_result) {
+        if (mdns_result->addr) {
+          network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
+          this->discovered_address_ = discovered_address.str();
+          this->server_port_ = mdns_result->port;
+          ESP_LOGD(TAG, "Discovered a snapcast server via mdns: %s", discovered_address.str().c_str());
         }
-        mdns_query_async_delete(this->snapclient_mdns_search_);
-        this->snapclient_mdns_search_ = nullptr;
+        ESP_LOGD(TAG, "Discovered a snapcast server via mdns");
+        mdns_query_results_free(mdns_result);
+      } else {
+        ESP_LOGD(TAG, "Didn't find a snapserver");
       }
+      mdns_query_async_delete(this->snapclient_mdns_search_);
+      this->snapclient_mdns_search_ = nullptr;
+    }
+  }
+
+  if (network::is_connected() && !this->server_address_.has_value() && !this->server_control_port_.has_value()) {
+    if (this->snapcontrol_mdns_search_ == nullptr) {
+      this->snapcontrol_mdns_search_ =
+          mdns_query_async_new(NULL, "_snapcast-jsonrpc", "_tcp", MDNS_TYPE_PTR, 5000, 2, NULL);
+      if (this->snapcontrol_mdns_search_ == nullptr) {
+        ESP_LOGE(TAG, "Failed to start mdns search for a snapserver control interface");
+      }
+    }
+  }
+
+  if (this->discovered_address_.has_value() && (this->snapcontrol_mdns_search_ != nullptr)) {
+    // Verify that the found snapcontrol socket matches the discovered address
+    mdns_result_t *mdns_result = nullptr;
+    uint8_t results = 0;
+    if (mdns_query_async_get_results(this->snapcontrol_mdns_search_, 0, &mdns_result, &results)) {
+      if (mdns_result) {
+        if (mdns_result->addr) {
+          network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
+          this->discovered_address_ = discovered_address.str();
+          if (this->discovered_address_.value().compare(discovered_address.str()) != 0) {
+            // TODO: Actually try to solve this problem... perhaps get more mdns results and step through them?
+
+            ESP_LOGE(TAG,
+                     "Discovered snapserver control interface not on the same host the snapclient is connected to");
+          } else {
+            this->server_control_port_ = mdns_result->port;
+            ESP_LOGD(TAG, "Discovered a snapcast server's control interfacxe via mdns: %s port %" PRIu16,
+                     discovered_address.str().c_str(), this->server_control_port_.value());
+          }
+        }
+        mdns_query_results_free(mdns_result);
+      } else {
+        ESP_LOGD(TAG, "Didn't find a snapsserver control interface");
+      }
+      mdns_query_async_delete(this->snapclient_mdns_search_);
+      this->snapclient_mdns_search_ = nullptr;
     }
   }
 
@@ -263,21 +304,18 @@ void SnapcastPlayer::control_task(void *params) {
 
   bool first_attempt = true;
 
-  while (!network::is_connected()) {
-    delay(5000);
+  // TODO: The connection logic isn't great, it assumes that the server is discovered, not configured it in yaml
+
+  while (!network::is_connected() || !this_snapcast->discovered_address_.has_value() ||
+         !this_snapcast->server_control_port_.has_value()) {
+    delay(50);
   }
 
   while (true) {
-    if (this_snapcast->snapcontrol_->connect_to_server() != ESP_OK) {
-      if (first_attempt) {
-        ESP_LOGW(TAG, "Failed to connect to snapcontrol server, retrying silently in 5 seconds\n");
-        first_attempt = false;
-      }
-
-      vTaskDelay(pdMS_TO_TICKS(5000));
-      continue;
-    } else {
-      ESP_LOGD(TAG, "Connected to snapserver's control interface");
+    if (this_snapcast->snapcontrol_->connect_to_server(this_snapcast->discovered_address_.value(),
+                                                       this_snapcast->server_control_port_.value()) != ESP_OK) {
+      ESP_LOGW(TAG, "Failed to connect to snapcontrol server at ip %s:%" PRIu16,
+               this_snapcast->discovered_address_.value().c_str(), this_snapcast->server_control_port_.value());
     }
 
     this_snapcast->snapcontrol_->control_get_server_status();

@@ -7,43 +7,19 @@
 
 #include "esphome/core/log.h"
 
-#include "mdns.h"
-
 static const char *TAG = "snapcast.control";
 
 namespace esphome {
 namespace snapcast {
 
 esp_err_t Snapcontrol::connect_to_server(std::string server_address, uint16_t port) {
-  // Connect to configured server, if set. Otherwise, use mdns to discover a server
+  // Connect to to the specified server
   esp_err_t err = ESP_OK;
 
   socklen_t sl = 0;
   struct sockaddr_storage server;
 
-  if (server_address.empty()) {
-    mdns_init();
-    mdns_result_t *mdns_result;
-
-    ESP_LOGD(TAG, "Looking for a snapcontrol service on network");
-    err = mdns_query_ptr("_snapcast-jsonrpc", "_tcp", 3000, 20, &mdns_result);
-
-    if (!mdns_result) {
-      ESP_LOGW(TAG, "No results found for snapcontrol service!");
-      return ESP_FAIL;
-    } else {
-      if (mdns_result->addr) {
-        network::IPAddress discovered_address = network::IPAddress(&mdns_result->addr->addr);
-        ESP_LOGD(TAG, "Found a snapcontrol server via mdns: %s", discovered_address.str().c_str());
-
-        sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), discovered_address.str().c_str(), port);
-      }
-      mdns_query_results_free(mdns_result);
-    }
-
-  } else {
-    sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), server_address.c_str(), port);
-  }
+  sl = socket::set_sockaddr((struct sockaddr *) &server, sizeof(server), server_address.c_str(), port);
 
   if (sl == 0) {
     ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);

@@ -105,7 +105,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   optional<std::string> server_address_;
   optional<std::string> discovered_address_;
   uint16_t server_port_;
-  uint16_t server_control_port_{1705};
+  optional<uint16_t> server_control_port_;
 
   QueueHandle_t playback_progress_queue_;
 
@@ -118,6 +118,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   std::unique_ptr<Snapcontrol> snapcontrol_;
 
   mdns_search_once_t *snapclient_mdns_search_{nullptr};
+  mdns_search_once_t *snapcontrol_mdns_search_{nullptr};
 
   Trigger<bool, float> *server_settings_trigger_ = new Trigger<bool, float>();
 };

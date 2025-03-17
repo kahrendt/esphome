@@ -29,7 +29,7 @@ class Snapcontrol {
  public:
   Snapcontrol(std::string player_id) : player_id_(player_id){};
 
-  esp_err_t connect_to_server(std::string server_address = "", uint16_t port = 1705);
+  esp_err_t connect_to_server(std::string server_address, uint16_t port);
   void disconnect_from_server();
 
   esp_err_t process_messages();
