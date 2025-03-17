@@ -191,8 +191,6 @@ class MixerSpeaker : public Component {
   bool queue_mode_;
   bool task_stack_in_psram_{false};
 
-  bool task_created_{false};
-
   TaskHandle_t task_handle_{nullptr};
   StaticTask_t task_stack_;
   StackType_t *task_stack_buffer_{nullptr};

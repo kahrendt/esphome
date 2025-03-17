@@ -33,7 +33,8 @@ static const std::vector<int16_t> DECIBEL_REDUCTION_TABLE = {
     651,   580,   517,   461,   411,   366,   326,   291,   259,   231,   206,   183,  163,  146,  130,  116,  103};
 
 enum MixerEventGroupBits : uint32_t {
-  COMMAND_STOP = (1 << 0),  // stops the mixer task
+  COMMAND_START = (1 << 0),  // starts the mixer task
+  COMMAND_STOP = (1 << 1),   // stops the mixer task
   STATE_STARTING = (1 << 10),
   STATE_RUNNING = (1 << 11),
   STATE_STOPPING = (1 << 12),
@@ -76,17 +77,11 @@ void SourceSpeaker::loop() {
         this->status_clear_error();
       } else {
         switch (err) {
-          case ESP_ERR_NO_MEM:
-            this->status_set_error("Failed to start mixer: not enough memory");
-            break;
           case ESP_ERR_NOT_SUPPORTED:
             this->status_set_error("Failed to start mixer: unsupported bits per sample");
             break;
           case ESP_ERR_INVALID_ARG:
             this->status_set_error("Failed to start mixer: audio stream isn't compatible with the other audio stream.");
-            break;
-          case ESP_ERR_INVALID_STATE:
-            this->status_set_error("Failed to start mixer: mixer task failed to start");
             break;
           default:
             this->status_set_error("Failed to start mixer");
@@ -315,6 +310,26 @@ void MixerSpeaker::setup() {
 void MixerSpeaker::loop() {
   uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
 
+  if (event_group_bits & MixerEventGroupBits::COMMAND_START) {
+    ESP_LOGD(TAG, "Starting mixer task");
+    esp_err_t err = this->start_task_();
+    if (err == ESP_OK) {
+      xEventGroupClearBits(this->event_group_, MixerEventGroupBits::COMMAND_START);
+    } else {
+      switch (err) {
+        case ESP_ERR_NO_MEM:
+          this->status_set_error("Failed to start mixer: not enough memory");
+          break;
+        case ESP_ERR_INVALID_STATE:
+          this->status_set_error("Failed to start mixer: mixer task failed to start");
+          break;
+        default:
+          this->status_set_error("Failed to start mixer");
+          break;
+      }
+    }
+  }
+
   if (event_group_bits & MixerEventGroupBits::STATE_STARTING) {
     ESP_LOGD(TAG, "Starting speaker mixer");
     xEventGroupClearBits(this->event_group_, MixerEventGroupBits::STATE_STARTING);
@@ -369,7 +384,8 @@ esp_err_t MixerSpeaker::start(audio::AudioStreamInfo &stream_info) {
     }
   }
 
-  return this->start_task_();
+  xEventGroupSetBits(this->event_group_, MixerEventGroupBits::COMMAND_START);
+  return ESP_OK;
 }
 
 esp_err_t MixerSpeaker::start_task_() {
@@ -400,8 +416,8 @@ esp_err_t MixerSpeaker::start_task_() {
 }
 
 esp_err_t MixerSpeaker::delete_task_() {
-  if (!this->task_created_) {
-    this->task_handle_ = nullptr;
+  if (this->task_handle_ != nullptr) {
+    vTaskDelete(this->task_handle_);
 
     if (this->task_stack_buffer_ != nullptr) {
       if (this->task_stack_in_psram_) {
@@ -414,7 +430,7 @@ esp_err_t MixerSpeaker::delete_task_() {
 
       this->task_stack_buffer_ = nullptr;
     }
-
+    this->task_handle_ = nullptr;
     return ESP_OK;
   }
 
@@ -479,17 +495,15 @@ void MixerSpeaker::audio_mixer_task(void *params) {
 
   xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STARTING);
 
-  this_mixer->task_created_ = true;
-
   std::unique_ptr<audio::AudioSinkTransferBuffer> output_transfer_buffer = audio::AudioSinkTransferBuffer::create(
       this_mixer->audio_stream_info_.value().ms_to_bytes(TRANSFER_BUFFER_DURATION_MS));
 
   if (output_transfer_buffer == nullptr) {
     xEventGroupSetBits(this_mixer->event_group_,
                        MixerEventGroupBits::STATE_STOPPED | MixerEventGroupBits::ERR_ESP_NO_MEM);
-
-    this_mixer->task_created_ = false;
-    vTaskDelete(nullptr);
+    while (true) {
+      delay(10);
+    }
   }
 
   output_transfer_buffer->set_sink(this_mixer->output_speaker_);
@@ -617,8 +631,9 @@ void MixerSpeaker::audio_mixer_task(void *params) {
   output_transfer_buffer.reset();
 
   xEventGroupSetBits(this_mixer->event_group_, MixerEventGroupBits::STATE_STOPPED);
-  this_mixer->task_created_ = false;
-  vTaskDelete(nullptr);
+  while (true) {
+    delay(10);
+  }
 }
 
 }  // namespace mixer_speaker
