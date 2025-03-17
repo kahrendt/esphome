@@ -62,6 +62,8 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
 
   void publish_client_settings();
 
+  void join_another_group();
+
  protected:
   // Receives commands from HA or from the voice assistant component
   void control(const media_player::MediaPlayerCall &call) override;

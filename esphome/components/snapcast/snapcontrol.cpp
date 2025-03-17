@@ -103,6 +103,12 @@ esp_err_t Snapcontrol::process_messages() {
 
     if (method.compare("Group.OnStreamChanged") == 0) {
       JsonObject group_stream_params = root["params"];
+      for (Snapgroup &group : this->snapgroups_) {
+        if (group_stream_params["id"].as<std::string>().compare(group.group_id) == 0) {
+          group.stream_id = group_stream_params["stream_id"].as<std::string>();
+        }
+      }
+
       if (group_stream_params["id"].as<std::string>().compare(this->group_id_) == 0) {
         this->stream_id_ = group_stream_params["stream_id"].as<std::string>();
         ESP_LOGV(TAG, "Current group changed stream id to %s", this->stream_id_.c_str());
@@ -110,9 +116,18 @@ esp_err_t Snapcontrol::process_messages() {
     }
     if (method.compare("Stream.OnUpdate") == 0) {
       JsonObject stream = root["params"];
-      // if (stream) {
-      //   this->parse_snapcast_stream_(stream);
-      // }
+
+      for (Snapgroup &group : this->snapgroups_) {
+        if (stream["id"].as<std::string>().compare(group.stream_id) == 0) {
+          std::string state = stream["stream"]["status"].as<std::string>();
+          if (state.compare("idle") == 0) {
+            group.is_active = false;
+          } else if (state.compare("playing") == 0) {
+            group.is_active = true;
+          }
+        }
+      }
+
       if (stream["id"].as<std::string>().compare(this->stream_id_) == 0) {
         std::string state = stream["stream"]["status"].as<std::string>();
         if (state.compare("idle") == 0) {
@@ -215,9 +230,43 @@ void Snapcontrol::control_snapcast_stream(media_player::MediaPlayerCommand comma
   this->control_socket_->write((void *) control_message.data(), control_message.size());
 }
 
+void Snapcontrol::join_another_group() {
+  if (!this->is_connected_) {
+    return;
+  }
+
+  printf("Currently know %d groups\n", this->snapgroups_.size());
+  for (Snapgroup &group : this->snapgroups_) {
+    printf("potentially joining group %s with name %s and status %s\n", group.group_id.c_str(), group.name.c_str(),
+           group.is_active ? "playing" : "idle");
+    if ((group.group_id.compare(this->group_id_) != 0) && (group.is_active)) {
+      printf("want to join group %s which has %d clients", group.group_id.c_str(), group.clients.size());
+      std::string control_message = json::build_json([this, group](JsonObject root) {
+        root["id"] = 1;
+        root["jsonrpc"] = "2.0";
+        root["method"] = "Group.SetClients";
+        root["params"].to<JsonObject>();
+        root["params"]["id"] = group.group_id;
+        JsonArray client_list = root["params"]["clients"].to<JsonArray>();
+        for (const std::string &client : group.clients) {
+          client_list.add(client);
+        }
+        client_list.add(this->player_id_);
+      });
+
+      control_message.push_back('\n');
+      ESP_LOGD(TAG, "Sending join group message to snapserver: %s", control_message.c_str());
+      this->control_socket_->write((void *) control_message.data(), control_message.size());
+      //
+      break;
+    }
+  }
+}
+
 void Snapcontrol::parse_snapcast_server_(JsonObject server) {
   JsonArray groups = server["groups"].as<JsonArray>();
   if (groups.size() > 0) {
+    this->snapgroups_.clear();  // Rediscover all groups
     this->parse_snapcast_groups_(groups);
   }
 
@@ -230,6 +279,33 @@ void Snapcontrol::parse_snapcast_server_(JsonObject server) {
 void Snapcontrol::parse_snapcast_groups_(JsonArray groups) {
   for (const JsonObject &group : groups) {
     if (group["clients"].is<JsonVariant>()) {
+      bool known_group = false;
+      for (Snapgroup &snapgroup : this->snapgroups_) {
+        if (group["id"].as<std::string>().compare(snapgroup.group_id) == 0) {
+          known_group = true;
+          snapgroup.name = group["name"].as<std::string>();
+          snapgroup.stream_id = group["stream_id"].as<std::string>();
+
+          JsonArray clients = group["clients"].as<JsonArray>();
+          for (const JsonObject &client : clients) {
+            snapgroup.clients.push_back(client["id"].as<std::string>());
+          }
+        }
+      }
+      if (!known_group) {
+        Snapgroup new_group;
+        new_group.name = group["name"].as<std::string>();
+        new_group.group_id = group["id"].as<std::string>();
+        new_group.stream_id = group["stream_id"].as<std::string>();
+        new_group.is_active = false;  // temporary state until we read the streams
+
+        JsonArray clients = group["clients"].as<JsonArray>();
+        for (const JsonObject &client : clients) {
+          new_group.clients.push_back(client["id"].as<std::string>());
+        }
+        this->snapgroups_.push_back(new_group);
+      }
+
       JsonArray clients = group["clients"].as<JsonArray>();
       for (const JsonObject &client : clients) {
         if (client["id"].as<std::string>().compare(this->player_id_) == 0) {
@@ -250,6 +326,17 @@ void Snapcontrol::parse_snapcast_streams_(JsonArray streams) {
   }
 
   for (const JsonObject &stream : streams) {
+    for (Snapgroup &group : this->snapgroups_) {
+      if (stream["id"].as<std::string>().compare(group.stream_id) == 0) {
+        std::string state = stream["status"].as<std::string>();
+        if (state.compare("idle") == 0) {
+          group.is_active = false;
+        } else if (state.compare("playing") == 0) {
+          group.is_active = true;
+        }
+      }
+    }
+
     if (stream["id"].as<std::string>().compare(this->stream_id_) == 0) {
       std::string state = stream["status"].as<std::string>();
       if (state.compare("idle") == 0) {
@@ -330,7 +417,6 @@ esp_err_t Snapcontrol::read_until_newline_(std::string *buffer) {
 
   return ESP_OK;
 }
-
 }  // namespace snapcast
 }  // namespace esphome
 #endif

@@ -299,6 +299,8 @@ void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
   }
 }
 
+void SnapcastPlayer::join_another_group() { this->snapcontrol_->join_another_group(); }
+
 void SnapcastPlayer::control_task(void *params) {
   SnapcastPlayer *this_snapcast = (SnapcastPlayer *) params;
 

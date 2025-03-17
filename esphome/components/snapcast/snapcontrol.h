@@ -7,11 +7,20 @@
 #include "esphome/components/socket/socket.h"
 
 #include <freertos/queue.h>
+#include <vector>
 
 #include "esp_check.h"
 
 namespace esphome {
 namespace snapcast {
+
+struct Snapgroup {
+  std::string name;
+  std::string group_id;
+  std::string stream_id;
+  std::vector<std::string> clients;
+  bool is_active;
+};
 
 class Snapcontrol {
   /* Class that communicates with the snapserver as a snapcontroller using a socket and the JSON-RPC API
@@ -42,6 +51,8 @@ class Snapcontrol {
 
   bool is_connected() { return this->is_connected_; }
 
+  void join_another_group();
+
  protected:
   void parse_snapcast_server_(JsonObject server);
   void parse_snapcast_groups_(JsonArray groups);
@@ -50,6 +61,8 @@ class Snapcontrol {
   esp_err_t read_until_newline_(std::string *buffer);
 
   std::unique_ptr<socket::Socket> control_socket_;
+
+  std::vector<Snapgroup> snapgroups_;
 
   bool is_connected_{false};
   std::string player_id_;
