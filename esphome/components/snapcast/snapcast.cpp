@@ -845,7 +845,7 @@ void SnapcastPlayer::decode_task(void *params) {
           } else {
             // Didn't actually receive the chunk, so don't transfer the audio
             output_transfer_buffer->decrease_buffer_length(
-                this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes) + frame_corrections);
+                new_bytes + this_snapcast->audio_stream_info_.value().frames_to_bytes(frame_corrections));
           }
         } else {
           timings.server_timestamp = encoded_chunk.server_timestamp;
