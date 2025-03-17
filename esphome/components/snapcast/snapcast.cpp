@@ -397,7 +397,7 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
       ProcessMessageResponse response = this_snapcast->snapclient_->process_messages(base_msg, &audio_chunk);
       switch (response) {
         case ProcessMessageResponse::PROCESSED_CODEC_HEADER: {
-          // Stop decoding and clear any existing chunks in the queue
+          // Stop decoding to reset states
           xEventGroupSetBits(this_snapcast->event_group_, COMMAND_STOP);
 
           xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, portMAX_DELAY);
@@ -461,7 +461,6 @@ void SnapcastPlayer::decode_task(void *params) {
   AudioChunk encoded_chunk;
   std::unique_ptr<esp_audio_libs::flac::FLACDecoder> flac_decoder;
   std::unique_ptr<esp_audio_libs::wav_decoder::WAVDecoder> wav_decoder;
-  // std::unique_ptr<OpusDecoder> opus_decoder;
   OpusDecoder *opus_decoder = nullptr;
   size_t opus_decoder_size = 0;
 
@@ -779,7 +778,7 @@ void SnapcastPlayer::decode_task(void *params) {
           output_transfer_buffer->increase_buffer_length(actual_bytes_of_silence);
           frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_of_silence);
 
-          ESP_LOGV(TAG,
+          ESP_LOGD(TAG,
                    "Hard sync: adding %" PRId32 " frames of silence. Current error is %" PRId64 "us. There are %" PRId64
                    "pending frames for correction",
                    frame_corrections, recent_error_us, pending_frame_corrections);
@@ -791,7 +790,7 @@ void SnapcastPlayer::decode_task(void *params) {
           size_t actual_bytes_to_remove = std::min(bytes_to_remove, new_bytes - bytes_per_frame);
           output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
           frame_corrections = -this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
-          ESP_LOGV(TAG,
+          ESP_LOGD(TAG,
                    "Hard sync: removing %" PRId32 " frames. Current error is %" PRId64 "us. There are %" PRId64
                    "pending frames for correction",
                    frame_corrections, recent_error_us, pending_frame_corrections);
