@@ -316,6 +316,7 @@ void SnapcastPlayer::control_task(void *params) {
                                                        this_snapcast->server_control_port_.value()) != ESP_OK) {
       ESP_LOGW(TAG, "Failed to connect to snapcontrol server at ip %s:%" PRIu16,
                this_snapcast->discovered_address_.value().c_str(), this_snapcast->server_control_port_.value());
+      delay(5000);
     }
 
     this_snapcast->snapcontrol_->control_get_server_status();
