@@ -178,6 +178,10 @@ void Snapcontrol::control_get_server_status() {
 }
 
 void Snapcontrol::control_snapcast_stream(media_player::MediaPlayerCommand command) {
+  if (!this->is_connected_) {
+    return;
+  }
+
   std::string snapcast_command = "";
   switch (command) {
     case media_player::MEDIA_PLAYER_COMMAND_PLAY:
