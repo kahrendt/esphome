@@ -73,6 +73,7 @@ void SourceSpeaker::setup() {
 void SourceSpeaker::loop() {
   switch (this->state_) {
     case speaker::STATE_STARTING: {
+      ESP_LOGD(TAG, "Starting a mixer source speaker");
       esp_err_t err = this->start_();
       if (err == ESP_OK) {
         this->state_ = speaker::STATE_RUNNING;
@@ -171,7 +172,6 @@ esp_err_t SourceSpeaker::start_() {
 void SourceSpeaker::stop() {
   if ((this->state_ != speaker::STATE_STOPPED) && (this->state_ != speaker::STATE_STOPPING)) {
     this->state_ = speaker::STATE_STOPPING;
-    printf("stopping source speaker\n");
   }
 }
 
@@ -423,7 +423,10 @@ esp_err_t MixerSpeaker::delete_task_() {
   return ESP_ERR_INVALID_STATE;
 }
 
-void MixerSpeaker::stop() { xEventGroupSetBits(this->event_group_, MixerEventGroupBits::COMMAND_STOP); }
+void MixerSpeaker::stop() {
+  ESP_LOGD(TAG, "Sneding stop command to mixer task");
+  xEventGroupSetBits(this->event_group_, MixerEventGroupBits::COMMAND_STOP);
+}
 
 void MixerSpeaker::copy_frames(const int16_t *input_buffer, audio::AudioStreamInfo input_stream_info,
                                int16_t *output_buffer, audio::AudioStreamInfo output_stream_info,
