@@ -778,7 +778,7 @@ void SnapcastPlayer::decode_task(void *params) {
           output_transfer_buffer->increase_buffer_length(actual_bytes_of_silence);
           frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_of_silence);
 
-          ESP_LOGD(TAG,
+          ESP_LOGV(TAG,
                    "Hard sync: adding %" PRId32 " frames of silence. Current error is %" PRId64 "us. There are %" PRId64
                    "pending frames for correction",
                    frame_corrections, recent_error_us, pending_frame_corrections);
@@ -790,7 +790,7 @@ void SnapcastPlayer::decode_task(void *params) {
           size_t actual_bytes_to_remove = std::min(bytes_to_remove, new_bytes - bytes_per_frame);
           output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
           frame_corrections = -this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
-          ESP_LOGD(TAG,
+          ESP_LOGV(TAG,
                    "Hard sync: removing %" PRId32 " frames. Current error is %" PRId64 "us. There are %" PRId64
                    "pending frames for correction",
                    frame_corrections, recent_error_us, pending_frame_corrections);
