@@ -157,8 +157,8 @@ void SnapcastPlayer::loop() {
       } else {
         ESP_LOGD(TAG, "Didn't find a snapsserver control interface");
       }
-      mdns_query_async_delete(this->snapclient_mdns_search_);
-      this->snapclient_mdns_search_ = nullptr;
+      mdns_query_async_delete(this->snapcontrol_mdns_search_);
+      this->snapcontrol_mdns_search_ = nullptr;
     }
   }
 
