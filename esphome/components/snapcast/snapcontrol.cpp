@@ -48,11 +48,20 @@ void Snapcontrol::disconnect_from_server() {
   this->control_socket_->shutdown(0);
   this->control_socket_->close();
 
+  // Clear stream state
   this->stream_is_idle_.reset();
   this->stream_is_playing_.reset();
-  this->group_id_ = "";
-  this->player_id_ = "";
-  this->stream_id_ = "";
+
+  // Clear various IDs of the snapclient
+  this->group_id_.clear();
+  this->player_id_.clear();
+  this->stream_id_.clear();
+
+  // Clear metadata
+  this->album_.clear();
+  this->artist_.clear();
+  this->title_.clear();
+  this->art_url_.clear();
 }
 
 esp_err_t Snapcontrol::process_messages() {
