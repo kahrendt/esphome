@@ -54,7 +54,6 @@ void Snapcontrol::disconnect_from_server() {
 
   // Clear various IDs of the snapclient
   this->group_id_.clear();
-  this->player_id_.clear();
   this->stream_id_.clear();
 
   // Clear metadata
