@@ -65,8 +65,8 @@ void SnapcastPlayer::setup() {
     this->mark_failed();
   }
 
-  this->encoded_chunk_data_queue_ = xQueueCreate(ENCODED_CHUNK_QUEUE_SIZE, sizeof(AudioChunk));
-  if (this->encoded_chunk_data_queue_ == nullptr) {
+  this->chunk_data_queue_ = xQueueCreate(ENCODED_CHUNK_QUEUE_SIZE, sizeof(AudioChunk));
+  if (this->chunk_data_queue_ == nullptr) {
     ESP_LOGE(TAG, "Couldn't create encoded chunk data queue.");
     this->mark_failed();
   }
@@ -194,8 +194,8 @@ void SnapcastPlayer::loop() {
 }
 
 void SnapcastPlayer::start() {
-  this->speaker_->add_audio_output_callback([this](uint32_t frames_played, int64_t write_timestamp) {
-    PlaybackProgress playback_progress = {.frames_played = frames_played, .write_timestamp = write_timestamp};
+  this->speaker_->add_audio_output_callback([this](uint32_t frames_played, int64_t finish_timestamp) {
+    PlaybackProgress playback_progress = {.frames_played = frames_played, .finish_timestamp = finish_timestamp};
     if (!xQueueSend(this->playback_progress_queue_, &playback_progress, 0)) {
       ESP_LOGE(TAG, "Playback info queue was full");
     }
@@ -327,10 +327,10 @@ void SnapcastPlayer::control_task(void *params) {
   }
 }
 
-void SnapcastPlayer::clear_chunk_queue_() {
+void SnapcastPlayer::clear_chunk_data_queue_() {
   RAMAllocator<uint8_t> data_allocator(RAMAllocator<uint8_t>::ALLOW_FAILURE);
   AudioChunk chunk;
-  while (xQueueReceive(this->encoded_chunk_data_queue_, &chunk, pdMS_TO_TICKS(1))) {
+  while (xQueueReceive(this->chunk_data_queue_, &chunk, pdMS_TO_TICKS(1))) {
     data_allocator.deallocate(chunk.data, chunk.offset + chunk.size);
   }
 }
@@ -440,14 +440,14 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
           // Stop decoding to reset states
           xEventGroupSetBits(this_snapcast->event_group_, COMMAND_STOP);
 
-          xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, portMAX_DELAY);
+          xQueueSend(this_snapcast->chunk_data_queue_, &audio_chunk, portMAX_DELAY);
           break;
         }
         case ProcessMessageResponse::PROCESSED_WIRE_CHUNK:
           if (!(event_bits & COMMAND_STOP) &&
               (this_snapcast->snapclient_->get_codec_format() != SnapcastCodecFormat::SNAPCAST_CODEC_UNSUPPORTED)) {
             // Only send new audio chunks if the COMMAND_STOP flag isn't set and the codec format is supported
-            if (!xQueueSend(this_snapcast->encoded_chunk_data_queue_, &audio_chunk, 0)) {
+            if (!xQueueSend(this_snapcast->chunk_data_queue_, &audio_chunk, 0)) {
               ESP_LOGW(TAG, "Encoded chunk queue is full, restarting stream.");
               data_allocator.deallocate(audio_chunk.data, audio_chunk.offset + audio_chunk.size);
               audio_chunk.data = nullptr;
@@ -535,7 +535,7 @@ void SnapcastPlayer::decode_task(void *params) {
       pending_frame_corrections = 0;
       chunk_timings.clear();
       xQueueReset(this_snapcast->playback_progress_queue_);
-      this_snapcast->clear_chunk_queue_();
+      this_snapcast->clear_chunk_data_queue_();
 
       initial_decode = true;
 
@@ -550,7 +550,7 @@ void SnapcastPlayer::decode_task(void *params) {
     size_t bytes_per_frame = this_snapcast->audio_stream_info_.frames_to_bytes(1);
 
     if ((output_transfer_buffer->available() == 0) &&
-        (xQueuePeek(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, pdMS_TO_TICKS(20)))) {
+        (xQueuePeek(this_snapcast->chunk_data_queue_, &encoded_chunk, pdMS_TO_TICKS(20)))) {
       bool receive_chunk = true;
       if (encoded_chunk.codec_header) {
         // Reset all decoders in case the format has changed
@@ -658,7 +658,7 @@ void SnapcastPlayer::decode_task(void *params) {
         this_snapcast->speaker_->set_audio_stream_info(this_snapcast->audio_stream_info_);
         initial_decode = true;
 
-        if (xQueueReceive(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, 0)) {
+        if (xQueueReceive(this_snapcast->chunk_data_queue_, &encoded_chunk, 0)) {
           data_allocator.deallocate(encoded_chunk.data, encoded_chunk.offset + encoded_chunk.size);
         } else {
           ESP_LOGE(TAG, "Queue was reset before we finished proceessing the codec header");
@@ -677,7 +677,7 @@ void SnapcastPlayer::decode_task(void *params) {
 
           if (!chunk_timings.empty()) {
             uint32_t frames_played = playback_progress.frames_played;
-            int64_t write_timestamp = playback_progress.write_timestamp;
+            int64_t finish_timestamp = playback_progress.finish_timestamp;
 
             InternalAudioTiming *front_chunk = &chunk_timings.front();
 
@@ -709,7 +709,7 @@ void SnapcastPlayer::decode_task(void *params) {
             int64_t equivalent_client_timestamp =
                 this_snapcast->snapclient_->server_timestamp_to_client(server_timestamp_finished);
 
-            int64_t new_error = equivalent_client_timestamp - write_timestamp;
+            int64_t new_error = equivalent_client_timestamp - finish_timestamp;
 
             this_snapcast->actual_offsets_.update(new_error);
           }
@@ -871,7 +871,7 @@ void SnapcastPlayer::decode_task(void *params) {
         InternalAudioTiming timings;
 
         if (receive_chunk) {
-          if (xQueueReceive(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, portMAX_DELAY)) {
+          if (xQueueReceive(this_snapcast->chunk_data_queue_, &encoded_chunk, portMAX_DELAY)) {
             data_allocator.deallocate(encoded_chunk.data, encoded_chunk.offset + encoded_chunk.size);
 
             timings.server_timestamp = encoded_chunk.server_timestamp + new_duration_us;

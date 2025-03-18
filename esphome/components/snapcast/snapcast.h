@@ -25,12 +25,13 @@
 namespace esphome {
 namespace snapcast {
 
+// Stores the timing information of audio played received from the speaker
 struct PlaybackProgress {
-  uint32_t frames_played;
-  int64_t write_timestamp;
+  uint32_t frames_played;    // Number of audio frames played since last progress update
+  int64_t finish_timestamp;  // The timestamp when the audio frames should finish playing
 };
 
-// Stores the timing information for decoded chunks of audio sent to the ESPHome speaker
+// Stores the timing information for decoded chunks of audio sent to the speaker
 struct InternalAudioTiming {
   int64_t server_timestamp;   // Server timestamp when this audio chunk should finish playing
   uint32_t total_frames;      // Total number of audio frames in this chunk, including corrections
@@ -39,7 +40,7 @@ struct InternalAudioTiming {
 
 class SnapcastPlayer : public Component, public media_player::MediaPlayer {
  public:
-  SnapcastPlayer() : network_latency_filter_(MedianFilter(50)), actual_offsets_(MedianFilter(1)){};
+  SnapcastPlayer() : actual_offsets_(MedianFilter(1)){};
   float get_setup_priority() const override { return esphome::setup_priority::AFTER_CONNECTION; }
   // float get_setup_priority() const override { return esphome::setup_priority::AFTER_WIFI; }
   void setup() override;
@@ -63,10 +64,11 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   void join_another_group();
 
  protected:
-  // Receives commands from HA or from the voice assistant component
+  // Receives commands from HA
   void control(const media_player::MediaPlayerCall &call) override;
 
-  void clear_chunk_queue_();
+  // Resets the encoded chunk queue after deallocating the data in each chunk.
+  void clear_chunk_data_queue_();
 
   static void client_task(void *params);
   TaskHandle_t client_task_handle_{nullptr};
@@ -83,6 +85,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   StaticTask_t decode_task_stack_;
   StackType_t *decode_task_stack_buffer_{nullptr};
 
+  // Used to regularly send time messages to the snapserver for computing the total network latency
   static void timesync_callback(void *params);
   uint16_t time_sync_counter_{0};
 
@@ -108,10 +111,8 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
   optional<uint16_t> server_control_port_;
 
   QueueHandle_t playback_progress_queue_;
+  QueueHandle_t chunk_data_queue_;
 
-  QueueHandle_t encoded_chunk_data_queue_;
-
-  MedianFilter network_latency_filter_;
   MedianFilter actual_offsets_;
 
   std::unique_ptr<Snapclient> snapclient_;
