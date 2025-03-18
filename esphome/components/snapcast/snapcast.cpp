@@ -184,7 +184,7 @@ void SnapcastPlayer::loop() {
       this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
     }
   } else {
-    this->snapcontrol_->control_get_server_status();
+    this->snapcontrol_->request_server_status();
   }
 
   if ((this->state != old_state) || (this->force_publish_state_)) {
@@ -281,7 +281,7 @@ void SnapcastPlayer::control(const media_player::MediaPlayerCall &call) {
       case media_player::MEDIA_PLAYER_COMMAND_PAUSE:   // Intentional fallthrough
       case media_player::MEDIA_PLAYER_COMMAND_TOGGLE:  // Intentional fallthrough
       case media_player::MEDIA_PLAYER_COMMAND_STOP:
-        this->snapcontrol_->control_snapcast_stream(call.get_command().value());
+        this->snapcontrol_->control_stream(call.get_command().value());
         break;
       case media_player::MEDIA_PLAYER_COMMAND_MUTE:
         this->speaker_->set_mute_state(true);
@@ -321,7 +321,7 @@ void SnapcastPlayer::control_task(void *params) {
       delay(5000);
     }
 
-    this_snapcast->snapcontrol_->control_get_server_status();
+    this_snapcast->snapcontrol_->request_server_status();
     while (this_snapcast->snapcontrol_->process_messages() == ESP_OK) {
     }
     this_snapcast->snapcontrol_->disconnect_from_server();
@@ -673,7 +673,7 @@ void SnapcastPlayer::decode_task(void *params) {
           if (initial_decode) {
             // Some sent audio chunks have now been played by the speaker
             initial_decode = false;
-            this_snapcast->snapcontrol_->control_get_server_status();  // Determine what stream this client is playing
+            this_snapcast->snapcontrol_->request_server_status();  // Determine what stream this client is playing
           }
 
           if (!chunk_timings.empty()) {

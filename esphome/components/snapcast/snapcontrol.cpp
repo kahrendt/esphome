@@ -25,17 +25,17 @@ esp_err_t Snapcontrol::connect_to_server(std::string server_address, uint16_t po
     ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);
     return ESP_FAIL;
   }
-  this->control_socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
+  this->socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
 
-  err = this->control_socket_->connect((struct sockaddr *) &server, sizeof(server));
+  err = this->socket_->connect((struct sockaddr *) &server, sizeof(server));
   if (err != 0) {
     ESP_LOGE(TAG, "Socket unable to connect: errno %d", err);
     return ESP_FAIL;
   }
 
   int nodelay = 1;
-  if (this->control_socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
-    ESP_LOGW(TAG, "Failed to turn on TCP_NODELAY, syncing may be inaccurate");
+  if (this->socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
+    ESP_LOGW(TAG, "Failed to turn on TCP_NODELAY, controls may be delayed");
     nodelay = 0;
   }
 
@@ -45,16 +45,16 @@ esp_err_t Snapcontrol::connect_to_server(std::string server_address, uint16_t po
 
 void Snapcontrol::disconnect_from_server() {
   this->is_connected_ = false;
-  this->control_socket_->shutdown(0);
-  this->control_socket_->close();
+  this->socket_->shutdown(0);
+  this->socket_->close();
 
   // Clear stream state
   this->stream_is_idle_.reset();
   this->stream_is_playing_.reset();
 
   // Clear various IDs of the snapclient
-  this->group_id_.clear();
-  this->stream_id_.clear();
+  this->current_group_id_.clear();
+  this->current_stream_id_.clear();
 
   // Clear metadata
   this->album_.clear();
@@ -108,9 +108,9 @@ esp_err_t Snapcontrol::process_messages() {
         }
       }
 
-      if (group_stream_params["id"].as<std::string>().compare(this->group_id_) == 0) {
-        this->stream_id_ = group_stream_params["stream_id"].as<std::string>();
-        ESP_LOGV(TAG, "Current group changed stream id to %s", this->stream_id_.c_str());
+      if (group_stream_params["id"].as<std::string>().compare(this->current_group_id_) == 0) {
+        this->current_stream_id_ = group_stream_params["stream_id"].as<std::string>();
+        ESP_LOGV(TAG, "Current group changed stream id to %s", this->current_stream_id_.c_str());
       }
     }
     if (method.compare("Stream.OnUpdate") == 0) {
@@ -127,7 +127,7 @@ esp_err_t Snapcontrol::process_messages() {
         }
       }
 
-      if (stream["id"].as<std::string>().compare(this->stream_id_) == 0) {
+      if (stream["id"].as<std::string>().compare(this->current_stream_id_) == 0) {
         std::string state = stream["stream"]["status"].as<std::string>();
         if (state.compare("idle") == 0) {
           this->stream_is_idle_ = true;
@@ -144,14 +144,14 @@ esp_err_t Snapcontrol::process_messages() {
     }
     if (method.compare("Stream.OnProperties") == 0) {
       JsonObject stream = root["params"];
-      if (stream["id"].as<std::string>().compare(this->stream_id_) == 0) {
+      if (stream["id"].as<std::string>().compare(this->current_stream_id_) == 0) {
         if (stream["properties"].is<JsonVariant>()) {
           JsonObject properties = stream["properties"];
           this->parse_snapcast_stream_properties_(properties);
         }
       }
 
-      // if (stream_params["id"].as<std::string>().compare(this->stream_id_) == 0) {
+      // if (stream_params["id"].as<std::string>().compare(this->current_stream_id_) == 0) {
       //   JsonObject metadata = stream_params["metadata"];
 
       //   if (metadata["album"].is<JsonVariant>()) {
@@ -176,7 +176,7 @@ esp_err_t Snapcontrol::process_messages() {
   return ESP_OK;
 }
 
-void Snapcontrol::control_get_server_status() {
+void Snapcontrol::request_server_status() {
   if (!this->is_connected_) {
     return;
   }
@@ -188,10 +188,10 @@ void Snapcontrol::control_get_server_status() {
 
   control_message.push_back('\n');
 
-  this->control_socket_->write((void *) control_message.data(), control_message.size());
+  this->socket_->write((void *) control_message.data(), control_message.size());
 }
 
-void Snapcontrol::control_snapcast_stream(media_player::MediaPlayerCommand command) {
+void Snapcontrol::control_stream(media_player::MediaPlayerCommand command) {
   if (!this->is_connected_) {
     return;
   }
@@ -219,14 +219,14 @@ void Snapcontrol::control_snapcast_stream(media_player::MediaPlayerCommand comma
     root["jsonrpc"] = "2.0";
     root["method"] = "Stream.Control";
     root["params"].to<JsonObject>();
-    root["params"]["id"] = this->stream_id_;
+    root["params"]["id"] = this->current_stream_id_;
     root["params"]["command"] = snapcast_command;
     root["params"]["params"].to<JsonObject>();
   });
 
   control_message.push_back('\n');
   ESP_LOGD(TAG, "Sending stream control message to snapserver: %s", control_message.c_str());
-  this->control_socket_->write((void *) control_message.data(), control_message.size());
+  this->socket_->write((void *) control_message.data(), control_message.size());
 }
 
 void Snapcontrol::join_another_group() {
@@ -238,7 +238,7 @@ void Snapcontrol::join_another_group() {
   for (Snapgroup &group : this->snapgroups_) {
     printf("potentially joining group %s with name %s and status %s\n", group.group_id.c_str(), group.name.c_str(),
            group.is_active ? "playing" : "idle");
-    if ((group.group_id.compare(this->group_id_) != 0) && (group.is_active)) {
+    if ((group.group_id.compare(this->current_group_id_) != 0) && (group.is_active)) {
       printf("want to join group %s which has %d clients", group.group_id.c_str(), group.clients.size());
       std::string control_message = json::build_json([this, group](JsonObject root) {
         root["id"] = 1;
@@ -255,7 +255,7 @@ void Snapcontrol::join_another_group() {
 
       control_message.push_back('\n');
       ESP_LOGD(TAG, "Sending join group message to snapserver: %s", control_message.c_str());
-      this->control_socket_->write((void *) control_message.data(), control_message.size());
+      this->socket_->write((void *) control_message.data(), control_message.size());
       //
       break;
     }
@@ -308,10 +308,10 @@ void Snapcontrol::parse_snapcast_groups_(JsonArray groups) {
       JsonArray clients = group["clients"].as<JsonArray>();
       for (const JsonObject &client : clients) {
         if (client["id"].as<std::string>().compare(this->player_id_) == 0) {
-          this->group_id_ = group["id"].as<std::string>();
-          this->stream_id_ = group["stream_id"].as<std::string>();
-          ESP_LOGV(TAG, "Found which group we are in, current group id is %s streaming %s", this->group_id_.c_str(),
-                   this->stream_id_.c_str());
+          this->current_group_id_ = group["id"].as<std::string>();
+          this->current_stream_id_ = group["stream_id"].as<std::string>();
+          ESP_LOGV(TAG, "Found which group we are in, current group id is %s streaming %s",
+                   this->current_group_id_.c_str(), this->current_stream_id_.c_str());
           break;
         }
       }
@@ -320,10 +320,6 @@ void Snapcontrol::parse_snapcast_groups_(JsonArray groups) {
 }
 
 void Snapcontrol::parse_snapcast_streams_(JsonArray streams) {
-  if (this->stream_id_.empty()) {
-    return;
-  }
-
   for (const JsonObject &stream : streams) {
     for (Snapgroup &group : this->snapgroups_) {
       if (stream["id"].as<std::string>().compare(group.stream_id) == 0) {
@@ -336,7 +332,7 @@ void Snapcontrol::parse_snapcast_streams_(JsonArray streams) {
       }
     }
 
-    if (stream["id"].as<std::string>().compare(this->stream_id_) == 0) {
+    if (stream["id"].as<std::string>().compare(this->current_stream_id_) == 0) {
       std::string state = stream["status"].as<std::string>();
       if (state.compare("idle") == 0) {
         this->stream_is_idle_ = true;
@@ -405,7 +401,7 @@ esp_err_t Snapcontrol::read_until_newline_(std::string *buffer) {
   }
   char new_char = ' ';
   while (new_char != '\n') {
-    ssize_t bytes_read = this->control_socket_->read((void *) &new_char, sizeof(new_char));
+    ssize_t bytes_read = this->socket_->read((void *) &new_char, sizeof(new_char));
     if (bytes_read == -1) {
       ESP_LOGW(TAG, "Couldn't read from control socket");
       *buffer = "";
