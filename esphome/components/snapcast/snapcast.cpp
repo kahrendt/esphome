@@ -547,7 +547,7 @@ void SnapcastPlayer::decode_task(void *params) {
 
     const size_t bytes_written = output_transfer_buffer->transfer_data_to_sink(pdMS_TO_TICKS(20), false);
 
-    size_t bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
+    size_t bytes_per_frame = this_snapcast->audio_stream_info_.frames_to_bytes(1);
 
     if ((output_transfer_buffer->available() == 0) &&
         (xQueuePeek(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, pdMS_TO_TICKS(20)))) {
@@ -583,7 +583,7 @@ void SnapcastPlayer::decode_task(void *params) {
           this_snapcast->audio_stream_info_ = audio::AudioStreamInfo(
               flac_decoder->get_sample_depth(), flac_decoder->get_num_channels(), flac_decoder->get_sample_rate());
 
-          bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
+          bytes_per_frame = this_snapcast->audio_stream_info_.frames_to_bytes(1);
 
           free_buffer_required = flac_decoder->get_output_buffer_size_bytes();
           if (!output_transfer_buffer->reallocate(free_buffer_required + bytes_per_frame)) {
@@ -603,7 +603,7 @@ void SnapcastPlayer::decode_task(void *params) {
           if (result == esp_audio_libs::wav_decoder::WAV_DECODER_SUCCESS_IN_DATA) {
             this_snapcast->audio_stream_info_ = audio::AudioStreamInfo(
                 wav_decoder->bits_per_sample(), wav_decoder->num_channels(), wav_decoder->sample_rate());
-            bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
+            bytes_per_frame = this_snapcast->audio_stream_info_.frames_to_bytes(1);
           } else {
             ESP_LOGE(TAG, "Failed to parse WAV header");
             continue;
@@ -631,9 +631,9 @@ void SnapcastPlayer::decode_task(void *params) {
 
           if (decoder_error == OPUS_OK) {
             this_snapcast->audio_stream_info_ = audio::AudioStreamInfo(bit_depth, channels, sample_rate);
-            bytes_per_frame = this_snapcast->audio_stream_info_.value().frames_to_bytes(1);
+            bytes_per_frame = this_snapcast->audio_stream_info_.frames_to_bytes(1);
 
-            free_buffer_required = this_snapcast->audio_stream_info_.value().ms_to_bytes(120);
+            free_buffer_required = this_snapcast->audio_stream_info_.ms_to_bytes(120);
             if (!output_transfer_buffer->reallocate(free_buffer_required + bytes_per_frame)) {
               ESP_LOGE(TAG, "Failed to reallocate buffer for decoding OPUS");
               continue;
@@ -655,7 +655,7 @@ void SnapcastPlayer::decode_task(void *params) {
         chunk_timings.clear();
         xQueueReset(this_snapcast->playback_progress_queue_);
 
-        this_snapcast->speaker_->set_audio_stream_info(this_snapcast->audio_stream_info_.value());
+        this_snapcast->speaker_->set_audio_stream_info(this_snapcast->audio_stream_info_);
         initial_decode = true;
 
         if (xQueueReceive(this_snapcast->encoded_chunk_data_queue_, &encoded_chunk, 0)) {
@@ -701,9 +701,9 @@ void SnapcastPlayer::decode_task(void *params) {
             uint32_t unplayed_frames = chunk_timings.front().total_frames;
 
             int64_t unplayed_ms =
-                this_snapcast->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&unplayed_frames);
+                this_snapcast->audio_stream_info_.frames_to_milliseconds_with_remainder(&unplayed_frames);
             int64_t unplayed_us =
-                1000 * unplayed_ms + this_snapcast->audio_stream_info_.value().frames_to_microseconds(unplayed_frames);
+                1000 * unplayed_ms + this_snapcast->audio_stream_info_.frames_to_microseconds(unplayed_frames);
 
             int64_t server_timestamp_finished = front_chunk->server_timestamp - unplayed_us;
             int64_t equivalent_client_timestamp =
@@ -717,7 +717,7 @@ void SnapcastPlayer::decode_task(void *params) {
 
         int64_t signed_pending_duration_corrections =
             (pending_frame_corrections * 1000000LL) /
-            static_cast<int64_t>(this_snapcast->audio_stream_info_.value().get_sample_rate());
+            static_cast<int64_t>(this_snapcast->audio_stream_info_.get_sample_rate());
 
         // Takes into account the pending error
         int64_t recent_error_us =
@@ -760,7 +760,7 @@ void SnapcastPlayer::decode_task(void *params) {
             ESP_LOGE(TAG, "Serious error decoding FLAC file");
             continue;
           }
-          new_bytes = this_snapcast->audio_stream_info_.value().samples_to_bytes(output_samples);
+          new_bytes = this_snapcast->audio_stream_info_.samples_to_bytes(output_samples);
         } else if ((wav_decoder != nullptr) &&
                    (this_snapcast->snapclient_->get_codec_format() == SnapcastCodecFormat::SNAPCAST_CODEC_PCM)) {
           if (output_transfer_buffer->capacity() < encoded_chunk.size + bytes_per_frame) {
@@ -777,11 +777,11 @@ void SnapcastPlayer::decode_task(void *params) {
           int output_frames =
               opus_decode(opus_decoder, (encoded_chunk.data + encoded_chunk.offset), encoded_chunk.size,
                           (int16_t *) output_transfer_buffer->get_buffer_end(),
-                          this_snapcast->audio_stream_info_.value().bytes_to_frames(output_transfer_buffer->free()), 0);
+                          this_snapcast->audio_stream_info_.bytes_to_frames(output_transfer_buffer->free()), 0);
           if (output_frames < 0) {
             printf("ran into an issue decoding opus error code %d\n", output_frames);
           } else {
-            new_bytes = this_snapcast->audio_stream_info_.value().frames_to_bytes(output_frames);
+            new_bytes = this_snapcast->audio_stream_info_.frames_to_bytes(output_frames);
           }
         }
 
@@ -790,16 +790,16 @@ void SnapcastPlayer::decode_task(void *params) {
         /*
          * Ensure the newly decode audio will play in sync
          */
-        uint32_t new_frames = this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes);
+        uint32_t new_frames = this_snapcast->audio_stream_info_.bytes_to_frames(new_bytes);
         const uint32_t new_duration_ms =
-            this_snapcast->audio_stream_info_.value().frames_to_milliseconds_with_remainder(&new_frames);
+            this_snapcast->audio_stream_info_.frames_to_milliseconds_with_remainder(&new_frames);
         const int64_t new_duration_us =
-            new_duration_ms * 1000 + this_snapcast->audio_stream_info_.value().frames_to_microseconds(new_frames);
+            new_duration_ms * 1000 + this_snapcast->audio_stream_info_.frames_to_microseconds(new_frames);
 
         // How many frames in this chunk that are added or removed to the actual frame count
         int32_t frame_corrections = 0;
 
-        const int64_t us_per_frame_margin = 3 * this_snapcast->audio_stream_info_.value().frames_to_microseconds(1) / 2;
+        const int64_t us_per_frame_margin = 3 * this_snapcast->audio_stream_info_.frames_to_microseconds(1) / 2;
 
         if (initial_decode || (recent_error_us > HARD_SYNC_THRESHOLD_US)) {
           // // Hard sync because we just started decoding and haven't sent any audio or we are way behind
@@ -810,13 +810,13 @@ void SnapcastPlayer::decode_task(void *params) {
           output_transfer_buffer->decrease_buffer_length(new_bytes);  // Remove the newly added length
 
           const size_t silence_bytes_for_correction =
-              this_snapcast->audio_stream_info_.value().ms_to_bytes(recent_error_us / 1000);
+              this_snapcast->audio_stream_info_.ms_to_bytes(recent_error_us / 1000);
           size_t actual_bytes_of_silence = std::min(silence_bytes_for_correction, zeroed_bytes);
           if (initial_decode) {
             actual_bytes_of_silence = zeroed_bytes;
           }
           output_transfer_buffer->increase_buffer_length(actual_bytes_of_silence);
-          frame_corrections = this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_of_silence);
+          frame_corrections = this_snapcast->audio_stream_info_.bytes_to_frames(actual_bytes_of_silence);
 
           ESP_LOGV(TAG,
                    "Hard sync: adding %" PRId32 " frames of silence. Current error is %" PRId64 "us. There are %" PRId64
@@ -826,10 +826,10 @@ void SnapcastPlayer::decode_task(void *params) {
         } else if (recent_error_us < -HARD_SYNC_THRESHOLD_US) {
           // Hard sync because we have gotten ahead and need to skip some audio to get in sync
           // Removes newly decoded frames (but will always leave a minimum of 1 frame)
-          size_t bytes_to_remove = this_snapcast->audio_stream_info_.value().ms_to_bytes(abs(recent_error_us) / 1000);
+          size_t bytes_to_remove = this_snapcast->audio_stream_info_.ms_to_bytes(abs(recent_error_us) / 1000);
           size_t actual_bytes_to_remove = std::min(bytes_to_remove, new_bytes - bytes_per_frame);
           output_transfer_buffer->decrease_buffer_length(actual_bytes_to_remove);
-          frame_corrections = -this_snapcast->audio_stream_info_.value().bytes_to_frames(actual_bytes_to_remove);
+          frame_corrections = -this_snapcast->audio_stream_info_.bytes_to_frames(actual_bytes_to_remove);
           ESP_LOGV(TAG,
                    "Hard sync: removing %" PRId32 " frames. Current error is %" PRId64 "us. There are %" PRId64
                    "pending frames for correction",
@@ -838,7 +838,7 @@ void SnapcastPlayer::decode_task(void *params) {
           // Small sync adjustment after getting slightly ahead.
           // Removes the last frame in the chunk to get in sync. The second to last frame is replaced with the average
           // of it and the removed frame to minimize audible glitches.
-          const uint32_t num_channels = this_snapcast->audio_stream_info_.value().get_channels();
+          const uint32_t num_channels = this_snapcast->audio_stream_info_.get_channels();
           int16_t *samples =
               reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
           for (int chan = 0; chan < num_channels; ++chan) {
@@ -853,7 +853,7 @@ void SnapcastPlayer::decode_task(void *params) {
           // Adds one new frame to get in sync. The new frame is inserted between the last and second to last frames.
           // The new frame is the average of the last two frames in the chunk to minimize audible glitches.
           if (output_transfer_buffer->free() >= bytes_per_frame) {
-            const uint32_t num_channels = this_snapcast->audio_stream_info_.value().get_channels();
+            const uint32_t num_channels = this_snapcast->audio_stream_info_.get_channels();
             int16_t *samples =
                 reinterpret_cast<int16_t *>(output_transfer_buffer->get_buffer_end() - 2 * bytes_per_frame);
             for (int chan = 0; chan < num_channels; ++chan) {
@@ -875,8 +875,7 @@ void SnapcastPlayer::decode_task(void *params) {
             data_allocator.deallocate(encoded_chunk.data, encoded_chunk.offset + encoded_chunk.size);
 
             timings.server_timestamp = encoded_chunk.server_timestamp + new_duration_us;
-            timings.total_frames =
-                this_snapcast->audio_stream_info_.value().bytes_to_frames(new_bytes) + frame_corrections;
+            timings.total_frames = this_snapcast->audio_stream_info_.bytes_to_frames(new_bytes) + frame_corrections;
             timings.frame_corrections = frame_corrections;
             pending_frame_corrections += frame_corrections;
 
@@ -884,7 +883,7 @@ void SnapcastPlayer::decode_task(void *params) {
           } else {
             // Didn't actually receive the chunk, so don't transfer the audio
             output_transfer_buffer->decrease_buffer_length(
-                new_bytes + this_snapcast->audio_stream_info_.value().frames_to_bytes(frame_corrections));
+                new_bytes + this_snapcast->audio_stream_info_.frames_to_bytes(frame_corrections));
           }
         } else {
           timings.server_timestamp = encoded_chunk.server_timestamp;

@@ -88,7 +88,7 @@ class SnapcastPlayer : public Component, public media_player::MediaPlayer {
 
   EventGroupHandle_t event_group_{nullptr};
 
-  optional<audio::AudioStreamInfo> audio_stream_info_;
+  audio::AudioStreamInfo audio_stream_info_;
 
   optional<uint16_t> volume_;
 
