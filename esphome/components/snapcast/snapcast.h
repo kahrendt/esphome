@@ -1,17 +1,15 @@
 #pragma once
 
 #include "esphome/core/defines.h"
+
 #ifdef USE_NETWORK
 
 #include "median_filter.h"
-
-#include "snapcontrol.h"
 #include "snapclient.h"
+#include "snapcontrol.h"
 
 #include "esphome/components/audio/audio.h"
-#include "esphome/components/bytebuffer/bytebuffer.h"
 #include "esphome/components/media_player/media_player.h"
-#include "esphome/components/socket/socket.h"
 #include "esphome/components/speaker/speaker.h"
 
 #include "esphome/core/automation.h"

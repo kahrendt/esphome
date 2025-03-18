@@ -1,14 +1,13 @@
 #pragma once
 
 #include "esphome/core/defines.h"
+
 #ifdef USE_NETWORK
 
 #include "median_filter.h"
 
 #include "esphome/components/bytebuffer/bytebuffer.h"
 #include "esphome/components/socket/socket.h"
-
-#include <freertos/queue.h>
 
 #include "esp_check.h"
 

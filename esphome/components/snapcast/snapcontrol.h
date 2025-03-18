@@ -1,12 +1,12 @@
 #pragma once
 
 #include "esphome/core/defines.h"
+
 #ifdef USE_NETWORK
 
 #include "esphome/components/media_player/media_player.h"
 #include "esphome/components/socket/socket.h"
 
-#include <freertos/queue.h>
 #include <vector>
 
 #include "esp_check.h"

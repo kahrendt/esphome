@@ -2,7 +2,6 @@
 
 #ifdef USE_NETWORK
 
-#include "esphome/components/network/ip_address.h"
 #include "esphome/components/json/json_util.h"
 
 #include "esphome/core/log.h"

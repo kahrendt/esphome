@@ -1,11 +1,10 @@
 #include "snapcast.h"
 
 #ifdef USE_NETWORK
-#include "esphome/components/audio/audio.h"
+
 #include "esphome/components/audio/audio_transfer_buffer.h"
 #include "esphome/components/network/ip_address.h"
 #include "esphome/components/network/util.h"
-#include "esphome/components/json/json_util.h"
 
 #include "esphome/core/application.h"
 #include "esphome/core/log.h"
