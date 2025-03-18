@@ -87,7 +87,8 @@ esp_err_t Snapclient::send_hello_message() {
     return ESP_FAIL;
   }
 
-  std::string hello_msg = this->hello_message_serialize_();
+  HelloMessage msg = this->build_hello_message_();
+  std::string hello_msg = this->hello_message_serialize_(&msg);
 
   size_t total_hello_msg_size = hello_msg.size() + sizeof(uint32_t);
   bytebuffer::ByteBuffer hello_msg_buffer = bytebuffer::ByteBuffer(total_hello_msg_size);
@@ -359,7 +360,7 @@ std::string Snapclient::client_message_serialize_(const ClientInfoMessage *msg) 
   });
 }
 
-std::string Snapclient::hello_message_serialize_() {
+HelloMessage Snapclient::build_hello_message_() const {
   HelloMessage hello_message;
   hello_message.mac = this->player_id_.c_str();
   hello_message.hostname = App.get_name().c_str();
@@ -370,10 +371,10 @@ std::string Snapclient::hello_message_serialize_() {
   hello_message.instance = 1;
   hello_message.id = this->player_id_.c_str();
   hello_message.protocol_version = 2;
-  return this->build_hello_message_(&hello_message);
+  return hello_message;
 }
 
-std::string Snapclient::build_hello_message_(HelloMessage *msg) {
+std::string Snapclient::hello_message_serialize_(const HelloMessage *msg) {
   return json::build_json([msg](JsonObject root) {
     root["MAC"] = msg->mac;
     root["HostName"] = msg->hostname;

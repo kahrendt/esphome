@@ -188,16 +188,14 @@ class Snapclient {
   /// @return (std::string) Message serialized into JSON format
   std::string client_message_serialize_(const ClientInfoMessage *msg);
 
-  // TODO: The naming scheme of the hello messages functions are not consistent with other function names
+  /// @brief Builds a HelloMessage struct containing information about the client.
+  /// @return (HelloMessage) The client's hello message
+  HelloMessage build_hello_message_() const;
 
-  /// @brief Builds and serializes a hello message into a JSON string for sending to the server.
-  /// @return (std::string) Hello message serialized into JSON format
-  std::string hello_message_serialize_();
-
-  /// @brief Serializes the client hello message into a JSON string.
+  /// @brief Serializes a client hello message into a JSON string.
   /// @param msg (HelloMessage *) Message to serialize
   /// @return (std::string) Hello message serialized into JSON format
-  std::string build_hello_message_(HelloMessage *msg);
+  std::string hello_message_serialize_(const HelloMessage *msg);
 
   // TODO: why return a boolean?
 
