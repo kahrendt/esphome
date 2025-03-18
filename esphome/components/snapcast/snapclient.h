@@ -176,7 +176,7 @@ class Snapclient {
   /// @brief Serializes a base message into a bytebuffer for sending to the server.
   /// @param msg (BaseMessage *) Base message to serialize
   /// @param buffer (ByteBuffer&) Buffer to store the serialized message
-  void base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
+  void base_message_serialize_(const BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
 
   /// @brief Deserializes a base message in a bytebuffer received from the server.
   /// @param msg (BaseMessage *) Base message to store deserialized message
@@ -186,7 +186,7 @@ class Snapclient {
   /// @brief Serializes a client message into a JSON string for sending to the server.
   /// @param msg (ClientInfoMessage *) Client message to serialize
   /// @return (std::string) Message serialized into JSON format
-  std::string client_message_serialize_(ClientInfoMessage *msg);
+  std::string client_message_serialize_(const ClientInfoMessage *msg);
 
   // TODO: The naming scheme of the hello messages functions are not consistent with other function names
 

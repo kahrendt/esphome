@@ -330,7 +330,7 @@ int64_t Snapclient::server_timestamp_to_client(int64_t server_timestamp) {
          (this->server_settings_message_.buffer_ms - this->server_settings_message_.latency) * 1000;
 }
 
-void Snapclient::base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer) {
+void Snapclient::base_message_serialize_(const BaseMessage *msg, bytebuffer::ByteBuffer &buffer) {
   buffer.put_uint16(msg->type);
   buffer.put_uint16(msg->id);
   buffer.put_uint16(msg->refers_to);
@@ -352,7 +352,7 @@ void Snapclient::base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuf
   msg->size = buffer.get_uint32();
 }
 
-std::string Snapclient::client_message_serialize_(ClientInfoMessage *msg) {
+std::string Snapclient::client_message_serialize_(const ClientInfoMessage *msg) {
   return json::build_json([msg](JsonObject root) {
     root["volume"] = msg->volume;
     root["muted"] = msg->muted;
