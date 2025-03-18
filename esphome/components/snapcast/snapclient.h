@@ -164,6 +164,7 @@ class Snapclient {
   ProcessMessageResponse process_messages(BaseMessage &base_msg, AudioChunk *audio_chunk);
 
   /// @brief Converts a server timestamp into a client timestamp taking into account the network latency.
+  /// Should only be used after confirming ``is_network_latency_full`` is true to ensure a stable result.
   /// @param server_timestamp (int64_t) Server timestamp in microseconds
   /// @return (int64_t) Client timestamp in microseconds
   int64_t server_timestamp_to_client(int64_t server_timestamp) const;
@@ -176,34 +177,32 @@ class Snapclient {
   /// @brief Serializes a base message into a bytebuffer for sending to the server.
   /// @param msg (BaseMessage *) Base message to serialize
   /// @param buffer (ByteBuffer&) Buffer to store the serialized message
-  void base_message_serialize_(const BaseMessage *msg, bytebuffer::ByteBuffer &buffer) const;
+  void serialize_base_message_(const BaseMessage *msg, bytebuffer::ByteBuffer &buffer) const;
 
   /// @brief Deserializes a base message in a bytebuffer received from the server.
   /// @param msg (BaseMessage *) Base message to store deserialized message
   /// @param buffer (ByteBuffer&) Buffer containing the message to deserialize
-  void base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer) const;
+  void deserialize_base_message_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer) const;
 
-  /// @brief Serializes a client message into a JSON string for sending to the server.
+  /// @brief Formats a client message as a JSON string for sending to the server.
   /// @param msg (ClientInfoMessage *) Client message to serialize
   /// @return (std::string) Message serialized into JSON format
-  std::string client_message_serialize_(const ClientInfoMessage *msg) const;
+  std::string format_client_message_(const ClientInfoMessage *msg) const;
 
   /// @brief Builds a HelloMessage struct containing information about the client.
   /// @return (HelloMessage) The client's hello message
   HelloMessage build_hello_message_() const;
 
-  /// @brief Serializes a client hello message into a JSON string.
+  /// @brief Formats a client hello message as a JSON string for sending to the server.
   /// @param msg (HelloMessage *) Message to serialize
   /// @return (std::string) Hello message serialized into JSON format
-  std::string hello_message_serialize_(const HelloMessage *msg) const;
+  std::string format_hello_message_(const HelloMessage *msg) const;
 
-  // TODO: why return a boolean?
-
-  /// @brief Deserializes a server settings message JSON string.
+  /// @brief Deserializes a server settings message JSON string received from the server.
   /// @param msg (ServerSettingsMessage*) Stores the deserialized string
   /// @param json_str (const char*) Server settings JSON formatted string to deserialize
   /// @return True if successful, false otherwse
-  bool server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str) const;
+  bool deserialize_server_settings_message_(ServerSettingsMessage *msg, const char *json_str) const;
 
   /// @brief Reads a specified number of bytes from the socket into a buffer.
   /// Repeatedly reads until the specified number of bytes are read.

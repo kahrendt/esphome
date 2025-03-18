@@ -57,7 +57,7 @@ esp_err_t Snapclient::send_client_message(float volume, bool muted) {
   }
 
   ClientInfoMessage client_msg = {.volume = static_cast<uint32_t>(volume * 100.0f), .muted = muted};
-  std::string json_client_msg = this->client_message_serialize_(&client_msg);
+  std::string json_client_msg = this->format_client_message_(&client_msg);
   size_t client_message_size = json_client_msg.size() + sizeof(uint32_t);
 
   int64_t now = esp_timer_get_time();
@@ -71,7 +71,7 @@ esp_err_t Snapclient::send_client_message(float volume, bool muted) {
       .received = {.sec = 0, .usec = 0},
       .size = client_message_size,
   };
-  this->base_message_serialize_(&base_msg_for_client_info, base_msg_buffer);
+  this->serialize_base_message_(&base_msg_for_client_info, base_msg_buffer);
   base_msg_buffer.put_uint32(json_client_msg.size());
 
   if ((this->socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + sizeof(uint32_t)) == -1) ||
@@ -88,7 +88,7 @@ esp_err_t Snapclient::send_hello_message() {
   }
 
   HelloMessage msg = this->build_hello_message_();
-  std::string hello_msg = this->hello_message_serialize_(&msg);
+  std::string hello_msg = this->format_hello_message_(&msg);
 
   size_t total_hello_msg_size = hello_msg.size() + sizeof(uint32_t);
   bytebuffer::ByteBuffer hello_msg_buffer = bytebuffer::ByteBuffer(total_hello_msg_size);
@@ -111,7 +111,7 @@ esp_err_t Snapclient::send_hello_message() {
 
   bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE);
 
-  this->base_message_serialize_(&base_msg, base_msg_buffer);
+  this->serialize_base_message_(&base_msg, base_msg_buffer);
 
   ESP_LOGD(TAG, "Sent hello message: %s", hello_msg.c_str());
 
@@ -140,7 +140,7 @@ esp_err_t Snapclient::send_time_message() {
       .size = TIME_MESSAGE_SIZE,
   };
 
-  this->base_message_serialize_(&base_msg_for_time, time_msg_buffer);
+  this->serialize_base_message_(&base_msg_for_time, time_msg_buffer);
   time_msg_buffer.put_int32(0);
   time_msg_buffer.put_int32(0);
   ssize_t time_msg_written =
@@ -169,7 +169,7 @@ esp_err_t Snapclient::read_base_message(BaseMessage *base_msg) {
 
   int64_t now = esp_timer_get_time();
 
-  this->base_message_deserialize_(base_msg, base_msg_buffer);
+  this->deserialize_base_message_(base_msg, base_msg_buffer);
   base_msg->received.sec = static_cast<int32_t>(now / 1000000LL);
   base_msg->received.usec = static_cast<int32_t>(now - (now / 1000000LL) * 1000000LL);
 
@@ -285,7 +285,7 @@ ProcessMessageResponse Snapclient::process_messages(BaseMessage &base_msg, Audio
         std::memcpy((void *) server_msg_read_data.data(), (void *) (audio_chunk->data + audio_chunk->offset),
                     server_settings_len);
 
-        this->server_settings_message_deserialize_(&this->server_settings_message_, server_msg_read_data.c_str());
+        this->deserialize_server_settings_message_(&this->server_settings_message_, server_msg_read_data.c_str());
       }
 
       response = ProcessMessageResponse::PROCESSED_SERVER_SETTINGS;
@@ -331,7 +331,7 @@ int64_t Snapclient::server_timestamp_to_client(int64_t server_timestamp) const {
          (this->server_settings_message_.buffer_ms - this->server_settings_message_.latency) * 1000;
 }
 
-void Snapclient::base_message_serialize_(const BaseMessage *msg, bytebuffer::ByteBuffer &buffer) const {
+void Snapclient::serialize_base_message_(const BaseMessage *msg, bytebuffer::ByteBuffer &buffer) const {
   buffer.put_uint16(msg->type);
   buffer.put_uint16(msg->id);
   buffer.put_uint16(msg->refers_to);
@@ -342,7 +342,7 @@ void Snapclient::base_message_serialize_(const BaseMessage *msg, bytebuffer::Byt
   buffer.put_uint32(msg->size);
 }
 
-void Snapclient::base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer) const {
+void Snapclient::deserialize_base_message_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer) const {
   msg->type = buffer.get_uint16();
   msg->id = buffer.get_uint16();
   msg->refers_to = buffer.get_uint16();
@@ -353,7 +353,7 @@ void Snapclient::base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuf
   msg->size = buffer.get_uint32();
 }
 
-std::string Snapclient::client_message_serialize_(const ClientInfoMessage *msg) const {
+std::string Snapclient::format_client_message_(const ClientInfoMessage *msg) const {
   return json::build_json([msg](JsonObject root) {
     root["volume"] = msg->volume;
     root["muted"] = msg->muted;
@@ -374,7 +374,7 @@ HelloMessage Snapclient::build_hello_message_() const {
   return hello_message;
 }
 
-std::string Snapclient::hello_message_serialize_(const HelloMessage *msg) const {
+std::string Snapclient::format_hello_message_(const HelloMessage *msg) const {
   return json::build_json([msg](JsonObject root) {
     root["MAC"] = msg->mac;
     root["HostName"] = msg->hostname;
@@ -388,22 +388,7 @@ std::string Snapclient::hello_message_serialize_(const HelloMessage *msg) const 
   });
 }
 
-ssize_t Snapclient::read_from_socket_(uint8_t *buffer, size_t length) {
-  size_t offset = 0;
-  while (length > 0) {
-    ssize_t bytes_read = this->socket_->read((void *) (buffer + offset), length);
-
-    if (bytes_read == -1) {
-      return -1;
-    }
-    length -= bytes_read;
-    offset += bytes_read;
-  }
-
-  return offset;
-}
-
-bool Snapclient::server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str) const {
+bool Snapclient::deserialize_server_settings_message_(ServerSettingsMessage *msg, const char *json_str) const {
   bool valid = json::parse_json(json_str, [msg](JsonObject root) -> bool {
     if (!root["bufferMs"].is<JsonVariant>() || !root["latency"].is<JsonVariant>() || !root["muted"].is<JsonVariant>() ||
         !root["volume"].is<JsonVariant>()) {
@@ -419,6 +404,21 @@ bool Snapclient::server_settings_message_deserialize_(ServerSettingsMessage *msg
   });
 
   return valid;
+}
+
+ssize_t Snapclient::read_from_socket_(uint8_t *buffer, size_t length) {
+  size_t offset = 0;
+  while (length > 0) {
+    ssize_t bytes_read = this->socket_->read((void *) (buffer + offset), length);
+
+    if (bytes_read == -1) {
+      return -1;
+    }
+    length -= bytes_read;
+    offset += bytes_read;
+  }
+
+  return offset;
 }
 
 }  // namespace snapcast
