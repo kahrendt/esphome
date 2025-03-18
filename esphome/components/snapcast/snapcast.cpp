@@ -409,7 +409,7 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
 
       EventBits_t event_bits = xEventGroupGetBits(this_snapcast->event_group_);
 
-      if (high_speed_timer_started && this_snapcast->snapclient_->get_network_latency_full()) {
+      if (high_speed_timer_started && this_snapcast->snapclient_->is_network_latency_full()) {
         high_speed_timer_started = false;
         low_speed_timer_started = true;
         time_message_delay = NORMAL_SYNC_LATENCY_BUF;
@@ -460,7 +460,7 @@ void SnapcastPlayer::client_task(void *params) {  // // Find snapcast server
           }
           break;
         case ProcessMessageResponse::PROCESSED_SERVER_SETTINGS: {
-          ServerSettingsMessage server_settings = this_snapcast->snapclient_->get_server_settings_message();
+          ServerSettingsMessage server_settings = this_snapcast->snapclient_->get_server_settings();
           this_snapcast->defer([this_snapcast, server_settings]() {
             this_snapcast->server_settings_trigger_->trigger(server_settings.muted, server_settings.volume / 100.0f);
           });

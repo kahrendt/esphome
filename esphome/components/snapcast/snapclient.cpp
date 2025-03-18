@@ -27,16 +27,16 @@ esp_err_t Snapclient::connect_to_server(std::string server_address, uint16_t por
     ESP_LOGE(TAG, "Socket unable to set sockaddr: errno %d", errno);
     return ESP_FAIL;
   }
-  this->client_socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
+  this->socket_ = socket::socket_ip(SOCK_STREAM, IPPROTO_IP);
 
-  err = this->client_socket_->connect((struct sockaddr *) &server, sizeof(server));
+  err = this->socket_->connect((struct sockaddr *) &server, sizeof(server));
   if (err != 0) {
     ESP_LOGE(TAG, "Socket unable to connect: errno %d", err);
     return ESP_FAIL;
   }
 
   int nodelay = 1;
-  if (this->client_socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
+  if (this->socket_->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
     ESP_LOGW(TAG, "Failed to turn on TCP_NODELAY, syncing may be inaccurate");
     nodelay = 0;
   }
@@ -47,8 +47,8 @@ esp_err_t Snapclient::connect_to_server(std::string server_address, uint16_t por
 
 void Snapclient::disconnect_from_server() {
   this->is_connected_ = false;
-  this->client_socket_->shutdown(0);
-  this->client_socket_->close();
+  this->socket_->shutdown(0);
+  this->socket_->close();
 }
 
 esp_err_t Snapclient::send_client_message(float volume, bool muted) {
@@ -74,9 +74,8 @@ esp_err_t Snapclient::send_client_message(float volume, bool muted) {
   this->base_message_serialize_(&base_msg_for_client_info, base_msg_buffer);
   base_msg_buffer.put_uint32(json_client_msg.size());
 
-  if ((this->client_socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + sizeof(uint32_t)) ==
-       -1) ||
-      (this->client_socket_->write((void *) json_client_msg.data(), json_client_msg.size()) == -1)) {
+  if ((this->socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + sizeof(uint32_t)) == -1) ||
+      (this->socket_->write((void *) json_client_msg.data(), json_client_msg.size()) == -1)) {
     return ESP_FAIL;
   }
 
@@ -115,8 +114,8 @@ esp_err_t Snapclient::send_hello_message() {
 
   ESP_LOGD(TAG, "Sent hello message: %s", hello_msg.c_str());
 
-  if ((this->client_socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE) == -1) ||
-      (this->client_socket_->write((void *) hello_msg_buffer.get_raw_data(), base_msg.size) == -1)) {
+  if ((this->socket_->write((void *) base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE) == -1) ||
+      (this->socket_->write((void *) hello_msg_buffer.get_raw_data(), base_msg.size) == -1)) {
     return ESP_FAIL;
   }
   return ESP_OK;
@@ -144,7 +143,7 @@ esp_err_t Snapclient::send_time_message() {
   time_msg_buffer.put_int32(0);
   time_msg_buffer.put_int32(0);
   ssize_t time_msg_written =
-      this->client_socket_->write((void *) time_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + TIME_MESSAGE_SIZE);
+      this->socket_->write((void *) time_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE + TIME_MESSAGE_SIZE);
   if (time_msg_written == -1) {
     return ESP_FAIL;
   }
@@ -161,8 +160,7 @@ esp_err_t Snapclient::read_base_message(BaseMessage *base_msg) {
 
   bytebuffer::ByteBuffer base_msg_buffer = bytebuffer::ByteBuffer(BASE_MESSAGE_SIZE);
 
-  ssize_t bytes_read =
-      this->read_from_socket_(this->client_socket_.get(), base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
+  ssize_t bytes_read = this->read_from_socket_(base_msg_buffer.get_raw_data(), BASE_MESSAGE_SIZE);
   if (bytes_read == -1) {
     ESP_LOGE(TAG, "Failed to read from the socket");
     return ESP_FAIL;
@@ -182,7 +180,7 @@ ProcessMessageResponse Snapclient::process_messages(BaseMessage &base_msg, Audio
     return ProcessMessageResponse::ERROR_DISCONNECTED;
   }
 
-  size_t bytes_read = this->read_from_socket_(this->client_socket_.get(), audio_chunk->data, base_msg.size);
+  size_t bytes_read = this->read_from_socket_(audio_chunk->data, base_msg.size);
   if (bytes_read != base_msg.size) {
     ESP_LOGE(TAG, "Error reading from socket");
     return ProcessMessageResponse::ERROR_SOCKET_READ;
@@ -389,10 +387,10 @@ std::string Snapclient::build_hello_message_(HelloMessage *msg) {
   });
 }
 
-ssize_t Snapclient::read_from_socket_(socket::Socket *socket, uint8_t *buffer, size_t length) {
+ssize_t Snapclient::read_from_socket_(uint8_t *buffer, size_t length) {
   size_t offset = 0;
   while (length > 0) {
-    ssize_t bytes_read = socket->read((void *) (buffer + offset), length);
+    ssize_t bytes_read = this->socket_->read((void *) (buffer + offset), length);
 
     if (bytes_read == -1) {
       return -1;

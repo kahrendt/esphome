@@ -96,7 +96,9 @@ static const size_t TIME_MESSAGE_SIZE = 8;
 static const size_t WIRE_CHUNK_HEADER_SIZE = 12;
 
 class Snapclient {
-  /* Class that implements communication with a snapserver as snapclient.
+  /* Class that implements the binary protocl communication with a snapserver as snapclient.
+   *
+   * Based on https://github.com/badaix/snapcast/blob/develop/doc/binary_protocol.md (accessed 2025-03-18)
    *
    * 1) First connect to the snapserver with ``connect_to_server``
    * 2) Send a hello message with ``send_hello_message``
@@ -115,38 +117,104 @@ class Snapclient {
  public:
   Snapclient(std::string player_id) : player_id_(player_id), network_latency_filter_(MedianFilter(50)){};
 
+  /// @brief Connects to a snapserver's client tcp interface.
+  /// @param server_address (std::string) Server IP address
+  /// @param port (uint16_t) Port for the snapserver's client tcp interface
+  /// @return ESP_OK if successful, ESP_FAIL if there was a problem connecting the socket
   esp_err_t connect_to_server(std::string server_address, uint16_t port);
+
+  /// @brief Disconnects and shuts down the socket.
   void disconnect_from_server();
 
+  /// @brief Sends a snapcast client message to the server to update the current volume and muted states.
+  /// @param volume (float) current volume
+  /// @param muted (bool) current muted state
+  /// @return ESP_FAIL if the message couldn't be sent, ESP_OK otherwise
   esp_err_t send_client_message(float volume, bool muted);
+
+  /// @brief Sends an inital snapcast hello message to the server describing the client.
+  /// @return ESP_FAIL if the message couldn't be sent, ESP_OK otherwise
   esp_err_t send_hello_message();
+
+  /// @brief Sends a snapcast time message to the server with clients current internal time.
+  /// @return ESP_FAIL if the message couldn't be sent, ESP_OK otherwise
   esp_err_t send_time_message();
 
-  ServerSettingsMessage get_server_settings_message() { return this->server_settings_message_; }
-  bool get_network_latency_full() { return this->network_latency_filter_.is_full(); }
+  /// @brief Gets the most recently sent server settings.
+  /// @return ServerSettingsMessage most recent server settings
+  ServerSettingsMessage get_server_settings() { return this->server_settings_message_; }
+
+  /// @brief Tests if the median filter for the server client timestamp offset is full.
+  /// @return True if full, false otherwise.
+  bool is_network_latency_full() { return this->network_latency_filter_.is_full(); }
+
+  /// @brief Gets the current stream's codec.
+  /// @return (SnapcastCodecFormat)
   SnapcastCodecFormat get_codec_format() { return this->codec_format_; }
 
+  /// @brief Reads a base message from the socket.
+  /// @param base_msg (BaseMessage*) Stores the read, deserialized base message
+  /// @return ESP_FAIL if the message couldn't be read, ESP_OK otherwise
   esp_err_t read_base_message(BaseMessage *base_msg);
+
+  /// @brief Reads a follow-up message from the socket and processes its information.
+  /// @param base_msg (BaseMessage&) The base message describing this follow-up message
+  /// @param audio_chunk (AudioChunk*) Stores the incoming message. Must already have allocated the .data pointer.
+  /// @return (ProcessMessageResponse) The type of the message processed if successful, or an appropriate error.
   ProcessMessageResponse process_messages(BaseMessage &base_msg, AudioChunk *audio_chunk);
 
+  /// @brief Converts a server timestamp into a client timestamp taking into account the network latency.
+  /// @param server_timestamp (int64_t) Server timestamp in microseconds
+  /// @return (int64_t) Client timestamp in microseconds
   int64_t server_timestamp_to_client(int64_t server_timestamp);
 
+  /// @brief Tests if the socket is currently connected.
+  /// @return True if there is an active connection, false otherwise
   bool is_connected() { return this->is_connected_; }
 
  protected:
+  /// @brief Serializes a base message into a bytebuffer for sending to the server.
+  /// @param msg (BaseMessage *) Base message to serialize
+  /// @param buffer (ByteBuffer&) Buffer to store the serialized message
   void base_message_serialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
+
+  /// @brief Deserializes a base message in a bytebuffer received from the server.
+  /// @param msg (BaseMessage *) Base message to store deserialized message
+  /// @param buffer (ByteBuffer&) Buffer containing the message to deserialize
   void base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
 
+  /// @brief Serializes a client message into a JSON string for sending to the server.
+  /// @param msg (ClientInfoMessage *) Client message to serialize
+  /// @return (std::string) Message serialized into JSON format
   std::string client_message_serialize_(ClientInfoMessage *msg);
+
+  // TODO: The naming scheme of the hello messages functions are not consistent with other function names
+
+  /// @brief Builds and serializes a hello message into a JSON string for sending to the server.
+  /// @return (std::string) Hello message serialized into JSON format
   std::string hello_message_serialize_();
 
+  /// @brief Serializes the client hello message into a JSON string.
+  /// @param msg (HelloMessage *) Message to serialize
+  /// @return (std::string) Hello message serialized into JSON format
   std::string build_hello_message_(HelloMessage *msg);
 
+  // TODO: why return a boolean?
+
+  /// @brief Deserializes a server settings message JSON string.
+  /// @param msg (ServerSettingsMessage*) Stores the deserialized string
+  /// @param json_str (const char*) Server settings JSON formatted string to deserialize
+  /// @return True if successful, false otherwse
   bool server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str);
 
-  ssize_t read_from_socket_(socket::Socket *socket, uint8_t *buffer, size_t length);
+  /// @brief Reads a specified number of bytes from the socket into a buffer.
+  /// Repeatedly reads until the specified number of bytes are read.
+  /// @param buffer (uint8_t*) Buffer to store received data
+  /// @param length (size_t) Number of bytes to read
+  /// @return (ssize_t) -1 if failed, otherwise the number of bytes received
+  ssize_t read_from_socket_(uint8_t *buffer, size_t length);
 
-  std::unique_ptr<socket::Socket> client_socket_;
+  std::unique_ptr<socket::Socket> socket_;
   MedianFilter network_latency_filter_;
 
   ServerSettingsMessage server_settings_message_;
