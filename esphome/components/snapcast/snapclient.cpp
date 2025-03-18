@@ -15,6 +15,11 @@ namespace snapcast {
 
 static const char *TAG = "snapcast.client";
 
+static const char *SNAPCAST_CLIENT_ARCH = "xtensa";
+static const char *SNAPCAST_CLIENT_NAME = "esphome";
+static const char *SNAPCAST_CLIENT_OS = "esp32";
+static const char *SNAPCAST_CLIENT_VERSION = "0.1.0";
+
 esp_err_t Snapclient::connect_to_server(std::string server_address, uint16_t port) {
   esp_err_t err = ESP_OK;
 
@@ -364,10 +369,10 @@ HelloMessage Snapclient::build_hello_message_() const {
   HelloMessage hello_message;
   hello_message.mac = this->player_id_.c_str();
   hello_message.hostname = App.get_name().c_str();
-  hello_message.version = "0.0.1";
-  hello_message.client_name = "esphome";
-  hello_message.os = "esp32";
-  hello_message.arch = "xtensa";
+  hello_message.version = SNAPCAST_CLIENT_VERSION;
+  hello_message.client_name = SNAPCAST_CLIENT_NAME;
+  hello_message.os = SNAPCAST_CLIENT_OS;
+  hello_message.arch = SNAPCAST_CLIENT_ARCH;
   hello_message.instance = 1;
   hello_message.id = this->player_id_.c_str();
   hello_message.protocol_version = 2;
