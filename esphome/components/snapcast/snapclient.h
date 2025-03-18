@@ -142,15 +142,15 @@ class Snapclient {
 
   /// @brief Gets the most recently sent server settings.
   /// @return ServerSettingsMessage most recent server settings
-  ServerSettingsMessage get_server_settings() { return this->server_settings_message_; }
+  ServerSettingsMessage get_server_settings() const { return this->server_settings_message_; }
 
   /// @brief Tests if the median filter for the server client timestamp offset is full.
   /// @return True if full, false otherwise.
-  bool is_network_latency_full() { return this->network_latency_filter_.is_full(); }
+  bool is_network_latency_full() const { return this->network_latency_filter_.is_full(); }
 
   /// @brief Gets the current stream's codec.
   /// @return (SnapcastCodecFormat)
-  SnapcastCodecFormat get_codec_format() { return this->codec_format_; }
+  SnapcastCodecFormat get_codec_format() const { return this->codec_format_; }
 
   /// @brief Reads a base message from the socket.
   /// @param base_msg (BaseMessage*) Stores the read, deserialized base message
@@ -166,27 +166,27 @@ class Snapclient {
   /// @brief Converts a server timestamp into a client timestamp taking into account the network latency.
   /// @param server_timestamp (int64_t) Server timestamp in microseconds
   /// @return (int64_t) Client timestamp in microseconds
-  int64_t server_timestamp_to_client(int64_t server_timestamp);
+  int64_t server_timestamp_to_client(int64_t server_timestamp) const;
 
   /// @brief Tests if the socket is currently connected.
   /// @return True if there is an active connection, false otherwise
-  bool is_connected() { return this->is_connected_; }
+  bool is_connected() const { return this->is_connected_; }
 
  protected:
   /// @brief Serializes a base message into a bytebuffer for sending to the server.
   /// @param msg (BaseMessage *) Base message to serialize
   /// @param buffer (ByteBuffer&) Buffer to store the serialized message
-  void base_message_serialize_(const BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
+  void base_message_serialize_(const BaseMessage *msg, bytebuffer::ByteBuffer &buffer) const;
 
   /// @brief Deserializes a base message in a bytebuffer received from the server.
   /// @param msg (BaseMessage *) Base message to store deserialized message
   /// @param buffer (ByteBuffer&) Buffer containing the message to deserialize
-  void base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer);
+  void base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer) const;
 
   /// @brief Serializes a client message into a JSON string for sending to the server.
   /// @param msg (ClientInfoMessage *) Client message to serialize
   /// @return (std::string) Message serialized into JSON format
-  std::string client_message_serialize_(const ClientInfoMessage *msg);
+  std::string client_message_serialize_(const ClientInfoMessage *msg) const;
 
   /// @brief Builds a HelloMessage struct containing information about the client.
   /// @return (HelloMessage) The client's hello message
@@ -195,7 +195,7 @@ class Snapclient {
   /// @brief Serializes a client hello message into a JSON string.
   /// @param msg (HelloMessage *) Message to serialize
   /// @return (std::string) Hello message serialized into JSON format
-  std::string hello_message_serialize_(const HelloMessage *msg);
+  std::string hello_message_serialize_(const HelloMessage *msg) const;
 
   // TODO: why return a boolean?
 
@@ -203,7 +203,7 @@ class Snapclient {
   /// @param msg (ServerSettingsMessage*) Stores the deserialized string
   /// @param json_str (const char*) Server settings JSON formatted string to deserialize
   /// @return True if successful, false otherwse
-  bool server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str);
+  bool server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str) const;
 
   /// @brief Reads a specified number of bytes from the socket into a buffer.
   /// Repeatedly reads until the specified number of bytes are read.

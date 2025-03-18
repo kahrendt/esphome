@@ -46,7 +46,7 @@ class Snapcontrol {
   /// @return ESP_OK if successful, ESP_FAIL if there was a problem connecting the socket
   esp_err_t connect_to_server(std::string server_address, uint16_t port);
 
-  /// @brief Disconnects and shuts down the socket. Resets ``current_group_id_``, ``current_stream_id_`` and metadata
+  /// @brief Disconnects and shuts down the socket. Resets ``current_group_id_``, ``current_stream_id_``, and metadata
   /// member variables.
   void disconnect_from_server();
 
@@ -69,16 +69,16 @@ class Snapcontrol {
 
   /// @brief Gets if the current stream is status is idle.
   /// @return (optional<bool>) True if idle, false if playing, no value if state is unknown
-  optional<bool> get_stream_is_idle() { return this->stream_is_idle_; }
+  optional<bool> get_stream_is_idle() const { return this->stream_is_idle_; }
 
   /// @brief Gets if the current stream's playbackStatus properties is playing
   /// Not all streams have this information
   /// @return (optional<bool>) True if playing, false if paused or stopped, no value if state is unknown
-  optional<bool> get_stream_is_playing() { return this->stream_is_playing_; }
+  optional<bool> get_stream_is_playing() const { return this->stream_is_playing_; }
 
   /// @brief Tests if the socket is currently connected.
   /// @return True if there is an active connection, false otherwise
-  bool is_connected() { return this->is_connected_; }
+  bool is_connected() const { return this->is_connected_; }
 
   /// @brief Experimental
   void join_another_group();

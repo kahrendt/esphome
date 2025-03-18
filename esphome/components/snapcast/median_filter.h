@@ -37,9 +37,9 @@ class MedianFilter {
     return median_offset;
   }
 
-  int64_t get_most_recent_median() { return this->most_recent_median_; }
+  int64_t get_most_recent_median() const { return this->most_recent_median_; }
 
-  bool is_full() { return (this->data_.size() == this->capacity_); }
+  bool is_full() const { return (this->data_.size() == this->capacity_); }
 
   void reset() {
     this->data_.clear();

@@ -326,12 +326,12 @@ ProcessMessageResponse Snapclient::process_messages(BaseMessage &base_msg, Audio
   return response;
 }
 
-int64_t Snapclient::server_timestamp_to_client(int64_t server_timestamp) {
+int64_t Snapclient::server_timestamp_to_client(int64_t server_timestamp) const {
   return server_timestamp - this->network_latency_filter_.get_most_recent_median() +
          (this->server_settings_message_.buffer_ms - this->server_settings_message_.latency) * 1000;
 }
 
-void Snapclient::base_message_serialize_(const BaseMessage *msg, bytebuffer::ByteBuffer &buffer) {
+void Snapclient::base_message_serialize_(const BaseMessage *msg, bytebuffer::ByteBuffer &buffer) const {
   buffer.put_uint16(msg->type);
   buffer.put_uint16(msg->id);
   buffer.put_uint16(msg->refers_to);
@@ -342,7 +342,7 @@ void Snapclient::base_message_serialize_(const BaseMessage *msg, bytebuffer::Byt
   buffer.put_uint32(msg->size);
 }
 
-void Snapclient::base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer) {
+void Snapclient::base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuffer &buffer) const {
   msg->type = buffer.get_uint16();
   msg->id = buffer.get_uint16();
   msg->refers_to = buffer.get_uint16();
@@ -353,7 +353,7 @@ void Snapclient::base_message_deserialize_(BaseMessage *msg, bytebuffer::ByteBuf
   msg->size = buffer.get_uint32();
 }
 
-std::string Snapclient::client_message_serialize_(const ClientInfoMessage *msg) {
+std::string Snapclient::client_message_serialize_(const ClientInfoMessage *msg) const {
   return json::build_json([msg](JsonObject root) {
     root["volume"] = msg->volume;
     root["muted"] = msg->muted;
@@ -374,7 +374,7 @@ HelloMessage Snapclient::build_hello_message_() const {
   return hello_message;
 }
 
-std::string Snapclient::hello_message_serialize_(const HelloMessage *msg) {
+std::string Snapclient::hello_message_serialize_(const HelloMessage *msg) const {
   return json::build_json([msg](JsonObject root) {
     root["MAC"] = msg->mac;
     root["HostName"] = msg->hostname;
@@ -403,7 +403,7 @@ ssize_t Snapclient::read_from_socket_(uint8_t *buffer, size_t length) {
   return offset;
 }
 
-bool Snapclient::server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str) {
+bool Snapclient::server_settings_message_deserialize_(ServerSettingsMessage *msg, const char *json_str) const {
   bool valid = json::parse_json(json_str, [msg](JsonObject root) -> bool {
     if (!root["bufferMs"].is<JsonVariant>() || !root["latency"].is<JsonVariant>() || !root["muted"].is<JsonVariant>() ||
         !root["volume"].is<JsonVariant>()) {
