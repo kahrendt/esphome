@@ -520,6 +520,9 @@ void SnapcastPlayer::decode_task(void *params) {
 
   bool initial_decode = true;
 
+  // std::vector<uint32_t> debug_decode_durations;
+  // int64_t debug_decode_audio_durations = 0;
+
   while (true) {
     EventBits_t event_bits = xEventGroupGetBits(this_snapcast->event_group_);
     if (event_bits & COMMAND_STOP) {
@@ -744,6 +747,7 @@ void SnapcastPlayer::decode_task(void *params) {
          * Decode the audio chunk and write to the transfer buffer
          */
         size_t new_bytes = 0;
+        // uint32_t decode_start = micros();
         if ((flac_decoder != nullptr) &&
             (this_snapcast->snapclient_->get_codec_format() == SnapcastCodecFormat::SNAPCAST_CODEC_FLAC)) {
           uint32_t output_samples = 0;
@@ -784,6 +788,7 @@ void SnapcastPlayer::decode_task(void *params) {
             new_bytes = this_snapcast->audio_stream_info_.frames_to_bytes(output_frames);
           }
         }
+        // uint32_t decode_duration = micros() - decode_start;
 
         output_transfer_buffer->increase_buffer_length(new_bytes);
 
@@ -795,6 +800,20 @@ void SnapcastPlayer::decode_task(void *params) {
             this_snapcast->audio_stream_info_.frames_to_milliseconds_with_remainder(&new_frames);
         const int64_t new_duration_us =
             new_duration_ms * 1000 + this_snapcast->audio_stream_info_.frames_to_microseconds(new_frames);
+
+        // if (debug_decode_durations.size() < 500) {
+        //   debug_decode_durations.push_back(decode_duration);
+        //   debug_decode_audio_durations += new_duration_us;
+        // } else {
+        //   int64_t accumulator = 0;
+        //   for (auto &duration : debug_decode_durations) {
+        //     accumulator += duration;
+        //   }
+        //   double average = static_cast<double>(accumulator) / static_cast<double>(debug_decode_audio_durations);
+        //   printf("average decode time in us per us of audio: %f us\n", average);
+        //   debug_decode_audio_durations = 0;
+        //   debug_decode_durations.clear();
+        // }
 
         // How many frames in this chunk that are added or removed to the actual frame count
         int32_t frame_corrections = 0;
