@@ -177,13 +177,14 @@ void SnapcastPlayer::loop() {
                                                              !this->snapcontrol_->get_stream_is_playing().value())) {
       this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
       if ((old_state == media_player::MEDIA_PLAYER_STATE_PLAYING) && !this->speaker_->is_stopped()) {
+        ESP_LOGD(TAG, "Sending stop command to decode task");
         xEventGroupSetBits(this->event_group_, COMMAND_STOP);
       }
     } else {
       this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
     }
   } else {
-    this->snapcontrol_->request_server_status();
+    // this->snapcontrol_->request_server_status();
   }
 
   if ((this->state != old_state) || (this->force_publish_state_)) {
@@ -318,9 +319,11 @@ void SnapcastPlayer::control_task(void *params) {
       ESP_LOGW(TAG, "Failed to connect to snapcontrol server at ip %s:%" PRIu16,
                this_snapcast->discovered_address_.value().c_str(), this_snapcast->server_control_port_.value());
       delay(5000);
+      continue;
     }
 
     this_snapcast->snapcontrol_->request_server_status();
+
     while (this_snapcast->snapcontrol_->process_messages() == ESP_OK) {
     }
     this_snapcast->snapcontrol_->disconnect_from_server();

@@ -110,6 +110,7 @@ esp_err_t Snapcontrol::process_messages() {
       if (group_stream_params["id"].as<std::string>().compare(this->current_group_id_) == 0) {
         this->current_stream_id_ = group_stream_params["stream_id"].as<std::string>();
         ESP_LOGV(TAG, "Current group changed stream id to %s", this->current_stream_id_.c_str());
+        this->request_server_status();
       }
     }
     if (method.compare("Stream.OnUpdate") == 0) {
@@ -130,6 +131,7 @@ esp_err_t Snapcontrol::process_messages() {
         std::string state = stream["stream"]["status"].as<std::string>();
         if (state.compare("idle") == 0) {
           this->stream_is_idle_ = true;
+          this->stream_is_playing_ = false;
         } else if (state.compare("playing") == 0) {
           this->stream_is_idle_ = false;
         }
@@ -268,8 +270,9 @@ void Snapcontrol::parse_snapcast_server_(JsonObject server) {
     this->parse_snapcast_groups_(groups);
   }
 
-  JsonArray streams = server["streams"];
+  JsonArray streams = server["streams"].as<JsonArray>();
   if (streams.size() > 0) {
+    printf("we found %d streams in this message!\n", streams.size());
     this->parse_snapcast_streams_(streams);
   }
 }
@@ -302,6 +305,8 @@ void Snapcontrol::parse_snapcast_groups_(JsonArray groups) {
           new_group.clients.push_back(client["id"].as<std::string>());
         }
         this->snapgroups_.push_back(new_group);
+        // printf("adding a new group to the stored list with id %s and stream id %s\n", new_group.group_id.c_str(),
+        //        new_group.stream_id.c_str());
       }
 
       JsonArray clients = group["clients"].as<JsonArray>();
@@ -309,7 +314,7 @@ void Snapcontrol::parse_snapcast_groups_(JsonArray groups) {
         if (client["id"].as<std::string>().compare(this->player_id_) == 0) {
           this->current_group_id_ = group["id"].as<std::string>();
           this->current_stream_id_ = group["stream_id"].as<std::string>();
-          ESP_LOGV(TAG, "Found which group we are in, current group id is %s streaming %s",
+          ESP_LOGD(TAG, "Found which group we are in, current group id is %s streaming %s",
                    this->current_group_id_.c_str(), this->current_stream_id_.c_str());
           break;
         }
@@ -320,7 +325,10 @@ void Snapcontrol::parse_snapcast_groups_(JsonArray groups) {
 
 void Snapcontrol::parse_snapcast_streams_(JsonArray streams) {
   for (const JsonObject &stream : streams) {
+    printf("parsing streams, currnet stream to parse is %s\n", stream["id"].as<std::string>().c_str());
     for (Snapgroup &group : this->snapgroups_) {
+      // printf("trying to parse the streams, this is group id we know %s with stream id %s\n", group.group_id.c_str(),
+      //        group.stream_id.c_str());
       if (stream["id"].as<std::string>().compare(group.stream_id) == 0) {
         std::string state = stream["status"].as<std::string>();
         if (state.compare("idle") == 0) {
@@ -328,6 +336,9 @@ void Snapcontrol::parse_snapcast_streams_(JsonArray streams) {
         } else if (state.compare("playing") == 0) {
           group.is_active = true;
         }
+        // printf("found group %s current stream %s with status %s\n", group.group_id.c_str(), group.stream_id.c_str(),
+        //        state.c_str());
+        // break;
       }
     }
 
@@ -335,6 +346,7 @@ void Snapcontrol::parse_snapcast_streams_(JsonArray streams) {
       std::string state = stream["status"].as<std::string>();
       if (state.compare("idle") == 0) {
         this->stream_is_idle_ = true;
+        this->stream_is_playing_ = false;
       } else if (state.compare("playing") == 0) {
         this->stream_is_idle_ = false;
       }
@@ -344,7 +356,6 @@ void Snapcontrol::parse_snapcast_streams_(JsonArray streams) {
       if (properties) {
         this->parse_snapcast_stream_properties_(properties);
       }
-      break;
     }
   }
 }
