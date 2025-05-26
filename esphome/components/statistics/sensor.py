@@ -2,7 +2,9 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 import esphome.final_validate as fv
 from esphome import automation
-from esphome.core import CORE, Lambda
+
+# from esphome.core import CORE, Lambda
+from esphome.core import Lambda
 from esphome.components import sensor, time
 from esphome.const import (
     CONF_ACCURACY_DECIMALS,
@@ -37,11 +39,11 @@ CODEOWNERS = ["@kahrendt"]
 DEPENDENCIES = ["time"]
 
 
-# Borrowed from ili9xxx/display.py, accessed August 2023
-def AUTO_LOAD():
-    if CORE.is_esp32:
-        return ["psram"]
-    return []
+# # Borrowed from ili9xxx/display.py, accessed August 2023
+# def AUTO_LOAD():
+#     if CORE.is_esp32:
+#         return ["psram"]
+#     return []
 
 
 statistics_ns = cg.esphome_ns.namespace("statistics")
@@ -840,11 +842,11 @@ async def to_code(config):
                 return_string = STATISTIC_TYPE_CONFIGS[stat_sensor.get(CONF_TYPE)][
                     STAT_TYPE_CONF_RETURN_LAMBDA
                 ].format(
-                    time_conversion=TIME_CONVERSION_FACTORS[
-                        stat_sensor.get(CONF_TIME_UNIT)
-                    ]
-                    if (CONF_TIME_UNIT in stat_sensor)
-                    else 1,
+                    time_conversion=(
+                        TIME_CONVERSION_FACTORS[stat_sensor.get(CONF_TIME_UNIT)]
+                        if (CONF_TIME_UNIT in stat_sensor)
+                        else 1
+                    ),
                     time_component=time_,
                 )
 
