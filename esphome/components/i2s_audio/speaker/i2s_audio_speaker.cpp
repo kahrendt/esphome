@@ -115,6 +115,7 @@ void I2SAudioSpeaker::loop() {
     xEventGroupClearBits(this->event_group_, SpeakerEventGroupBits::COMMAND_START);
   }
 
+  // Handle the task's state
   if (event_group_bits & SpeakerEventGroupBits::TASK_STARTING) {
     ESP_LOGD(TAG, "Task started, attempting to allocate buffer");
     xEventGroupClearBits(this->event_group_, SpeakerEventGroupBits::TASK_STARTING);
@@ -123,9 +124,6 @@ void I2SAudioSpeaker::loop() {
     ESP_LOGD(TAG, "Task is running and writing data");
     xEventGroupClearBits(this->event_group_, SpeakerEventGroupBits::TASK_RUNNING);
     this->state_ = speaker::STATE_RUNNING;
-
-    this->status_clear_warning();
-    this->status_clear_error();
   }
   if (event_group_bits & SpeakerEventGroupBits::TASK_STOPPING) {
     ESP_LOGD(TAG, "Task is stopping, deallocating buffer");
@@ -145,16 +143,17 @@ void I2SAudioSpeaker::loop() {
     this->state_ = speaker::STATE_STOPPED;
   }
 
+  // Log any errors encounted by the task
   if (event_group_bits & SpeakerEventGroupBits::ERR_ESP_NO_MEM) {
     ESP_LOGE(TAG, "Failed to allocate buffers");
     xEventGroupClearBits(this->event_group_, SpeakerEventGroupBits::ERR_ESP_NO_MEM);
   }
-
   if (event_group_bits & SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE) {
     ESP_LOGE(TAG, "Unable write all data to the I2S bus");
     // The error bit is cleared by the task on the next successful write
   }
 
+  // Handle the speaker's state
   switch (this->state_) {
     case speaker::STATE_STARTING:
       if (this->status_has_error()) {
@@ -162,7 +161,6 @@ void I2SAudioSpeaker::loop() {
       }
 
       if (this->start_i2s_driver_(this->audio_stream_info_) != ESP_OK) {
-        // TODO: careful, audio stream info could change while task is running
         this->status_momentary_error("I2S driver failed to start, attempting again in 1 second", 1000);
         break;
       }
@@ -486,7 +484,7 @@ esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_strea
       (i2s_slot_bit_width_t) audio_stream_info.get_bits_per_sample() > this->slot_bit_width_) {
 #endif
     // Currently can't handle the case when the incoming audio has more bits per sample than the configured value
-    ESP_LOGE(TAG, "Audio streams with more bits per sample than the I2S speaker's configuraiton is not supported");
+    ESP_LOGE(TAG, "Audio streams with more bits per sample than the I2S speaker's configuration is not supported");
     return ESP_ERR_NOT_SUPPORTED;
   }
 
