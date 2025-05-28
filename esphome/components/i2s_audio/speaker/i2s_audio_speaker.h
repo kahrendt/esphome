@@ -129,6 +129,8 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
 
   int16_t q15_volume_factor_{INT16_MAX};
 
+  audio::AudioStreamInfo current_stream_info_;  // stream info the driver currently loaded
+
 #ifdef USE_I2S_LEGACY
 #if SOC_I2S_SUPPORTS_DAC
   i2s_dac_mode_t internal_dac_mode_{I2S_DAC_CHANNEL_DISABLE};
