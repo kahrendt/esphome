@@ -32,6 +32,7 @@ class I2SAudioBase : public Parented<I2SAudioComponent> {
   void set_sample_rate(uint32_t sample_rate) { this->sample_rate_ = sample_rate; }
   void set_use_apll(uint32_t use_apll) { this->use_apll_ = use_apll; }
   void set_mclk_multiple(i2s_mclk_multiple_t mclk_multiple) { this->mclk_multiple_ = mclk_multiple; }
+  void set_use_ext_clk(bool use_ext_clk) { this->use_ext_clk_ = use_ext_clk; }
 
  protected:
 #ifdef USE_I2S_LEGACY
@@ -47,6 +48,7 @@ class I2SAudioBase : public Parented<I2SAudioComponent> {
 #endif
   uint32_t sample_rate_;
   bool use_apll_;
+  bool use_ext_clk_;
   i2s_mclk_multiple_t mclk_multiple_;
 };
 

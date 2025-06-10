@@ -591,6 +591,9 @@ esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_strea
     clk_src = I2S_CLK_SRC_APLL;
   }
 #endif
+  if (this->use_ext_clk_) {
+    clk_src = I2S_CLK_SRC_EXTERNAL;
+  }
   i2s_std_gpio_config_t pin_config = this->parent_->get_pin_config();
 
   i2s_std_clk_config_t clk_cfg = {
