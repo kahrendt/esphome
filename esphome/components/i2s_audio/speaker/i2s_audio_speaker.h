@@ -86,6 +86,7 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
 
 #ifndef USE_I2S_LEGACY
   static bool i2s_overflow_cb(i2s_chan_handle_t handle, i2s_event_data_t *event, void *user_ctx);
+  static bool i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_event_data_t *event, void *user_ctx);
 #endif
 
   /// @brief Allocates the data buffer and ring buffer
@@ -126,6 +127,8 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   optional<uint32_t> timeout_;
 
   bool pause_state_{false};
+
+  uint32_t frames_written_{0};
 
   int16_t q15_volume_factor_{INT16_MAX};
 
