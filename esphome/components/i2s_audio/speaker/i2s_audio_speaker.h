@@ -89,17 +89,6 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   static bool i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_event_data_t *event, void *user_ctx);
 #endif
 
-  /// @brief Allocates the data buffer and ring buffer
-  /// @param data_buffer_size Number of bytes to allocate for the data buffer.
-  /// @param ring_buffer_size Number of bytes to allocate for the ring buffer.
-  /// @return ESP_ERR_NO_MEM if either buffer fails to allocate
-  ///         ESP_OK if successful
-  esp_err_t allocate_buffers_(size_t data_buffer_size, size_t ring_buffer_size);
-
-  /// @brief Deallocates ``data_buffer_`` and resets the ``audio_ring_buffer_`` shared pointer
-  /// @param data_buffer_size Allocated size of ``data_buffer_`
-  void deallocate_buffers_(size_t data_buffer_size);
-
   /// @brief Starts the ESP32 I2S driver.
   /// Attempts to lock the I2S port, starts the I2S driver using the passed in stream information, and sets the data out
   /// pin. If it fails, it will unlock the I2S port and uninstalls the driver, if necessary.
@@ -119,17 +108,13 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
 
   QueueHandle_t i2s_event_queue_;
 
-  uint8_t *data_buffer_;
-  std::shared_ptr<RingBuffer> audio_ring_buffer_;
+  std::weak_ptr<RingBuffer> audio_ring_buffer_;
 
   uint32_t buffer_duration_ms_;
 
   optional<uint32_t> timeout_;
 
   bool pause_state_{false};
-
-  uint32_t frames_written_{0};
-  bool dma_underflow_{false};
 
   int16_t q15_volume_factor_{INT16_MAX};
 
