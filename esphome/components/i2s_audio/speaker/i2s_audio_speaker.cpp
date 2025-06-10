@@ -20,13 +20,13 @@
 namespace esphome {
 namespace i2s_audio {
 
-static const uint8_t DMA_BUFFER_DURATION_MS = 15;
+static const uint32_t DMA_BUFFER_DURATION_MS = 15;
 static const size_t DMA_BUFFERS_COUNT = 4;
 
 static const size_t TASK_DELAY_MS = DMA_BUFFER_DURATION_MS * DMA_BUFFERS_COUNT / 2;
 
 static const size_t TASK_STACK_SIZE = 4096;
-static const ssize_t TASK_PRIORITY = 18;
+static const ssize_t TASK_PRIORITY = 23;
 
 static const size_t I2S_EVENT_QUEUE_COUNT = DMA_BUFFERS_COUNT + 1;
 
@@ -278,6 +278,8 @@ void I2SAudioSpeaker::speaker_task(void *params) {
   const size_t data_buffer_size = this_speaker->current_stream_info_.ms_to_bytes(dma_buffers_duration_ms);
   const size_t ring_buffer_size = this_speaker->current_stream_info_.ms_to_bytes(ring_buffer_duration);
 
+  const size_t single_dma_buffer_input_size = data_buffer_size / DMA_BUFFERS_COUNT;
+
   bool successful = true;
   std::unique_ptr<audio::AudioSourceTransferBuffer> transfer_buffer =
       audio::AudioSourceTransferBuffer::create(data_buffer_size);
@@ -301,7 +303,6 @@ void I2SAudioSpeaker::speaker_task(void *params) {
     bool stop_gracefully = false;
     uint32_t last_data_received_time = millis();
     bool tx_dma_underflow = false;
-    bool channel_enabled = false;
     uint32_t frames_written = 0;
 
     while (this_speaker->pause_state_ || !this_speaker->timeout_.has_value() ||
@@ -336,10 +337,10 @@ void I2SAudioSpeaker::speaker_task(void *params) {
           tx_dma_underflow = true;
           frames_sent = frames_written;
 
-          if (channel_enabled) {
-            i2s_channel_disable(this_speaker->tx_handle_);
-            channel_enabled = false;
-          }
+          ESP_LOGD(TAG, "only have %" PRIu32 " frames written to DMA, but it actually sent %" PRIu32 " frames",
+                   frames_written, write_info.frames);
+
+          this_speaker->disable_channel_();
         } else {
           tx_dma_underflow = false;
         }
@@ -356,17 +357,10 @@ void I2SAudioSpeaker::speaker_task(void *params) {
       }
 
       uint8_t *new_data = transfer_buffer->get_buffer_end();
-      size_t bytes_read = transfer_buffer->transfer_data_from_source(0, (transfer_buffer->free() == 0));
+      size_t bytes_read = transfer_buffer->transfer_data_from_source(
+          this_speaker->current_stream_info_.frames_to_microseconds(frames_written) / 2000, false);
 
-      if (transfer_buffer->available() == 0) {
-        if (stop_gracefully && tx_dma_underflow) {
-          break;
-        } else {
-          delay(TASK_DELAY_MS);
-        }
-      } else {
-        uint32_t ms_to_delay = this_speaker->current_stream_info_.bytes_to_frames(transfer_buffer->available());
-
+      if (bytes_read > 0) {
         if ((this_speaker->current_stream_info_.get_bits_per_sample() == 16) &&
             (this_speaker->q15_volume_factor_ < INT16_MAX)) {
           // Scale samples by the volume factor in place
@@ -387,6 +381,15 @@ void I2SAudioSpeaker::speaker_task(void *params) {
           }
         }
 #endif
+      }
+
+      if (transfer_buffer->available() == 0) {
+        if (stop_gracefully && tx_dma_underflow) {
+          break;
+        }
+      } else {
+        const size_t bytes_to_write = std::min(transfer_buffer->available(), single_dma_buffer_input_size);
+        const uint32_t ms_to_delay = DMA_BUFFER_DURATION_MS / 2;
 
         size_t bytes_written = 0;
 #ifdef USE_I2S_LEGACY
@@ -399,26 +402,26 @@ void I2SAudioSpeaker::speaker_task(void *params) {
                            this_speaker->bits_per_sample_, &bytes_written, pdMS_TO_TICKS(ms_to_delay));
         }
 #else
-        if (!channel_enabled) {
+        if (!this_speaker->channel_enabled_) {
           i2s_channel_preload_data(this_speaker->tx_handle_, transfer_buffer->get_buffer_start(),
                                    transfer_buffer->available(), &bytes_written);
           if (bytes_written > 0) {
-            i2s_channel_enable(this_speaker->tx_handle_);
-            channel_enabled = true;
+            this_speaker->enable_channel_();
           }
         } else {
-          i2s_channel_write(this_speaker->tx_handle_, transfer_buffer->get_buffer_start(), transfer_buffer->available(),
-                            &bytes_written, pdMS_TO_TICKS(ms_to_delay));
+          if (i2s_channel_write(this_speaker->tx_handle_, transfer_buffer->get_buffer_start(), bytes_to_write,
+                                &bytes_written, pdMS_TO_TICKS(ms_to_delay)) == ESP_ERR_TIMEOUT) {
+            // ESP_LOGD(TAG, "Timed out writing to DMA");
+          }
         }
 #endif
-        if ((transfer_buffer->available() > 0) && (bytes_written == 0)) {
-          xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE);
-        } else {
-          xEventGroupClearBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE);
-        }
+        // if ((transfer_buffer->available() > 0) && (bytes_written == 0)) {
+        //   xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE);
+        // } else {
+        //   xEventGroupClearBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE);
+        // }
 
         if (bytes_written > 0) {
-          tx_dma_underflow = false;
           last_data_received_time = millis();
           frames_written += this_speaker->current_stream_info_.bytes_to_frames(bytes_written);
           transfer_buffer->decrease_buffer_length(bytes_written);
@@ -677,9 +680,10 @@ bool IRAM_ATTR I2SAudioSpeaker::i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_eve
   i2s_dma_write_info write_info = {.timestamp = now,
                                    .frames = this_speaker->current_stream_info_.bytes_to_frames(event->size)};
 
-  xQueueSend(this_speaker->i2s_event_queue_, &write_info, 0);
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+  xQueueSendToBackFromISR(this_speaker->i2s_event_queue_, &write_info, &xHigherPriorityTaskWoken);
 
-  return false;
+  return xHigherPriorityTaskWoken;
 }
 #endif
 
@@ -687,10 +691,25 @@ void I2SAudioSpeaker::stop_i2s_driver_() {
 #ifdef USE_I2S_LEGACY
   i2s_driver_uninstall(this->parent_->get_port());
 #else
+  this->disable_channel_();
   i2s_del_channel(this->tx_handle_);
 #endif
 
   this->parent_->unlock();
+}
+
+void I2SAudioSpeaker::enable_channel_() {
+  if (!this->channel_enabled_) {
+    i2s_channel_enable(this->tx_handle_);
+    this->channel_enabled_ = true;
+  }
+}
+void I2SAudioSpeaker::disable_channel_() {
+  if (this->channel_enabled_) {
+    i2s_channel_disable(this->tx_handle_);
+    this->channel_enabled_ = false;
+    ESP_LOGD(TAG, "Disabled channel");
+  }
 }
 
 }  // namespace i2s_audio

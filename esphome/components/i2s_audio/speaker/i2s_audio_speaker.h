@@ -103,6 +103,9 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   /// @brief Stops the I2S driver and unlocks the I2S port
   void stop_i2s_driver_();
 
+  void enable_channel_();
+  void disable_channel_();
+
   TaskHandle_t speaker_task_handle_{nullptr};
   EventGroupHandle_t event_group_{nullptr};
 
@@ -115,6 +118,8 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   optional<uint32_t> timeout_;
 
   bool pause_state_{false};
+
+  bool channel_enabled_{false};
 
   int16_t q15_volume_factor_{INT16_MAX};
 
