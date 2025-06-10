@@ -376,6 +376,16 @@ void I2SAudioSpeaker::speaker_task(void *params) {
                              pdMS_TO_TICKS(DMA_BUFFER_DURATION_MS * 5));
           }
 #else
+          while (xQueueReceive(this_speaker->i2s_event_queue_, &write_info, 0)) {
+            this_speaker->audio_output_callback_(write_info.frames, write_info.timestamp);
+            if (this_speaker->frames_written_ == 0) {
+              tx_dma_underflow = true;
+
+              // TODO: Will this cause audible issues with certain DACs? It stops sending WCLK and BLCK signals...
+              i2s_channel_disable(this_speaker->tx_handle_);
+            }
+          }
+
           if (this_speaker->frames_written_ == 0) {
             i2s_channel_preload_data(this_speaker->tx_handle_,
                                      this_speaker->data_buffer_ + i * single_dma_buffer_input_size, bytes_to_write,
