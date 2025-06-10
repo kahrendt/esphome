@@ -718,7 +718,7 @@ bool IRAM_ATTR I2SAudioSpeaker::i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_eve
   // TODO: This may not account for expanding to higher bits per sample...
   uint32_t frames_sent =
       std::min(this_speaker->current_stream_info_.bytes_to_frames(event->size), this_speaker->frames_written_);
-  if (frames_sent > this_speaker->frames_written) {
+  if (frames_sent > this_speaker->frames_written_) {
     this_speaker->dma_underflow_ = true;
   }
   this_speaker->frames_written_ -= frames_sent;
