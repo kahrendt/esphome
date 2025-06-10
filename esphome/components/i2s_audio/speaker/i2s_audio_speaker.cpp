@@ -317,7 +317,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
       i2s_dma_write_info write_info;
       while (xQueueReceive(this_speaker->i2s_event_queue_, &write_info, 0)) {
         this_speaker->audio_output_callback_(write_info.frames, write_info.timestamp);
-        if (this_speaker->frames_written_ == 0) {
+        if (this_speaker->dma_underflow_ && !tx_dma_underflow) {
           tx_dma_underflow = true;
 
           // TODO: Will this cause audible issues with certain DACs? It stops sending WCLK and BLCK signals...
@@ -378,7 +378,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
 #else
           while (xQueueReceive(this_speaker->i2s_event_queue_, &write_info, 0)) {
             this_speaker->audio_output_callback_(write_info.frames, write_info.timestamp);
-            if (this_speaker->frames_written_ == 0) {
+            if (this_speaker->dma_underflow_ && !tx_dma_underflow) {
               tx_dma_underflow = true;
 
               // TODO: Will this cause audible issues with certain DACs? It stops sending WCLK and BLCK signals...
@@ -718,6 +718,9 @@ bool IRAM_ATTR I2SAudioSpeaker::i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_eve
   // TODO: This may not account for expanding to higher bits per sample...
   uint32_t frames_sent =
       std::min(this_speaker->current_stream_info_.bytes_to_frames(event->size), this_speaker->frames_written_);
+  if (frames_sent > this_speaker->frames_written) {
+    this_speaker->dma_underflow_ = true;
+  }
   this_speaker->frames_written_ -= frames_sent;
 
   i2s_dma_write_info write_info = {.timestamp = now, .frames = frames_sent};

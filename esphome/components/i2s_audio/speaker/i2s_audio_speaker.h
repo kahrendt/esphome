@@ -129,6 +129,7 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   bool pause_state_{false};
 
   uint32_t frames_written_{0};
+  bool dma_underflow_{false};
 
   int16_t q15_volume_factor_{INT16_MAX};
 
