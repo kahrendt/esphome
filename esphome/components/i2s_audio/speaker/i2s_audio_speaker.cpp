@@ -386,7 +386,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
             }
           }
 
-          if (this_speaker->frames_written_ == 0) {
+          if ((this_speaker->frames_written_ == 0) && tx_dma_underflow) {
             i2s_channel_preload_data(this_speaker->tx_handle_,
                                      this_speaker->data_buffer_ + i * single_dma_buffer_input_size, bytes_to_write,
                                      &bytes_written);
