@@ -380,6 +380,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
             this_speaker->audio_output_callback_(write_info.frames, write_info.timestamp);
             if (this_speaker->dma_underflow_ && !tx_dma_underflow) {
               tx_dma_underflow = true;
+              this_speaker->dma_underflow_ = false;
 
               // TODO: Will this cause audible issues with certain DACs? It stops sending WCLK and BLCK signals...
               i2s_channel_disable(this_speaker->tx_handle_);
