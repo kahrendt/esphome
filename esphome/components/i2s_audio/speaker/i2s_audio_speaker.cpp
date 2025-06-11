@@ -383,11 +383,25 @@ void I2SAudioSpeaker::speaker_task(void *params) {
       size_t bytes_read = transfer_buffer->transfer_data_from_source(pdMS_TO_TICKS(read_delay));
 
       if (bytes_read > 0) {
-        if ((this_speaker->current_stream_info_.get_bits_per_sample() == 16) &&
-            (this_speaker->q15_volume_factor_ < INT16_MAX)) {
-          // Scale samples by the volume factor in place
-          q15_multiplication((int16_t *) new_data, (int16_t *) new_data, bytes_read / sizeof(int16_t),
-                             this_speaker->q15_volume_factor_);
+        if (this_speaker->q15_volume_factor_ < INT16_MAX) {
+          const size_t bytes_per_sample = this_speaker->current_stream_info_.samples_to_bytes(1);
+          const uint32_t len = bytes_read / bytes_per_sample;
+
+          int32_t gain_factor = this_speaker->q15_volume_factor_;
+          int32_t shift = 15;
+          if (bytes_per_sample >= 3) {
+            shift >>= 8;        // Will convert Q31 to Q23
+            gain_factor >>= 7;  // Q15 -> Q8
+            // shifted_sample * gain_factor is Q23*Q8 = Q31
+          }
+
+          for (uint32_t i = 0; i < len; ++i) {
+            int32_t sample =
+                audio::unpack_audio_sample_to_q31(&new_data[i * bytes_per_sample], bytes_per_sample);  // Q31
+            sample >>= shift;
+            sample *= gain_factor;  // Q31
+            audio::pack_q31_as_audio_sample(sample, &new_data[i * bytes_per_sample], bytes_per_sample);
+          }
         }
 
 #ifdef USE_ESP32_VARIANT_ESP32
