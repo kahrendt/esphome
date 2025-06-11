@@ -591,15 +591,20 @@ esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_strea
     clk_src = I2S_CLK_SRC_APLL;
   }
 #endif
-  if (this->use_ext_clk_) {
+#ifdef I2S_CLK_SRC_EXTERNAL
+  if (this->external_clk_freq_ > 0) {
     clk_src = I2S_CLK_SRC_EXTERNAL;
   }
+#endif
   i2s_std_gpio_config_t pin_config = this->parent_->get_pin_config();
 
   i2s_std_clk_config_t clk_cfg = {
       .sample_rate_hz = audio_stream_info.get_sample_rate(),
       .clk_src = clk_src,
       .mclk_multiple = this->mclk_multiple_,
+#ifdef I2S_CLK_SRC_EXTERNAL
+      .ext_clk_freq_hz = this->external_clk_freq_,
+#endif
   };
 
   i2s_slot_mode_t slot_mode = this->slot_mode_;

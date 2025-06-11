@@ -39,7 +39,7 @@ CONF_PRIMARY = "primary"
 CONF_SECONDARY = "secondary"
 
 CONF_USE_APLL = "use_apll"
-CONF_USE_EXT_CLK = "use_ext_clk"
+CONF_EXTERNAL_CLK_FREQ = "external_clk_freq"
 CONF_BITS_PER_CHANNEL = "bits_per_channel"
 CONF_MCLK_MULTIPLE = "mclk_multiple"
 CONF_MONO = "mono"
@@ -172,7 +172,7 @@ def i2s_audio_component_schema(
                 *I2S_MODE_OPTIONS, lower=True
             ),
             cv.Optional(CONF_USE_APLL, default=False): cv.boolean,
-            cv.Optional(CONF_USE_EXT_CLK, default=False): cv.boolean,
+            cv.Optional(CONF_EXTERNAL_CLK_FREQ, default=0): cv.positive_int,
             cv.Optional(CONF_BITS_PER_CHANNEL, default="default"): cv.All(
                 cv.Any(cv.float_with_unit("bits", "bit"), "default"),
                 cv.one_of(*I2S_BITS_PER_CHANNEL),
@@ -208,7 +208,7 @@ async def register_i2s_audio_component(var, config):
         cg.add(var.set_slot_bit_width(I2S_SLOT_BIT_WIDTH[config[CONF_BITS_PER_SAMPLE]]))
     cg.add(var.set_sample_rate(config[CONF_SAMPLE_RATE]))
     cg.add(var.set_use_apll(config[CONF_USE_APLL]))
-    cg.add(var.set_use_ext_clk(config[CONF_USE_EXT_CLK]))
+    cg.add(var.set_external_clk_freq(config[CONF_EXTERNAL_CLK_FREQ]))
     cg.add(var.set_mclk_multiple(I2S_MCLK_MULTIPLE[config[CONF_MCLK_MULTIPLE]]))
 
 
