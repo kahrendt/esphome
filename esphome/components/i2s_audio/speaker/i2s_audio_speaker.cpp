@@ -282,7 +282,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
 
   bool successful = true;
   std::unique_ptr<audio::AudioSourceTransferBuffer> transfer_buffer =
-      audio::AudioSourceTransferBuffer::create(data_buffer_size);
+      audio::AudioSourceTransferBuffer::create(single_dma_buffer_input_size);
 
   if (transfer_buffer == nullptr) {
     successful = false;
@@ -304,6 +304,8 @@ void I2SAudioSpeaker::speaker_task(void *params) {
     uint32_t last_data_received_time = millis();
     bool tx_dma_underflow = false;
     uint32_t frames_written = 0;
+    int64_t last_timestamp = esp_timer_get_time();
+    uint32_t counter = 0;
 
     while (this_speaker->pause_state_ || !this_speaker->timeout_.has_value() ||
            (millis() - last_data_received_time) <= this_speaker->timeout_.value()) {
@@ -346,6 +348,16 @@ void I2SAudioSpeaker::speaker_task(void *params) {
         }
         frames_written -= frames_sent;
         this_speaker->audio_output_callback_(frames_sent, write_info.timestamp);
+        // int64_t us_sent = this_speaker->current_stream_info_.frames_to_microseconds(frames_sent);
+        // int64_t time_since_last_sent = write_info.timestamp-last_timestamp;
+        // last_timestamp = write_info.timestamp;
+        // int64_t error = time_since_last_sent - us_sent;
+        // printf("Timestamp vs duration in us: %" PRId64 ", ", error);
+        // ++counter;
+        // if (counter > 50) {
+        //   printf("\n");
+        //   counter = 0;
+        // }
       }
 #endif
 
@@ -357,8 +369,18 @@ void I2SAudioSpeaker::speaker_task(void *params) {
       }
 
       uint8_t *new_data = transfer_buffer->get_buffer_end();
-      size_t bytes_read = transfer_buffer->transfer_data_from_source(
-          this_speaker->current_stream_info_.frames_to_microseconds(frames_written) / 2000, false);
+
+      // // Only shift if there isn't a full DMA buffer's worth of audio and there isn't enough space to store a full
+      // DMA
+      // // buffer's worth of audio
+      // const bool shift_transfer_buffer =
+      //     (transfer_buffer->available() < single_dma_buffer_input_size) &&
+      //     (transfer_buffer->free() < single_dma_buffer_input_size - transfer_buffer->available());
+      // Only wait half the duration of the data already written to the DMA buffer for new audio data
+      const uint32_t read_delay =
+          (this_speaker->current_stream_info_.frames_to_microseconds(frames_written) / 1000) / 2;
+
+      size_t bytes_read = transfer_buffer->transfer_data_from_source(pdMS_TO_TICKS(read_delay));
 
       if (bytes_read > 0) {
         if ((this_speaker->current_stream_info_.get_bits_per_sample() == 16) &&
@@ -389,7 +411,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
         }
       } else {
         const size_t bytes_to_write = std::min(transfer_buffer->available(), single_dma_buffer_input_size);
-        const uint32_t ms_to_delay = DMA_BUFFER_DURATION_MS / 2;
+        const uint32_t ms_to_delay = 3 * DMA_BUFFER_DURATION_MS;
 
         size_t bytes_written = 0;
 #ifdef USE_I2S_LEGACY
@@ -432,7 +454,9 @@ void I2SAudioSpeaker::speaker_task(void *params) {
 
   xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::TASK_STOPPING);
 
-  transfer_buffer.reset();
+  if (transfer_buffer != nullptr) {
+    transfer_buffer.reset();
+  }
 
   xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::TASK_STOPPED);
 
