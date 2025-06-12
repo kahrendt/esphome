@@ -326,9 +326,9 @@ void I2SAudioSpeaker::speaker_task(void *params) {
         }
         frames_written -= frames_sent;
         this_speaker->audio_output_callback_(frames_sent, write_info.timestamp);
-        if (this_speaker->current_stream_info_.frames_to_microseconds(frames_sent) !=
-            (write_info.timestamp - write_info.timestamp)) {
-          printf("time since last write duration %" PRId64 " us\n", (write_info.timestamp - write_info.timestamp));
+        int64_t duration_us = this_speaker->current_stream_info_.frames_to_microseconds(frames_sent);
+        if (duration_us != (write_info.timestamp - last_interrupt)) {
+          printf("time since last write duration %" PRId64 " us\n", (write_info.timestamp - last_interrupt));
         }
         last_interrupt = write_info.timestamp;
       }
