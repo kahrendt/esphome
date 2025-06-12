@@ -85,7 +85,6 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   void stop_(bool wait_on_empty);
 
 #ifndef USE_I2S_LEGACY
-  static bool i2s_overflow_cb(i2s_chan_handle_t handle, i2s_event_data_t *event, void *user_ctx);
   static bool i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_event_data_t *event, void *user_ctx);
 #endif
 
@@ -103,8 +102,11 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   /// @brief Stops the I2S driver and unlocks the I2S port
   void stop_i2s_driver_();
 
-  void enable_channel_();
-  void disable_channel_();
+  /// @brief Enables the TX I2S channel, if available and not already enabled
+  void enable_i2s_channel_();
+
+  /// @brief Disables the TX I2S channel, if available and enabled
+  void disable_i2s_channel_();
 
   TaskHandle_t speaker_task_handle_{nullptr};
   EventGroupHandle_t event_group_{nullptr};
