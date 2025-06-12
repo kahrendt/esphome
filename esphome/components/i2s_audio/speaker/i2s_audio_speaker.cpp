@@ -26,7 +26,7 @@ static const size_t DMA_BUFFERS_COUNT = 4;
 static const size_t TASK_DELAY_MS = DMA_BUFFER_DURATION_MS * DMA_BUFFERS_COUNT / 2;
 
 static const size_t TASK_STACK_SIZE = 4096;
-static const ssize_t TASK_PRIORITY = 23;
+static const ssize_t TASK_PRIORITY = 19;
 
 static const size_t I2S_EVENT_QUEUE_COUNT = DMA_BUFFERS_COUNT + 1;
 
