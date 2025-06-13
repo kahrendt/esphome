@@ -286,7 +286,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
     bool tx_dma_underflow = false;
     uint32_t frames_written = 0;
     i2s_dma_write_info write_info;
-    int64_t last_interrupt = 0;
+    // int64_t last_interrupt = 0;
 
     while (this_speaker->pause_state_ || !this_speaker->timeout_.has_value() ||
            (millis() - last_data_received_time) <= this_speaker->timeout_.value()) {
@@ -326,11 +326,11 @@ void I2SAudioSpeaker::speaker_task(void *params) {
         }
         frames_written -= frames_sent;
         this_speaker->audio_output_callback_(frames_sent, write_info.timestamp);
-        int64_t duration_us = this_speaker->current_stream_info_.frames_to_microseconds(frames_sent);
-        if (duration_us != (write_info.timestamp - last_interrupt)) {
-          printf("time since last write duration %" PRId64 " us\n", (write_info.timestamp - last_interrupt));
-        }
-        last_interrupt = write_info.timestamp;
+        // int64_t duration_us = this_speaker->current_stream_info_.frames_to_microseconds(frames_sent);
+        // if (duration_us != (write_info.timestamp - last_interrupt)) {
+        //   printf("time since last write duration %" PRId64 " us\n", (write_info.timestamp - last_interrupt));
+        // }
+        // last_interrupt = write_info.timestamp;
       }
 #endif
 
