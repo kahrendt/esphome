@@ -218,6 +218,11 @@ bool I2SAudioMicrophone::start_driver_() {
     clk_src = I2S_CLK_SRC_APLL;
   }
 #endif
+#ifdef I2S_CLK_SRC_EXTERNAL
+  if (this->external_clk_freq_ > 0) {
+    clk_src = I2S_CLK_SRC_EXTERNAL;
+  }
+#endif
   i2s_std_gpio_config_t pin_config = this->parent_->get_pin_config();
 #if SOC_I2S_SUPPORTS_PDM_RX
   if (this->pdm_) {
@@ -263,6 +268,9 @@ bool I2SAudioMicrophone::start_driver_() {
         .sample_rate_hz = this->sample_rate_,
         .clk_src = clk_src,
         .mclk_multiple = this->mclk_multiple_,
+#ifdef I2S_CLK_SRC_EXTERNAL
+        .ext_clk_freq_hz = this->external_clk_freq_,
+#endif
     };
     i2s_std_slot_config_t std_slot_cfg =
         I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG((i2s_data_bit_width_t) this->slot_bit_width_, this->slot_mode_);
