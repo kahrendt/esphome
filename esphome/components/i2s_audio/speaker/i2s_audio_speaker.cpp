@@ -263,7 +263,8 @@ void I2SAudioSpeaker::speaker_task(void *params) {
 
   bool successful = true;
   std::unique_ptr<audio::AudioSourceTransferBuffer> transfer_buffer =
-      audio::AudioSourceTransferBuffer::create(single_dma_buffer_input_size);
+      audio::AudioSourceTransferBuffer::create(data_buffer_size);
+  // audio::AudioSourceTransferBuffer::create(single_dma_buffer_input_size);
 
   if (transfer_buffer == nullptr) {
     successful = false;
@@ -421,7 +422,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
           }
         } else {
           i2s_channel_write(this_speaker->tx_handle_, transfer_buffer->get_buffer_start(), transfer_buffer->available(),
-                            &bytes_written, pdMS_TO_TICKS(ms_to_wait));
+                            &bytes_written, ms_to_wait);
         }
 #endif
         if (bytes_written > 0) {
