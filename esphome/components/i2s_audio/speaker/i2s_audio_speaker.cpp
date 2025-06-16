@@ -699,7 +699,8 @@ bool IRAM_ATTR I2SAudioSpeaker::i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_eve
                                    .frames = this_speaker->current_stream_info_.bytes_to_frames(event->size)};
 
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-  if (xQueueSendToBackFromISR(this_speaker->i2s_event_queue_, &write_info, &xHigherPriorityTaskWoken) == errQUEUE_FUL) {
+  if (xQueueSendToBackFromISR(this_speaker->i2s_event_queue_, &write_info, &xHigherPriorityTaskWoken) ==
+      errQUEUE_FULL) {
     this->queue_full_ = true;
   }
 
