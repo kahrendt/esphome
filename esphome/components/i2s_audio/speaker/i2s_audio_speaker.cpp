@@ -592,6 +592,7 @@ esp_err_t I2SAudioSpeaker::start_i2s_driver_(audio::AudioStreamInfo &audio_strea
       .dma_desc_num = DMA_BUFFERS_COUNT,
       .dma_frame_num = dma_buffer_length,
       .auto_clear = true,
+      .intr_priority = 1,
   };
   /* Allocate a new TX channel and get the handle of this channel */
   esp_err_t err = i2s_new_channel(&chan_cfg, &this->tx_handle_, NULL);
