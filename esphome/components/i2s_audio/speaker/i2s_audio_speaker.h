@@ -138,6 +138,8 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   std::string i2s_comm_fmt_;
   i2s_chan_handle_t tx_handle_;
 #endif
+
+  bool queue_full_{false};
 };
 
 }  // namespace i2s_audio

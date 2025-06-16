@@ -98,6 +98,11 @@ void I2SAudioSpeaker::dump_config() {
 void I2SAudioSpeaker::loop() {
   uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
 
+  if (this->queue_full_) {
+    ESP_LOGE(TAG, "callback sent queue full!");
+    this->queue_full_ = false;
+  }
+
   if ((event_group_bits & SpeakerEventGroupBits::COMMAND_START) && (this->state_ == speaker::STATE_STOPPED)) {
     this->state_ = speaker::STATE_STARTING;
     xEventGroupClearBits(this->event_group_, SpeakerEventGroupBits::COMMAND_START);
@@ -694,7 +699,9 @@ bool IRAM_ATTR I2SAudioSpeaker::i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_eve
                                    .frames = this_speaker->current_stream_info_.bytes_to_frames(event->size)};
 
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-  xQueueSendToBackFromISR(this_speaker->i2s_event_queue_, &write_info, &xHigherPriorityTaskWoken);
+  if (xQueueSendToBackFromISR(this_speaker->i2s_event_queue_, &write_info, &xHigherPriorityTaskWoken) == errQUEUE_FUL) {
+    this->queue_full_ = true;
+  }
 
   return xHigherPriorityTaskWoken;
 }
