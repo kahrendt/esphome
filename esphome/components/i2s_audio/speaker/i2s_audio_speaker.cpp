@@ -261,7 +261,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
   const uint32_t ring_buffer_duration = std::max(dma_buffers_duration_ms, this_speaker->buffer_duration_ms_);
 
   // The DMA buffers may have more bits per sample, so calculate buffer sizes based in the input audio stream info
-  const size_t data_buffer_size = this_speaker->current_stream_info_.ms_to_bytes(dma_buffers_duration_ms);
+  const size_t data_buffer_size = this_speaker->current_stream_info_.ms_to_bytes(dma_buffers_duration_ms / 2);
   const size_t ring_buffer_size = this_speaker->current_stream_info_.ms_to_bytes(ring_buffer_duration);
 
   const size_t single_dma_buffer_input_size = data_buffer_size / DMA_BUFFERS_COUNT;
@@ -406,7 +406,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
           break;
         }
       } else {
-        const uint32_t ms_to_wait = 3 * DMA_BUFFER_DURATION_MS;
+        const uint32_t ms_to_wait = DMA_BUFFER_DURATION_MS;
 
         size_t bytes_written = 0;
 #ifdef USE_I2S_LEGACY
