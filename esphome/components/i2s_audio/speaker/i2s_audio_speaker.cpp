@@ -401,7 +401,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
       }
 
       if (transfer_buffer->available() == 0) {
-        vTaskDelay(pdMS_TO_TICKS(DMA_BUFFER_DURATION_MS));
+        vTaskDelay(pdMS_TO_TICKS(DMA_BUFFER_DURATION_MS / 2));
         if (stop_gracefully && tx_dma_underflow) {
           break;
         }
