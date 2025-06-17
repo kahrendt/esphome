@@ -717,7 +717,6 @@ void I2SAudioSpeaker::stop_i2s_driver_() {
   i2s_del_channel(this->tx_handle_);
   this->tx_handle_ = nullptr;
 #endif
-
   this->parent_->unlock();
 }
 
@@ -732,6 +731,7 @@ void I2SAudioSpeaker::disable_i2s_channel_() {
   if (this->channel_enabled_ && (this->tx_handle_ != nullptr)) {
     i2s_channel_disable(this->tx_handle_);
     this->channel_enabled_ = false;
+    ESP_LOGD(TAG, "disabled tx channel");
   }
 }
 
