@@ -266,7 +266,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
 
   const size_t single_dma_buffer_input_size = data_buffer_size / DMA_BUFFERS_COUNT;
 
-  const uint32_t frames_in_single_dma_buffer = audio_stream_info.ms_to_frames(DMA_BUFFER_DURATION_MS);
+  const uint32_t frames_in_single_dma_buffer = this_speaker->current_stream_info_.ms_to_frames(DMA_BUFFER_DURATION_MS);
 
   bool successful = true;
   std::unique_ptr<audio::AudioSourceTransferBuffer> transfer_buffer =
