@@ -266,6 +266,8 @@ void I2SAudioSpeaker::speaker_task(void *params) {
 
   const size_t single_dma_buffer_input_size = data_buffer_size / DMA_BUFFERS_COUNT;
 
+  const uint32_t frames_in_single_dma_buffer = audio_stream_info.ms_to_frames(DMA_BUFFER_DURATION_MS);
+
   bool successful = true;
   std::unique_ptr<audio::AudioSourceTransferBuffer> transfer_buffer =
       audio::AudioSourceTransferBuffer::create(data_buffer_size);
@@ -321,8 +323,8 @@ void I2SAudioSpeaker::speaker_task(void *params) {
 #else
 
       while (xQueueReceive(this_speaker->i2s_event_queue_, &write_info, 0)) {
-        uint32_t frames_sent = write_info.frames;
-        if (write_info.frames > frames_written) {
+        uint32_t frames_sent = frames_in_single_dma_buffer;  // write_info.frames;
+        if (frames_in_single_dma_buffer > frames_written) {
           tx_dma_underflow = true;
           frames_sent = frames_written;
 
@@ -436,9 +438,9 @@ void I2SAudioSpeaker::speaker_task(void *params) {
           transfer_buffer->decrease_buffer_length(bytes_written);
 
           xEventGroupClearBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE);
-        } else if (transfer_buffer->available() > 0) {
-          // Failed to write anything
-          xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE);
+          // } else if (transfer_buffer->available() > 0) {
+          //   // Failed to write anything
+          //   xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::ERR_ESP_INVALID_SIZE);
         }
       }
     }
@@ -696,8 +698,8 @@ bool IRAM_ATTR I2SAudioSpeaker::i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_eve
 
   I2SAudioSpeaker *this_speaker = (I2SAudioSpeaker *) user_ctx;
 
-  i2s_dma_write_info write_info = {.timestamp = now,
-                                   .frames = this_speaker->current_stream_info_.bytes_to_frames(event->size)};
+  i2s_dma_write_info write_info = {.timestamp = now, .frames = 0};
+  //  .frames = this_speaker->current_stream_info_.bytes_to_frames(event->size)};
 
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
   if (xQueueSendToBackFromISR(this_speaker->i2s_event_queue_, &write_info, &xHigherPriorityTaskWoken) ==
