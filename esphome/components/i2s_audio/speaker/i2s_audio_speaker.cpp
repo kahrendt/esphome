@@ -707,6 +707,8 @@ bool IRAM_ATTR I2SAudioSpeaker::i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_eve
     this_speaker->queue_full_ = true;
   }
 
+  portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+
   return xHigherPriorityTaskWoken;
 }
 #endif
