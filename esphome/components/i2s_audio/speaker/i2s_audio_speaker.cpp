@@ -726,7 +726,7 @@ void I2SAudioSpeaker::enable_i2s_channel_() {
   if (!this->channel_enabled_ && (this->tx_handle_ != nullptr)) {
     i2s_channel_enable(this->tx_handle_);
     this->channel_enabled_ = true;
-    xQueueReset(this_speaker->i2s_event_queue_);
+    xQueueReset(this->i2s_event_queue_);
   }
 }
 
