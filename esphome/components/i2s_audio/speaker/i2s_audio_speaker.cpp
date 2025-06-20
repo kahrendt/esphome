@@ -704,10 +704,6 @@ bool IRAM_ATTR I2SAudioSpeaker::i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_eve
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
   if (xQueueSendToBackFromISR(this_speaker->i2s_event_queue_, &write_info, &xHigherPriorityTaskWoken) ==
       errQUEUE_FULL) {
-    // this_speaker->queue_full_ = true;
-  }
-
-  if (xHigherPriorityTaskWoken) {
     this_speaker->queue_full_ = true;
   }
 
@@ -730,6 +726,7 @@ void I2SAudioSpeaker::enable_i2s_channel_() {
   if (!this->channel_enabled_ && (this->tx_handle_ != nullptr)) {
     i2s_channel_enable(this->tx_handle_);
     this->channel_enabled_ = true;
+    xQueueReset(this_speaker->i2s_event_queue_);
   }
 }
 
