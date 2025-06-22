@@ -1,19 +1,18 @@
-from esphome import pins
 import esphome.codegen as cg
 from esphome.components import audio, esp32, microphone
-from esphome.components.adc import ESP32_VARIANT_ADC1_PIN_TO_CHANNEL, validate_adc_pin
+from esphome.components.adc import validate_adc_pin
+
+# from esphome.components.adc import ESP32_VARIANT_ADC1_PIN_TO_CHANNEL, validate_adc_pin
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_BITS_PER_SAMPLE,
     CONF_CHANNEL,
     CONF_ID,
     CONF_NUM_CHANNELS,
-    CONF_NUMBER,
     CONF_SAMPLE_RATE,
 )
 
 from .. import (
-    CONF_I2S_DIN_PIN,
     CONF_LEFT,
     CONF_MONO,
     CONF_RIGHT,
@@ -22,7 +21,6 @@ from .. import (
     i2s_audio_ns,
     register_i2s_audio_component,
     use_legacy,
-    validate_mclk_divisible_by_3,
 )
 
 CODEOWNERS = ["@jesserockz"]
@@ -106,7 +104,7 @@ CONFIG_SCHEMA = cv.All(
             ),
             "external": BASE_SCHEMA.extend(
                 {
-                    cv.Required(CONF_I2S_DIN_PIN): pins.internal_gpio_input_pin_number,
+                    # cv.Required(CONF_I2S_DIN_PIN): pins.internal_gpio_input_pin_number,
                     cv.Optional(CONF_PDM, default=False): cv.boolean,
                 }
             ),
@@ -117,7 +115,7 @@ CONFIG_SCHEMA = cv.All(
     _validate_channel,
     _set_num_channels_from_config,
     _set_stream_limits,
-    validate_mclk_divisible_by_3,
+    # validate_mclk_divisible_by_3,
 )
 
 
@@ -136,13 +134,14 @@ async def to_code(config):
     await register_i2s_audio_component(var, config)
     await microphone.register_microphone(var, config)
 
-    if config[CONF_ADC_TYPE] == "internal":
-        variant = esp32.get_esp32_variant()
-        pin_num = config[CONF_ADC_PIN][CONF_NUMBER]
-        channel = ESP32_VARIANT_ADC1_PIN_TO_CHANNEL[variant][pin_num]
-        cg.add(var.set_adc_channel(channel))
-    else:
-        cg.add(var.set_din_pin(config[CONF_I2S_DIN_PIN]))
-        cg.add(var.set_pdm(config[CONF_PDM]))
+    # if config[CONF_ADC_TYPE] == "internal":
+    #     variant = esp32.get_esp32_variant()
+    #     pin_num = config[CONF_ADC_PIN][CONF_NUMBER]
+    #     channel = ESP32_VARIANT_ADC1_PIN_TO_CHANNEL[variant][pin_num]
+    #     cg.add(var.set_adc_channel(channel))
+    # else:
+    #     cg.add(var.set_din_pin(config[CONF_I2S_DIN_PIN]))
+    #     cg.add(var.set_pdm(config[CONF_PDM]))
+    cg.add(var.set_pdm(config[CONF_PDM]))
 
     cg.add(var.set_correct_dc_offset(config[CONF_CORRECT_DC_OFFSET]))
