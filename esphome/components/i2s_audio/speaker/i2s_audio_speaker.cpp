@@ -110,21 +110,21 @@ void I2SAudioSpeaker::loop() {
 
   // Handle the task's state
   if (event_group_bits & SpeakerEventGroupBits::TASK_STARTING) {
-    ESP_LOGD(TAG, "Task started, attempting to allocate buffer");
+    ESP_LOGD(TAG, "Starting");
     xEventGroupClearBits(this->event_group_, SpeakerEventGroupBits::TASK_STARTING);
   }
   if (event_group_bits & SpeakerEventGroupBits::TASK_RUNNING) {
-    ESP_LOGD(TAG, "Task is running and writing data");
+    ESP_LOGD(TAG, "Started");
     xEventGroupClearBits(this->event_group_, SpeakerEventGroupBits::TASK_RUNNING);
     this->state_ = speaker::STATE_RUNNING;
   }
   if (event_group_bits & SpeakerEventGroupBits::TASK_STOPPING) {
-    ESP_LOGD(TAG, "Task is stopping, deallocating buffer");
+    ESP_LOGD(TAG, "Stopping");
     xEventGroupClearBits(this->event_group_, SpeakerEventGroupBits::TASK_STOPPING);
     this->state_ = speaker::STATE_STOPPING;
   }
   if (event_group_bits & SpeakerEventGroupBits::TASK_STOPPED) {
-    ESP_LOGD(TAG, "Task finished, freeing resources and uninstalling I2S driver");
+    ESP_LOGD(TAG, "Stopped");
 
     vTaskDelete(this->speaker_task_handle_);
     this->speaker_task_handle_ = nullptr;
@@ -154,7 +154,8 @@ void I2SAudioSpeaker::loop() {
       }
 
       if (this->start_i2s_driver_(this->audio_stream_info_) != ESP_OK) {
-        this->status_momentary_error("I2S driver failed to start, attempting again in 1 second", 1000);
+        ESP_LOGE(TAG, "I2S driver failed to start, attempting again in 1 second");
+        this->status_momentary_error("driver_fail", 1000);
         break;
       }
 
@@ -163,7 +164,8 @@ void I2SAudioSpeaker::loop() {
                     &this->speaker_task_handle_);
 
         if (this->speaker_task_handle_ == nullptr) {
-          this->status_momentary_error("Task failed to start, attempting again in 1 second", 1000);
+          ESP_LOGE(TAG, "Task failed to start, attempting again in 1 second");
+          this->status_momentary_error("task_fail", 1000);
           this->stop_i2s_driver_();  // Stops the driver to return the lock; will be reloaded in next attempt
         }
       }
