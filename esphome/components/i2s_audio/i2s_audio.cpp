@@ -95,7 +95,6 @@ esp_err_t I2SAudioComponent::setup_rx_handle(audio::AudioStreamInfo data_stream_
 
 void I2SAudioComponent::set_callbacks(i2s_event_callbacks_t callbacks, i2s_chan_handle_t channel_handle,
                                       void *user_context) {
-  this->callbacks_ = callbacks;
   bool reenable = false;
 
   if (channel_handle == this->rx_handle_ && this->rx_channel_enabled_) {

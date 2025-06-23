@@ -275,20 +275,25 @@ void I2SAudioSpeaker::speaker_task(void *params) {
   const size_t data_buffer_size = this_speaker->current_stream_info_.ms_to_bytes(dma_buffers_duration_ms / 2);
   const size_t ring_buffer_size = this_speaker->current_stream_info_.ms_to_bytes(ring_buffer_duration);
 
-  const size_t single_dma_buffer_input_size = data_buffer_size / DMA_BUFFERS_COUNT;
+  // const size_t single_dma_buffer_input_size = data_buffer_size / DMA_BUFFERS_COUNT;
+  const size_t single_dma_buffer_input_size =
+      this_speaker->current_stream_info_.frames_to_bytes(480);  // hardcoded, for now, in parent i2s audio
 
-  const uint32_t frames_in_single_dma_buffer = this_speaker->current_stream_info_.ms_to_frames(DMA_BUFFER_DURATION_MS);
+  const uint32_t frames_in_single_dma_buffer =
+      // this_speaker->current_stream_info_.ms_to_frames(DMA_BUFFER_DURATION_MS);
+      480;  // hardcoded, for now, in parent i2s audio
 
   bool successful = true;
   std::unique_ptr<audio::AudioSourceTransferBuffer> transfer_buffer =
-      audio::AudioSourceTransferBuffer::create(data_buffer_size);
-  // audio::AudioSourceTransferBuffer::create(single_dma_buffer_input_size);
+      // audio::AudioSourceTransferBuffer::create(data_buffer_size);
+      audio::AudioSourceTransferBuffer::create(single_dma_buffer_input_size * 4);
 
   i2s_chan_handle_t tx_handle = this_speaker->parent_->get_tx_handle();
 
-  i2s_event_callbacks_t callbacks = this_speaker->parent_->get_callbacks();
-  callbacks.on_sent = i2s_on_sent_cb;
-  this_speaker->parent_->set_callbacks(callbacks, tx_handle, this_speaker);
+  // In duplex mode, this also temporarily stops the I2S rx channel - testing seems it takes ~45 microseconds on an
+  // ESP32-S3
+  this_speaker->enable_on_sent_callback_();
+  xQueueReset(this_speaker->i2s_event_queue_);
 
   if (transfer_buffer == nullptr) {
     successful = false;
@@ -307,11 +312,13 @@ void I2SAudioSpeaker::speaker_task(void *params) {
     xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::TASK_RUNNING);
 
     bool stop_gracefully = false;
-    uint32_t last_data_received_time = millis();
     bool tx_dma_underflow = false;
+    bool callback_enabled = false;
+    uint8_t callback_ignore_count = 0;
+    uint32_t last_data_received_time = millis();
+
     uint32_t frames_written = 0;
     i2s_dma_write_info write_info;
-    // int64_t last_interrupt = 0;
 
     while (this_speaker->pause_state_ || !this_speaker->timeout_.has_value() ||
            (millis() - last_data_received_time) <= this_speaker->timeout_.value()) {
@@ -340,10 +347,17 @@ void I2SAudioSpeaker::speaker_task(void *params) {
       // #else
 
       while (xQueueReceive(this_speaker->i2s_event_queue_, &write_info, 0)) {
+        if (callback_ignore_count > 0) {
+          --callback_ignore_count;
+          continue;
+        }
         uint32_t frames_sent = frames_in_single_dma_buffer;  // write_info.frames;
         if (frames_in_single_dma_buffer > frames_written) {
           tx_dma_underflow = true;
           frames_sent = frames_written;
+          // this_speaker->disable_on_sent_callback_();
+          callback_enabled = false;
+          // printf("dma underflow\n");
         } else {
           tx_dma_underflow = false;
         }
@@ -438,11 +452,22 @@ void I2SAudioSpeaker::speaker_task(void *params) {
         //         }
         // #else
 
-        i2s_channel_write(tx_handle, transfer_buffer->get_buffer_start(), transfer_buffer->available(), &bytes_written,
-                          ms_to_wait);
+        size_t bytes_to_write = transfer_buffer->available();
+        if (!callback_enabled) {
+          bytes_to_write = single_dma_buffer_input_size;
+        }
+
+        i2s_channel_write(tx_handle, transfer_buffer->get_buffer_start(), bytes_to_write, &bytes_written, ms_to_wait);
 
         // #endif
         if (bytes_written > 0) {
+          if (!callback_enabled) {
+            // this_speaker->enable_on_sent_callback_();
+            xQueueReset(this_speaker->i2s_event_queue_);
+            callback_ignore_count = 3;  // 4 total DMA buffers, we only wrote to the last one
+            callback_enabled = true;
+          }
+
           last_data_received_time = millis();
           frames_written += this_speaker->current_stream_info_.bytes_to_frames(bytes_written);
           transfer_buffer->decrease_buffer_length(bytes_written);
@@ -458,9 +483,7 @@ void I2SAudioSpeaker::speaker_task(void *params) {
 
   xEventGroupSetBits(this_speaker->event_group_, SpeakerEventGroupBits::TASK_STOPPING);
 
-  callbacks = this_speaker->parent_->get_callbacks();
-  callbacks.on_sent = nullptr;
-  this_speaker->parent_->set_callbacks(callbacks, tx_handle, this_speaker);
+  this_speaker->disable_on_sent_callback_();
 
   if (transfer_buffer != nullptr) {
     transfer_buffer.reset();
@@ -486,6 +509,18 @@ void I2SAudioSpeaker::start() {
 void I2SAudioSpeaker::stop() { this->stop_(false); }
 
 void I2SAudioSpeaker::finish() { this->stop_(true); }
+
+void I2SAudioSpeaker::enable_on_sent_callback_() {
+  i2s_event_callbacks_t callbacks = {
+      .on_recv = nullptr, .on_recv_q_ovf = nullptr, .on_sent = i2s_on_sent_cb, .on_send_q_ovf = nullptr};
+  this->parent_->set_callbacks(callbacks, this->parent_->get_tx_handle(), this);
+}
+
+void I2SAudioSpeaker::disable_on_sent_callback_() {
+  i2s_event_callbacks_t callbacks = {
+      .on_recv = nullptr, .on_recv_q_ovf = nullptr, .on_sent = nullptr, .on_send_q_ovf = nullptr};
+  this->parent_->set_callbacks(callbacks, this->parent_->get_tx_handle(), this);
+}
 
 void I2SAudioSpeaker::stop_(bool wait_on_empty) {
   if (this->is_failed())
@@ -714,9 +749,9 @@ bool IRAM_ATTR I2SAudioSpeaker::i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_eve
 
   I2SAudioSpeaker *this_speaker = (I2SAudioSpeaker *) user_ctx;
 
-  if (this_speaker->state_ != speaker::STATE_RUNNING) {
-    return false;
-  }
+  // if (this_speaker->state_ != speaker::STATE_RUNNING) {
+  //   return false;
+  // }
 
   i2s_dma_write_info write_info = {.timestamp = now, .frames = 0};
   //  .frames = this_speaker->current_stream_info_.bytes_to_frames(event->size)};
@@ -724,7 +759,7 @@ bool IRAM_ATTR I2SAudioSpeaker::i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_eve
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
   if (xQueueSendToBackFromISR(this_speaker->i2s_event_queue_, &write_info, &xHigherPriorityTaskWoken) ==
       errQUEUE_FULL) {
-    this_speaker->queue_full_ = true;
+    // this_speaker->queue_full_ = true;
   }
 
   return xHigherPriorityTaskWoken;

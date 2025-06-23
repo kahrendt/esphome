@@ -86,6 +86,8 @@ class I2SAudioSpeaker : public I2SAudioBase, public speaker::Speaker, public Com
 
 #ifndef USE_I2S_LEGACY
   static bool i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_event_data_t *event, void *user_ctx);
+  void enable_on_sent_callback_();
+  void disable_on_sent_callback_();
 #endif
 
   // /// @brief Starts the ESP32 I2S driver.

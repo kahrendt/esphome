@@ -56,7 +56,6 @@ class I2SAudioComponent : public Component {
   i2s_chan_handle_t get_tx_handle() { return this->tx_handle_; }
   bool get_tx_channel_enabled() { return this->tx_channel_enabled_; }
 
-  i2s_event_callbacks_t get_callbacks() const { return this->callbacks_; }
   void set_callbacks(i2s_event_callbacks_t callbacks, i2s_chan_handle_t channel_handle, void *user_context);
 
  protected:
@@ -77,9 +76,6 @@ class I2SAudioComponent : public Component {
 
   i2s_chan_handle_t rx_handle_{nullptr};
   i2s_chan_handle_t tx_handle_{nullptr};
-
-  i2s_event_callbacks_t callbacks_{
-      .on_recv = nullptr, .on_recv_q_ovf = nullptr, .on_sent = nullptr, .on_send_q_ovf = nullptr};
 
   bool use_apll_;
   bool rx_channel_enabled_{false};
