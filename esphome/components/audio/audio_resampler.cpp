@@ -43,6 +43,11 @@ esp_err_t AudioResampler::add_sink(speaker::Speaker *speaker) {
 }
 #endif
 
+esp_err_t AudioResampler::add_sink(CallbackManager<void(const std::vector<uint8_t> &)> *callback_manager) {
+  this->output_transfer_buffer_->set_sink(callback_manager);
+  return ESP_OK;
+}
+
 esp_err_t AudioResampler::start(AudioStreamInfo &input_stream_info, AudioStreamInfo &output_stream_info,
                                 uint16_t number_of_taps, uint16_t number_of_filters) {
   this->input_stream_info_ = input_stream_info;

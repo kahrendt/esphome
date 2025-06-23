@@ -55,6 +55,8 @@ class AudioResampler {
   esp_err_t add_sink(speaker::Speaker *speaker);
 #endif
 
+  esp_err_t add_sink(CallbackManager<void(const std::vector<uint8_t> &)> *callback_manager);
+
   /// @brief Sets up the class to resample.
   /// @param input_stream_info The incoming sample rate, bits per sample, and number of channels
   /// @param output_stream_info The desired outgoing sample rate, bits per sample, and number of channels
