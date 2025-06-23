@@ -143,6 +143,10 @@ size_t AudioSinkTransferBuffer::transfer_data_to_sink(TickType_t ticks_to_wait, 
         if (this->ring_buffer_.use_count() > 0) {
       bytes_written =
           this->ring_buffer_->write_without_replacement((void *) this->data_start_, this->available(), ticks_to_wait);
+    } else if ((this->data_callbacks_ != nullptr) && this->data_callbacks_->size() > 0) {
+      std::vector<uint8_t> data(this->data_start_, this->data_start_ + this->available());
+      this->data_callbacks_->call(data);
+      bytes_written = this->available();
     }
 
     this->decrease_buffer_length(bytes_written);
