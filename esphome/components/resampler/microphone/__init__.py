@@ -2,18 +2,15 @@ import esphome.codegen as cg
 from esphome.components import audio, esp32, microphone
 import esphome.config_validation as cv
 from esphome.const import (
-    # CONF_BITS_PER_SAMPLE,
     CONF_BUFFER_DURATION,
+    CONF_CHANNELS,
     CONF_FILTERS,
     CONF_ID,
     CONF_MICROPHONE,
-    # CONF_NUM_CHANNELS,
     CONF_SAMPLE_RATE,
     CONF_TASK_STACK_IN_PSRAM,
     PLATFORM_ESP32,
 )
-
-# from esphome.core.entity_helpers import inherit_property_from
 
 AUTO_LOAD = ["audio"]
 CODEOWNERS = ["@kahrendt"]
@@ -27,31 +24,14 @@ CONF_TAPS = "taps"
 
 
 def _set_stream_limits(config):
-    # TODO: Quick hack! Need to do this properly...
+    # Set the max channels to the length of the the channels lists for downstream components to validate against. The listed channels will be validated in this component's FINAL_VALIDATE_SCHEMA
     audio.set_stream_limits(
-        min_bits_per_sample=16,  # config.get(CONF_BITS_PER_SAMPLE),
-        max_bits_per_sample=16,  # config.get(CONF_BITS_PER_SAMPLE),
-        min_channels=1,  # config.get(CONF_NUM_CHANNELS),
-        max_channels=2,  # config.get(CONF_NUM_CHANNELS),
+        max_channels=len(config.get(CONF_MICROPHONE).get(CONF_CHANNELS)),
         min_sample_rate=config.get(CONF_SAMPLE_RATE),
         max_sample_rate=config.get(CONF_SAMPLE_RATE),
     )(config)
 
     return config
-
-
-# def _validate_audio_compatability(config):
-#     inherit_property_from(CONF_BITS_PER_SAMPLE, CONF_OUTPUT_SPEAKER)(config)
-#     inherit_property_from(CONF_NUM_CHANNELS, CONF_OUTPUT_SPEAKER)(config)
-#     inherit_property_from(CONF_SAMPLE_RATE, CONF_OUTPUT_SPEAKER)(config)
-
-#     audio.final_validate_audio_schema(
-#         "source_speaker",
-#         audio_device=CONF_OUTPUT_SPEAKER,
-#         bits_per_sample=config.get(CONF_BITS_PER_SAMPLE),
-#         channels=config.get(CONF_NUM_CHANNELS),
-#         sample_rate=config.get(CONF_SAMPLE_RATE),
-#     )(config)
 
 
 def _validate_taps(taps):
@@ -65,11 +45,9 @@ CONFIG_SCHEMA = cv.All(
     microphone.MICROPHONE_SCHEMA.extend(
         {
             cv.GenerateID(): cv.declare_id(ResamplerMicrophone),
-            cv.Required(CONF_MICROPHONE): microphone.microphone_source_schema(
-                # min_bits_per_sample=16,
-                # max_bits_per_sample=16,
+            cv.Optional(CONF_MICROPHONE): microphone.microphone_source_schema(
                 min_channels=1,
-                # max_channels=1,
+                max_channels=3,  # Not a technical limit but practical one for computational load
             ),
             cv.Optional(
                 CONF_BUFFER_DURATION, default="100ms"
@@ -86,7 +64,18 @@ CONFIG_SCHEMA = cv.All(
 )
 
 
-# FINAL_VALIDATE_SCHEMA = _validate_audio_compatability
+FINAL_VALIDATE_SCHEMA = cv.All(
+    cv.Schema(
+        {
+            cv.Required(
+                CONF_MICROPHONE
+            ): microphone.final_validate_microphone_source_schema(
+                "resampler_microphone"
+            ),
+        },
+        extra=cv.ALLOW_EXTRA,
+    ),
+)
 
 
 async def to_code(config):
