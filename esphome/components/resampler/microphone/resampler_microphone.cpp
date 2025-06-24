@@ -18,7 +18,6 @@ static const UBaseType_t MAX_LISTENERS = 16;
 
 static const uint32_t TRANSFER_BUFFER_DURATION_MS = 16;
 
-static const uint32_t TASK_DELAY_MS = 20;
 static const uint32_t TASK_STACK_SIZE = 3072;
 
 static const char *const TAG = "resampler_microphone";
@@ -55,15 +54,20 @@ void ResamplerMicrophone::setup() {
     if (this->state_ == microphone::STATE_STOPPED) {
       return;
     }
-    std::shared_ptr<RingBuffer> temp_ring_buffer = this->ring_buffer_.lock();
-    if (this->ring_buffer_.use_count() > 1) {
-      size_t bytes_free = temp_ring_buffer->free();
+    if (this->requires_resampling_()) {
+      std::shared_ptr<RingBuffer> temp_ring_buffer = this->ring_buffer_.lock();
+      if (this->ring_buffer_.use_count() > 1) {
+        size_t bytes_free = temp_ring_buffer->free();
 
-      if (bytes_free < data.size()) {
-        xEventGroupSetBits(this->event_group_, ResamplingEventGroupBits::WARNING_FULL_RING_BUFFER);
-        temp_ring_buffer->reset();
+        if (bytes_free < data.size()) {
+          xEventGroupSetBits(this->event_group_, ResamplingEventGroupBits::WARNING_FULL_RING_BUFFER);
+          temp_ring_buffer->reset();
+        }
+        temp_ring_buffer->write((void *) data.data(), data.size());
       }
-      temp_ring_buffer->write((void *) data.data(), data.size());
+    } else if (this->data_callbacks_.size() > 0) {
+      // No resampling required, just pass through the audio
+      this->data_callbacks_.call(data);
     }
   });
 
@@ -105,7 +109,7 @@ void ResamplerMicrophone::loop() {
 
   if (event_group_bits & ResamplingEventGroupBits::WARNING_FULL_RING_BUFFER) {
     xEventGroupClearBits(this->event_group_, ResamplingEventGroupBits::WARNING_FULL_RING_BUFFER);
-    ESP_LOGW(TAG, "Not enough free bytes in ring buffer to store incoming audio data. Resetting the ring buffer.");
+    ESP_LOGW(TAG, "Ring buffer full, resetting it.");
   }
 
   // Start the microphone if any semaphores are taken
@@ -128,20 +132,32 @@ void ResamplerMicrophone::loop() {
 
       this->configure_stream_settings_();
 
-      if (this->task_handle_ == nullptr) {
-        if (this->start_task_() != ESP_OK) {
-          ESP_LOGE(TAG, "Task failed to start, retrying in 1 second");
-          this->status_momentary_error("task_fail", 1000);
-        } else {
-          this->microphone_source_->start();
+      if (this->requires_resampling_()) {
+        if (this->task_handle_ == nullptr) {
+          if (this->start_task_() != ESP_OK) {
+            ESP_LOGE(TAG, "Task failed to start, retrying in 1 second");
+            this->status_momentary_error("task_fail", 1000);
+          } else {
+            this->microphone_source_->start();
+          }
         }
+      } else {
+        // No task needed, just start the source mic and update state
+        this->microphone_source_->start();
+        this->state_ = microphone::STATE_RUNNING;
       }
 
       break;
     case microphone::STATE_RUNNING:
       break;
     case microphone::STATE_STOPPING:
-      xEventGroupSetBits(this->event_group_, ResamplingEventGroupBits::COMMAND_STOP);
+      this->microphone_source_->stop();  // stop source mic
+      if (this->requires_resampling_()) {
+        xEventGroupSetBits(this->event_group_, ResamplingEventGroupBits::COMMAND_STOP);
+      } else {
+        // No task needed, just update state directly
+        this->state_ = microphone::STATE_STOPPED;
+      }
       break;
     case microphone::STATE_STOPPED:
       break;
@@ -205,8 +221,17 @@ void ResamplerMicrophone::deallocate_task_stack_() {
 }
 
 void ResamplerMicrophone::configure_stream_settings_() {
-  this->audio_stream_info_ = audio::AudioStreamInfo(
-      32, this->microphone_source_->get_audio_stream_info().get_channels(), this->target_sample_rate_);
+  if (this->requires_resampling_()) {
+    // Resampler outputs 32 bits per sample and lets downstream MicrophoneSource handle conversions
+    this->audio_stream_info_ = audio::AudioStreamInfo(
+        32, this->microphone_source_->get_audio_stream_info().get_channels(), this->target_sample_rate_);
+  } else {
+    // No resampling needed, so just pass through the source mic's settings
+    this->audio_stream_info_ =
+        audio::AudioStreamInfo(this->microphone_source_->get_audio_stream_info().get_bits_per_sample(),
+                               this->microphone_source_->get_audio_stream_info().get_channels(),
+                               this->microphone_source_->get_audio_stream_info().get_sample_rate());
+  }
 }
 
 bool ResamplerMicrophone::requires_resampling_() const {
