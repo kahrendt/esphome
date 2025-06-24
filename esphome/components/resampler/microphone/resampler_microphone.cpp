@@ -226,11 +226,8 @@ void ResamplerMicrophone::configure_stream_settings_() {
     this->audio_stream_info_ = audio::AudioStreamInfo(
         32, this->microphone_source_->get_audio_stream_info().get_channels(), this->target_sample_rate_);
   } else {
-    // No resampling needed, so just pass through the source mic's settings
-    this->audio_stream_info_ =
-        audio::AudioStreamInfo(this->microphone_source_->get_audio_stream_info().get_bits_per_sample(),
-                               this->microphone_source_->get_audio_stream_info().get_channels(),
-                               this->microphone_source_->get_audio_stream_info().get_sample_rate());
+    // No resampling needed, so just pass through the source mic's stream info
+    this->audio_stream_info_ = this->microphone_source_->get_audio_stream_info();
   }
 }
 
