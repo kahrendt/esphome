@@ -16,7 +16,7 @@ namespace resampler {
 static const UBaseType_t RESAMPLER_TASK_PRIORITY = 1;
 static const UBaseType_t MAX_LISTENERS = 16;
 
-static const uint32_t TRANSFER_BUFFER_DURATION_MS = 50;
+static const uint32_t TRANSFER_BUFFER_DURATION_MS = 16;
 
 static const uint32_t TASK_DELAY_MS = 20;
 static const uint32_t TASK_STACK_SIZE = 3072;
