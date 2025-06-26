@@ -58,6 +58,8 @@ class I2SAudioComponent : public Component {
 
   void set_callbacks(i2s_event_callbacks_t callbacks, i2s_chan_handle_t channel_handle, void *user_context);
 
+  void set_exclusive(bool exclusive) { this->exclusive_ = exclusive; }
+
  protected:
   i2s_std_clk_config_t get_clk_config_(uint32_t sample_rate) const;
   i2s_std_gpio_config_t get_pin_config_() const;
@@ -82,6 +84,7 @@ class I2SAudioComponent : public Component {
   bool rx_channel_setup_{false};
   bool tx_channel_enabled_{false};
   bool tx_channel_setup_{false};
+  bool exclusive_;
 
   uint8_t output_bits_per_sample_;
   uint32_t sample_rate_;

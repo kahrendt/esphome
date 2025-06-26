@@ -48,6 +48,7 @@ CONF_LEFT = "left"
 CONF_RIGHT = "right"
 CONF_STEREO = "stereo"
 CONF_BOTH = "both"
+CONF_EXCLUSIVE = "exclusive"
 
 CONF_USE_LEGACY = "use_legacy"
 
@@ -258,6 +259,7 @@ CONFIG_SCHEMA = cv.All(
                 *I2S_MODE_OPTIONS, lower=True
             ),
             cv.Optional(CONF_USE_APLL, default=False): cv.boolean,
+            cv.Optional(CONF_EXCLUSIVE, default=False): cv.boolean,
             cv.Optional(CONF_EXTERNAL_CLK_FREQ, default=0): cv.positive_int,
             cv.Optional(CONF_MCLK_MULTIPLE, default=256): cv.one_of(*I2S_MCLK_MULTIPLE),
             cv.Optional(CONF_I2S_COMM_FMT, default="stand_i2s"): cv.one_of(
@@ -309,6 +311,7 @@ async def to_code(config):
 
     cg.add(var.set_i2s_role(I2S_ROLE_OPTIONS[config[CONF_I2S_MODE]]))
     cg.add(var.set_use_apll(config[CONF_USE_APLL]))
+    cg.add(var.set_exclusive(config[CONF_EXCLUSIVE]))
     cg.add(var.set_external_clk_freq(config[CONF_EXTERNAL_CLK_FREQ]))
     cg.add(var.set_mclk_multiple(I2S_MCLK_MULTIPLE[config[CONF_MCLK_MULTIPLE]]))
     fmt = "std"  # equals stand_i2s, stand_pcm_long, i2s_msb, pcm_long
