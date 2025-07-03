@@ -71,6 +71,8 @@ class I2SAudioComponent : public Component {
   esp_err_t enable_tx_handle_();
   esp_err_t disable_tx_handle_();
 
+  esp_err_t initialize_channels_(bool initialize_rx, bool initialize_tx);
+
   uint32_t external_clk_freq_;
   std::string i2s_comm_fmt_;
   i2s_role_t i2s_role_{};
@@ -85,6 +87,7 @@ class I2SAudioComponent : public Component {
   bool tx_channel_enabled_{false};
   bool tx_channel_setup_{false};
   bool exclusive_;
+  bool initialized_{false};
 
   uint8_t output_bits_per_sample_;
   uint32_t sample_rate_;

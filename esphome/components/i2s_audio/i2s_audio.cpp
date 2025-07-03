@@ -29,6 +29,14 @@ void I2SAudioComponent::setup() {
   this->port_ = next_port_num;
   next_port_num = (i2s_port_t) (next_port_num + 1);
 
+  this->initialize_channels_(true, true);
+}
+
+esp_err_t I2SAudioComponent::initialize_channels_(bool initialize_rx, bool initialize_tx) {
+  if (this->initialized_) {
+    return ESP_FAIL;
+  }
+
   i2s_chan_config_t chan_cfg = {
       .id = this->port_,
       .role = this->i2s_role_,
@@ -39,24 +47,36 @@ void I2SAudioComponent::setup() {
   };
 
   esp_err_t err = ESP_OK;
-  if ((this->dout_pin_ != I2S_GPIO_UNUSED) && (this->din_pin_ != I2S_GPIO_UNUSED)) {
+
+  const bool rx_available = (this->din_pin_ != I2S_GPIO_UNUSED);
+  const bool tx_available = (this->dout_pin_ != I2S_GPIO_UNUSED);
+
+  if (this->exclusive_) {
+    if (initialize_rx && rx_available) {
+      err = i2s_new_channel(&chan_cfg, NULL, &this->rx_handle_);
+    } else if (initialize_tx && tx_available) {
+      err = i2s_new_channel(&chan_cfg, &this->tx_handle_, NULL);
+    }
+  } else {
     err = i2s_new_channel(&chan_cfg, &this->tx_handle_, &this->rx_handle_);
-  } else if (this->dout_pin_ != I2S_GPIO_UNUSED) {
-    err = i2s_new_channel(&chan_cfg, &this->tx_handle_, NULL);
-  } else if (this->din_pin_ != I2S_GPIO_UNUSED) {
-    err = i2s_new_channel(&chan_cfg, NULL, &this->rx_handle_);
   }
 
   if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to setup channel(s)");  // TODO: Log the error as well
-    this->mark_failed();
+    this->status_set_error("Failed to setup channel(s)");
+  } else {
+    this->initialized_ = true;
   }
+
+  return err;
 }
 
 esp_err_t I2SAudioComponent::setup_rx_handle(audio::AudioStreamInfo data_stream_info, uint8_t hardware_bits_per_sample,
                                              i2s_std_slot_mask_t slot_mask) {
   // TODO: Verify sample rate is okay when other channel is running
-  // TODO: verify din pin is set...
+
+  if (this->din_pin_ == I2S_GPIO_UNUSED) {
+    return ESP_FAIL;  // TODO: give a better error message
+  }
 
   const i2s_std_clk_config_t clock_config = this->get_clk_config_(data_stream_info.get_sample_rate());
   const i2s_std_slot_config_t slot_config =
@@ -141,7 +161,10 @@ esp_err_t I2SAudioComponent::disable_rx_handle_() {
 esp_err_t I2SAudioComponent::setup_tx_handle(audio::AudioStreamInfo data_stream_info, uint8_t hardware_bits_per_sample,
                                              i2s_std_slot_mask_t slot_mask) {
   // TODO: Verify sample rate is okay when other channel is running
-  // TODO: verify din pin is set...
+
+  if (this->dout_pin_ == I2S_GPIO_UNUSED) {
+    return ESP_FAIL;  // TODO: give a better error message
+  }
 
   const i2s_std_clk_config_t clock_config = this->get_clk_config_(data_stream_info.get_sample_rate());
   const i2s_std_slot_config_t slot_config =
