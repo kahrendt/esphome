@@ -11,6 +11,11 @@ enum EventGroupBits : uint32_t {
   SLOT_AVAILABLE = (1 << 2),   // Signal that a queue slot is available for producer
 };
 
+// Minimum available data space ratio required before allowing capacity growth.
+// This prevents growing the number of chunk slots when we're close to the data size limit.
+// Value of 4 means at least 1/4 (25%) of max_data_size must remain available.
+static const size_t MIN_AVAILABLE_RATIO = 4;
+
 std::unique_ptr<AudioChunkQueue> AudioChunkQueue::create(size_t capacity, size_t max_data_size,
                                                          bool enable_dynamic_growth, size_t max_capacity) {
   auto queue = make_unique<AudioChunkQueue>();
@@ -263,8 +268,6 @@ bool AudioChunkQueue::can_grow_() const {
     size_t pending_size = this->pending_chunk_size_.load(std::memory_order_acquire);
 
     // Only grow if we have reasonable data space available
-    // Use a more conservative threshold to prevent excessive growth
-    const size_t MIN_AVAILABLE_RATIO = 4;                          // Require at least 1/4 of max space available
     size_t space_needed = pending_size > 0 ? pending_size : 1024;  // Assume 1KB if no pending
     size_t max_allowed = this->max_data_size_ - (this->max_data_size_ / MIN_AVAILABLE_RATIO);
     if ((current_data_size + space_needed) > max_allowed) {
