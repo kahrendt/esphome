@@ -21,6 +21,16 @@ std::unique_ptr<AudioSinkTransferBuffer> AudioSinkTransferBuffer::create(size_t 
   return sink_buffer;
 }
 
+std::unique_ptr<AudioSinkTransferBuffer> AudioSinkTransferBuffer::create_inplace() {
+  std::unique_ptr<AudioSinkTransferBuffer> sink_buffer = make_unique<AudioSinkTransferBuffer>();
+
+  sink_buffer->inplace_ = true;
+  sink_buffer->buffer_size_ = 0;
+  sink_buffer->buffer_length_ = 0;
+
+  return sink_buffer;
+}
+
 std::unique_ptr<AudioSourceTransferBuffer> AudioSourceTransferBuffer::create(size_t buffer_size) {
   std::unique_ptr<AudioSourceTransferBuffer> source_buffer = make_unique<AudioSourceTransferBuffer>();
 
@@ -29,6 +39,17 @@ std::unique_ptr<AudioSourceTransferBuffer> AudioSourceTransferBuffer::create(siz
   }
 
   return source_buffer;
+}
+
+void AudioTransferBuffer::change_inplace_buffer(uint8_t *new_buffer, size_t new_buffer_size) {
+  if (!this->inplace_) {
+    return;
+  }
+
+  this->buffer_ = new_buffer;
+  this->data_start_ = this->buffer_;
+  this->buffer_size_ = new_buffer_size;
+  this->buffer_length_ = new_buffer_size;
 }
 
 size_t AudioTransferBuffer::free() const {
@@ -77,25 +98,12 @@ bool AudioTransferBuffer::has_buffered_data() const {
 }
 
 bool AudioTransferBuffer::reallocate(size_t new_buffer_size) {
-  if (this->buffer_ == nullptr) {
-    return this->allocate_buffer_(new_buffer_size);
-  }
-
-  if (new_buffer_size < this->buffer_length_) {
-    // New size is too small to hold existing data
+  if (this->inplace_) {
+    // Buffer data is managed externally
     return false;
   }
-
-  // Shift existing data to the start of the buffer so realloc preserves it
-  if ((this->buffer_length_ > 0) && (this->data_start_ != this->buffer_)) {
-    std::memmove(this->buffer_, this->data_start_, this->buffer_length_);
-    this->data_start_ = this->buffer_;
-  }
-
-  RAMAllocator<uint8_t> allocator;
-  uint8_t *new_buffer = allocator.reallocate(this->buffer_, new_buffer_size);
-  if (new_buffer == nullptr) {
-    // Reallocation failed, but the original buffer is still valid
+  if (this->buffer_length_ > 0) {
+    // Buffer currently has data, so reallocation is impossible
     return false;
   }
 
@@ -106,6 +114,10 @@ bool AudioTransferBuffer::reallocate(size_t new_buffer_size) {
 }
 
 bool AudioTransferBuffer::allocate_buffer_(size_t buffer_size) {
+  if (this->inplace_) {
+    // Buffer data is managed externally
+    return true;
+  }
   this->buffer_size_ = buffer_size;
 
   RAMAllocator<uint8_t> allocator;
@@ -122,6 +134,10 @@ bool AudioTransferBuffer::allocate_buffer_(size_t buffer_size) {
 }
 
 void AudioTransferBuffer::deallocate_buffer_() {
+  if (this->inplace_) {
+    // Buffer data is managed externally
+    return;
+  }
   if (this->buffer_ != nullptr) {
     RAMAllocator<uint8_t> allocator;
     allocator.deallocate(this->buffer_, this->buffer_size_);
