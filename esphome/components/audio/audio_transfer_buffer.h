@@ -114,6 +114,10 @@ class AudioSinkTransferBuffer : public AudioTransferBuffer {
   void set_sink(speaker::Speaker *speaker) { this->speaker_ = speaker; }
 #endif
 
+  void set_sink(std::function<size_t(uint8_t *, size_t, TickType_t)> &&callback) {
+    this->sink_callback_ = std::move(callback);
+  }
+
   void clear_buffered_data() override;
 
   bool has_buffered_data() const override;
@@ -122,6 +126,7 @@ class AudioSinkTransferBuffer : public AudioTransferBuffer {
 #ifdef USE_SPEAKER
   speaker::Speaker *speaker_{nullptr};
 #endif
+  std::function<size_t(uint8_t *, size_t, TickType_t)> sink_callback_;
 };
 
 class AudioSourceTransferBuffer : public AudioTransferBuffer {
