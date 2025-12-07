@@ -160,7 +160,7 @@ void AudioTransferBuffer::deallocate_buffer_() {
 }
 
 size_t AudioSourceTransferBuffer::transfer_data_from_source(TickType_t ticks_to_wait, bool pre_shift) {
-  if (pre_shift) {
+  if (pre_shift && !this->inplace_) {
     // Shift data in buffer to start
     if (this->buffer_length_ > 0) {
       std::memmove(this->buffer_, this->data_start_, this->buffer_length_);
