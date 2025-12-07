@@ -41,6 +41,16 @@ std::unique_ptr<AudioSourceTransferBuffer> AudioSourceTransferBuffer::create(siz
   return source_buffer;
 }
 
+std::unique_ptr<AudioSourceTransferBuffer> AudioSourceTransferBuffer::create_inplace() {
+  std::unique_ptr<AudioSourceTransferBuffer> source_buffer = make_unique<AudioSourceTransferBuffer>();
+
+  source_buffer->inplace_ = true;
+  source_buffer->buffer_size_ = 0;
+  source_buffer->buffer_length_ = 0;
+
+  return source_buffer;
+}
+
 void AudioTransferBuffer::change_inplace_buffer(uint8_t *new_buffer, size_t new_buffer_size) {
   if (!this->inplace_) {
     return;

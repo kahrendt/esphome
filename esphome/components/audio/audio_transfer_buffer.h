@@ -140,6 +140,8 @@ class AudioSourceTransferBuffer : public AudioTransferBuffer {
   /// @return unique_ptr if successfully allocated, nullptr otherwise
   static std::unique_ptr<AudioSourceTransferBuffer> create(size_t buffer_size);
 
+  static std::unique_ptr<AudioSourceTransferBuffer> create_inplace();
+
   /// @brief Reads any available data from the sink into the transfer buffer.
   /// @param ticks_to_wait FreeRTOS ticks to block while waiting for the source to have enough data
   /// @param pre_shift If true, any unwritten data is moved to the start of the buffer before transferring from the
