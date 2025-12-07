@@ -16,7 +16,12 @@ static const uint32_t READ_WRITE_TIMEOUT_MS = 20;  // Timeout for transferring a
 static const uint32_t MAX_POTENTIALLY_FAILED_COUNT = 10;
 
 AudioDecoder::AudioDecoder(size_t input_buffer_size, size_t output_buffer_size) {
-  this->input_transfer_buffer_ = AudioSourceTransferBuffer::create(input_buffer_size);
+  if (input_buffer_size > 0) {
+    this->input_transfer_buffer_ = AudioSourceTransferBuffer::create(input_buffer_size);
+  } else {
+    // Assume we'll get an inplace source
+    this->input_transfer_buffer_ = AudioSourceTransferBuffer::create_inplace();
+  }
   this->output_transfer_buffer_ = AudioSinkTransferBuffer::create(output_buffer_size);
 }
 
