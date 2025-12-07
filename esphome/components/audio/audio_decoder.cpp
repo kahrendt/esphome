@@ -36,6 +36,14 @@ esp_err_t AudioDecoder::add_source(std::weak_ptr<RingBuffer> &input_ring_buffer)
   return ESP_ERR_NO_MEM;
 }
 
+esp_err_t AudioDecoder::add_source(uint8_t *data_pointer, size_t length) {
+  if (this->input_transfer_buffer_ != nullptr) {
+    this->input_transfer_buffer_->change_inplace_buffer(data_pointer, length);
+    return ESP_OK;
+  }
+  return ESP_ERR_NO_MEM;
+}
+
 esp_err_t AudioDecoder::add_sink(std::weak_ptr<RingBuffer> &output_ring_buffer) {
   if (this->output_transfer_buffer_ != nullptr) {
     this->output_transfer_buffer_->set_sink(output_ring_buffer);
@@ -53,6 +61,14 @@ esp_err_t AudioDecoder::add_sink(speaker::Speaker *speaker) {
   return ESP_ERR_NO_MEM;
 }
 #endif
+
+esp_err_t AudioDecoder::add_sink(std::function<size_t(uint8_t *, size_t, TickType_t)> &&callback) {
+  if (this->output_transfer_buffer_ != nullptr) {
+    this->output_transfer_buffer_->set_sink(std::move(callback));
+    return ESP_OK;
+  }
+  return ESP_ERR_NO_MEM;
+}
 
 esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
   if ((this->input_transfer_buffer_ == nullptr) || (this->output_transfer_buffer_ == nullptr)) {
