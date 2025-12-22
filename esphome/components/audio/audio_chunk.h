@@ -21,6 +21,14 @@ struct AudioChunk {
   size_t offset{0};          // Number of bytes to skip in the buffer
   size_t size{0};            // Number of bytes to read from the buffer after offset
 
+  // Delete copy and move constructors to prevent accidental buffer pointer duplication
+  // AudioChunk should only be used through std::shared_ptr to ensure proper ownership
+  AudioChunk() = default;
+  AudioChunk(const AudioChunk &) = delete;
+  AudioChunk &operator=(const AudioChunk &) = delete;
+  AudioChunk(AudioChunk &&) = delete;
+  AudioChunk &operator=(AudioChunk &&) = delete;
+
   // Get pointer to actual audio buffer (with offset applied)
   // Returns nullptr if buffer is null or offset is out of bounds
   uint8_t *get_data() const {
