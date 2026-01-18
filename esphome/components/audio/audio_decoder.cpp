@@ -89,6 +89,7 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
 #ifdef USE_AUDIO_FLAC_SUPPORT
     case AudioFileType::FLAC:
       this->flac_decoder_ = make_unique<esp_audio_libs::flac::FLACDecoder>();
+      this->flac_decoder_->set_crc_check_enabled(false);  // Disable CRC check for small speed up
       this->free_buffer_required_ =
           this->output_transfer_buffer_->capacity();  // Adjusted and reallocated after reading the header
       break;
