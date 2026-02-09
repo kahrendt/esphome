@@ -41,16 +41,6 @@ std::unique_ptr<AudioSourceTransferBuffer> AudioSourceTransferBuffer::create(siz
   return source_buffer;
 }
 
-std::unique_ptr<AudioSourceTransferBuffer> AudioSourceTransferBuffer::create_inplace() {
-  std::unique_ptr<AudioSourceTransferBuffer> source_buffer = make_unique<AudioSourceTransferBuffer>();
-
-  source_buffer->inplace_ = true;
-  source_buffer->buffer_size_ = 0;
-  source_buffer->buffer_length_ = 0;
-
-  return source_buffer;
-}
-
 void AudioTransferBuffer::change_inplace_buffer(uint8_t *new_buffer, size_t new_buffer_size) {
   if (!this->inplace_) {
     return;
@@ -160,7 +150,7 @@ void AudioTransferBuffer::deallocate_buffer_() {
 }
 
 size_t AudioSourceTransferBuffer::transfer_data_from_source(TickType_t ticks_to_wait, bool pre_shift) {
-  if (pre_shift && !this->inplace_) {
+  if (pre_shift) {
     // Shift data in buffer to start
     if (this->buffer_length_ > 0) {
       std::memmove(this->buffer_, this->data_start_, this->buffer_length_);
@@ -168,7 +158,7 @@ size_t AudioSourceTransferBuffer::transfer_data_from_source(TickType_t ticks_to_
     this->data_start_ = this->buffer_;
   }
 
-  size_t bytes_to_read = this->free();
+  size_t bytes_to_read = AudioTransferBuffer::free();
   size_t bytes_read = 0;
   if (bytes_to_read > 0) {
     if (this->ring_buffer_.use_count() > 0) {
@@ -178,6 +168,20 @@ size_t AudioSourceTransferBuffer::transfer_data_from_source(TickType_t ticks_to_
     this->increase_buffer_length(bytes_read);
   }
   return bytes_read;
+}
+
+size_t AudioSourceTransferBuffer::free() const { return AudioTransferBuffer::free(); }
+
+bool AudioSourceTransferBuffer::has_buffered_data() const { return AudioTransferBuffer::has_buffered_data(); }
+
+void ConstAudioSourceBuffer::set_data(const uint8_t *data, size_t length) {
+  this->data_start_ = data;
+  this->length_ = length;
+}
+
+void ConstAudioSourceBuffer::consume(size_t bytes) {
+  this->length_ -= bytes;
+  this->data_start_ += bytes;
 }
 
 size_t AudioSinkTransferBuffer::transfer_data_to_sink(TickType_t ticks_to_wait, bool post_shift) {

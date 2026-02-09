@@ -80,7 +80,7 @@ class AudioDecoder {
   esp_err_t add_sink(speaker::Speaker *speaker);
 #endif
 
-  esp_err_t add_source(uint8_t *data_pointer, size_t length);
+  esp_err_t add_source(const uint8_t *data_pointer, size_t length);
   esp_err_t add_sink(std::function<size_t(uint8_t *, size_t, TickType_t)> &&callback);
 
   /// @brief Sets up decoding the file
@@ -123,7 +123,9 @@ class AudioDecoder {
 #endif
   FileDecoderState decode_wav_();
 
-  std::unique_ptr<AudioSourceTransferBuffer> input_transfer_buffer_;
+  std::unique_ptr<AudioReadableBuffer> input_buffer_;
+  ConstAudioSourceBuffer *const_input_source_{nullptr};  // Non-owning pointer for repeated set_data() calls
+  size_t input_buffer_size_{0};
   std::unique_ptr<AudioSinkTransferBuffer> output_transfer_buffer_;
 
   AudioFileType audio_file_type_{AudioFileType::NONE};
