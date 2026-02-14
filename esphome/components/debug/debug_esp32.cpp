@@ -16,10 +16,12 @@
 #include <Esp.h>
 #endif
 
+#include "sdkconfig.h"
+
+#if CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
-#include "sdkconfig.h"
 
 static const UBaseType_t STATS_TASK_PRIORIY = 3;
 static const uint32_t STATS_DELAY_MS = 5000;
@@ -133,6 +135,7 @@ static void stats_task(void *arg) {
     }
   }
 }
+#endif  // CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
 
 namespace esphome {
 namespace debug {
@@ -274,9 +277,11 @@ const char *DebugComponent::get_wakeup_cause_(std::span<char, WAKEUP_CAUSE_BUFFE
 }
 
 void DebugComponent::setup() {
+#if CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
   if (this->log_cpu_usage_) {
     xTaskCreate(stats_task, "stats", 4096, nullptr, STATS_TASK_PRIORIY, nullptr);
   }
+#endif  // CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
 }
 
 void DebugComponent::log_partition_info_() {
