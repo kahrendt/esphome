@@ -77,8 +77,25 @@ bool AudioTransferBuffer::has_buffered_data() const {
 }
 
 bool AudioTransferBuffer::reallocate(size_t new_buffer_size) {
-  if (this->buffer_length_ > 0) {
-    // Buffer currently has data, so reallocation is impossible
+  if (this->buffer_ == nullptr) {
+    return this->allocate_buffer_(new_buffer_size);
+  }
+
+  if (new_buffer_size < this->buffer_length_) {
+    // New size is too small to hold existing data
+    return false;
+  }
+
+  // Shift existing data to the start of the buffer so realloc preserves it
+  if ((this->buffer_length_ > 0) && (this->data_start_ != this->buffer_)) {
+    std::memmove(this->buffer_, this->data_start_, this->buffer_length_);
+    this->data_start_ = this->buffer_;
+  }
+
+  RAMAllocator<uint8_t> allocator;
+  uint8_t *new_buffer = allocator.reallocate(this->buffer_, new_buffer_size);
+  if (new_buffer == nullptr) {
+    // Reallocation failed, but the original buffer is still valid
     return false;
   }
 
