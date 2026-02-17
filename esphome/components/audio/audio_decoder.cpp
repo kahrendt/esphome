@@ -75,7 +75,7 @@ esp_err_t AudioDecoder::add_sink(std::function<size_t(uint8_t *, size_t, TickTyp
 }
 
 esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
-  if ((this->input_buffer_ == nullptr) || (this->output_transfer_buffer_ == nullptr)) {
+  if (this->output_transfer_buffer_ == nullptr) {
     return ESP_ERR_NO_MEM;
   }
 
@@ -133,6 +133,10 @@ esp_err_t AudioDecoder::start(AudioFileType audio_file_type) {
 }
 
 AudioDecoderState AudioDecoder::decode(bool stop_gracefully) {
+  if (this->input_buffer_ == nullptr) {
+    return AudioDecoderState::FAILED;
+  }
+
   if (stop_gracefully) {
     if (this->output_transfer_buffer_->available() == 0) {
       if (this->end_of_file_) {
