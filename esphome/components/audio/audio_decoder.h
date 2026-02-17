@@ -124,7 +124,6 @@ class AudioDecoder {
   FileDecoderState decode_wav_();
 
   std::unique_ptr<AudioReadableBuffer> input_buffer_;
-  ConstAudioSourceBuffer *const_input_source_{nullptr};  // Non-owning pointer for repeated set_data() calls
   size_t input_buffer_size_{0};
   std::unique_ptr<AudioSinkTransferBuffer> output_transfer_buffer_;
 

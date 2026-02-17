@@ -39,12 +39,12 @@ esp_err_t AudioDecoder::add_source(std::weak_ptr<RingBuffer> &input_ring_buffer)
 }
 
 esp_err_t AudioDecoder::add_source(const uint8_t *data_pointer, size_t length) {
-  if (this->const_input_source_ == nullptr) {
-    auto source = make_unique<ConstAudioSourceBuffer>();
-    this->const_input_source_ = source.get();
-    this->input_buffer_ = std::move(source);
+  auto source = make_unique<ConstAudioSourceBuffer>();
+  if (source == nullptr) {
+    return ESP_ERR_NO_MEM;
   }
-  this->const_input_source_->set_data(data_pointer, length);
+  source->set_data(data_pointer, length);
+  this->input_buffer_ = std::move(source);
   return ESP_OK;
 }
 
@@ -383,9 +383,8 @@ FileDecoderState AudioDecoder::decode_opus_() {
   size_t bytes_consumed, samples_decoded;
 
   micro_opus::OggOpusResult result = this->opus_decoder_->decode(
-      this->input_transfer_buffer_->get_buffer_start(), this->input_transfer_buffer_->available(),
-      this->output_transfer_buffer_->get_buffer_end(), this->output_transfer_buffer_->free(), bytes_consumed,
-      samples_decoded);
+      this->input_buffer_->data(), this->input_buffer_->available(), this->output_transfer_buffer_->get_buffer_end(),
+      this->output_transfer_buffer_->free(), bytes_consumed, samples_decoded);
 
   if (result == micro_opus::OGG_OPUS_OK) {
     if (!processed_header && this->opus_decoder_->is_initialized()) {
@@ -399,7 +398,7 @@ FileDecoderState AudioDecoder::decode_opus_() {
       this->output_transfer_buffer_->increase_buffer_length(
           this->audio_stream_info_.value().frames_to_bytes(samples_decoded));
     }
-    this->input_transfer_buffer_->decrease_buffer_length(bytes_consumed);
+    this->input_buffer_->consume(bytes_consumed);
   } else if (result == micro_opus::OGG_OPUS_OUTPUT_BUFFER_TOO_SMALL) {
     // Reallocate to decode the packet on the next call
     this->free_buffer_required_ = this->opus_decoder_->get_required_output_buffer_size();
