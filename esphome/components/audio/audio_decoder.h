@@ -124,25 +124,25 @@ class AudioDecoder {
   FileDecoderState decode_wav_();
 
   std::unique_ptr<AudioReadableBuffer> input_buffer_;
-  size_t input_buffer_size_{0};
   std::unique_ptr<AudioSinkTransferBuffer> output_transfer_buffer_;
 
   AudioFileType audio_file_type_{AudioFileType::NONE};
   optional<AudioStreamInfo> audio_stream_info_{};
 
+  size_t input_buffer_size_{0};
   size_t free_buffer_required_{0};
   size_t wav_bytes_left_{0};
 
   uint32_t potentially_failed_count_{0};
+  uint32_t accumulated_frames_written_{0};
+  uint32_t playback_ms_{0};
+
   bool end_of_file_{false};
   bool wav_has_known_end_{false};
 
   bool decoder_buffers_internally_{false};
 
   bool pause_output_{false};
-
-  uint32_t accumulated_frames_written_{0};
-  uint32_t playback_ms_{0};
 };
 }  // namespace audio
 }  // namespace esphome
