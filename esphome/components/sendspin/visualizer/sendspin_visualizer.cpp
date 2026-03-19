@@ -28,6 +28,11 @@ void SendspinVisualizer::setup() {
     // Point the base class to our buffer
     this->spectrum_bins_ = this->spectrum_buffer_.get();
     this->spectrum_bin_count_ = this->configured_bin_count_;
+
+    // Allocate display bins for smoothing/dirty tracking
+    this->display_bins_storage_ = std::make_unique<visualizer::DisplayBin[]>(this->configured_bin_count_);
+    std::memset(this->display_bins_storage_.get(), 0, this->configured_bin_count_ * sizeof(visualizer::DisplayBin));
+    this->display_bins_ = this->display_bins_storage_.get();
   }
 
   // Compute frame slot size and derive ring buffer capacity from buffer_capacity.
@@ -73,9 +78,18 @@ void SendspinVisualizer::loop() {
   const int64_t now = esp_timer_get_time();
   bool updated = false;
 
-  // Advance through frames whose display time has passed, applying the most recent one.
-  // Timestamps are stored as raw server times and converted here on the main thread,
-  // which is safe (hub state only accessed from main thread) and uses the latest time sync.
+  // Debug: periodically log timing info
+  static uint32_t last_timing_log = 0;
+  uint32_t now_ms = millis();
+  if (now_ms - last_timing_log > 3000 && this->ring_count_ > 0) {
+    last_timing_log = now_ms;
+    VisualizerFrame *peek = this->ring_frame_(this->ring_read_);
+    int64_t peek_display = this->parent_->get_client_time(peek->server_time);
+    int64_t diff = peek_display - now;
+    ESP_LOGD(TAG, "Timing: ring_count=%zu, next_frame=%lld us from now, now=%lld, display_time=%lld", this->ring_count_,
+             diff, now, peek_display);
+  }
+
   while (this->ring_count_ > 0) {
     VisualizerFrame *frame = this->ring_frame_(this->ring_read_);
 

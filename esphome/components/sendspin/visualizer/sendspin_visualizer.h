@@ -90,6 +90,7 @@ class SendspinVisualizer : public Component, public visualizer::Visualizer, publ
 
   // Spectrum display buffer (allocated once based on configured n_disp_bins, used by base class)
   std::unique_ptr<uint16_t[]> spectrum_buffer_;
+  std::unique_ptr<visualizer::DisplayBin[]> display_bins_storage_;
   uint8_t configured_bin_count_{0};
 
   // --- Frame ring buffer ---
