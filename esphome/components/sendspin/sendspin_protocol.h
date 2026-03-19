@@ -219,9 +219,66 @@ struct ClientArtworkRequestObject {
 #endif  // USE_SENDSPIN_ARTWORK
 
 #ifdef USE_SENDSPIN_VISUALIZER
+enum class VisualizerDataType : uint8_t {
+  BEAT,
+  LOUDNESS,
+  F_PEAK,
+  SPECTRUM,
+};
+
+inline const char *to_cstr(VisualizerDataType type) {
+  switch (type) {
+    case VisualizerDataType::BEAT:
+      return "beat";
+    case VisualizerDataType::LOUDNESS:
+      return "loudness";
+    case VisualizerDataType::F_PEAK:
+      return "f_peak";
+    case VisualizerDataType::SPECTRUM:
+      return "spectrum";
+    default:
+      return "unknown";
+  }
+}
+
+enum class VisualizerSpectrumScale : uint8_t {
+  MEL,
+  LOG,
+  LIN,
+};
+
+inline const char *to_cstr(VisualizerSpectrumScale scale) {
+  switch (scale) {
+    case VisualizerSpectrumScale::MEL:
+      return "mel";
+    case VisualizerSpectrumScale::LOG:
+      return "log";
+    case VisualizerSpectrumScale::LIN:
+      return "lin";
+    default:
+      return "mel";
+  }
+}
+
+struct VisualizerSpectrumConfig {
+  uint8_t n_disp_bins;
+  VisualizerSpectrumScale scale;
+  uint16_t f_min;
+  uint16_t f_max;
+  uint16_t rate_max;
+};
+
 struct VisualizerSupportObject {
+  std::vector<VisualizerDataType> types;
   size_t buffer_capacity;
-  // TODO: FFT details (to be determined in spec)
+  uint8_t batch_max;
+  std::optional<VisualizerSpectrumConfig> spectrum;
+};
+
+struct ServerVisualizerStreamObject {
+  std::vector<VisualizerDataType> types;
+  uint8_t batch_max;
+  std::optional<VisualizerSpectrumConfig> spectrum;
 };
 #endif  // USE_SENDSPIN_VISUALIZER
 
@@ -404,9 +461,10 @@ inline uint8_t get_binary_slot(uint8_t type) { return type & 0x03; }
 
 // Common binary message types
 enum SendspinBinaryType : uint8_t {
-  SENDSPIN_BINARY_PLAYER_AUDIO = 4,   // Player slot 0
-  SENDSPIN_BINARY_ARTWORK_IMAGE = 8,  // Artwork slot 0
-  SENDSPIN_BINARY_VISUALIZER = 16,    // Visualizer slot 0
+  SENDSPIN_BINARY_PLAYER_AUDIO = 4,      // Player slot 0
+  SENDSPIN_BINARY_ARTWORK_IMAGE = 8,     // Artwork slot 0
+  SENDSPIN_BINARY_VISUALIZER = 16,       // Visualizer data (loudness, f_peak, spectrum)
+  SENDSPIN_BINARY_VISUALIZER_BEAT = 17,  // Visualizer beat events
 };
 
 enum class SendspinServerToClientMessageType {
@@ -449,7 +507,7 @@ inline const char *to_cstr(SendspinRole role) {
     case SendspinRole::ARTWORK:
       return "artwork@v1";
     case SendspinRole::VISUALIZER:
-      return "visualizer@v1";
+      return "visualizer@_draft_r1";
     default:
       return "unknown";
   }
@@ -532,7 +590,7 @@ struct ClientHelloMessage {
   std::optional<ArtworkSupportObject> artwork_v1_support;
 #endif
 #ifdef USE_SENDSPIN_VISUALIZER
-  std::optional<VisualizerSupportObject> visualizer_v1_support;
+  std::optional<VisualizerSupportObject> visualizer_support;
 #endif
 };
 
@@ -613,6 +671,9 @@ struct StreamStartMessage {
 #endif
 #ifdef USE_SENDSPIN_ARTWORK
   std::optional<ServerArtworkStreamObject> artwork;
+#endif
+#ifdef USE_SENDSPIN_VISUALIZER
+  std::optional<ServerVisualizerStreamObject> visualizer;
 #endif
 };
 

@@ -207,6 +207,24 @@ class SendspinHub : public Component {
   /// @return Pointer to the current connection, or nullptr if none.
   SendspinConnection *get_current_connection() const { return this->current_connection_.get(); }
 
+#ifdef USE_SENDSPIN_VISUALIZER
+  void set_visualizer_data_callback(std::function<void(const uint8_t *, size_t)> &&callback) {
+    this->visualizer_data_callback_ = std::move(callback);
+  }
+  void set_beat_data_callback(std::function<void(const uint8_t *, size_t)> &&callback) {
+    this->beat_data_callback_ = std::move(callback);
+  }
+  void set_visualizer_stream_callbacks(std::function<void(const ServerVisualizerStreamObject &)> &&on_start,
+                                       std::function<void()> &&on_end, std::function<void()> &&on_clear) {
+    this->visualizer_stream_start_callback_ = std::move(on_start);
+    this->visualizer_stream_end_callback_ = std::move(on_end);
+    this->visualizer_stream_clear_callback_ = std::move(on_clear);
+  }
+
+  void set_visualizer_support(const VisualizerSupportObject &support) { this->visualizer_support_ = support; }
+  const std::optional<VisualizerSupportObject> &get_visualizer_support() const { return this->visualizer_support_; }
+#endif
+
 #ifdef USE_SENDSPIN_ARTWORK
   void add_image_slot_callback(uint8_t slot,
                                std::function<void(const uint8_t *, size_t, SendspinImageFormat, int64_t)> &&callback) {
@@ -389,6 +407,15 @@ class SendspinHub : public Component {
 
 #ifdef USE_SENDSPIN_SENSOR
   CallbackManager<void(const SendspinSensorUpdate &)> sensor_callbacks_{};
+#endif
+
+#ifdef USE_SENDSPIN_VISUALIZER
+  std::optional<VisualizerSupportObject> visualizer_support_;
+  std::function<void(const uint8_t *, size_t)> visualizer_data_callback_;
+  std::function<void(const uint8_t *, size_t)> beat_data_callback_;
+  std::function<void(const ServerVisualizerStreamObject &)> visualizer_stream_start_callback_;
+  std::function<void()> visualizer_stream_end_callback_;
+  std::function<void()> visualizer_stream_clear_callback_;
 #endif
 };
 

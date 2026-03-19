@@ -229,6 +229,13 @@ bool SendspinHub::send_hello_message_(uint8_t remaining_attempts, SendspinConnec
   }
 #endif
 
+#ifdef USE_SENDSPIN_VISUALIZER
+  if (this->visualizer_support_.has_value()) {
+    supported_roles.push_back(SendspinRole::VISUALIZER);
+    msg.visualizer_support = this->visualizer_support_.value();
+  }
+#endif
+
   msg.supported_roles = supported_roles;
 
   // Format the hello message using the protocol layer
@@ -456,6 +463,12 @@ void SendspinHub::cleanup_connection_state_() {
   // Stop controls (for player, etc.)
   this->controls_callbacks_.call(SendspinControls::STOP);
 
+#ifdef USE_SENDSPIN_VISUALIZER
+  if (this->visualizer_stream_end_callback_) {
+    this->visualizer_stream_end_callback_();
+  }
+#endif
+
   // Note: Time message state is per-connection and cleaned up when connection is destroyed
 
 #ifdef USE_WIFI
@@ -534,7 +547,7 @@ void SendspinHub::persist_static_delay_() {
 #endif  // USE_SENDSPIN_PLAYER
 
 void SendspinHub::process_binary_message_(uint8_t *payload, size_t len) {
-  if (len < SENDSPIN_BINARY_CHUNK_HEADER_SIZE) {
+  if (len < 2) {  // Minimum: type byte + at least 1 more byte
     return;
   }
 
@@ -542,60 +555,76 @@ void SendspinHub::process_binary_message_(uint8_t *payload, size_t len) {
   uint8_t role = get_binary_role(binary_type);
   uint8_t slot = get_binary_slot(binary_type);
 
-  // Use the big endian datatype helpers for converting to host format
-  int64_be_t server_timestamp;
-  std::memcpy((void *) &server_timestamp, (void *) (payload + 1), sizeof(server_timestamp));
-
   switch (role) {
-    case SENDSPIN_ROLE_PLAYER: {
-#ifdef USE_SENDSPIN_PLAYER
-      if (slot == 0) {
-        // Audio data (slot 0) - pass raw data to callback (no heap allocation)
-        if (!this->send_audio_chunk_(payload + SENDSPIN_BINARY_CHUNK_HEADER_SIZE,
-                                     len - SENDSPIN_BINARY_CHUNK_HEADER_SIZE, server_timestamp,
-                                     CHUNK_TYPE_ENCODED_AUDIO, 0)) {
-          ESP_LOGW(TAG, "Failed to send audio chunk");
-        }
-      } else {
-        ESP_LOGW(TAG, "Unknown player binary slot %d", slot);
-      }
-#else
-      ESP_LOGV(TAG, "Ignoring player binary message (audio not enabled)");
-#endif
-      break;
-    }
+    case SENDSPIN_ROLE_PLAYER:
     case SENDSPIN_ROLE_ARTWORK: {
-#ifdef USE_SENDSPIN_ARTWORK
-      // Find the format preference for this slot
-      SendspinImageFormat image_format = SendspinImageFormat::JPEG;  // default fallback
-      for (const auto &pref : this->preferred_image_formats_) {
-        if (pref.slot == slot) {
-          image_format = pref.format;
-          break;
-        }
+      // Player and artwork use standard header: [type(1)] [timestamp(8)] [data...]
+      if (len < SENDSPIN_BINARY_CHUNK_HEADER_SIZE) {
+        return;
       }
+      int64_be_t server_timestamp;
+      std::memcpy((void *) &server_timestamp, (void *) (payload + 1), sizeof(server_timestamp));
 
-      // Route to slot-specific callbacks (linear search)
-      bool found_callback = false;
-      for (auto &entry : this->image_slot_callbacks_) {
-        if (entry.slot == slot) {
-          entry.callbacks.call(payload + SENDSPIN_BINARY_CHUNK_HEADER_SIZE, len - SENDSPIN_BINARY_CHUNK_HEADER_SIZE,
-                               image_format, (int64_t) server_timestamp);
-          found_callback = true;
-          break;
+      if (role == SENDSPIN_ROLE_PLAYER) {
+#ifdef USE_SENDSPIN_PLAYER
+        if (slot == 0) {
+          if (!this->send_audio_chunk_(payload + SENDSPIN_BINARY_CHUNK_HEADER_SIZE,
+                                       len - SENDSPIN_BINARY_CHUNK_HEADER_SIZE, server_timestamp,
+                                       CHUNK_TYPE_ENCODED_AUDIO, 0)) {
+            ESP_LOGW(TAG, "Failed to send audio chunk");
+          }
+        } else {
+          ESP_LOGW(TAG, "Unknown player binary slot %d", slot);
         }
-      }
-      if (!found_callback) {
-        ESP_LOGW(TAG, "No callback registered for artwork slot %d", slot);
-      }
 #else
-      ESP_LOGV(TAG, "Ignoring artwork message with %zu bytes", len - SENDSPIN_BINARY_CHUNK_HEADER_SIZE);
+        ESP_LOGV(TAG, "Ignoring player binary message (audio not enabled)");
 #endif
+      } else {
+#ifdef USE_SENDSPIN_ARTWORK
+        // Find the format preference for this slot
+        SendspinImageFormat image_format = SendspinImageFormat::JPEG;  // default fallback
+        for (const auto &pref : this->preferred_image_formats_) {
+          if (pref.slot == slot) {
+            image_format = pref.format;
+            break;
+          }
+        }
+
+        // Route to slot-specific callbacks (linear search)
+        bool found_callback = false;
+        for (auto &entry : this->image_slot_callbacks_) {
+          if (entry.slot == slot) {
+            entry.callbacks.call(payload + SENDSPIN_BINARY_CHUNK_HEADER_SIZE, len - SENDSPIN_BINARY_CHUNK_HEADER_SIZE,
+                                 image_format, (int64_t) server_timestamp);
+            found_callback = true;
+            break;
+          }
+        }
+        if (!found_callback) {
+          ESP_LOGW(TAG, "No callback registered for artwork slot %d", slot);
+        }
+#else
+        ESP_LOGV(TAG, "Ignoring artwork message with %zu bytes", len - SENDSPIN_BINARY_CHUNK_HEADER_SIZE);
+#endif
+      }
       break;
     }
     case SENDSPIN_ROLE_VISUALIZER: {
-      // TODO: implement visualizer binary message handling
-      ESP_LOGV(TAG, "Ignoring visualizer message with %zu bytes", len - SENDSPIN_BINARY_CHUNK_HEADER_SIZE);
+#ifdef USE_SENDSPIN_VISUALIZER
+      // Visualizer messages have a different header format than player/artwork:
+      // [type(1)] [num_frames(1)] [frames...] instead of [type(1)] [timestamp(8)] [data...]
+      if (binary_type == SENDSPIN_BINARY_VISUALIZER_BEAT) {
+        if (this->beat_data_callback_) {
+          this->beat_data_callback_(payload, len);
+        }
+      } else {
+        if (this->visualizer_data_callback_) {
+          this->visualizer_data_callback_(payload, len);
+        }
+      }
+#else
+      ESP_LOGV(TAG, "Ignoring visualizer message with %zu bytes", len - 2);
+#endif
       break;
     }
     default: {
@@ -619,6 +648,13 @@ bool SendspinHub::process_json_message_(SendspinConnection *conn, const std::str
   switch (message_type) {
     case SendspinServerToClientMessageType::STREAM_START: {
       ESP_LOGD(TAG, "Stream Started");
+
+      StreamStartMessage stream_msg;
+      if (!process_stream_start_message(root, &stream_msg)) {
+        ESP_LOGE(TAG, "Failed to parse stream/start message");
+        break;
+      }
+
 #ifdef USE_SENDSPIN_PLAYER
 #ifdef USE_WIFI
       ESP_LOGD(TAG, "Requesting high performance networking for playback");
@@ -628,13 +664,7 @@ bool SendspinHub::process_json_message_(SendspinConnection *conn, const std::str
       }
 #endif
 
-      StreamStartMessage stream_msg;
-      if (process_stream_start_message(root, &stream_msg)) {
-        if (!stream_msg.player.has_value()) {
-          ESP_LOGE(TAG, "Stream start message has no player object");
-          break;
-        }
-
+      if (stream_msg.player.has_value()) {
         // Start player immediately so the task can drain the ring buffer, if necessary. Also reduces overall latency to
         // first sound.
         this->controls_callbacks_.call(SendspinControls::START);
@@ -679,9 +709,17 @@ bool SendspinHub::process_json_message_(SendspinConnection *conn, const std::str
           ESP_LOGE(TAG, "Failed to send codec header");
           this->controls_callbacks_.call(SendspinControls::STOP);
         }
+      } else {
+        this->controls_callbacks_.call(SendspinControls::START);
       }
 #else
       this->controls_callbacks_.call(SendspinControls::START);
+#endif
+
+#ifdef USE_SENDSPIN_VISUALIZER
+      if (stream_msg.visualizer.has_value() && this->visualizer_stream_start_callback_) {
+        this->visualizer_stream_start_callback_(stream_msg.visualizer.value());
+      }
 #endif
       break;
     }
@@ -718,7 +756,11 @@ bool SendspinHub::process_json_message_(SendspinConnection *conn, const std::str
 #endif
         }
 
-        // TODO: Handle artwork and visualizer stream endings when implemented
+#ifdef USE_SENDSPIN_VISUALIZER
+        if (end_visualizer && this->visualizer_stream_end_callback_) {
+          this->visualizer_stream_end_callback_();
+        }
+#endif
       }
       break;
     }
@@ -748,7 +790,11 @@ bool SendspinHub::process_json_message_(SendspinConnection *conn, const std::str
 #endif
         }
 
-        // TODO: Handle visualizer stream clearing when implemented
+#ifdef USE_SENDSPIN_VISUALIZER
+        if (clear_visualizer && this->visualizer_stream_clear_callback_) {
+          this->visualizer_stream_clear_callback_();
+        }
+#endif
       }
       break;
     }

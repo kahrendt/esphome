@@ -288,6 +288,56 @@ bool process_stream_start_message(JsonObject root, StreamStartMessage *stream_ms
   }
 #endif
 
+#ifdef USE_SENDSPIN_VISUALIZER
+  if (root["payload"]["visualizer"].is<JsonObject>()) {
+    ServerVisualizerStreamObject vis_obj;
+    JsonObject vis_json = root["payload"]["visualizer"];
+
+    // Parse types array
+    if (vis_json["types"].is<JsonArray>()) {
+      for (JsonVariant type_var : vis_json["types"].as<JsonArray>()) {
+        if (type_var.is<const char *>()) {
+          std::string type_str = type_var.as<std::string>();
+          if (type_str == "loudness") {
+            vis_obj.types.push_back(VisualizerDataType::LOUDNESS);
+          } else if (type_str == "f_peak") {
+            vis_obj.types.push_back(VisualizerDataType::F_PEAK);
+          } else if (type_str == "spectrum") {
+            vis_obj.types.push_back(VisualizerDataType::SPECTRUM);
+          } else if (type_str == "beat") {
+            vis_obj.types.push_back(VisualizerDataType::BEAT);
+          }
+        }
+      }
+    }
+
+    if (vis_json["batch_max"].is<JsonVariant>()) {
+      vis_obj.batch_max = vis_json["batch_max"].as<uint8_t>();
+    }
+
+    // Parse spectrum config if present
+    if (vis_json["spectrum"].is<JsonObject>()) {
+      JsonObject spec_json = vis_json["spectrum"];
+      VisualizerSpectrumConfig spec_cfg;
+      spec_cfg.n_disp_bins = spec_json["n_disp_bins"].as<uint8_t>();
+      std::string scale_str = spec_json["scale"].as<std::string>();
+      if (scale_str == "log") {
+        spec_cfg.scale = VisualizerSpectrumScale::LOG;
+      } else if (scale_str == "lin") {
+        spec_cfg.scale = VisualizerSpectrumScale::LIN;
+      } else {
+        spec_cfg.scale = VisualizerSpectrumScale::MEL;
+      }
+      spec_cfg.f_min = spec_json["f_min"].as<uint16_t>();
+      spec_cfg.f_max = spec_json["f_max"].as<uint16_t>();
+      spec_cfg.rate_max = spec_json["rate_max"].as<uint16_t>();
+      vis_obj.spectrum = spec_cfg;
+    }
+
+    stream_msg->visualizer = vis_obj;
+  }
+#endif
+
   return true;
 }
 
@@ -618,6 +668,25 @@ std::string format_client_hello_message(const ClientHelloMessage *msg) {
         channel_obj["format"] = to_cstr(channel.format);
         channel_obj["media_width"] = channel.media_width;
         channel_obj["media_height"] = channel.media_height;
+      }
+    }
+#endif
+#ifdef USE_SENDSPIN_VISUALIZER
+    if (msg->visualizer_support.has_value()) {
+      const auto &vis = msg->visualizer_support.value();
+      JsonArray types_list = root["payload"]["visualizer@_draft_r1_support"]["types"].to<JsonArray>();
+      for (const auto &type : vis.types) {
+        types_list.add(to_cstr(type));
+      }
+      root["payload"]["visualizer@_draft_r1_support"]["buffer_capacity"] = vis.buffer_capacity;
+      root["payload"]["visualizer@_draft_r1_support"]["batch_max"] = vis.batch_max;
+      if (vis.spectrum.has_value()) {
+        const auto &spec = vis.spectrum.value();
+        root["payload"]["visualizer@_draft_r1_support"]["spectrum"]["n_disp_bins"] = spec.n_disp_bins;
+        root["payload"]["visualizer@_draft_r1_support"]["spectrum"]["scale"] = to_cstr(spec.scale);
+        root["payload"]["visualizer@_draft_r1_support"]["spectrum"]["f_min"] = spec.f_min;
+        root["payload"]["visualizer@_draft_r1_support"]["spectrum"]["f_max"] = spec.f_max;
+        root["payload"]["visualizer@_draft_r1_support"]["spectrum"]["rate_max"] = spec.rate_max;
       }
     }
 #endif
