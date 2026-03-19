@@ -66,22 +66,7 @@ void SendspinVisualizer::setup() {
 }
 
 void SendspinVisualizer::loop() {
-  static uint32_t last_debug_log = 0;
-  uint32_t now_ms = millis();
-
-  if (!this->stream_active_) {
-    if (now_ms - last_debug_log > 5000) {
-      last_debug_log = now_ms;
-      ESP_LOGD(TAG, "loop: stream not active, ring_count=%zu", this->ring_count_);
-    }
-    return;
-  }
-
-  if (this->ring_count_ == 0) {
-    if (now_ms - last_debug_log > 5000) {
-      last_debug_log = now_ms;
-      ESP_LOGD(TAG, "loop: ring empty (stream active)");
-    }
+  if (!this->stream_active_ || this->ring_count_ == 0) {
     return;
   }
 
@@ -97,22 +82,12 @@ void SendspinVisualizer::loop() {
     int64_t display_time = this->parent_->get_client_time(frame->server_time);
     if (display_time == 0) {
       // Time sync not available yet - discard frame
-      if (now_ms - last_debug_log > 2000) {
-        last_debug_log = now_ms;
-        ESP_LOGW(TAG, "loop: get_client_time returned 0, discarding (ring_count=%zu)", this->ring_count_);
-      }
       this->ring_read_ = (this->ring_read_ + 1) % this->ring_capacity_;
       this->ring_count_--;
       continue;
     }
 
     if (display_time > now) {
-      // This frame is in the future, stop here
-      if (now_ms - last_debug_log > 2000) {
-        last_debug_log = now_ms;
-        int64_t ahead_us = display_time - now;
-        ESP_LOGD(TAG, "loop: next frame is %lld us in future (ring_count=%zu)", ahead_us, this->ring_count_);
-      }
       break;
     }
 
@@ -244,9 +219,6 @@ void SendspinVisualizer::on_visualizer_data(const uint8_t *data, size_t length) 
   if (num_frames == 0) {
     return;
   }
-
-  ESP_LOGV(TAG, "on_visualizer_data: %u frames, %zu bytes, frame_data_size=%zu", num_frames, length,
-           this->frame_data_size_);
 
   const size_t frame_size = FRAME_TIMESTAMP_SIZE + this->frame_data_size_;
   size_t offset = VISUALIZER_BINARY_HEADER_SIZE;
