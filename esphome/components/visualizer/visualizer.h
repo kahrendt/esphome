@@ -4,6 +4,7 @@
 #include "esphome/core/helpers.h"
 
 #include <cstdint>
+#include <cstring>
 #include <functional>
 
 namespace esphome::visualizer {

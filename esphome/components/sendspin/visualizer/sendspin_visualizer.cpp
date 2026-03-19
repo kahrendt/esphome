@@ -5,6 +5,7 @@
 #include "../sendspin_hub.h"
 #include "esphome/core/log.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace esphome {
@@ -129,17 +130,19 @@ void SendspinVisualizer::on_visualizer_data(const uint8_t *data, size_t length) 
           offset += 2;
         }
         break;
-      case VisualizerDataType::SPECTRUM:
-        if (this->spectrum_buffer_ != nullptr && this->configured_bin_count_ > 0) {
-          size_t spectrum_bytes = this->configured_bin_count_ * 2;
-          if (offset + spectrum_bytes <= length) {
-            for (uint8_t i = 0; i < this->configured_bin_count_; i++) {
-              this->spectrum_buffer_[i] = (static_cast<uint16_t>(data[offset + i * 2]) << 8) | data[offset + i * 2 + 1];
-            }
-            offset += spectrum_bytes;
+      case VisualizerDataType::SPECTRUM: {
+        // stream_bin_count_ is the server's bin count (used for frame size/offset advancement)
+        // configured_bin_count_ is our buffer size (used for how many bins we actually read)
+        size_t stream_spectrum_bytes = this->stream_bin_count_ * 2;
+        if (this->spectrum_buffer_ != nullptr && offset + stream_spectrum_bytes <= length) {
+          uint8_t bins_to_read = std::min(this->stream_bin_count_, this->configured_bin_count_);
+          for (uint8_t i = 0; i < bins_to_read; i++) {
+            this->spectrum_buffer_[i] = (static_cast<uint16_t>(data[offset + i * 2]) << 8) | data[offset + i * 2 + 1];
           }
         }
+        offset += stream_spectrum_bytes;
         break;
+      }
       default:
         break;
     }
@@ -171,6 +174,12 @@ void SendspinVisualizer::on_stream_start(const ServerVisualizerStreamObject &str
   this->active_types_ = stream_obj.types;
   this->stream_active_ = true;
 
+  // Store the server's spectrum bin count (may differ from what we requested)
+  this->stream_bin_count_ = 0;
+  if (stream_obj.spectrum.has_value()) {
+    this->stream_bin_count_ = stream_obj.spectrum.value().n_disp_bins;
+  }
+
   // Compute frame data size from the types array (excluding beat, which uses separate messages)
   this->frame_data_size_ = 0;
   for (const auto &type : this->active_types_) {
@@ -182,16 +191,19 @@ void SendspinVisualizer::on_stream_start(const ServerVisualizerStreamObject &str
         this->frame_data_size_ += 2;
         break;
       case VisualizerDataType::SPECTRUM:
-        if (stream_obj.spectrum.has_value()) {
-          this->frame_data_size_ += stream_obj.spectrum.value().n_disp_bins * 2;
-        }
+        this->frame_data_size_ += this->stream_bin_count_ * 2;
         break;
       default:
         break;
     }
   }
 
-  ESP_LOGD(TAG, "  Types: %zu, frame data size: %zu bytes", this->active_types_.size(), this->frame_data_size_);
+  // Update the base class bin count to reflect what we can actually display
+  this->spectrum_bin_count_ = std::min(this->stream_bin_count_, this->configured_bin_count_);
+
+  ESP_LOGD(TAG, "  Types: %zu, frame data size: %zu bytes, spectrum bins: %u (server: %u, configured: %u)",
+           this->active_types_.size(), this->frame_data_size_, this->spectrum_bin_count_, this->stream_bin_count_,
+           this->configured_bin_count_);
 }
 
 void SendspinVisualizer::on_stream_end() {

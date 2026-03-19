@@ -71,6 +71,7 @@ class SendspinVisualizer : public Component, public visualizer::Visualizer, publ
   bool stream_active_{false};
   std::vector<VisualizerDataType> active_types_;  // Types in the current stream (order matters for parsing)
   size_t frame_data_size_{0};                     // Bytes per frame (excluding 8-byte timestamp)
+  uint8_t stream_bin_count_{0};                   // Server's bin count for this stream (for frame parsing)
 
   // Spectrum buffer (allocated once based on configured n_disp_bins)
   std::unique_ptr<uint16_t[]> spectrum_buffer_;
