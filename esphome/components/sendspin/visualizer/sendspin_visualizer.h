@@ -18,6 +18,14 @@ namespace sendspin {
 
 class SendspinHub;
 
+/// @brief A single parsed visualizer frame ready for display.
+struct VisualizerFrame {
+  int64_t server_time;  // Raw server timestamp in microseconds (converted to local time in loop())
+  uint16_t loudness;
+  uint16_t peak_frequency;
+  // Spectrum bins are stored inline after this struct in the ring buffer
+};
+
 class SendspinVisualizer : public Component, public visualizer::Visualizer, public Parented<SendspinHub> {
  public:
   void setup() override;
@@ -36,7 +44,7 @@ class SendspinVisualizer : public Component, public visualizer::Visualizer, publ
   // --- Hub callbacks ---
 
   /// @brief Called by hub when a visualizer binary message (type 16) arrives.
-  /// Parses batched frames and updates the latest frame data.
+  /// Parses all frames and stores them in the ring buffer with converted timestamps.
   /// @param data Pointer to the full binary message (starting at byte 0 = message type).
   /// @param length Total message length in bytes.
   void on_visualizer_data(const uint8_t *data, size_t length);
@@ -61,6 +69,13 @@ class SendspinVisualizer : public Component, public visualizer::Visualizer, publ
   VisualizerSupportObject get_support_object() const;
 
  protected:
+  /// @brief Parse a single frame's data fields from the binary message and write into the frame ring buffer.
+  /// @param data Pointer to the start of the data fields (after the 8-byte timestamp).
+  /// @param length Remaining bytes in the message from this offset.
+  /// @param frame Pointer to the VisualizerFrame to write scalar fields into.
+  /// @param spectrum_dest Pointer to the spectrum buffer for this frame slot.
+  void parse_frame_data_(const uint8_t *data, size_t length, VisualizerFrame *frame, uint16_t *spectrum_dest);
+
   // Configuration
   std::vector<VisualizerDataType> requested_types_;
   size_t buffer_capacity_{8192};
@@ -73,13 +88,31 @@ class SendspinVisualizer : public Component, public visualizer::Visualizer, publ
   size_t frame_data_size_{0};                     // Bytes per frame (excluding 8-byte timestamp)
   uint8_t stream_bin_count_{0};                   // Server's bin count for this stream (for frame parsing)
 
-  // Spectrum buffer (allocated once based on configured n_disp_bins)
+  // Spectrum display buffer (allocated once based on configured n_disp_bins, used by base class)
   std::unique_ptr<uint16_t[]> spectrum_buffer_;
   uint8_t configured_bin_count_{0};
 
-  // Pending state flags (set from hub callbacks, consumed in loop)
-  bool pending_frame_{false};
-  bool pending_beat_{false};
+  // --- Frame ring buffer ---
+  // Stores parsed frames with display timestamps. Each slot = VisualizerFrame + spectrum bins.
+  // Size is derived from buffer_capacity / wire_frame_size in setup().
+  std::unique_ptr<uint8_t[]> frame_ring_;  // Raw storage: ring_capacity_ * frame_slot_size_
+  size_t frame_slot_size_{0};              // sizeof(VisualizerFrame) + configured_bin_count_ * sizeof(uint16_t)
+  size_t ring_capacity_{0};                // Total slots (computed in setup)
+  size_t ring_write_{0};                   // Next write index (0..ring_capacity_-1)
+  size_t ring_read_{0};                    // Next read index
+  size_t ring_count_{0};                   // Number of frames in buffer
+
+  /// @brief Get a pointer to the frame at the given ring buffer index.
+  VisualizerFrame *ring_frame_(size_t index);
+  /// @brief Get the spectrum data pointer for the frame at the given ring buffer index.
+  uint16_t *ring_spectrum_(size_t index);
+
+  // --- Beat timing ---
+  static const size_t MAX_BUFFERED_BEATS = 32;
+  int64_t beat_times_[MAX_BUFFERED_BEATS]{};
+  size_t beat_write_{0};
+  size_t beat_read_{0};
+  size_t beat_count_{0};
 };
 
 }  // namespace sendspin
