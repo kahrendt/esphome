@@ -27,7 +27,11 @@ static const UBaseType_t STATS_TASK_PRIORITY = 3;
 static const uint32_t STATS_DELAY_MS = 5000;
 static const uint32_t ARRAY_SIZE_OFFSET = 5;  // Increase this if compute_real_time_stats returns ESP_ERR_INVALID_SIZE
 
-static esp_err_t compute_real_time_stats(TickType_t xTicksToWait, bool print_stats, std::atomic<float> *idle_pct_out) {
+namespace esphome {
+namespace debug {
+
+static esp_err_t compute_real_time_stats(TickType_t xTicksToWait, bool print_stats, std::atomic<float> *idle_pct_out,
+                                         FixedVector<TaskCpuSensor *> *task_sensors, uint32_t *task_elapsed_scratch) {
   TaskStatus_t *start_array = nullptr, *end_array = nullptr;
   UBaseType_t start_array_size, end_array_size;
   uint32_t start_run_time, end_run_time;
@@ -84,6 +88,14 @@ static esp_err_t compute_real_time_stats(TickType_t xTicksToWait, bool print_sta
   uint32_t num_cores = portNUM_PROCESSORS;
   uint32_t idle_total_time = 0;
 
+  // Reset per-task-sensor accumulators
+  size_t num_task_sensors = (task_sensors != nullptr) ? task_sensors->size() : 0;
+  if (task_elapsed_scratch != nullptr) {
+    for (size_t s = 0; s < num_task_sensors; s++) {
+      task_elapsed_scratch[s] = 0;
+    }
+  }
+
   if (print_stats) {
     printf("| Task | Run Time | Percentage\n");
   }
@@ -111,6 +123,16 @@ static esp_err_t compute_real_time_stats(TickType_t xTicksToWait, bool print_sta
       if (strncmp(start_array[i].pcTaskName, "IDLE", 4) == 0) {
         idle_total_time += task_elapsed_time;
       }
+
+      // Accumulate elapsed time for any user-registered task sensor whose prefix matches
+      if (task_elapsed_scratch != nullptr) {
+        for (size_t s = 0; s < num_task_sensors; s++) {
+          const auto *entry = (*task_sensors)[s];
+          if (strncmp(start_array[i].pcTaskName, entry->name_prefix, entry->name_prefix_len) == 0) {
+            task_elapsed_scratch[s] += task_elapsed_time;
+          }
+        }
+      }
     }
   }
 
@@ -118,6 +140,14 @@ static esp_err_t compute_real_time_stats(TickType_t xTicksToWait, bool print_sta
   if (idle_pct_out != nullptr) {
     float idle_pct = (idle_total_time * 100.0f) / (total_elapsed_time * num_cores);
     idle_pct_out->store(idle_pct, std::memory_order_relaxed);
+  }
+
+  // Store per-task-sensor percentages
+  if (task_elapsed_scratch != nullptr) {
+    for (size_t s = 0; s < num_task_sensors; s++) {
+      float pct = (task_elapsed_scratch[s] * 100.0f) / (total_elapsed_time * num_cores);
+      (*task_sensors)[s]->percentage.store(pct, std::memory_order_relaxed);
+    }
   }
 
   if (print_stats) {
@@ -139,6 +169,9 @@ static esp_err_t compute_real_time_stats(TickType_t xTicksToWait, bool print_sta
   free(end_array);
   return ret;
 }
+
+}  // namespace debug
+}  // namespace esphome
 #endif  // CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
 
 namespace esphome {
@@ -284,7 +317,10 @@ void DebugComponent::setup() {
 #if CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
   bool need_stats_task = this->log_cpu_usage_;
 #ifdef USE_SENSOR
-  need_stats_task = need_stats_task || (this->cpu_idle_sensor_ != nullptr);
+  need_stats_task = need_stats_task || (this->cpu_idle_sensor_ != nullptr) || (!this->task_cpu_sensors_.empty());
+  if (!this->task_cpu_sensors_.empty()) {
+    this->task_cpu_elapsed_scratch_ = std::make_unique<uint32_t[]>(this->task_cpu_sensors_.size());
+  }
 #endif
   if (need_stats_task) {
     xTaskCreate(DebugComponent::stats_task_, "stats", 4096, this, STATS_TASK_PRIORITY, nullptr);
@@ -292,17 +328,37 @@ void DebugComponent::setup() {
 #endif  // CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
 }
 
+#ifdef USE_SENSOR
+void DebugComponent::add_task_cpu_sensor(const char *name_prefix, sensor::Sensor *sensor) {
+  auto *entry = new TaskCpuSensor();  // NOLINT(cppcoreguidelines-owning-memory)
+  entry->name_prefix = name_prefix;
+  entry->name_prefix_len = static_cast<uint8_t>(strlen(name_prefix));
+  entry->sensor = sensor;
+  this->task_cpu_sensors_.push_back(entry);
+}
+#endif
+
 #if CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
 void DebugComponent::stats_task_(void *arg) {
   auto *component = static_cast<DebugComponent *>(arg);
   bool print_stats = component->get_log_cpu_usage();
-  std::atomic<float> *idle_pct = component->get_cpu_idle_pct_ptr();
+#ifdef USE_SENSOR
+  std::atomic<float> *idle_pct = &component->cpu_idle_percentage_;
+  FixedVector<TaskCpuSensor *> *task_sensors =
+      component->task_cpu_sensors_.empty() ? nullptr : &component->task_cpu_sensors_;
+  uint32_t *task_scratch = component->task_cpu_elapsed_scratch_.get();
+#else
+  std::atomic<float> *idle_pct = nullptr;
+  FixedVector<TaskCpuSensor *> *task_sensors = nullptr;
+  uint32_t *task_scratch = nullptr;
+#endif
 
   while (1) {
     if (print_stats) {
       printf("\n\nGetting real time stats over %" PRIu32 " ms\n", STATS_DELAY_MS);
     }
-    esp_err_t err = compute_real_time_stats(pdMS_TO_TICKS(STATS_DELAY_MS), print_stats, idle_pct);
+    esp_err_t err =
+        compute_real_time_stats(pdMS_TO_TICKS(STATS_DELAY_MS), print_stats, idle_pct, task_sensors, task_scratch);
     if (print_stats) {
       if (err == ESP_OK) {
         printf("Real time stats obtained\n");
@@ -471,6 +527,12 @@ void DebugComponent::update_platform_() {
     float idle_pct = this->cpu_idle_percentage_.load(std::memory_order_relaxed);
     if (!std::isnan(idle_pct)) {
       this->cpu_idle_sensor_->publish_state(idle_pct);
+    }
+  }
+  for (auto *entry : this->task_cpu_sensors_) {
+    float pct = entry->percentage.load(std::memory_order_relaxed);
+    if (!std::isnan(pct)) {
+      entry->sensor->publish_state(pct);
     }
   }
 #endif

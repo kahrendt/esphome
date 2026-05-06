@@ -5,6 +5,7 @@
 #include "esphome/core/helpers.h"
 #include "esphome/core/macros.h"
 #include <atomic>
+#include <memory>
 #include <span>
 
 #ifdef USE_SENSOR
@@ -20,6 +21,15 @@ namespace debug {
 static constexpr size_t DEVICE_INFO_BUFFER_SIZE = 256;
 static constexpr size_t RESET_REASON_BUFFER_SIZE = 128;
 static constexpr size_t WAKEUP_CAUSE_BUFFER_SIZE = 128;
+
+#if defined(USE_ESP32) && defined(USE_SENSOR)
+struct TaskCpuSensor {
+  const char *name_prefix;
+  uint8_t name_prefix_len;
+  sensor::Sensor *sensor;
+  std::atomic<float> percentage{NAN};
+};
+#endif
 
 // buf_append_printf is now provided by esphome/core/helpers.h
 
@@ -52,7 +62,8 @@ class DebugComponent : public PollingComponent {
   void set_cpu_idle_sensor(sensor::Sensor *cpu_idle_sensor) { this->cpu_idle_sensor_ = cpu_idle_sensor; }
   void set_log_cpu_usage(bool log_cpu_usage) { this->log_cpu_usage_ = log_cpu_usage; }
   bool get_log_cpu_usage() const { return this->log_cpu_usage_; }
-  std::atomic<float> *get_cpu_idle_pct_ptr() { return &this->cpu_idle_percentage_; }
+  void init_task_cpu_sensors(size_t count) { this->task_cpu_sensors_.init(count); }
+  void add_task_cpu_sensor(const char *name_prefix, sensor::Sensor *sensor);
   static void stats_task_(void *arg);
 #endif  // USE_ESP32
   void set_cpu_frequency_sensor(sensor::Sensor *cpu_frequency_sensor) {
@@ -82,6 +93,8 @@ class DebugComponent : public PollingComponent {
   sensor::Sensor *psram_sensor_{nullptr};
   sensor::Sensor *cpu_idle_sensor_{nullptr};
   std::atomic<float> cpu_idle_percentage_{NAN};
+  FixedVector<TaskCpuSensor *> task_cpu_sensors_;
+  std::unique_ptr<uint32_t[]> task_cpu_elapsed_scratch_;
   bool log_cpu_usage_;
 #endif  // USE_ESP32
   sensor::Sensor *cpu_frequency_sensor_{nullptr};

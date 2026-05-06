@@ -33,6 +33,27 @@ DEPENDENCIES = ["debug"]
 CONF_CPU_IDLE = "cpu_idle"
 CONF_MIN_FREE = "min_free"
 CONF_PSRAM = "psram"
+CONF_TASKS = "tasks"
+CONF_TASK_NAME = "task_name"
+
+# FreeRTOS task names are limited to configMAX_TASK_NAME_LEN (16 by default in ESP-IDF,
+# allowing 15 characters plus a null terminator). Names are matched as prefixes, so
+# specifying "IDLE" matches both "IDLE0" and "IDLE1" on dual-core variants.
+TASK_NAME_MAX_LEN = 15
+
+TASK_CPU_SCHEMA = sensor.sensor_schema(
+    unit_of_measurement=UNIT_PERCENT,
+    icon="mdi:cpu-32-bit",
+    accuracy_decimals=1,
+    entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+    state_class=STATE_CLASS_MEASUREMENT,
+).extend(
+    {
+        cv.Required(CONF_TASK_NAME): cv.All(
+            cv.string_strict, cv.Length(min=1, max=TASK_NAME_MAX_LEN)
+        ),
+    }
+)
 
 CONFIG_SCHEMA = {
     cv.GenerateID(CONF_DEBUG_ID): cv.use_id(DebugComponent),
@@ -119,6 +140,10 @@ CONFIG_SCHEMA = {
             state_class=STATE_CLASS_MEASUREMENT,
         ),
     ),
+    cv.Optional(CONF_TASKS): cv.All(
+        cv.only_on_esp32,
+        cv.ensure_list(TASK_CPU_SCHEMA),
+    ),
 }
 
 
@@ -160,3 +185,13 @@ async def to_code(config):
         esp32.add_idf_sdkconfig_option("CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS", True)
         sens = await sensor.new_sensor(cpu_idle_conf)
         cg.add(debug_component.set_cpu_idle_sensor(sens))
+
+    if tasks_conf := config.get(CONF_TASKS):
+        from esphome.components import esp32
+
+        esp32.add_idf_sdkconfig_option("CONFIG_FREERTOS_USE_TRACE_FACILITY", True)
+        esp32.add_idf_sdkconfig_option("CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS", True)
+        cg.add(debug_component.init_task_cpu_sensors(len(tasks_conf)))
+        for task_conf in tasks_conf:
+            sens = await sensor.new_sensor(task_conf)
+            cg.add(debug_component.add_task_cpu_sensor(task_conf[CONF_TASK_NAME], sens))

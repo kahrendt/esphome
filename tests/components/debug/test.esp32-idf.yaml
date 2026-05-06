@@ -13,5 +13,12 @@ sensor:
       name: "Heap Fragmentation"
     min_free:
       name: "Heap Min Free"
+    cpu_idle:
+      name: "CPU Idle"
+    tasks:
+      - task_name: "loopTask"
+        name: "Loop Task CPU"
+      - task_name: "IDLE"
+        name: "Idle Tasks CPU"
 
 psram:
