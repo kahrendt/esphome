@@ -1,6 +1,12 @@
 #include "model_data.h"
 
-#ifdef USE_ESP_IDF
+#ifdef USE_ESP32
+
+#include <cstring>
+#include "esphome/core/log.h"
+
+#include <tensorflow/lite/core/c/common.h>
+#include <tensorflow/lite/micro/micro_interpreter.h>
 
 namespace esphome {
 namespace micro_wake_word {
@@ -8,22 +14,6 @@ namespace micro_wake_word {
 static const char *const TAG = "micro_wake_word";
 
 ModelData::~ModelData() { this->deallocate_(); }
-
-ModelData::ModelData(ModelData &&other) noexcept {
-  std::swap(this->data_, other.data_);
-  std::swap(this->size_, other.size_);
-  std::swap(this->valid_, other.valid_);
-}
-
-ModelData &ModelData::operator=(ModelData &&other) noexcept {
-  if (this != &other) {
-    this->deallocate_();
-    std::swap(this->data_, other.data_);
-    std::swap(this->size_, other.size_);
-    std::swap(this->valid_, other.valid_);
-  }
-  return *this;
-}
 
 bool ModelData::allocate(size_t size) {
   // If we already have enough space, just update size
@@ -65,7 +55,8 @@ uint8_t *ModelData::get_write_pointer() {
 }
 
 bool ModelData::validate_and_mark_ready() {
-  if (!this->data_ || this->size_ < 4) {
+  // The magic number lives in bytes 4-7, so we need at least 8 bytes to read it.
+  if (!this->data_ || this->size_ < 8) {
     ESP_LOGE(TAG, "Model data is null or too small");
     return false;
   }
@@ -95,4 +86,4 @@ bool ModelData::validate_and_mark_ready() {
 }  // namespace micro_wake_word
 }  // namespace esphome
 
-#endif  // USE_ESP_IDF
+#endif  // USE_ESP32

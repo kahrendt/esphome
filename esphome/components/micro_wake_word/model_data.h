@@ -1,27 +1,27 @@
 #pragma once
 
-#ifdef USE_ESP_IDF
+#ifdef USE_ESP32
 
-#include <memory>
-#include <cstring>
+#include <cstddef>
+#include <cstdint>
 #include "esphome/core/helpers.h"
-#include "esphome/core/log.h"
-#include <tensorflow/lite/core/c/common.h>
-#include <tensorflow/lite/micro/micro_interpreter.h>
 
 namespace esphome {
 namespace micro_wake_word {
 
+// Owns the PSRAM buffer holding a runtime-downloaded TFLite model. The buffer is filled over HTTP,
+// verified (SHA256 + TFLite header), then kept alive for the lifetime of the WakeWordModel that uses
+// it. Only ever held behind a std::shared_ptr, so copies and moves are disabled.
 class ModelData {
  public:
   ModelData() = default;
   ~ModelData();
 
-  // Disable copy, allow move
+  // Non-copyable, non-movable
   ModelData(const ModelData &) = delete;
   ModelData &operator=(const ModelData &) = delete;
-  ModelData(ModelData &&other) noexcept;
-  ModelData &operator=(ModelData &&other) noexcept;
+  ModelData(ModelData &&) = delete;
+  ModelData &operator=(ModelData &&) = delete;
 
   // Allocate memory for model
   bool allocate(size_t size);
@@ -57,4 +57,4 @@ class ModelData {
 }  // namespace micro_wake_word
 }  // namespace esphome
 
-#endif  // USE_ESP_IDF
+#endif  // USE_ESP32

@@ -65,9 +65,18 @@ class MicroWakeWord final : public Component
   Trigger<std::string> *get_wake_word_detected_trigger() { return &this->wake_word_detected_trigger_; }
 
   void add_wake_word_model(WakeWordModel *model);
-  void add_runtime_model(std::unique_ptr<WakeWordModel> model);
-  void remove_runtime_model(const std::string &model_id);
+
+  /// @brief Adds a runtime-downloaded wake word model. Must be called from the main loop.
+  /// If the inference task is running it is paused at a safe point before the model lists are mutated,
+  /// so the task never observes a half-updated vector.
+  /// @return True if the model was added, false on a duplicate id or if the task could not be paused
+  bool add_runtime_model(std::unique_ptr<WakeWordModel> model);
+
+  /// @brief Returns the wake word model with the given id, or nullptr if none matches (compiled or runtime)
   WakeWordModel *get_model_by_id(const std::string &model_id);
+
+  /// @brief Returns the feature step size (ms) the frontend is configured for. Runtime models must match it.
+  uint8_t get_features_step_size() const { return this->features_step_size_; }
 
 #ifdef USE_MICRO_WAKE_WORD_VAD
   void add_vad_model(const uint8_t *model_start, uint8_t probability_cutoff, size_t sliding_window_size,

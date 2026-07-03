@@ -1338,24 +1338,10 @@ bool APIConnection::send_voice_assistant_get_configuration_response_(const Voice
     return this->send_message(resp);
   }
 
+  // VoiceAssistant::get_configuration merges compiled models with cached external wake words (deduped by id),
+  // so the response is built entirely from config.available_wake_words.
   auto &config = voice_assistant::global_voice_assistant->get_configuration(msg.external_wake_words);
   for (auto &wake_word : config.available_wake_words) {
-    resp.available_wake_words.emplace_back();
-    auto &resp_wake_word = resp.available_wake_words.back();
-    resp_wake_word.id = StringRef(wake_word.id);
-    resp_wake_word.wake_word = StringRef(wake_word.wake_word);
-    for (const auto &lang : wake_word.trained_languages) {
-      resp_wake_word.trained_languages.push_back(lang);
-    }
-  }
-
-  // Filter external wake words
-  for (auto &wake_word : msg.external_wake_words) {
-    if (wake_word.model_type != "micro") {
-      // microWakeWord only
-      continue;
-    }
-
     resp.available_wake_words.emplace_back();
     auto &resp_wake_word = resp.available_wake_words.back();
     resp_wake_word.id = StringRef(wake_word.id);

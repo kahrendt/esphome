@@ -15,8 +15,18 @@ from esphome.const import (
     CONF_ON_START,
     CONF_SPEAKER,
 )
+from esphome.types import ConfigType
 
-AUTO_LOAD = ["audio", "ring_buffer", "socket"]
+
+def AUTO_LOAD(config: ConfigType) -> list[str]:
+    """Auto-load the components needed to download runtime wake word models over HTTP."""
+    base = ["audio", "ring_buffer", "socket"]
+    # Runtime model loading verifies downloads (sha256) and parses manifests (json).
+    if config and CONF_HTTP_REQUEST_ID in config:
+        return base + ["sha256", "json"]
+    return base
+
+
 DEPENDENCIES = ["api", "microphone"]
 
 CODEOWNERS = ["@jesserockz", "@kahrendt"]
@@ -45,7 +55,6 @@ CONF_VOLUME_MULTIPLIER = "volume_multiplier"
 
 CONF_MICRO_WAKE_WORD = "micro_wake_word"
 CONF_WAKE_WORD = "wake_word"
-CONF_HTTP_REQUEST = "http_request"
 
 CONF_CONVERSATION_TIMEOUT = "conversation_timeout"
 
@@ -86,6 +95,15 @@ def tts_stream_validate(config):
     ):
         raise cv.Invalid(
             f"{CONF_SPEAKER} is required when using {CONF_ON_TTS_STREAM_START} and/or {CONF_ON_TTS_STREAM_END}"
+        )
+    return config
+
+
+def _runtime_model_validate(config):
+    # Downloading wake word models is only useful alongside micro_wake_word, which runs them.
+    if CONF_HTTP_REQUEST_ID in config and CONF_MICRO_WAKE_WORD not in config:
+        raise cv.Invalid(
+            f"'{CONF_HTTP_REQUEST_ID}' requires '{CONF_MICRO_WAKE_WORD}' to be configured on the voice assistant"
         )
     return config
 
@@ -186,6 +204,7 @@ CONFIG_SCHEMA = cv.All(
         }
     ).extend(cv.COMPONENT_SCHEMA),
     tts_stream_validate,
+    _runtime_model_validate,
 )
 
 FINAL_VALIDATE_SCHEMA = cv.All(
@@ -218,12 +237,12 @@ async def to_code(config):
         mww = await cg.get_variable(config[CONF_MICRO_WAKE_WORD])
         cg.add(var.set_micro_wake_word(mww))
 
-    if CONF_HTTP_REQUEST_ID in config:
-        http_req = await cg.get_variable(config[CONF_HTTP_REQUEST_ID])
+    if (http_request_id := config.get(CONF_HTTP_REQUEST_ID)) is not None:
+        http_req = await cg.get_variable(http_request_id)
         cg.add(var.set_http_request(http_req))
+        # sha256's and json's own to_code emit USE_SHA256/USE_JSON and their build flags; they are
+        # pulled in via AUTO_LOAD above.
         cg.add_define("USE_VOICE_ASSISTANT_RUNTIME_MODEL")
-        # Enable SHA256 for model validation
-        cg.add_define("USE_SHA256")
 
     if CONF_MEDIA_PLAYER in config:
         mp = await cg.get_variable(config[CONF_MEDIA_PLAYER])

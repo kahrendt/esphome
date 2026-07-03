@@ -35,11 +35,16 @@ static const UBaseType_t INFERENCE_TASK_PRIORITY = 3;
 enum EventGroupBits : uint32_t {
   COMMAND_STOP = (1 << 0),               // Signals the inference task should stop
   COMMAND_RESET_RING_BUFFER = (1 << 1),  // Signals the inference task to discard buffered audio
+  COMMAND_PAUSE_MODELS = (1 << 2),       // Asks the inference task to pause at a safe point so the model lists can be
+                                         // mutated from the main loop
 
   TASK_STARTING = (1 << 3),
   TASK_RUNNING = (1 << 4),
   TASK_STOPPING = (1 << 5),
   TASK_STOPPED = (1 << 6),
+
+  MODELS_PAUSED = (1 << 7),          // Inference task acknowledges it is paused and holds no iterators
+  COMMAND_RESUME_MODELS = (1 << 8),  // Main loop signals the inference task it may resume iterating
 
   ERROR_MEMORY = (1 << 9),
   ERROR_INFERENCE = (1 << 10),
@@ -49,6 +54,13 @@ enum EventGroupBits : uint32_t {
   ERROR_BITS = ERROR_MEMORY | ERROR_INFERENCE,
   ALL_BITS = 0xfffff,  // 24 total bits available in an event group
 };
+
+// How long the main loop waits for the inference task to acknowledge a pause request before giving up.
+// The task checks for the command at the top of its loop, which runs at least every DATA_TIMEOUT_MS.
+static const uint32_t MODELS_PAUSE_TIMEOUT_MS = 500;
+// How long the paused inference task waits to be resumed before rechecking on its own. Only reached if
+// the main loop abandoned the handshake (e.g. it timed out first), so recovery just needs to be bounded.
+static const uint32_t MODELS_RESUME_TIMEOUT_MS = 1000;
 
 float MicroWakeWord::get_setup_priority() const { return setup_priority::AFTER_CONNECTION; }
 
@@ -176,6 +188,15 @@ void MicroWakeWord::inference_task(void *params) {
       xEventGroupSetBits(this_mww->event_group_, EventGroupBits::TASK_RUNNING);
 
       while (!(xEventGroupGetBits(this_mww->event_group_) & (COMMAND_STOP | ERROR_BITS))) {
+        if (xEventGroupGetBits(this_mww->event_group_) & EventGroupBits::COMMAND_PAUSE_MODELS) {
+          // Safe point: no iterators into wake_word_models_ are held here. Acknowledge the pause and wait for the
+          // main loop to finish mutating the model lists before resuming.
+          xEventGroupSetBits(this_mww->event_group_, EventGroupBits::MODELS_PAUSED);
+          xEventGroupWaitBits(this_mww->event_group_, EventGroupBits::COMMAND_RESUME_MODELS, pdTRUE, pdTRUE,
+                              pdMS_TO_TICKS(MODELS_RESUME_TIMEOUT_MS));
+          continue;
+        }
+
         if (xEventGroupGetBits(this_mww->event_group_) & EventGroupBits::COMMAND_RESET_RING_BUFFER) {
           // Producer asked us to drain; run the consumer-side reset from this thread.
           audio_source->clear_buffered_data();
@@ -232,57 +253,64 @@ std::vector<WakeWordModel *> MicroWakeWord::get_wake_words() {
 
 void MicroWakeWord::add_wake_word_model(WakeWordModel *model) { this->wake_word_models_.push_back(model); }
 
-void MicroWakeWord::add_runtime_model(std::unique_ptr<WakeWordModel> model) {
+bool MicroWakeWord::add_runtime_model(std::unique_ptr<WakeWordModel> model) {
   if (!model) {
     ESP_LOGE(TAG, "Cannot add null runtime model");
-    return;
+    return false;
   }
 
-  // Check if model with same ID already exists
-  const std::string &model_id = model->get_id();
-  for (const auto &existing : this->runtime_models_) {
+  const std::string model_id = model->get_id();
+
+  // Reject a duplicate id against every model (compiled or runtime). The inference task only ever reads
+  // wake_word_models_, so scanning it here (on the main loop) needs no synchronization.
+  for (auto *existing : this->wake_word_models_) {
     if (existing->get_id() == model_id) {
-      ESP_LOGW(TAG, "Runtime model with ID '%s' already exists", model_id.c_str());
-      return;
+      ESP_LOGW(TAG, "Wake word model '%s' already exists", model_id.c_str());
+      return false;
     }
   }
 
-  // Add to wake_word_models_ for inference
-  this->wake_word_models_.push_back(model.get());
+  // When the inference task isn't running it holds no iterators into wake_word_models_, so the lists can be
+  // mutated directly.
+  if (!this->inference_task_.is_created() || this->state_ == State::STOPPED) {
+    this->wake_word_models_.push_back(model.get());
+    this->runtime_models_.push_back(std::move(model));
+    ESP_LOGD(TAG, "Added runtime model '%s'", model_id.c_str());
+    return true;
+  }
 
-  // Transfer ownership to runtime_models_
+  // The task is running and iterates wake_word_models_. Ask it to pause at a safe point before we mutate.
+  // Clear any stale acknowledgement from an abandoned handshake first.
+  xEventGroupClearBits(this->event_group_, EventGroupBits::MODELS_PAUSED);
+  xEventGroupSetBits(this->event_group_, EventGroupBits::COMMAND_PAUSE_MODELS);
+
+  EventBits_t bits = xEventGroupWaitBits(this->event_group_, EventGroupBits::MODELS_PAUSED, pdFALSE, pdTRUE,
+                                         pdMS_TO_TICKS(MODELS_PAUSE_TIMEOUT_MS));
+
+  if (!(bits & EventGroupBits::MODELS_PAUSED)) {
+    // The task never acknowledged. Withdraw the request; it may have stopped in the meantime, in which case
+    // it is safe to insert directly. Otherwise refuse to mutate a list the task might be iterating.
+    xEventGroupClearBits(this->event_group_, EventGroupBits::COMMAND_PAUSE_MODELS);
+    if (!this->inference_task_.is_created() || this->state_ == State::STOPPED) {
+      this->wake_word_models_.push_back(model.get());
+      this->runtime_models_.push_back(std::move(model));
+      ESP_LOGD(TAG, "Added runtime model '%s'", model_id.c_str());
+      return true;
+    }
+    ESP_LOGE(TAG, "Timed out pausing inference task; not adding runtime model '%s'", model_id.c_str());
+    return false;
+  }
+
+  // Task is paused at a safe point: safe to grow both vectors.
+  this->wake_word_models_.push_back(model.get());
   this->runtime_models_.push_back(std::move(model));
 
-  ESP_LOGI(TAG, "Added runtime model: %s", model_id.c_str());
-}
+  // Release the task.
+  xEventGroupClearBits(this->event_group_, EventGroupBits::MODELS_PAUSED | EventGroupBits::COMMAND_PAUSE_MODELS);
+  xEventGroupSetBits(this->event_group_, EventGroupBits::COMMAND_RESUME_MODELS);
 
-void MicroWakeWord::remove_runtime_model(const std::string &model_id) {
-  // Find and remove from runtime_models_
-  auto runtime_it =
-      std::find_if(this->runtime_models_.begin(), this->runtime_models_.end(),
-                   [&model_id](const std::unique_ptr<WakeWordModel> &model) { return model->get_id() == model_id; });
-
-  if (runtime_it == this->runtime_models_.end()) {
-    ESP_LOGW(TAG, "Runtime model '%s' not found", model_id.c_str());
-    return;
-  }
-
-  // Get raw pointer before removing
-  WakeWordModel *raw_ptr = runtime_it->get();
-
-  // Remove from wake_word_models_
-  auto models_it = std::find(this->wake_word_models_.begin(), this->wake_word_models_.end(), raw_ptr);
-  if (models_it != this->wake_word_models_.end()) {
-    this->wake_word_models_.erase(models_it);
-  }
-
-  // Disable the model first to ensure it's unloaded
-  (*runtime_it)->disable();
-
-  // Remove from runtime_models_ (destructor will handle cleanup)
-  this->runtime_models_.erase(runtime_it);
-
-  ESP_LOGI(TAG, "Removed runtime model: %s", model_id.c_str());
+  ESP_LOGD(TAG, "Added runtime model '%s'", model_id.c_str());
+  return true;
 }
 
 WakeWordModel *MicroWakeWord::get_model_by_id(const std::string &model_id) {
