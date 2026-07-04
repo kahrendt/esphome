@@ -1147,6 +1147,17 @@ const Configuration &VoiceAssistant::get_configuration(
   if (this->micro_wake_word_) {
     this->config_.max_active_wake_words = 1;
 
+#ifdef USE_VOICE_ASSISTANT_RUNTIME_MODEL
+    // Rebuild the external wake word cache from this request (drops entries HA no longer advertises).
+    this->cache_external_wake_words_(external_wake_words);
+
+    // Unload runtime models whose wake word is no longer advertised, before the loops below would list them.
+    this->remove_stale_runtime_models_();
+
+    // Re-download any models the user had enabled before a reboot; they become active asynchronously.
+    this->restore_runtime_models_();
+#endif
+
     // Add built-in wake words (already loaded models)
     for (auto &model : this->micro_wake_word_->get_wake_words()) {
       if (model->is_enabled()) {
@@ -1163,12 +1174,6 @@ const Configuration &VoiceAssistant::get_configuration(
     }
 
 #ifdef USE_VOICE_ASSISTANT_RUNTIME_MODEL
-    // Rebuild the external wake word cache from this request (drops entries HA no longer advertises).
-    this->cache_external_wake_words_(external_wake_words);
-
-    // Re-download any models the user had enabled before a reboot; they become active asynchronously.
-    this->restore_runtime_models_();
-
     // Advertise cached external wake words that aren't already loaded (loaded ones are listed above).
     for (const auto &cached_ww : this->external_wake_words_cache_) {
       if (this->micro_wake_word_->get_model_by_id(cached_ww.id) != nullptr) {
@@ -1256,6 +1261,17 @@ void VoiceAssistant::cache_external_wake_words_(const std::vector<api::VoiceAssi
   }
 }
 
+void VoiceAssistant::remove_stale_runtime_models_() {
+  // Runtime models whose wake word HA no longer advertises are unloaded entirely, freeing the interpreter,
+  // arenas, and the PSRAM model buffer. The enabled preference is deliberately left alone: if HA ever
+  // advertises the wake word again, restore_runtime_models_ re-downloads it in the state the user left it.
+  for (const auto &id : this->micro_wake_word_->get_runtime_model_ids()) {
+    if (this->find_cached_wake_word_(id) == nullptr) {
+      this->micro_wake_word_->remove_runtime_model(id);
+    }
+  }
+}
+
 void VoiceAssistant::restore_runtime_models_() {
   for (const auto &cached_ww : this->external_wake_words_cache_) {
     // Skip anything already loaded or already queued/downloading.
@@ -1312,6 +1328,17 @@ void VoiceAssistant::try_start_model_load_task_() {
   }
   // One task at a time; nothing to do if it is already running or there is no queued work.
   if (this->model_load_task_handle_ != nullptr || this->model_download_queue_.empty()) {
+    return;
+  }
+
+  // Drop queued entries that are already loaded (a repeated activation raced with an in-flight download).
+  auto &queue = this->model_download_queue_;
+  queue.erase(std::remove_if(queue.begin(), queue.end(),
+                             [this](const CachedExternalWakeWord &ww) {
+                               return this->micro_wake_word_->get_model_by_id(ww.id) != nullptr;
+                             }),
+              queue.end());
+  if (queue.empty()) {
     return;
   }
 
@@ -1494,6 +1521,17 @@ void VoiceAssistant::model_load_task(void *params) {
     const size_t window = static_cast<size_t>(sliding_window_size);
     const size_t arena = static_cast<size_t>(tensor_arena_size);
     this_va->defer([this_va, id, wake_word_copy, trained_languages, model_data, quantized_cutoff, window, arena]() {
+      // The world may have changed while the download was in flight; re-check against current main-loop state.
+      if (this_va->find_cached_wake_word_(id) == nullptr) {
+        // HA stopped advertising this wake word: discard the download. The model buffer is freed when the
+        // last shared_ptr reference (this lambda's capture) drops.
+        ESP_LOGW(TAG, "Discarding downloaded model %s: no longer advertised", id.c_str());
+        this_va->erase_pending_wake_word_(id);
+        return;
+      }
+      // A set_configuration while the download was in flight may have withdrawn the activation request.
+      const bool still_wanted = this_va->is_wake_word_pending_(id);
+
       auto model = make_unique<micro_wake_word::WakeWordModel>(id, model_data, quantized_cutoff, window, wake_word_copy,
                                                                trained_languages, arena);
       auto *raw = model.get();
@@ -1508,9 +1546,15 @@ void VoiceAssistant::model_load_task(void *params) {
         }
         return;
       }
-      raw->enable();  // persists pref = true via the unified path
+      if (still_wanted) {
+        raw->enable();  // persists pref = true via the unified path
+        ESP_LOGI(TAG, "Enabled runtime model %s", id.c_str());
+      } else {
+        // Deactivated while downloading: keep the model loaded for instant re-enable, but leave it off.
+        raw->disable();  // persists pref = false
+        ESP_LOGI(TAG, "Loaded runtime model %s (left disabled: activation was withdrawn)", id.c_str());
+      }
       this_va->erase_pending_wake_word_(id);
-      ESP_LOGI(TAG, "Enabled runtime model %s", id.c_str());
     });
   }
 

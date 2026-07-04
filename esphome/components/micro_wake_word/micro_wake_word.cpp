@@ -9,6 +9,8 @@
 
 #include "esphome/components/audio/audio_transfer_buffer.h"
 
+#include <algorithm>
+
 #ifdef USE_OTA
 #include "esphome/components/ota/ota_backend.h"
 #endif
@@ -253,6 +255,39 @@ std::vector<WakeWordModel *> MicroWakeWord::get_wake_words() {
 
 void MicroWakeWord::add_wake_word_model(WakeWordModel *model) { this->wake_word_models_.push_back(model); }
 
+bool MicroWakeWord::try_lock_models_() {
+  // When the inference task isn't running it holds no iterators into wake_word_models_, so the lists can be
+  // mutated without a handshake. The main loop is the only caller, so this state cannot change between here
+  // and the matching unlock_models_() call.
+  if (!this->inference_task_.is_created() || this->state_ == State::STOPPED) {
+    return true;
+  }
+
+  // The task is running and iterates wake_word_models_. Ask it to pause at a safe point before we mutate.
+  // Clear any stale acknowledgement from an abandoned handshake first.
+  xEventGroupClearBits(this->event_group_, EventGroupBits::MODELS_PAUSED);
+  xEventGroupSetBits(this->event_group_, EventGroupBits::COMMAND_PAUSE_MODELS);
+
+  EventBits_t bits = xEventGroupWaitBits(this->event_group_, EventGroupBits::MODELS_PAUSED, pdFALSE, pdTRUE,
+                                         pdMS_TO_TICKS(MODELS_PAUSE_TIMEOUT_MS));
+
+  if (!(bits & EventGroupBits::MODELS_PAUSED)) {
+    // The task never acknowledged (e.g. it is busy stopping). Withdraw the request and refuse to mutate a
+    // list it might be iterating.
+    xEventGroupClearBits(this->event_group_, EventGroupBits::COMMAND_PAUSE_MODELS);
+    return false;
+  }
+  return true;
+}
+
+void MicroWakeWord::unlock_models_() {
+  if (!this->inference_task_.is_created() || this->state_ == State::STOPPED) {
+    return;  // Nothing was paused
+  }
+  xEventGroupClearBits(this->event_group_, EventGroupBits::MODELS_PAUSED | EventGroupBits::COMMAND_PAUSE_MODELS);
+  xEventGroupSetBits(this->event_group_, EventGroupBits::COMMAND_RESUME_MODELS);
+}
+
 bool MicroWakeWord::add_runtime_model(std::unique_ptr<WakeWordModel> model) {
   if (!model) {
     ESP_LOGE(TAG, "Cannot add null runtime model");
@@ -270,47 +305,61 @@ bool MicroWakeWord::add_runtime_model(std::unique_ptr<WakeWordModel> model) {
     }
   }
 
-  // When the inference task isn't running it holds no iterators into wake_word_models_, so the lists can be
-  // mutated directly.
-  if (!this->inference_task_.is_created() || this->state_ == State::STOPPED) {
-    this->wake_word_models_.push_back(model.get());
-    this->runtime_models_.push_back(std::move(model));
-    ESP_LOGD(TAG, "Added runtime model '%s'", model_id.c_str());
-    return true;
-  }
-
-  // The task is running and iterates wake_word_models_. Ask it to pause at a safe point before we mutate.
-  // Clear any stale acknowledgement from an abandoned handshake first.
-  xEventGroupClearBits(this->event_group_, EventGroupBits::MODELS_PAUSED);
-  xEventGroupSetBits(this->event_group_, EventGroupBits::COMMAND_PAUSE_MODELS);
-
-  EventBits_t bits = xEventGroupWaitBits(this->event_group_, EventGroupBits::MODELS_PAUSED, pdFALSE, pdTRUE,
-                                         pdMS_TO_TICKS(MODELS_PAUSE_TIMEOUT_MS));
-
-  if (!(bits & EventGroupBits::MODELS_PAUSED)) {
-    // The task never acknowledged. Withdraw the request; it may have stopped in the meantime, in which case
-    // it is safe to insert directly. Otherwise refuse to mutate a list the task might be iterating.
-    xEventGroupClearBits(this->event_group_, EventGroupBits::COMMAND_PAUSE_MODELS);
-    if (!this->inference_task_.is_created() || this->state_ == State::STOPPED) {
-      this->wake_word_models_.push_back(model.get());
-      this->runtime_models_.push_back(std::move(model));
-      ESP_LOGD(TAG, "Added runtime model '%s'", model_id.c_str());
-      return true;
-    }
+  if (!this->try_lock_models_()) {
     ESP_LOGE(TAG, "Timed out pausing inference task; not adding runtime model '%s'", model_id.c_str());
     return false;
   }
 
-  // Task is paused at a safe point: safe to grow both vectors.
   this->wake_word_models_.push_back(model.get());
   this->runtime_models_.push_back(std::move(model));
 
-  // Release the task.
-  xEventGroupClearBits(this->event_group_, EventGroupBits::MODELS_PAUSED | EventGroupBits::COMMAND_PAUSE_MODELS);
-  xEventGroupSetBits(this->event_group_, EventGroupBits::COMMAND_RESUME_MODELS);
-
+  this->unlock_models_();
   ESP_LOGD(TAG, "Added runtime model '%s'", model_id.c_str());
   return true;
+}
+
+bool MicroWakeWord::remove_runtime_model(const std::string &model_id) {
+  // Only runtime-downloaded models can be removed; compiled-in models never appear in runtime_models_.
+  auto runtime_it =
+      std::find_if(this->runtime_models_.begin(), this->runtime_models_.end(),
+                   [&model_id](const std::unique_ptr<WakeWordModel> &m) { return m->get_id() == model_id; });
+  if (runtime_it == this->runtime_models_.end()) {
+    return false;
+  }
+
+  if (!this->try_lock_models_()) {
+    ESP_LOGE(TAG, "Timed out pausing inference task; not removing runtime model '%s'", model_id.c_str());
+    return false;
+  }
+
+  WakeWordModel *raw = runtime_it->get();
+  auto models_it = std::find(this->wake_word_models_.begin(), this->wake_word_models_.end(), raw);
+  if (models_it != this->wake_word_models_.end()) {
+    this->wake_word_models_.erase(models_it);
+  }
+
+  // Queued detection events hold a pointer into the model being destroyed, so drop them. The inference task
+  // is parked, so no new events can be queued concurrently. Losing an undelivered detection from another
+  // model is acceptable for this rare operation.
+  xQueueReset(this->detection_queue_);
+
+  // Free the interpreter and arenas (safe: the task is parked, not mid-inference), then destroy the model.
+  // Its ModelData releases the PSRAM model buffer once the last shared_ptr reference drops.
+  raw->unload_model();
+  this->runtime_models_.erase(runtime_it);
+
+  this->unlock_models_();
+  ESP_LOGI(TAG, "Removed runtime model '%s'", model_id.c_str());
+  return true;
+}
+
+std::vector<std::string> MicroWakeWord::get_runtime_model_ids() {
+  std::vector<std::string> ids;
+  ids.reserve(this->runtime_models_.size());
+  for (const auto &model : this->runtime_models_) {
+    ids.push_back(model->get_id());
+  }
+  return ids;
 }
 
 WakeWordModel *MicroWakeWord::get_model_by_id(const std::string &model_id) {

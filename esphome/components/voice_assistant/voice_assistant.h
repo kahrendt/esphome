@@ -398,6 +398,8 @@ class VoiceAssistant : public Component {
   std::vector<CachedExternalWakeWord> model_download_queue_;
 
   void cache_external_wake_words_(const std::vector<api::VoiceAssistantExternalWakeWord> &wake_words);
+  // Unloads runtime models whose wake word is no longer in the cache, freeing their memory.
+  void remove_stale_runtime_models_();
   void restore_runtime_models_();
   CachedExternalWakeWord *find_cached_wake_word_(const std::string &id);
   bool is_wake_word_pending_(const std::string &id) const;
