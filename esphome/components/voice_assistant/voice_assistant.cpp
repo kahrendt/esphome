@@ -1103,6 +1103,18 @@ void VoiceAssistant::on_set_configuration(const std::vector<std::string> &active
 #ifdef USE_VOICE_ASSISTANT_RUNTIME_MODEL
     // Reset the optimistic pending list -- it tracks the most recent request only.
     this->pending_active_wake_words_.clear();
+
+    // Evict runtime (downloaded) models that are no longer active, freeing their PSRAM buffer immediately
+    // rather than leaving it resident behind a merely-disabled model. Without this, trialing many advertised
+    // wake words accumulates one PSRAM buffer per model tried (HA keeps advertising them, so the stale-model
+    // cleanup never fires), which can exhaust PSRAM and make unrelated allocations (audio playback, TLS, etc.)
+    // fail. Compiled-in models are only disabled (above); switching back to an evicted model re-downloads it.
+    // get_runtime_model_ids() returns a copy, so removing while iterating is safe.
+    for (const auto &id : this->micro_wake_word_->get_runtime_model_ids()) {
+      if (std::find(active_wake_words.begin(), active_wake_words.end(), id) == active_wake_words.end()) {
+        this->micro_wake_word_->remove_runtime_model(id);
+      }
+    }
 #endif
 
     // Enable the requested wake words.
