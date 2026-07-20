@@ -136,7 +136,7 @@ struct ModelLoadTaskParams {
 };
 #endif
 
-class VoiceAssistant : public Component {
+class VoiceAssistant final : public Component {
  public:
   VoiceAssistant();
 
