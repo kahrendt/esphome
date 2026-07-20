@@ -1230,6 +1230,9 @@ constexpr uint32_t MODEL_LOAD_TASK_STACK_SIZE = 8192;
 constexpr size_t MAX_MANIFEST_SIZE = 8192;
 // Chunk size for streaming an HTTP body into its destination buffer.
 constexpr size_t MODEL_DOWNLOAD_CHUNK_SIZE = 1024;
+// Sanity bounds for the model parameters declared in the manifest.
+constexpr size_t MAX_SLIDING_WINDOW_SIZE = 50;
+constexpr size_t MAX_TENSOR_ARENA_SIZE = 1024 * 1024;
 
 // Verifies a buffer against an expected hex-encoded SHA256. A free function (not a method) so it can never
 // read VoiceAssistant state, and so the hasher stays within a single stack frame as the hardware-accelerated
@@ -1424,8 +1427,8 @@ void VoiceAssistant::model_load_task(void *params) {
     std::string model_url;
     std::string wake_word;
     float probability_cutoff = 0.0f;
-    int sliding_window_size = 0;
-    int tensor_arena_size = 0;
+    uint32_t sliding_window_size = 0;
+    uint32_t tensor_arena_size = 0;
     int manifest_feature_step_size = -1;
     bool parse_success = json::parse_json(manifest_str, [&](JsonObject root) -> bool {
       if (!root["model"].is<const char *>() || !root["wake_word"].is<const char *>() ||
@@ -1437,8 +1440,8 @@ void VoiceAssistant::model_load_task(void *params) {
       wake_word = root["wake_word"].as<std::string>();
 
       JsonObject micro = root["micro"];
-      if (!micro["probability_cutoff"].is<float>() || !micro["sliding_window_size"].is<int>() ||
-          !micro["tensor_arena_size"].is<int>() || !micro["feature_step_size"].is<int>()) {
+      if (!micro["probability_cutoff"].is<float>() || !micro["sliding_window_size"].is<uint32_t>() ||
+          !micro["tensor_arena_size"].is<uint32_t>() || !micro["feature_step_size"].is<int>()) {
         ESP_LOGE(TAG, "Manifest micro section does not contain required fields");
         return false;
       }
@@ -1458,6 +1461,18 @@ void VoiceAssistant::model_load_task(void *params) {
     if (manifest_feature_step_size != static_cast<int>(features_step_size)) {
       ESP_LOGE(TAG, "Model %s feature step size %d does not match device's %u; rejecting", id.c_str(),
                manifest_feature_step_size, features_step_size);
+      fail();
+      continue;
+    }
+
+    // Validate model hyper-parameters for sanity: a probability cutoff outside [0, 1] overflows the
+    // uint8_t quantization, a zero sliding window divides by zero when averaging, and an
+    // out-of-range arena could fail to allocate memory.
+    if (probability_cutoff < 0.0f || probability_cutoff > 1.0f || sliding_window_size == 0 ||
+        sliding_window_size > MAX_SLIDING_WINDOW_SIZE || tensor_arena_size == 0 ||
+        tensor_arena_size > MAX_TENSOR_ARENA_SIZE) {
+      ESP_LOGE(TAG, "Model %s has out-of-range parameters (cutoff %.3f, window %" PRIu32 ", arena %" PRIu32 ")",
+               id.c_str(), probability_cutoff, sliding_window_size, tensor_arena_size);
       fail();
       continue;
     }
@@ -1528,8 +1543,8 @@ void VoiceAssistant::model_load_task(void *params) {
     const std::string wake_word_copy = wake_word;
     const std::vector<std::string> trained_languages = cached_ww.trained_languages;
     const uint8_t quantized_cutoff = static_cast<uint8_t>(probability_cutoff * 255);
-    const size_t window = static_cast<size_t>(sliding_window_size);
-    const size_t arena = static_cast<size_t>(tensor_arena_size);
+    const size_t window = sliding_window_size;
+    const size_t arena = tensor_arena_size;
     this_va->defer([this_va, id, wake_word_copy, trained_languages, model_data, quantized_cutoff, window, arena]() {
       // The world may have changed while the download was in flight; re-check against current main-loop state.
       if (this_va->find_cached_wake_word_(id) == nullptr) {
