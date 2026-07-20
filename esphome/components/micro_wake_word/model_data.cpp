@@ -16,15 +16,18 @@ static const char *const TAG = "micro_wake_word";
 ModelData::~ModelData() { this->deallocate_(); }
 
 bool ModelData::allocate(size_t size) {
-  // If we already have enough space, just update size
-  if (this->data_ && this->size_ >= size) {
+  // Already allocated, so reallocate to the new size
+  if (this->data_) {
+    uint8_t *new_allocation = this->allocator_.reallocate(this->data_, size);
+    if (new_allocation == nullptr) {
+      ESP_LOGE(TAG, "Failed to reallocate %zu bytes", size);
+      return false;
+    }
+    this->data_ = new_allocation;
     this->size_ = size;
     this->valid_ = false;  // Need to revalidate with new data
     return true;
   }
-
-  // Need new allocation
-  this->deallocate_();
 
   // Try to allocate in PSRAM first
   this->data_ = this->allocator_.allocate(size);
