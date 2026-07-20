@@ -1371,8 +1371,6 @@ void VoiceAssistant::try_start_model_load_task_() {
     delete params;
     return;
   }
-
-  ESP_LOGD(TAG, "Model load task launched for %zu model(s)", params->models_to_load.size());
 }
 
 void VoiceAssistant::model_load_task(void *params) {
