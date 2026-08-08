@@ -15,10 +15,15 @@ sensor:
       name: "Heap Min Free"
     cpu_idle:
       name: "CPU Idle"
+    cores:
+      - core: 0
+        name: "Core 0 Idle"
+      - core: 1
+        name: "Core 1 Idle"
     tasks:
       - task_name: "loopTask"
         name: "Loop Task CPU"
-      - task_name: "IDLE"
-        name: "Idle Tasks CPU"
+      - task_name: "esp_timer"
+        name: "Timer Task CPU"
 
 psram:

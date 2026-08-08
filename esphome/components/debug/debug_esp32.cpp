@@ -22,16 +22,50 @@
 #if CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+// xTaskGetCoreID(), xTaskGetIdleTaskHandleForCore() and ulTaskGetIdleRunTimeCounterForCore().
+// FreeRTOS.h still includes this implicitly, but that is slated for removal in ESP-IDF 6.0.
+#include "freertos/idf_additions.h"
+
+#include <cinttypes>
+#include <cstring>
 
 static const UBaseType_t STATS_TASK_PRIORITY = 3;
 static const uint32_t STATS_DELAY_MS = 5000;
-static const uint32_t ARRAY_SIZE_OFFSET = 5;  // Increase this if compute_real_time_stats returns ESP_ERR_INVALID_SIZE
+static const uint32_t ARRAY_SIZE_OFFSET = 5;  // Increase this if log_task_table returns ESP_ERR_INVALID_SIZE
 
 namespace esphome {
 namespace debug {
 
-static esp_err_t compute_real_time_stats(TickType_t xTicksToWait, bool print_stats, std::atomic<float> *idle_pct_out,
-                                         FixedVector<TaskCpuSensor *> *task_sensors, uint32_t *task_elapsed_scratch) {
+/// How many times a task name is looked up before giving up on it. Task lookup is the one expensive
+/// call left on the sensor path, so it must not repeat forever - but monitored tasks are routinely
+/// created well after setup() (a component may start its worker from loop()), so a single attempt at
+/// startup would miss them.
+static const uint8_t TASK_RESOLVE_MAX_ATTEMPTS = 12;
+
+/// Core an affinity value refers to, for logs. Unpinned tasks are free to run on either core, and on
+/// targets with an FPU that is not a permanent property - see sample_cpu_stats_().
+static const char *core_label(BaseType_t core_id) {
+  switch (core_id) {
+    case 0:
+      return "0";
+    case 1:
+      return "1";
+    default:
+      return "any";
+  }
+}
+
+/// Snapshot-and-diff table covering EVERY task in the system, for log_cpu_usage.
+///
+/// This is the expensive path, and it stays expensive on purpose: enumerating is the only way to
+/// report tasks that were never configured, which is what makes it the tool for discovering what to
+/// point a `tasks:` sensor at. uxTaskGetSystemState() holds the FreeRTOS kernel lock - which is a
+/// real taskENTER_CRITICAL, interrupts OFF, on a dual-core build - across a walk of every ready,
+/// delayed, suspended and terminated list. On a busy target that runs into tens of milliseconds, and
+/// interrupts masked that long can make peripheral DMA (I2S capture especially) drop data with no
+/// counter to show for it. So it only runs when explicitly asked for, and the sensors never use it -
+/// they take the O(1) path in sample_cpu_stats_() instead.
+static esp_err_t log_task_table(TickType_t xTicksToWait) {
   TaskStatus_t *start_array = nullptr, *end_array = nullptr;
   UBaseType_t start_array_size, end_array_size;
   uint32_t start_run_time, end_run_time;
@@ -86,22 +120,16 @@ static esp_err_t compute_real_time_stats(TickType_t xTicksToWait, bool print_sta
   }
 
   uint32_t num_cores = portNUM_PROCESSORS;
-  uint32_t idle_total_time = 0;
 
-  // Reset per-task-sensor accumulators
-  size_t num_task_sensors = (task_sensors != nullptr) ? task_sensors->size() : 0;
-  if (task_elapsed_scratch != nullptr) {
-    for (size_t s = 0; s < num_task_sensors; s++) {
-      task_elapsed_scratch[s] = 0;
-    }
-  }
-
-  if (print_stats) {
-    printf("| Task | Run Time | Percentage\n");
-  }
+  // Percentages are against every core's time, so they sum to 100% across the whole table rather
+  // than per core: a task saturating one core of two reads 50%. Same basis as the cpu_idle sensor.
+  printf("| Task | Core | Run Time | Percentage\n");
   // Match each task in start_array to those in the end_array
   for (int i = 0; i < start_array_size; i++) {
     int k = -1;
+    // Kept before the handles are nulled below: xTaskGetCoreID() costs nothing (it just reads the
+    // TCB's affinity field) and it is what tells a pinned task from a roaming one.
+    TaskHandle_t handle = start_array[i].xHandle;
     for (int j = 0; j < end_array_size; j++) {
       if (start_array[i].xHandle == end_array[j].xHandle) {
         k = j;
@@ -115,52 +143,20 @@ static esp_err_t compute_real_time_stats(TickType_t xTicksToWait, bool print_sta
     if (k >= 0) {
       uint32_t task_elapsed_time = end_array[k].ulRunTimeCounter - start_array[i].ulRunTimeCounter;
       uint32_t percentage_time = (task_elapsed_time * 100UL) / (total_elapsed_time * num_cores);
-      if (print_stats) {
-        printf("| %s | %" PRIu32 " | %" PRIu32 "%%\n", start_array[i].pcTaskName, task_elapsed_time, percentage_time);
-      }
-
-      // Accumulate idle task runtime (matches "IDLE", "IDLE0", "IDLE1")
-      if (strncmp(start_array[i].pcTaskName, "IDLE", 4) == 0) {
-        idle_total_time += task_elapsed_time;
-      }
-
-      // Accumulate elapsed time for any user-registered task sensor whose prefix matches
-      if (task_elapsed_scratch != nullptr) {
-        for (size_t s = 0; s < num_task_sensors; s++) {
-          const auto *entry = (*task_sensors)[s];
-          if (strncmp(start_array[i].pcTaskName, entry->name_prefix, entry->name_prefix_len) == 0) {
-            task_elapsed_scratch[s] += task_elapsed_time;
-          }
-        }
-      }
+      printf("| %s | %s | %" PRIu32 " | %" PRIu32 "%%\n", start_array[i].pcTaskName, core_label(xTaskGetCoreID(handle)),
+             task_elapsed_time, percentage_time);
     }
   }
 
-  // Store idle percentage for sensor
-  if (idle_pct_out != nullptr) {
-    float idle_pct = (idle_total_time * 100.0f) / (total_elapsed_time * num_cores);
-    idle_pct_out->store(idle_pct, std::memory_order_relaxed);
-  }
-
-  // Store per-task-sensor percentages
-  if (task_elapsed_scratch != nullptr) {
-    for (size_t s = 0; s < num_task_sensors; s++) {
-      float pct = (task_elapsed_scratch[s] * 100.0f) / (total_elapsed_time * num_cores);
-      (*task_sensors)[s]->percentage.store(pct, std::memory_order_relaxed);
+  // Print unmatched tasks
+  for (int i = 0; i < start_array_size; i++) {
+    if (start_array[i].xHandle != NULL) {
+      printf("| %s | Deleted\n", start_array[i].pcTaskName);
     }
   }
-
-  if (print_stats) {
-    // Print unmatched tasks
-    for (int i = 0; i < start_array_size; i++) {
-      if (start_array[i].xHandle != NULL) {
-        printf("| %s | Deleted\n", start_array[i].pcTaskName);
-      }
-    }
-    for (int i = 0; i < end_array_size; i++) {
-      if (end_array[i].xHandle != NULL) {
-        printf("| %s | Created\n", end_array[i].pcTaskName);
-      }
+  for (int i = 0; i < end_array_size; i++) {
+    if (end_array[i].xHandle != NULL) {
+      printf("| %s | Created\n", end_array[i].pcTaskName);
     }
   }
   ret = ESP_OK;
@@ -317,10 +313,8 @@ void DebugComponent::setup() {
 #if CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
   bool need_stats_task = this->log_cpu_usage_;
 #ifdef USE_SENSOR
-  need_stats_task = need_stats_task || (this->cpu_idle_sensor_ != nullptr) || (!this->task_cpu_sensors_.empty());
-  if (!this->task_cpu_sensors_.empty()) {
-    this->task_cpu_elapsed_scratch_ = std::make_unique<uint32_t[]>(this->task_cpu_sensors_.size());
-  }
+  need_stats_task = need_stats_task || (this->cpu_idle_sensor_ != nullptr) || (!this->task_cpu_sensors_.empty()) ||
+                    (!this->core_cpu_sensors_.empty());
 #endif
   if (need_stats_task) {
     xTaskCreate(DebugComponent::stats_task_, "stats", 4096, this, STATS_TASK_PRIORITY, nullptr);
@@ -329,43 +323,163 @@ void DebugComponent::setup() {
 }
 
 #ifdef USE_SENSOR
-void DebugComponent::add_task_cpu_sensor(const char *name_prefix, sensor::Sensor *sensor) {
+void DebugComponent::add_task_cpu_sensor(const char *task_name, sensor::Sensor *sensor) {
   auto *entry = new TaskCpuSensor();  // NOLINT(cppcoreguidelines-owning-memory)
-  entry->name_prefix = name_prefix;
-  entry->name_prefix_len = static_cast<uint8_t>(strlen(name_prefix));
+  entry->task_name = task_name;
   entry->sensor = sensor;
   this->task_cpu_sensors_.push_back(entry);
+}
+
+void DebugComponent::add_core_cpu_sensor(uint8_t core_id, sensor::Sensor *sensor) {
+  // Checked here rather than in the config validation, because how many cores a target has is known
+  // to the compiler but not to the codegen - and a core that does not exist would index past
+  // last_idle_counters_ and trip ulTaskGetIdleRunTimeCounterForCore()'s own assert.
+  if (core_id >= CPU_CORE_COUNT) {
+    ESP_LOGE(TAG, "Core %u sensor ignored - this target only has %u core(s)", core_id,
+             static_cast<unsigned>(CPU_CORE_COUNT));
+    return;
+  }
+  auto *entry = new CoreCpuSensor();  // NOLINT(cppcoreguidelines-owning-memory)
+  entry->core_id = core_id;
+  entry->sensor = sensor;
+  this->core_cpu_sensors_.push_back(entry);
 }
 #endif
 
 #if CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
+#ifdef USE_SENSOR
+bool DebugComponent::resolve_task_handle_(TaskCpuSensor *entry) {
+  if (entry->handle != nullptr) {
+    return true;
+  }
+  if (entry->resolve_attempts >= TASK_RESOLVE_MAX_ATTEMPTS) {
+    return false;
+  }
+
+  // The only call left on this path that walks the task lists under the kernel lock, and it is
+  // bounded: once a name resolves it is never looked up again, and a name that never turns up is
+  // given up on rather than costing a walk every sample forever.
+  entry->resolve_attempts++;
+  entry->handle = xTaskGetHandle(entry->task_name);
+  if (entry->handle == nullptr) {
+    if (entry->resolve_attempts >= TASK_RESOLVE_MAX_ATTEMPTS) {
+      ESP_LOGW(TAG, "No task named '%s' after %" PRIu32 "s - giving up (list the real names with log_cpu_usage)",
+               entry->task_name, (TASK_RESOLVE_MAX_ATTEMPTS * STATS_DELAY_MS) / 1000);
+    }
+    return false;
+  }
+  ESP_LOGI(TAG, "Task '%s' found, core %s", entry->task_name, core_label(xTaskGetCoreID(entry->handle)));
+  return true;
+}
+
+void DebugComponent::sample_cpu_stats_(bool prime) {
+  // The same counter the kernel stamps its own run-time stats with, so it is in the same units as
+  // every ulRunTimeCounter read below. All of this is unsigned on purpose: at the default 1 us
+  // resolution a 32-bit counter wraps roughly every 72 minutes, and wrapped subtraction still gives
+  // the right delta as long as nothing is ever compared with < or >.
+  const configRUN_TIME_COUNTER_TYPE now = portGET_RUN_TIME_COUNTER_VALUE();
+  const configRUN_TIME_COUNTER_TYPE window = now - this->last_sample_counter_;
+  this->last_sample_counter_ = now;
+  // Counters are always latched, but there is nothing to divide by until a second sample exists.
+  const bool publish = !prime && window != 0;
+
+  // Every core's idle counter, whether or not a per-core sensor asked for it: the overall cpu_idle
+  // figure is their sum, so a config with only cpu_idle still needs them all. Each read holds the
+  // kernel lock for a single word, against uxTaskGetSystemState()'s walk of every task list.
+  configRUN_TIME_COUNTER_TYPE idle_deltas[CPU_CORE_COUNT];
+  configRUN_TIME_COUNTER_TYPE idle_total = 0;
+  for (size_t core = 0; core < CPU_CORE_COUNT; core++) {
+    const configRUN_TIME_COUNTER_TYPE counter = ulTaskGetIdleRunTimeCounterForCore(static_cast<BaseType_t>(core));
+    idle_deltas[core] = counter - this->last_idle_counters_[core];
+    this->last_idle_counters_[core] = counter;
+    idle_total += idle_deltas[core];
+  }
+
+  if (publish) {
+    for (auto *entry : this->core_cpu_sensors_) {
+      // Per core, so 100% means that one core was idle for the whole window.
+      entry->idle_percentage.store(
+          100.0f * static_cast<float>(idle_deltas[entry->core_id]) / static_cast<float>(window),
+          std::memory_order_relaxed);
+    }
+    if (this->cpu_idle_sensor_ != nullptr) {
+      // Averaged across cores, so 100% means the whole chip was idle. Unchanged from what this
+      // sensor has always reported, and the same basis the per-task percentages use.
+      this->cpu_idle_percentage_.store(
+          100.0f * static_cast<float>(idle_total) / (static_cast<float>(window) * CPU_CORE_COUNT),
+          std::memory_order_relaxed);
+    }
+  }
+
+  for (auto *entry : this->task_cpu_sensors_) {
+    if (!this->resolve_task_handle_(entry)) {
+      continue;
+    }
+
+    TaskStatus_t status;
+    // pdFALSE skips the stack high-water scan, and a state other than eInvalid skips the list search
+    // that would work the real state out - either one would put back the walk this path exists to
+    // avoid. What is left is a fixed set of field copies out of one TCB.
+    vTaskGetInfo(entry->handle, &status, pdFALSE, eReady);
+
+    // The handle is cached across samples, so a deleted task would leave it dangling. The name is
+    // the cheap tell that this TCB is no longer the one that was looked up (FreeRTOS reuses the
+    // memory): drop the handle and re-resolve rather than reporting some other task's time.
+    if (strncmp(status.pcTaskName, entry->task_name, configMAX_TASK_NAME_LEN - 1) != 0) {
+      ESP_LOGW(TAG, "Task '%s' is gone - its CPU sensor resumes if a task by that name comes back", entry->task_name);
+      entry->handle = nullptr;
+      entry->resolve_attempts = 0;
+      entry->last_core_id = CORE_UNKNOWN;
+      entry->percentage.store(NAN, std::memory_order_relaxed);
+      continue;
+    }
+
+    // Free - no lock, it just reads the TCB's affinity field. Worth reporting every sample rather
+    // than once at resolve time, because a task created without an affinity does not necessarily
+    // keep it: on targets with an FPU the coprocessor registers are saved lazily per core, so the
+    // first floating-point instruction a task executes pins it to whatever core it ran on.
+    const BaseType_t core_id = xTaskGetCoreID(entry->handle);
+    const int8_t core = core_id == tskNO_AFFINITY ? CORE_UNPINNED : static_cast<int8_t>(core_id);
+    if (core != entry->last_core_id) {
+      if (entry->last_core_id != INT8_MIN) {
+        ESP_LOGI(TAG, "Task '%s' is now on core %s", entry->task_name, core_label(core_id));
+      }
+      entry->last_core_id = core;
+    }
+
+    const configRUN_TIME_COUNTER_TYPE delta = status.ulRunTimeCounter - entry->last_counter;
+    entry->last_counter = status.ulRunTimeCounter;
+    if (publish) {
+      entry->percentage.store(100.0f * static_cast<float>(delta) / (static_cast<float>(window) * CPU_CORE_COUNT),
+                              std::memory_order_relaxed);
+    }
+  }
+}
+#endif  // USE_SENSOR
+
 void DebugComponent::stats_task_(void *arg) {
   auto *component = static_cast<DebugComponent *>(arg);
-  bool print_stats = component->get_log_cpu_usage();
 #ifdef USE_SENSOR
-  std::atomic<float> *idle_pct = &component->cpu_idle_percentage_;
-  FixedVector<TaskCpuSensor *> *task_sensors =
-      component->task_cpu_sensors_.empty() ? nullptr : &component->task_cpu_sensors_;
-  uint32_t *task_scratch = component->task_cpu_elapsed_scratch_.get();
-#else
-  std::atomic<float> *idle_pct = nullptr;
-  FixedVector<TaskCpuSensor *> *task_sensors = nullptr;
-  uint32_t *task_scratch = nullptr;
+  // Seed the counters so the first published sample covers one interval rather than all of boot.
+  component->sample_cpu_stats_(true);
 #endif
 
-  while (1) {
-    if (print_stats) {
+  while (true) {
+    if (component->get_log_cpu_usage()) {
+      // The table brackets its own delay with a snapshot pair, so it paces this loop when enabled.
       printf("\n\nGetting real time stats over %" PRIu32 " ms\n", STATS_DELAY_MS);
-    }
-    esp_err_t err =
-        compute_real_time_stats(pdMS_TO_TICKS(STATS_DELAY_MS), print_stats, idle_pct, task_sensors, task_scratch);
-    if (print_stats) {
+      esp_err_t err = log_task_table(pdMS_TO_TICKS(STATS_DELAY_MS));
       if (err == ESP_OK) {
         printf("Real time stats obtained\n");
       } else {
         printf("Error getting real time stats: %s\n", esp_err_to_name(err));
       }
+    } else {
+      vTaskDelay(pdMS_TO_TICKS(STATS_DELAY_MS));
     }
+#ifdef USE_SENSOR
+    component->sample_cpu_stats_(false);
+#endif
   }
 }
 #endif  // CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
@@ -527,6 +641,12 @@ void DebugComponent::update_platform_() {
     float idle_pct = this->cpu_idle_percentage_.load(std::memory_order_relaxed);
     if (!std::isnan(idle_pct)) {
       this->cpu_idle_sensor_->publish_state(idle_pct);
+    }
+  }
+  for (auto *entry : this->core_cpu_sensors_) {
+    float pct = entry->idle_percentage.load(std::memory_order_relaxed);
+    if (!std::isnan(pct)) {
+      entry->sensor->publish_state(pct);
     }
   }
   for (auto *entry : this->task_cpu_sensors_) {

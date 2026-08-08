@@ -31,15 +31,23 @@ from . import (  # noqa: F401  pylint: disable=unused-import
 DEPENDENCIES = ["debug"]
 
 CONF_CPU_IDLE = "cpu_idle"
+CONF_CORES = "cores"
+CONF_CORE = "core"
 CONF_MIN_FREE = "min_free"
 CONF_PSRAM = "psram"
 CONF_TASKS = "tasks"
 CONF_TASK_NAME = "task_name"
 
 # FreeRTOS task names are limited to configMAX_TASK_NAME_LEN (16 by default in ESP-IDF,
-# allowing 15 characters plus a null terminator). Names are matched as prefixes, so
-# specifying "IDLE" matches both "IDLE0" and "IDLE1" on dual-core variants.
+# allowing 15 characters plus a null terminator). The name must match a task's name EXACTLY:
+# it is resolved once with xTaskGetHandle() and the handle is then reused, which is what keeps
+# sampling cheap enough to leave interrupts alone. Use `log_cpu_usage: true` on the `debug`
+# component to print the real names if you are not sure what a task is called.
 TASK_NAME_MAX_LEN = 15
+
+# Dual-core is the widest any current ESP32 variant goes; single-core variants only have core 0.
+# An out-of-range core would read a idle-task handle that does not exist.
+CORE_ID_MAX = 1
 
 TASK_CPU_SCHEMA = sensor.sensor_schema(
     unit_of_measurement=UNIT_PERCENT,
@@ -52,6 +60,18 @@ TASK_CPU_SCHEMA = sensor.sensor_schema(
         cv.Required(CONF_TASK_NAME): cv.All(
             cv.string_strict, cv.Length(min=1, max=TASK_NAME_MAX_LEN)
         ),
+    }
+)
+
+CORE_CPU_SCHEMA = sensor.sensor_schema(
+    unit_of_measurement=UNIT_PERCENT,
+    icon="mdi:cpu-32-bit",
+    accuracy_decimals=1,
+    entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+    state_class=STATE_CLASS_MEASUREMENT,
+).extend(
+    {
+        cv.Required(CONF_CORE): cv.int_range(min=0, max=CORE_ID_MAX),
     }
 )
 
@@ -140,11 +160,28 @@ CONFIG_SCHEMA = {
             state_class=STATE_CLASS_MEASUREMENT,
         ),
     ),
+    cv.Optional(CONF_CORES): cv.All(
+        cv.only_on_esp32,
+        cv.ensure_list(CORE_CPU_SCHEMA),
+    ),
     cv.Optional(CONF_TASKS): cv.All(
         cv.only_on_esp32,
         cv.ensure_list(TASK_CPU_SCHEMA),
     ),
 }
+
+
+def _enable_run_time_stats():
+    """Turn on the FreeRTOS bookkeeping every CPU sensor here reads.
+
+    GENERATE_RUN_TIME_STATS is what maintains each task's ulRunTimeCounter, and TRACE_FACILITY is
+    what makes vTaskGetInfo() available to read one out. Both cost a timestamp on every context
+    switch, which is why they are only enabled when a CPU sensor actually asks for them.
+    """
+    from esphome.components import esp32
+
+    esp32.add_idf_sdkconfig_option("CONFIG_FREERTOS_USE_TRACE_FACILITY", True)
+    esp32.add_idf_sdkconfig_option("CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS", True)
 
 
 async def to_code(config):
@@ -179,18 +216,19 @@ async def to_code(config):
         cg.add(debug_component.set_cpu_frequency_sensor(sens))
 
     if cpu_idle_conf := config.get(CONF_CPU_IDLE):
-        from esphome.components import esp32
-
-        esp32.add_idf_sdkconfig_option("CONFIG_FREERTOS_USE_TRACE_FACILITY", True)
-        esp32.add_idf_sdkconfig_option("CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS", True)
+        _enable_run_time_stats()
         sens = await sensor.new_sensor(cpu_idle_conf)
         cg.add(debug_component.set_cpu_idle_sensor(sens))
 
-    if tasks_conf := config.get(CONF_TASKS):
-        from esphome.components import esp32
+    if cores_conf := config.get(CONF_CORES):
+        _enable_run_time_stats()
+        cg.add(debug_component.init_core_cpu_sensors(len(cores_conf)))
+        for core_conf in cores_conf:
+            sens = await sensor.new_sensor(core_conf)
+            cg.add(debug_component.add_core_cpu_sensor(core_conf[CONF_CORE], sens))
 
-        esp32.add_idf_sdkconfig_option("CONFIG_FREERTOS_USE_TRACE_FACILITY", True)
-        esp32.add_idf_sdkconfig_option("CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS", True)
+    if tasks_conf := config.get(CONF_TASKS):
+        _enable_run_time_stats()
         cg.add(debug_component.init_task_cpu_sensors(len(tasks_conf)))
         for task_conf in tasks_conf:
             sens = await sensor.new_sensor(task_conf)
