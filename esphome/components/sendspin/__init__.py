@@ -14,11 +14,10 @@ from esphome.const import (
     CONF_SAMPLE_RATE,
     CONF_SOURCE,
     CONF_TASK_STACK_IN_PSRAM,
-    CONF_TRIGGER_ID,
     CONF_WIDTH,
 )
 from esphome.core import CORE, ID
-from esphome.cpp_generator import TemplateArgsType
+from esphome.cpp_generator import MockObj, TemplateArgsType
 from esphome.types import ConfigType
 
 # mdns for autodiscovery
@@ -53,7 +52,7 @@ PSK_ID_LABEL = b"sendspin-psk-id-v1"
 PAIRING_PSK_BYTES = 32
 
 
-def _validate_static_pin(value):
+def _validate_static_pin(value: str) -> str:
     # cv.string_strict requires an explicit string so leading zeros survive and `!secret` works;
     # the PIN is handled as plaintext (stored in NVS and sent through the PAKE unencrypted at rest).
     value = cv.string_strict(value)
@@ -65,7 +64,7 @@ def _validate_static_pin(value):
     return value
 
 
-def _validate_pairing_psk(value):
+def _validate_pairing_psk(value: str) -> str:
     # Same key format as `api: encryption: key:` -- a base64-encoded 32-byte secret.
     value = cv.string_strict(value)
     try:
@@ -148,26 +147,31 @@ SendspinConfirmPairingWindowAction = sendspin_ns.class_(
     cg.Parented.template(SendspinHub),
 )
 
-SendspinOpenPairingWindowTrigger = sendspin_ns.class_(
-    "SendspinOpenPairingWindowTrigger", automation.Trigger.template()
-)
-SendspinClosePairingWindowTrigger = sendspin_ns.class_(
-    "SendspinClosePairingWindowTrigger", automation.Trigger.template()
-)
-
-SendspinDisplayPairingPinTrigger = sendspin_ns.class_(
-    "SendspinDisplayPairingPinTrigger", automation.Trigger.template(cg.std_string)
-)
-SendspinClearPairingPinTrigger = sendspin_ns.class_(
-    "SendspinClearPairingPinTrigger", automation.Trigger.template()
-)
-
-SendspinPairingSucceededTrigger = sendspin_ns.class_(
-    "SendspinPairingSucceededTrigger", automation.Trigger.template(cg.std_string)
-)
-SendspinPairingFailedTrigger = sendspin_ns.class_(
-    "SendspinPairingFailedTrigger",
-    automation.Trigger.template(cg.std_string, cg.std_string),
+_CALLBACK_AUTOMATIONS = (
+    automation.CallbackAutomation(
+        CONF_ON_OPEN_PAIRING_WINDOW, "add_on_open_pairing_window_callback"
+    ),
+    automation.CallbackAutomation(
+        CONF_ON_CLOSE_PAIRING_WINDOW, "add_on_close_pairing_window_callback"
+    ),
+    automation.CallbackAutomation(
+        CONF_ON_DISPLAY_PAIRING_PIN,
+        "add_on_display_pairing_pin_callback",
+        [(cg.std_string, "pin")],
+    ),
+    automation.CallbackAutomation(
+        CONF_ON_CLEAR_PAIRING_PIN, "add_on_clear_pairing_pin_callback"
+    ),
+    automation.CallbackAutomation(
+        CONF_ON_PAIRING_SUCCEEDED,
+        "add_on_pairing_succeeded_callback",
+        [(cg.std_string, "server_id")],
+    ),
+    automation.CallbackAutomation(
+        CONF_ON_PAIRING_FAILED,
+        "add_on_pairing_failed_callback",
+        [(cg.std_string, "server_id"), (cg.std_string, "reason")],
+    ),
 )
 
 
@@ -281,47 +285,17 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_INITIAL_PAIRING_PSK): cv.sensitive(_validate_pairing_psk),
             cv.Optional(CONF_INITIAL_UNPAIRED_ACCESS_ENABLED, default=True): cv.boolean,
             cv.Optional(CONF_ON_OPEN_PAIRING_WINDOW): automation.validate_automation(
-                {
-                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
-                        SendspinOpenPairingWindowTrigger
-                    ),
-                }
+                {}
             ),
             cv.Optional(CONF_ON_CLOSE_PAIRING_WINDOW): automation.validate_automation(
-                {
-                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
-                        SendspinClosePairingWindowTrigger
-                    ),
-                }
+                {}
             ),
             cv.Optional(CONF_ON_DISPLAY_PAIRING_PIN): automation.validate_automation(
-                {
-                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
-                        SendspinDisplayPairingPinTrigger
-                    ),
-                }
+                {}
             ),
-            cv.Optional(CONF_ON_CLEAR_PAIRING_PIN): automation.validate_automation(
-                {
-                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
-                        SendspinClearPairingPinTrigger
-                    ),
-                }
-            ),
-            cv.Optional(CONF_ON_PAIRING_SUCCEEDED): automation.validate_automation(
-                {
-                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
-                        SendspinPairingSucceededTrigger
-                    ),
-                }
-            ),
-            cv.Optional(CONF_ON_PAIRING_FAILED): automation.validate_automation(
-                {
-                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
-                        SendspinPairingFailedTrigger
-                    ),
-                }
-            ),
+            cv.Optional(CONF_ON_CLEAR_PAIRING_PIN): automation.validate_automation({}),
+            cv.Optional(CONF_ON_PAIRING_SUCCEEDED): automation.validate_automation({}),
+            cv.Optional(CONF_ON_PAIRING_FAILED): automation.validate_automation({}),
         }
     ),
     cv.only_on_esp32,
@@ -358,7 +332,7 @@ async def sendspin_switch_to_code(
     action_id: ID,
     template_arg: cg.TemplateArguments,
     args: TemplateArgsType,
-):
+) -> MockObj:
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
     return var
@@ -385,7 +359,7 @@ async def sendspin_confirm_pairing_window_to_code(
     action_id: ID,
     template_arg: cg.TemplateArguments,
     args: TemplateArgsType,
-):
+) -> MockObj:
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
     return var
@@ -406,42 +380,25 @@ async def to_code(config: ConfigType) -> None:
         decoded = base64.b64decode(pairing_psk)
         cg.add(var.set_initial_pairing_psk(_pairing_psk_id(decoded), list(decoded)))
 
-    if config[CONF_INITIAL_UNPAIRED_ACCESS_ENABLED]:
-        cg.add(var.set_initial_unpaired_access_enabled(True))
+    cg.add(
+        var.set_initial_unpaired_access_enabled(
+            config[CONF_INITIAL_UNPAIRED_ACCESS_ENABLED]
+        )
+    )
 
     # An on_open_pairing_window automation means the device implements the operator
     # pairing-window gesture UI, which is what makes the library advertise gesture-gated
     # pairing (codegen calls set_pairing_window_supported(true); a configured static PIN
     # implies it too, inside the hub).
-    if open_window_confs := config.get(CONF_ON_OPEN_PAIRING_WINDOW):
+    if config.get(CONF_ON_OPEN_PAIRING_WINDOW):
         cg.add(var.set_pairing_window_supported(True))
-        for conf in open_window_confs:
-            trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
-            await automation.build_automation(trigger, [], conf)
-    for conf in config.get(CONF_ON_CLOSE_PAIRING_WINDOW, []):
-        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
-        await automation.build_automation(trigger, [], conf)
 
     # An on_display_pairing_pin automation or a pairing_pin text sensor means the device can
     # show a dynamic PIN, which is what makes the library advertise the dynamic_pin pair method.
-    display_pin_confs = config.get(CONF_ON_DISPLAY_PAIRING_PIN, [])
-    if display_pin_confs or _get_data().pin_display_support:
+    if config.get(CONF_ON_DISPLAY_PAIRING_PIN) or _get_data().pin_display_support:
         cg.add(var.set_pin_display_supported(True))
-    for conf in display_pin_confs:
-        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
-        await automation.build_automation(trigger, [(cg.std_string, "pin")], conf)
-    for conf in config.get(CONF_ON_CLEAR_PAIRING_PIN, []):
-        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
-        await automation.build_automation(trigger, [], conf)
 
-    for conf in config.get(CONF_ON_PAIRING_SUCCEEDED, []):
-        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
-        await automation.build_automation(trigger, [(cg.std_string, "server_id")], conf)
-    for conf in config.get(CONF_ON_PAIRING_FAILED, []):
-        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
-        await automation.build_automation(
-            trigger, [(cg.std_string, "server_id"), (cg.std_string, "reason")], conf
-        )
+    await automation.build_callback_automations(var, config, _CALLBACK_AUTOMATIONS)
 
     # sendspin-cpp library: local development path override for the encryption branch.
     # Restore the registry pin (with a bumped ref) before this branch is upstreamed.
@@ -512,7 +469,7 @@ async def to_code(config: ConfigType) -> None:
             codecs.append(CODEC_FORMAT_OPUS)
         codecs.append(CODEC_FORMAT_PCM)
 
-        def _audio_format(codec, channels):
+        def _audio_format(codec: MockObj, channels: int) -> cg.StructInitializer:
             return cg.StructInitializer(
                 AudioSupportedFormatObject,
                 ("codec", codec),
