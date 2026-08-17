@@ -178,6 +178,7 @@ class SendspinConfiguration:
     metadata_support: bool = False
     player_support: bool = False
     visualizer_support: bool = False
+    pin_display_support: bool = False
 
     artwork_preferences: list[ConfigType] = field(default_factory=list)
     player_config: ConfigType | None = None
@@ -212,6 +213,15 @@ def request_player_support() -> None:
 def request_visualizer_support() -> None:
     """Request visualizer role support for Sendspin."""
     _get_data().visualizer_support = True
+
+
+def request_pin_display_support() -> None:
+    """Mark that the device can show a dynamic pairing PIN (e.g. a pairing_pin text sensor).
+
+    Makes the hub advertise the dynamic_pin pair method even without an
+    on_display_pairing_pin automation.
+    """
+    _get_data().pin_display_support = True
 
 
 def register_artwork_preference(config: ConfigType) -> int:
@@ -414,10 +424,10 @@ async def to_code(config: ConfigType) -> None:
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
         await automation.build_automation(trigger, [], conf)
 
-    # An on_display_pairing_pin automation means the device can show a dynamic PIN,
-    # which is what makes the library advertise the dynamic_pin pair method.
+    # An on_display_pairing_pin automation or a pairing_pin text sensor means the device can
+    # show a dynamic PIN, which is what makes the library advertise the dynamic_pin pair method.
     display_pin_confs = config.get(CONF_ON_DISPLAY_PAIRING_PIN, [])
-    if display_pin_confs:
+    if display_pin_confs or _get_data().pin_display_support:
         cg.add(var.set_pin_display_supported(True))
     for conf in display_pin_confs:
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)

@@ -216,6 +216,15 @@ void SendspinHub::loop() {
       secure_wipe(records.data(), records.size());
     }
   }
+
+  if (this->pairing_token_dirty_) {
+    this->pairing_token_dirty_ = false;
+    std::string token = this->client_->pairing_token().value_or("");
+    if (token != this->last_pairing_token_) {
+      this->last_pairing_token_ = token;
+      this->pairing_token_callbacks_.call(std::move(token));
+    }
+  }
 }
 
 void SendspinHub::dump_config() {
@@ -535,6 +544,9 @@ bool SendspinHub::save_blob(const std::string &key, const uint8_t *data, size_t 
     return ok;
   }
   if (key == keys::PAIRING_PSK) {
+    // Flag the pairing token for recomputation on the next loop() rather than calling back
+    // into the library from a provider method.
+    this->pairing_token_dirty_ = true;
     bool ok = write_blob<SENDSPIN_PAIRING_PSK_BLOB_CAP>(this->pairing_psk_pref_, keys::PAIRING_PSK, data, len);
     flush_preferences(keys::PAIRING_PSK);
     return ok;
@@ -565,6 +577,8 @@ bool SendspinHub::erase_blob(const std::string &key) {
   // A zero-length blob is the erased sentinel: distinct from never-written, so the YAML
   // initial_* seeds cannot resurrect a value a server explicitly cleared.
   if (key == keys::PAIRING_PSK) {
+    // See save_blob: recompute the (now absent) pairing token on the next loop.
+    this->pairing_token_dirty_ = true;
     bool ok = write_blob<SENDSPIN_PAIRING_PSK_BLOB_CAP>(this->pairing_psk_pref_, keys::PAIRING_PSK, nullptr, 0);
     flush_preferences(keys::PAIRING_PSK);
     return ok;

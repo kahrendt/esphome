@@ -203,6 +203,16 @@ class SendspinHub final : public Component,
     this->pairing_failed_callbacks_.add(std::forward<F>(callback));
   }
 
+  /// @brief Registers a callback that receives the client's pairing token ("SP:..." string).
+  ///
+  /// Fires on the main loop shortly after setup and again whenever the stored Pairing PSK
+  /// changes (server-driven set/clear), with the empty string when no token is available.
+  /// The token embeds the Pairing PSK secret: it is meant for the operator (display, QR
+  /// code, text sensor), so treat any surface it is published to accordingly.
+  template<typename F> void add_pairing_token_callback(F &&callback) {
+    this->pairing_token_callbacks_.add(std::forward<F>(callback));
+  }
+
   void set_task_stack_in_psram(bool task_stack_in_psram) { this->task_stack_in_psram_ = task_stack_in_psram; }
 
   /// @brief Sets the initial static PIN from YAML (exactly 8 decimal digits).
@@ -443,6 +453,14 @@ class SendspinHub final : public Component,
   // Pairing outcome fan-out to automation triggers. Failed carries (server_id, reason string).
   CallbackManager<void(std::string)> pairing_succeeded_callbacks_{};
   CallbackManager<void(std::string, std::string)> pairing_failed_callbacks_{};
+
+  // Pairing-token fan-out (see add_pairing_token_callback). The token is recomputed from
+  // loop() when pairing_token_dirty_ is set: at startup, and by save_blob/erase_blob on the
+  // PAIRING_PSK key (a provider method must not call back into the library, so the actual
+  // pairing_token() call is deferred to the next loop). last_pairing_token_ dedupes.
+  CallbackManager<void(std::string)> pairing_token_callbacks_{};
+  bool pairing_token_dirty_{true};
+  std::string last_pairing_token_;
 
   // Initial static PIN from YAML (absent = not configured). Seeds the STATIC_PIN blob and
   // the first-boot pairing config only until those keys are first written.

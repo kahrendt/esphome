@@ -13,3 +13,11 @@ text_sensor:
   - platform: sendspin
     name: "Album Artist"
     type: album_artist
+  - platform: sendspin
+    name: "Pairing Token"
+    type: pairing_token
+    entity_category: diagnostic
+  - platform: sendspin
+    name: "Pairing PIN"
+    type: pairing_pin
+    entity_category: diagnostic
