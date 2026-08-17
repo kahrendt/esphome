@@ -279,9 +279,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_TASK_STACK_IN_PSRAM): psram.validate_task_stack_in_psram,
             cv.Optional(CONF_INITIAL_STATIC_PIN): cv.sensitive(_validate_static_pin),
             cv.Optional(CONF_INITIAL_PAIRING_PSK): cv.sensitive(_validate_pairing_psk),
-            cv.Optional(
-                CONF_INITIAL_UNPAIRED_ACCESS_ENABLED, default=False
-            ): cv.boolean,
+            cv.Optional(CONF_INITIAL_UNPAIRED_ACCESS_ENABLED, default=True): cv.boolean,
             cv.Optional(CONF_ON_OPEN_PAIRING_WINDOW): automation.validate_automation(
                 {
                     cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
