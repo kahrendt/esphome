@@ -1,4 +1,6 @@
+import base64
 from dataclasses import dataclass, field
+import hashlib
 
 from esphome import automation
 import esphome.codegen as cg
@@ -12,6 +14,7 @@ from esphome.const import (
     CONF_SAMPLE_RATE,
     CONF_SOURCE,
     CONF_TASK_STACK_IN_PSRAM,
+    CONF_TRIGGER_ID,
     CONF_WIDTH,
 )
 from esphome.core import CORE, ID
@@ -30,6 +33,59 @@ CONF_SENDSPIN_ID = "sendspin_id"
 CONF_INITIAL_STATIC_DELAY = "initial_static_delay"
 CONF_FIXED_DELAY = "fixed_delay"
 CONF_DECODE_MEMORY = "decode_memory"
+
+CONF_INITIAL_STATIC_PIN = "initial_static_pin"
+CONF_INITIAL_PAIRING_PSK = "initial_pairing_psk"
+CONF_INITIAL_UNPAIRED_ACCESS_ENABLED = "initial_unpaired_access_enabled"
+CONF_ON_OPEN_PAIRING_WINDOW = "on_open_pairing_window"
+CONF_ON_CLOSE_PAIRING_WINDOW = "on_close_pairing_window"
+CONF_ON_DISPLAY_PAIRING_PIN = "on_display_pairing_pin"
+CONF_ON_CLEAR_PAIRING_PIN = "on_clear_pairing_pin"
+CONF_ON_PAIRING_SUCCEEDED = "on_pairing_succeeded"
+CONF_ON_PAIRING_FAILED = "on_pairing_failed"
+
+# Static PINs are exactly 8 decimal digits (mirrors STATIC_PIN_DIGITS in the sendspin-cpp library).
+STATIC_PIN_DIGITS = 8
+
+# Spec constant for deriving a psk_id from a PSK: base64url(SHA-256(PSK_ID_LABEL || psk)),
+# unpadded. Mirrors PSK_ID_LABEL in the sendspin-cpp library and aiosendspin.
+PSK_ID_LABEL = b"sendspin-psk-id-v1"
+PAIRING_PSK_BYTES = 32
+
+
+def _validate_static_pin(value):
+    # cv.string_strict requires an explicit string so leading zeros survive and `!secret` works;
+    # the PIN is handled as plaintext (stored in NVS and sent through the PAKE unencrypted at rest).
+    value = cv.string_strict(value)
+    if len(value) != STATIC_PIN_DIGITS or not all(c in "0123456789" for c in value):
+        raise cv.Invalid(
+            f"initial_static_pin must be exactly {STATIC_PIN_DIGITS} decimal digits "
+            '(quote the value so leading zeros are preserved, e.g. "01234567")'
+        )
+    return value
+
+
+def _validate_pairing_psk(value):
+    # Same key format as `api: encryption: key:` -- a base64-encoded 32-byte secret.
+    value = cv.string_strict(value)
+    try:
+        decoded = base64.b64decode(value, validate=True)
+    except ValueError as err:
+        raise cv.Invalid(
+            "Invalid initial_pairing_psk format, please check it's using base64"
+        ) from err
+    if len(decoded) != PAIRING_PSK_BYTES:
+        raise cv.Invalid(
+            f"initial_pairing_psk must be base64 and {PAIRING_PSK_BYTES} bytes long"
+        )
+    return value
+
+
+def _pairing_psk_id(psk: bytes) -> str:
+    """Derive the base64url (unpadded) psk_id for a pairing PSK."""
+    digest = hashlib.sha256(PSK_ID_LABEL + psk).digest()
+    return base64.urlsafe_b64encode(digest).decode().rstrip("=")
+
 
 # Matches ARTWORK_MAX_SLOTS in sendspin-cpp.
 MAX_ARTWORK_SLOTS = 4
@@ -84,6 +140,34 @@ SendspinSwitchCommandAction = sendspin_ns.class_(
     "SendspinSwitchCommandAction",
     automation.Action,
     cg.Parented.template(SendspinHub),
+)
+
+SendspinConfirmPairingWindowAction = sendspin_ns.class_(
+    "SendspinConfirmPairingWindowAction",
+    automation.Action,
+    cg.Parented.template(SendspinHub),
+)
+
+SendspinOpenPairingWindowTrigger = sendspin_ns.class_(
+    "SendspinOpenPairingWindowTrigger", automation.Trigger.template()
+)
+SendspinClosePairingWindowTrigger = sendspin_ns.class_(
+    "SendspinClosePairingWindowTrigger", automation.Trigger.template()
+)
+
+SendspinDisplayPairingPinTrigger = sendspin_ns.class_(
+    "SendspinDisplayPairingPinTrigger", automation.Trigger.template(cg.std_string)
+)
+SendspinClearPairingPinTrigger = sendspin_ns.class_(
+    "SendspinClearPairingPinTrigger", automation.Trigger.template()
+)
+
+SendspinPairingSucceededTrigger = sendspin_ns.class_(
+    "SendspinPairingSucceededTrigger", automation.Trigger.template(cg.std_string)
+)
+SendspinPairingFailedTrigger = sendspin_ns.class_(
+    "SendspinPairingFailedTrigger",
+    automation.Trigger.template(cg.std_string, cg.std_string),
 )
 
 
@@ -183,6 +267,53 @@ CONFIG_SCHEMA = cv.All(
         {
             cv.GenerateID(): cv.declare_id(SendspinHub),
             cv.Optional(CONF_TASK_STACK_IN_PSRAM): psram.validate_task_stack_in_psram,
+            cv.Optional(CONF_INITIAL_STATIC_PIN): cv.sensitive(_validate_static_pin),
+            cv.Optional(CONF_INITIAL_PAIRING_PSK): cv.sensitive(_validate_pairing_psk),
+            cv.Optional(
+                CONF_INITIAL_UNPAIRED_ACCESS_ENABLED, default=False
+            ): cv.boolean,
+            cv.Optional(CONF_ON_OPEN_PAIRING_WINDOW): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
+                        SendspinOpenPairingWindowTrigger
+                    ),
+                }
+            ),
+            cv.Optional(CONF_ON_CLOSE_PAIRING_WINDOW): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
+                        SendspinClosePairingWindowTrigger
+                    ),
+                }
+            ),
+            cv.Optional(CONF_ON_DISPLAY_PAIRING_PIN): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
+                        SendspinDisplayPairingPinTrigger
+                    ),
+                }
+            ),
+            cv.Optional(CONF_ON_CLEAR_PAIRING_PIN): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
+                        SendspinClearPairingPinTrigger
+                    ),
+                }
+            ),
+            cv.Optional(CONF_ON_PAIRING_SUCCEEDED): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
+                        SendspinPairingSucceededTrigger
+                    ),
+                }
+            ),
+            cv.Optional(CONF_ON_PAIRING_FAILED): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
+                        SendspinPairingFailedTrigger
+                    ),
+                }
+            ),
         }
     ),
     cv.only_on_esp32,
@@ -225,6 +356,33 @@ async def sendspin_switch_to_code(
     return var
 
 
+# Unlike sendspin.switch, this action does not require the controller role.
+SENDSPIN_HUB_ACTION_SCHEMA = automation.maybe_simple_id(
+    cv.Schema(
+        {
+            cv.GenerateID(): cv.use_id(SendspinHub),
+        }
+    )
+)
+
+
+@automation.register_action(
+    "sendspin.confirm_pairing_window",
+    SendspinConfirmPairingWindowAction,
+    SENDSPIN_HUB_ACTION_SCHEMA,
+    synchronous=True,
+)
+async def sendspin_confirm_pairing_window_to_code(
+    config: ConfigType,
+    action_id: ID,
+    template_arg: cg.TemplateArguments,
+    args: TemplateArgsType,
+):
+    var = cg.new_Pvariable(action_id, template_arg)
+    await cg.register_parented(var, config[CONF_ID])
+    return var
+
+
 async def to_code(config: ConfigType) -> None:
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
@@ -233,8 +391,57 @@ async def to_code(config: ConfigType) -> None:
         cg.add(var.set_task_stack_in_psram(True))
         psram.request_external_task_stack()
 
-    # sendspin-cpp library
-    esp32.add_idf_component(name="sendspin/sendspin-cpp", ref="0.7.1")
+    if (static_pin := config.get(CONF_INITIAL_STATIC_PIN)) is not None:
+        cg.add(var.set_initial_static_pin(static_pin))
+
+    if (pairing_psk := config.get(CONF_INITIAL_PAIRING_PSK)) is not None:
+        decoded = base64.b64decode(pairing_psk)
+        cg.add(var.set_initial_pairing_psk(_pairing_psk_id(decoded), list(decoded)))
+
+    if config[CONF_INITIAL_UNPAIRED_ACCESS_ENABLED]:
+        cg.add(var.set_initial_unpaired_access_enabled(True))
+
+    # An on_open_pairing_window automation means the device implements the operator
+    # pairing-window gesture UI, which is what makes the library advertise gesture-gated
+    # pairing (codegen calls set_pairing_window_supported(true); a configured static PIN
+    # implies it too, inside the hub).
+    if open_window_confs := config.get(CONF_ON_OPEN_PAIRING_WINDOW):
+        cg.add(var.set_pairing_window_supported(True))
+        for conf in open_window_confs:
+            trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+            await automation.build_automation(trigger, [], conf)
+    for conf in config.get(CONF_ON_CLOSE_PAIRING_WINDOW, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [], conf)
+
+    # An on_display_pairing_pin automation means the device can show a dynamic PIN,
+    # which is what makes the library advertise the dynamic_pin pair method.
+    display_pin_confs = config.get(CONF_ON_DISPLAY_PAIRING_PIN, [])
+    if display_pin_confs:
+        cg.add(var.set_pin_display_supported(True))
+    for conf in display_pin_confs:
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [(cg.std_string, "pin")], conf)
+    for conf in config.get(CONF_ON_CLEAR_PAIRING_PIN, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [], conf)
+
+    for conf in config.get(CONF_ON_PAIRING_SUCCEEDED, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [(cg.std_string, "server_id")], conf)
+    for conf in config.get(CONF_ON_PAIRING_FAILED, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(
+            trigger, [(cg.std_string, "server_id"), (cg.std_string, "reason")], conf
+        )
+
+    # sendspin-cpp library: local development path override for the encryption branch.
+    # Restore the registry pin (with a bumped ref) before this branch is upstreamed.
+    # esp32.add_idf_component(name="sendspin/sendspin-cpp", ref="0.7.1")
+    esp32.add_idf_component(
+        name="sendspin-cpp",
+        path="/Users/kahrendt/Documents/Hobbies/Programming/Git-Repositories/sendspin-cpp",
+    )
 
     cg.add_define("USE_SENDSPIN", True)  # for MDNS
 

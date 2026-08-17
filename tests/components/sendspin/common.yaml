@@ -7,3 +7,31 @@ psram:
 sendspin:
   id: sendspin_hub_id
   task_stack_in_psram: true
+  initial_static_pin: "01234567"
+  initial_pairing_psk: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+  initial_unpaired_access_enabled: true
+  on_open_pairing_window:
+    then:
+      - logger.log: "Pairing window requested"
+      - sendspin.confirm_pairing_window:
+  on_close_pairing_window:
+    then:
+      - logger.log: "Pairing window prompt dismissed"
+  on_display_pairing_pin:
+    then:
+      - logger.log:
+          format: "Pairing PIN: %s"
+          args: ["pin.c_str()"]
+  on_clear_pairing_pin:
+    then:
+      - logger.log: "Pairing PIN cleared"
+  on_pairing_succeeded:
+    then:
+      - logger.log:
+          format: "Paired with server %s"
+          args: ["server_id.c_str()"]
+  on_pairing_failed:
+    then:
+      - logger.log:
+          format: "Pairing with server %s failed: %s"
+          args: ["server_id.c_str()", "reason.c_str()"]

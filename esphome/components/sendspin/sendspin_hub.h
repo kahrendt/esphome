@@ -26,9 +26,15 @@
 #include <sendspin/player_role.h>
 #endif
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace esphome::sendspin_ {
 
@@ -44,14 +50,58 @@ inline constexpr float HUB = esphome::setup_priority::AFTER_WIFI;
 inline constexpr float CHILD = HUB - 1.0f;
 }  // namespace sendspin_priority
 
-/// @brief Persistent storage structure for last played server hash.
-struct LastPlayedServerPref {
-  uint32_t server_id_hash;
+// ---------------------------------------------------------------------------
+// Persistent storage (ESPPreferences POD blobs, one NVS key per library key).
+//
+// The library's SendspinPersistenceProvider is a plain byte store keyed by the
+// sendspin::persistence_keys constants; the library owns all serialization.
+// ESPPreferences stores fixed-size trivially-copyable structs, so each key gets
+// a fixed-capacity staging struct with an explicit length prefix. A stored
+// length of zero is the "erased" sentinel written by erase_blob(): it is
+// distinct from a never-written key, which is how the YAML initial_* seeds know
+// they still apply (they seed only while a key has never been written).
+// ---------------------------------------------------------------------------
+
+/// @brief Fixed-capacity staging struct for one persistence blob.
+template<size_t CAP> struct SendspinBlobPref {
+  uint16_t len;
+  uint8_t data[CAP];
 };
 
+/// @brief Raw 32-byte X25519 private key (persistence_keys::KEYPAIR).
+inline constexpr size_t SENDSPIN_KEYPAIR_BLOB_CAP = 32;
+/// @brief Codec blob holding the whole pairing-record array (persistence_keys::RECORDS).
+/// Sized for SENDSPIN_MAX_PAIRING_RECORDS plus the one extra record a pairing supersede
+/// transiently persists, at roughly 250 encoded bytes per record with label headroom (a
+/// measured label-free record encodes to ~180 bytes).
+///
+/// Every write persists the full CAP+2 bytes even when the encoded content is smaller:
+/// ESPPreferenceObject's load requires the exact stored size, so a variable-length write
+/// would need a size-discovery primitive the preferences API does not have (a separate
+/// length key cannot be updated atomically with the data and a torn write would read as
+/// "absent", losing every record). Records mutate only on pairing/management events, so
+/// the write amplification is bounded by design, not by frequency.
+inline constexpr size_t SENDSPIN_RECORDS_BLOB_CAP = 2400;
+/// @brief Codec blob holding the accepted Pairing PSK (persistence_keys::PAIRING_PSK).
+inline constexpr size_t SENDSPIN_PAIRING_PSK_BLOB_CAP = 240;
+/// @brief Raw UTF-8 static PIN string (persistence_keys::STATIC_PIN).
+inline constexpr size_t SENDSPIN_STATIC_PIN_BLOB_CAP = 16;
+/// @brief Codec blob holding the pairing policy config (persistence_keys::PAIR_CONFIG).
+inline constexpr size_t SENDSPIN_PAIR_CONFIG_BLOB_CAP = 288;
+/// @brief Raw UTF-8 base64url server_id (persistence_keys::LAST_PLAYED).
+inline constexpr size_t SENDSPIN_LAST_PLAYED_BLOB_CAP = 48;
+/// @brief ASCII decimal delay in milliseconds (persistence_keys::STATIC_DELAY).
+inline constexpr size_t SENDSPIN_STATIC_DELAY_BLOB_CAP = 8;
+
+/// @brief Cap on long-term pairing records, passed to the library as max_pairing_records.
+/// Keeps the encoded RECORDS blob inside SENDSPIN_RECORDS_BLOB_CAP.
+inline constexpr size_t SENDSPIN_MAX_PAIRING_RECORDS = 8;
+
 #ifdef USE_SENDSPIN_PLAYER
-/// @brief Persistent storage structure for player static delay.
-struct StaticDelayPref {
+/// @brief Pre-encryption storage layout for the player static delay (raw uint16 under the
+/// same NVS key the ASCII-decimal STATIC_DELAY blob now uses). Kept only so an upgraded
+/// device's tuned delay survives until the first new-format save overwrites it.
+struct LegacyStaticDelayPref {
   uint16_t delay_ms;
 };
 #endif
@@ -117,13 +167,84 @@ class SendspinHub final : public Component,
   ///   - `EXTERNAL_SOURCE`: client is playing from a non-Sendspin source.
   void update_state(sendspin::SendspinClientState state);
 
+  /// @brief Signals that the operator performed the device pairing-window gesture.
+  ///
+  /// Forwards to SendspinClient::confirm_pairing_window(); advances a pending gesture-gated
+  /// PIN pairing. No-op if the hub's client is not ready.
+  void confirm_pairing_window();
+
   // --- Configuration setters (called from codegen) ---
 
   template<typename F> void add_group_update_callback(F &&callback) {
     this->group_update_callbacks_.add(std::forward<F>(callback));
   }
 
+  template<typename F> void add_on_open_pairing_window_callback(F &&callback) {
+    this->open_pairing_window_callbacks_.add(std::forward<F>(callback));
+  }
+
+  template<typename F> void add_on_close_pairing_window_callback(F &&callback) {
+    this->close_pairing_window_callbacks_.add(std::forward<F>(callback));
+  }
+
+  template<typename F> void add_on_display_pairing_pin_callback(F &&callback) {
+    this->display_pairing_pin_callbacks_.add(std::forward<F>(callback));
+  }
+
+  template<typename F> void add_on_clear_pairing_pin_callback(F &&callback) {
+    this->clear_pairing_pin_callbacks_.add(std::forward<F>(callback));
+  }
+
+  template<typename F> void add_on_pairing_succeeded_callback(F &&callback) {
+    this->pairing_succeeded_callbacks_.add(std::forward<F>(callback));
+  }
+
+  template<typename F> void add_on_pairing_failed_callback(F &&callback) {
+    this->pairing_failed_callbacks_.add(std::forward<F>(callback));
+  }
+
   void set_task_stack_in_psram(bool task_stack_in_psram) { this->task_stack_in_psram_ = task_stack_in_psram; }
+
+  /// @brief Sets the initial static PIN from YAML (exactly 8 decimal digits).
+  ///
+  /// Seeds the library's STATIC_PIN blob while that key has never been written, seeds
+  /// static_pin_enabled into the first-boot pairing config, and makes build_client_config_()
+  /// advertise pairing-window support. Once a server persists a PIN change or clear via
+  /// management/set-pairing-config, the stored value wins over this seed.
+  void set_initial_static_pin(const std::string &pin) { this->initial_static_pin_ = pin; }
+
+  /// @brief Sets the initial accepted Pairing PSK from YAML.
+  ///
+  /// Seeds the library's PAIRING_PSK blob while that key has never been written; once the
+  /// library or a server writes or clears the accepted PSK, the stored value wins. psk_id is
+  /// derived from the secret at codegen time (base64url(SHA-256("sendspin-psk-id-v1" || psk))).
+  void set_initial_pairing_psk(const std::string &psk_id, const std::array<uint8_t, 32> &psk) {
+    sendspin::SendspinPairingPsk value;
+    value.psk_id = psk_id;
+    value.psk = psk;
+    this->initial_pairing_psk_ = std::move(value);
+  }
+
+  /// @brief Sets the first-boot default for unpaired (Sentinel) access.
+  ///
+  /// Passed through to SendspinClientConfig::initial_unpaired_access_enabled and folded into
+  /// the first-boot pairing config seed; a server's management/set-pairing-config decision
+  /// wins once any pairing config has been persisted.
+  void set_initial_unpaired_access_enabled(bool enabled) { this->initial_unpaired_access_enabled_ = enabled; }
+
+  /// @brief Marks that the YAML config can display a dynamic pairing PIN to the user.
+  ///
+  /// Set from codegen when an on_display_pairing_pin automation is configured. Makes
+  /// build_client_config_() advertise PIN-display support so the library offers the
+  /// dynamic_pin pair method to servers.
+  void set_pin_display_supported(bool supported) { this->pin_display_supported_ = supported; }
+
+  /// @brief Marks that the YAML config implements the operator pairing-window gesture UI.
+  ///
+  /// Set from codegen when an on_open_pairing_window automation is configured. A configured
+  /// initial static PIN implies pairing-window support even without the automation (the
+  /// sendspin.confirm_pairing_window action alone can confirm the gesture).
+  void set_pairing_window_supported(bool supported) { this->pairing_window_supported_ = supported; }
 
   // --- Sendspin role specific methods ---
 
@@ -198,12 +319,42 @@ class SendspinHub final : public Component,
 
   void on_release_high_performance() override;
 
+  void on_open_pairing_window() override;
+
+  void on_close_pairing_window() override;
+
+  void on_display_pairing_pin(const std::string &pin) override;
+
+  void on_clear_pairing_pin() override;
+
+  void on_pairing_succeeded(const std::string &server_id) override;
+
+  void on_pairing_failed(const std::string &server_id, sendspin::SendspinPairAbortReason reason) override;
+
   // --- SendspinNetworkProvider override ---
   bool is_network_ready() override;
 
   // --- SendspinPersistenceProvider overrides ---
-  bool save_last_server_hash(uint32_t hash) override;
-  std::optional<uint32_t> load_last_server_hash() override;
+  // Plain byte store keyed by sendspin::persistence_keys; the library owns all
+  // serialization. Pairing material (keypair, records, pairing_psk, static_pin, pair_config,
+  // and every erase) is flushed to flash immediately rather than waiting out the preference
+  // syncer's write interval, which would let a power cut strand the device on a key its
+  // server no longer accepts; last_played and static_delay ride the normal batching.
+  //
+  // ESPHome's preference queue is main-loop-only, and the library may call
+  // save_blob(RECORDS) from its network thread during pairing finalize. That one write is
+  // therefore staged under pending_records_mutex_ and persisted from loop() instead.
+  std::optional<std::vector<uint8_t>> load_blob(const std::string &key) override;
+  bool save_blob(const std::string &key, const uint8_t *data, size_t len) override;
+  bool erase_blob(const std::string &key) override;
+
+  /// @brief Returns the fabricated first-boot PAIR_CONFIG seed blob, or nullopt.
+  ///
+  /// Only called when the PAIR_CONFIG key has never been written. Folds the YAML initial_*
+  /// values (static PIN enabling, unpaired access) into the config the library loads on its
+  /// genuine first boot; the library persists the real config during first-boot
+  /// provisioning, so this fabrication happens at most once per device lifetime.
+  std::optional<std::vector<uint8_t>> first_boot_pairing_config_seed_();
 
   // --- Sendspin role specific methods/overrides/member variables ---
 
@@ -251,21 +402,66 @@ class SendspinHub final : public Component,
 #ifdef USE_SENDSPIN_PLAYER
   sendspin::PlayerRoleListener *player_listener_{nullptr};
   sendspin::PlayerRoleConfig player_config_{};
-
-  // Part of SendspinPersistenceProvider overrides
-  ESPPreferenceObject static_delay_pref_;
-  std::optional<uint16_t> load_static_delay() override;
-  bool save_static_delay(uint16_t delay_ms) override;
 #endif
 
   // --- Core member variables ---
 
-  ESPPreferenceObject last_played_server_pref_;
+  // Persistence (ESPPreferences, one NVS key per persistence_keys constant), initialized
+  // in setup(). legacy_static_delay_pref_ reads the pre-encryption uint16 layout stored
+  // under the same NVS key as static_delay_pref_'s ASCII-decimal blob.
+  ESPPreferenceObject keypair_pref_;
+  ESPPreferenceObject records_pref_;
+  ESPPreferenceObject pairing_psk_pref_;
+  ESPPreferenceObject static_pin_pref_;
+  ESPPreferenceObject pair_config_pref_;
+  ESPPreferenceObject last_played_pref_;
+  ESPPreferenceObject static_delay_pref_;
+#ifdef USE_SENDSPIN_PLAYER
+  ESPPreferenceObject legacy_static_delay_pref_;
+#endif
+
+  // Records blob staged by save_blob() when it runs on the library's network thread, drained
+  // and persisted by loop(). Latest-wins: the blob is the whole record array, so a newer
+  // write supersedes an undrained older one outright.
+  std::mutex pending_records_mutex_;
+  std::vector<uint8_t> pending_records_;
+  bool pending_records_valid_{false};
 
   std::unique_ptr<sendspin::SendspinClient> client_;
 
   // Callback fan-out to child components
   CallbackManager<void(const sendspin::GroupUpdateObject &)> group_update_callbacks_{};
+
+  // Pairing-window gesture fan-out to automation triggers.
+  CallbackManager<void()> open_pairing_window_callbacks_{};
+  CallbackManager<void()> close_pairing_window_callbacks_{};
+
+  // Dynamic-PIN display fan-out to automation triggers.
+  CallbackManager<void(std::string)> display_pairing_pin_callbacks_{};
+  CallbackManager<void()> clear_pairing_pin_callbacks_{};
+
+  // Pairing outcome fan-out to automation triggers. Failed carries (server_id, reason string).
+  CallbackManager<void(std::string)> pairing_succeeded_callbacks_{};
+  CallbackManager<void(std::string, std::string)> pairing_failed_callbacks_{};
+
+  // Initial static PIN from YAML (absent = not configured). Seeds the STATIC_PIN blob and
+  // the first-boot pairing config only until those keys are first written.
+  std::optional<std::string> initial_static_pin_{};
+
+  // Initial accepted Pairing PSK from YAML (absent = not configured). Seeds the
+  // PAIRING_PSK blob only until that key is first written.
+  std::optional<sendspin::SendspinPairingPsk> initial_pairing_psk_{};
+
+  // First-boot default for unpaired (Sentinel) access, from YAML.
+  bool initial_unpaired_access_enabled_{false};
+
+  // True when the YAML config has an on_display_pairing_pin automation, enabling
+  // dynamic-PIN pairing (see set_pin_display_supported).
+  bool pin_display_supported_{false};
+
+  // True when the YAML config has an on_open_pairing_window automation (see
+  // set_pairing_window_supported); a configured initial static PIN also implies support.
+  bool pairing_window_supported_{false};
 
   bool task_stack_in_psram_{false};
 };
