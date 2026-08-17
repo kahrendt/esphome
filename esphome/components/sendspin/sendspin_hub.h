@@ -86,7 +86,12 @@ inline constexpr size_t SENDSPIN_PAIRING_PSK_BLOB_CAP = 240;
 /// @brief Raw UTF-8 static PIN string (persistence_keys::STATIC_PIN).
 inline constexpr size_t SENDSPIN_STATIC_PIN_BLOB_CAP = 16;
 /// @brief Codec blob holding the pairing policy config (persistence_keys::PAIR_CONFIG).
-inline constexpr size_t SENDSPIN_PAIR_CONFIG_BLOB_CAP = 288;
+/// The current encoding maxes out near 300 bytes (a 43-char record_mode_psk_id, every
+/// boolean at its longer "false" spelling, and the failure counter at its clamped
+/// two-digit maximum), and a rejected write silently makes the config RAM-only, which
+/// would reset the dynamic-PIN escalation counter on every reboot. The extra headroom
+/// absorbs fields a future library version may add to the encoding.
+inline constexpr size_t SENDSPIN_PAIR_CONFIG_BLOB_CAP = 512;
 /// @brief Raw UTF-8 base64url server_id (persistence_keys::LAST_PLAYED).
 inline constexpr size_t SENDSPIN_LAST_PLAYED_BLOB_CAP = 48;
 /// @brief ASCII decimal delay in milliseconds (persistence_keys::STATIC_DELAY).
