@@ -202,7 +202,7 @@ void SendspinHub::loop() {
     std::vector<uint8_t> records;
     bool have_records = false;
     {
-      std::lock_guard<std::mutex> lock(this->pending_records_mutex_);
+      LockGuard lock(this->pending_records_mutex_);
       if (this->pending_records_valid_) {
         records.swap(this->pending_records_);
         this->pending_records_valid_ = false;
@@ -210,19 +210,42 @@ void SendspinHub::loop() {
       }
     }
     if (have_records) {
-      write_blob<SENDSPIN_RECORDS_BLOB_CAP>(this->records_pref_, sendspin::persistence_keys::RECORDS, records.data(),
-                                            records.size());
-      flush_preferences(sendspin::persistence_keys::RECORDS);
+      const bool ok = write_blob<SENDSPIN_RECORDS_BLOB_CAP>(this->records_pref_, sendspin::persistence_keys::RECORDS,
+                                                            records.data(), records.size());
+      if (ok) {
+        flush_preferences(sendspin::persistence_keys::RECORDS);
+        this->status_clear_warning();
+      } else {
+        // save_blob() already told the library this write succeeded, because the deferral to
+        // loop() leaves nothing to report synchronously, so the library's own handling of a
+        // rejected write has been bypassed. Both directions of a records change are affected,
+        // and this layer cannot tell them apart:
+        //   - a pairing that just completed is RAM-only, so it stops working at the next boot
+        //     even though on_pairing_succeeded fired and the server believes it is stored;
+        //   - a record that was just revoked is still in the stored array, so the revoked PSK
+        //     starts authenticating again at the next boot.
+        // The second is the one worth waking someone up for, so state both and raise a status
+        // warning rather than leaving this to write_blob()'s log line.
+        ESP_LOGE(TAG, "Failed to persist pairing records; a pairing made this boot will be lost on reboot, "
+                      "and a record revoked this boot will become valid again");
+        this->status_set_warning("failed to persist pairing records");
+      }
       secure_wipe(records.data(), records.size());
     }
   }
 
   if (this->pairing_token_dirty_) {
     this->pairing_token_dirty_ = false;
-    std::string token = this->client_->pairing_token().value_or("");
-    if (token != this->last_pairing_token_) {
-      this->last_pairing_token_ = token;
-      this->pairing_token_callbacks_.call(std::move(token));
+    // Skip the recompute entirely when nothing subscribes: pairing_token() builds a fresh
+    // string holding the Pairing PSK, and last_pairing_token_ would then retain it for the
+    // device's lifetime for a dedupe no one reads. Every subscriber registers during setup(),
+    // so this is settled before the first loop().
+    if (!this->pairing_token_callbacks_.empty()) {
+      std::string token = this->client_->pairing_token().value_or("");
+      if (token != this->last_pairing_token_) {
+        this->last_pairing_token_ = token;
+        this->pairing_token_callbacks_.call(std::move(token));
+      }
     }
   }
 }
@@ -406,7 +429,7 @@ std::optional<std::vector<uint8_t>> SendspinHub::load_blob(const std::string &ke
     // A staged write from the network thread has not reached the preference layer yet, so
     // answer from it rather than from the older stored bytes.
     {
-      std::lock_guard<std::mutex> lock(this->pending_records_mutex_);
+      LockGuard lock(this->pending_records_mutex_);
       if (this->pending_records_valid_) {
         return this->pending_records_;
       }
@@ -524,11 +547,14 @@ bool SendspinHub::save_blob(const std::string &key, const uint8_t *data, size_t 
   if (key == keys::RECORDS) {
     // The only key the library may write from its network thread (pairing finalize).
     // ESPHome's preference queue has no locking, so the write cannot happen here; stage the
-    // bytes and let loop() persist them on the main loop a few milliseconds later. The
-    // library does not gate anything on this return value, and its in-memory record store is
-    // already updated, so the deferral is invisible to pairing.
+    // bytes and let loop() persist them on the main loop a few milliseconds later.
+    //
+    // Returning true here is what the provider contract asks a queuing implementation to do,
+    // but it is not free: the library gates pairing completion on this key's return value, so
+    // claiming success up front spends that fail-closed guarantee. The contract's other half
+    // is that we then surface write failures ourselves, which loop() does.
     {
-      std::lock_guard<std::mutex> lock(this->pending_records_mutex_);
+      LockGuard lock(this->pending_records_mutex_);
       this->pending_records_.assign(data, data + len);
       this->pending_records_valid_ = true;
     }

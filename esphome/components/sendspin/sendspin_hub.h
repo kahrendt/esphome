@@ -31,7 +31,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -353,7 +352,9 @@ class SendspinHub final : public Component,
   //
   // ESPHome's preference queue is main-loop-only, and the library may call
   // save_blob(RECORDS) from its network thread during pairing finalize. That one write is
-  // therefore staged under pending_records_mutex_ and persisted from loop() instead.
+  // therefore staged under pending_records_mutex_ and persisted from loop() instead, which
+  // also has to report its own failures: see save_blob() for why the staged return value
+  // cannot.
   std::optional<std::vector<uint8_t>> load_blob(const std::string &key) override;
   bool save_blob(const std::string &key, const uint8_t *data, size_t len) override;
   bool erase_blob(const std::string &key) override;
@@ -430,35 +431,32 @@ class SendspinHub final : public Component,
   ESPPreferenceObject legacy_static_delay_pref_;
 #endif
 
-  // Records blob staged by save_blob() when it runs on the library's network thread, drained
-  // and persisted by loop(). Latest-wins: the blob is the whole record array, so a newer
-  // write supersedes an undrained older one outright.
-  std::mutex pending_records_mutex_;
-  std::vector<uint8_t> pending_records_;
-  bool pending_records_valid_{false};
-
   std::unique_ptr<sendspin::SendspinClient> client_;
 
   // Callback fan-out to child components
   CallbackManager<void(const sendspin::GroupUpdateObject &)> group_update_callbacks_{};
 
-  // Pairing-window gesture fan-out to automation triggers.
-  CallbackManager<void()> open_pairing_window_callbacks_{};
-  CallbackManager<void()> close_pairing_window_callbacks_{};
+  // Every pairing callback below is Lazy: each one is fed by an optional YAML surface (a
+  // pairing automation, a pairing text sensor), so on a device that configures none of them
+  // the idle cost is a null pointer rather than an empty vector.
 
-  // Dynamic-PIN display fan-out to automation triggers.
-  CallbackManager<void(std::string)> display_pairing_pin_callbacks_{};
-  CallbackManager<void()> clear_pairing_pin_callbacks_{};
+  // Pairing-window gesture fan-out to automation triggers.
+  LazyCallbackManager<void()> open_pairing_window_callbacks_{};
+  LazyCallbackManager<void()> close_pairing_window_callbacks_{};
+
+  // Dynamic-PIN display fan-out to automation triggers and the pairing_pin text sensor.
+  LazyCallbackManager<void(std::string)> display_pairing_pin_callbacks_{};
+  LazyCallbackManager<void()> clear_pairing_pin_callbacks_{};
 
   // Pairing outcome fan-out to automation triggers. Failed carries (server_id, reason string).
-  CallbackManager<void(std::string)> pairing_succeeded_callbacks_{};
-  CallbackManager<void(std::string, std::string)> pairing_failed_callbacks_{};
+  LazyCallbackManager<void(std::string)> pairing_succeeded_callbacks_{};
+  LazyCallbackManager<void(std::string, std::string)> pairing_failed_callbacks_{};
 
   // Pairing-token fan-out (see add_pairing_token_callback). The token is recomputed from
   // loop() when pairing_token_dirty_ is set: at startup, and by save_blob/erase_blob on the
   // PAIRING_PSK key (a provider method must not call back into the library, so the actual
   // pairing_token() call is deferred to the next loop). last_pairing_token_ dedupes.
-  CallbackManager<void(std::string)> pairing_token_callbacks_{};
+  LazyCallbackManager<void(std::string)> pairing_token_callbacks_{};
   bool pairing_token_dirty_{true};
   std::string last_pairing_token_;
 
@@ -482,6 +480,17 @@ class SendspinHub final : public Component,
   bool pairing_window_supported_{false};
 
   bool task_stack_in_psram_{false};
+
+ private:
+  // Records blob staged by save_blob() when it runs on the library's network thread, drained
+  // and persisted by loop(). Latest-wins: the blob is the whole record array, so a newer
+  // write supersedes an undrained older one outright.
+  //
+  // Private rather than protected: the buffer is only meaningful while the valid flag is set,
+  // and neither may be touched outside the mutex, so the three have to move together.
+  Mutex pending_records_mutex_;
+  std::vector<uint8_t> pending_records_;
+  bool pending_records_valid_{false};
 };
 
 /// @brief Base class for all sendspin subcomponents.
