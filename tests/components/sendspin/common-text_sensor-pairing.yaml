@@ -1,0 +1,25 @@
+# Pairing text sensors on their own, with no metadata text sensor to pull in the metadata
+# role. This is the build shape where USE_SENDSPIN_METADATA is undefined while the text
+# sensor platform is still compiled, which is guarded separately in sendspin_text_sensor.{h,cpp}.
+#
+# Deliberately does not include common.yaml: that file configures its own sendspin hub, and
+# the point here is the narrower one. sendspin depends on network, so the interface has to
+# be declared locally instead.
+wifi:
+  ap:
+
+sendspin:
+  id: sendspin_hub_id
+  initial_static_pin: "01234567"
+  initial_unpaired_access_enabled: false
+
+text_sensor:
+  - platform: sendspin
+    name: "Pairing Token"
+    type: pairing_token
+    # The token embeds the Pairing PSK, so codegen forces internal unless asked otherwise.
+    # Opt out here so the non-internal path is built too.
+    internal: false
+  - platform: sendspin
+    name: "Pairing PIN"
+    type: pairing_pin
