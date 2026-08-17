@@ -400,12 +400,14 @@ async def to_code(config: ConfigType) -> None:
 
     await automation.build_callback_automations(var, config, _CALLBACK_AUTOMATIONS)
 
-    # sendspin-cpp library: local development path override for the encryption branch.
+    # sendspin-cpp library: git override for the encryption branch, so this branch can be
+    # tested without a local checkout.
     # Restore the registry pin (with a bumped ref) before this branch is upstreamed.
     # esp32.add_idf_component(name="sendspin/sendspin-cpp", ref="0.7.1")
     esp32.add_idf_component(
         name="sendspin-cpp",
-        path="/Users/kahrendt/Documents/Hobbies/Programming/Git-Repositories/sendspin-cpp",
+        repo="https://github.com/Sendspin/sendspin-cpp",
+        ref="encryption-support",
     )
 
     cg.add_define("USE_SENDSPIN", True)  # for MDNS
