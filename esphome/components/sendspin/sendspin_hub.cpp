@@ -93,8 +93,8 @@ template<size_t CAP> BlobState read_blob(ESPPreferenceObject &pref, const char *
 }
 
 /// @brief Saves bytes into a SendspinBlobPref<CAP> preference. Main loop only: ESPHome's
-/// preference queue is not synchronized, so every caller must already be on the main loop
-/// (see SendspinHub::save_blob for how the one off-loop write is deferred there).
+/// preference queue is not synchronized, but every SendspinPersistenceProvider call already
+/// arrives on the main loop, so no caller needs to hop threads to reach here.
 /// The unused tail is zeroed so identical values produce identical stored bytes and the
 /// NVS layer's changed-data check can skip redundant writes; the whole staging buffer is
 /// wiped again before it is freed.
@@ -196,43 +196,6 @@ void SendspinHub::setup() {
 
 void SendspinHub::loop() {
   this->client_->loop();
-
-  // Persist a records blob staged by save_blob() from the library's network thread.
-  {
-    std::vector<uint8_t> records;
-    bool have_records = false;
-    {
-      LockGuard lock(this->pending_records_mutex_);
-      if (this->pending_records_valid_) {
-        records.swap(this->pending_records_);
-        this->pending_records_valid_ = false;
-        have_records = true;
-      }
-    }
-    if (have_records) {
-      const bool ok = write_blob<SENDSPIN_RECORDS_BLOB_CAP>(this->records_pref_, sendspin::persistence_keys::RECORDS,
-                                                            records.data(), records.size());
-      if (ok) {
-        flush_preferences(sendspin::persistence_keys::RECORDS);
-        this->status_clear_warning();
-      } else {
-        // save_blob() already told the library this write succeeded, because the deferral to
-        // loop() leaves nothing to report synchronously, so the library's own handling of a
-        // rejected write has been bypassed. Both directions of a records change are affected,
-        // and this layer cannot tell them apart:
-        //   - a pairing that just completed is RAM-only, so it stops working at the next boot
-        //     even though on_pairing_succeeded fired and the server believes it is stored;
-        //   - a record that was just revoked is still in the stored array, so the revoked PSK
-        //     starts authenticating again at the next boot.
-        // The second is the one worth waking someone up for, so state both and raise a status
-        // warning rather than leaving this to write_blob()'s log line.
-        ESP_LOGE(TAG, "Failed to persist pairing records; a pairing made this boot will be lost on reboot, "
-                      "and a record revoked this boot will become valid again");
-        this->status_set_warning("failed to persist pairing records");
-      }
-      secure_wipe(records.data(), records.size());
-    }
-  }
 
   if (this->pairing_token_dirty_) {
     this->pairing_token_dirty_ = false;
@@ -411,8 +374,7 @@ bool SendspinHub::is_network_ready() { return network::is_connected(); }
 // --- SendspinPersistenceProvider overrides ---
 // See the interface comment in sendspin_hub.h: pure byte store, immediate flush for pairing
 // material, batched writes for last_played/static_delay, zero-length sentinel for erases.
-// Everything runs on the main loop except save_blob(RECORDS), which may also fire on the
-// library's network thread during pairing finalize and is staged for loop() to persist.
+// Every call arrives on the main loop.
 
 std::optional<std::vector<uint8_t>> SendspinHub::load_blob(const std::string &key) {
   namespace keys = sendspin::persistence_keys;
@@ -426,14 +388,6 @@ std::optional<std::vector<uint8_t>> SendspinHub::load_blob(const std::string &ke
   }
 
   if (key == keys::RECORDS) {
-    // A staged write from the network thread has not reached the preference layer yet, so
-    // answer from it rather than from the older stored bytes.
-    {
-      LockGuard lock(this->pending_records_mutex_);
-      if (this->pending_records_valid_) {
-        return this->pending_records_;
-      }
-    }
     if (read_blob<SENDSPIN_RECORDS_BLOB_CAP>(this->records_pref_, keys::RECORDS, &out) == BlobState::PRESENT) {
       return out;
     }
@@ -545,23 +499,16 @@ std::optional<std::vector<uint8_t>> SendspinHub::first_boot_pairing_config_seed_
 bool SendspinHub::save_blob(const std::string &key, const uint8_t *data, size_t len) {
   namespace keys = sendspin::persistence_keys;
   if (key == keys::RECORDS) {
-    // The only key the library may write from its network thread (pairing finalize).
-    // ESPHome's preference queue has no locking, so the write cannot happen here; stage the
-    // bytes and let loop() persist them on the main loop a few milliseconds later.
-    //
-    // Returning true here is what the provider contract asks a queuing implementation to do,
-    // but it is not free: the library gates pairing completion on this key's return value, so
-    // claiming success up front spends that fail-closed guarantee. The contract's other half
-    // is that we then surface write failures ourselves, which loop() does.
-    {
-      LockGuard lock(this->pending_records_mutex_);
-      this->pending_records_.assign(data, data + len);
-      this->pending_records_valid_ = true;
-    }
-    return true;
+    // The library commits a just-paired or just-revoked record to RAM immediately and only
+    // flushes this durable write on its own next loop() tick, so a rejected write here is
+    // fail-open for pairing (works for the rest of this boot, warning logged, lost at
+    // reboot) rather than fail-closed. Report the real result: management/add-record still
+    // gates its response on it, and a false leaves the library's own durability warning
+    // accurate.
+    bool ok = write_blob<SENDSPIN_RECORDS_BLOB_CAP>(this->records_pref_, keys::RECORDS, data, len);
+    flush_preferences(keys::RECORDS);
+    return ok;
   }
-
-  // Everything below is main-loop-only per the library's provider contract.
   if (key == keys::KEYPAIR) {
     // The keypair is the device identity (client_id derives from it); losing it would
     // invalidate every pairing.

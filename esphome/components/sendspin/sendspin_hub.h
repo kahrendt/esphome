@@ -345,16 +345,12 @@ class SendspinHub final : public Component,
 
   // --- SendspinPersistenceProvider overrides ---
   // Plain byte store keyed by sendspin::persistence_keys; the library owns all
-  // serialization. Pairing material (keypair, records, pairing_psk, static_pin, pair_config,
-  // and every erase) is flushed to flash immediately rather than waiting out the preference
-  // syncer's write interval, which would let a power cut strand the device on a key its
-  // server no longer accepts; last_played and static_delay ride the normal batching.
-  //
-  // ESPHome's preference queue is main-loop-only, and the library may call
-  // save_blob(RECORDS) from its network thread during pairing finalize. That one write is
-  // therefore staged under pending_records_mutex_ and persisted from loop() instead, which
-  // also has to report its own failures: see save_blob() for why the staged return value
-  // cannot.
+  // serialization. Every call arrives on the main loop, so ESPHome's (main-loop-only)
+  // preference queue can be written directly with no locking on our side. Pairing material
+  // (keypair, records, pairing_psk, static_pin, pair_config, and every erase) is flushed to
+  // flash immediately rather than waiting out the preference syncer's write interval, which
+  // would let a power cut strand the device on a key its server no longer accepts;
+  // last_played and static_delay ride the normal batching.
   std::optional<std::vector<uint8_t>> load_blob(const std::string &key) override;
   bool save_blob(const std::string &key, const uint8_t *data, size_t len) override;
   bool erase_blob(const std::string &key) override;
@@ -480,17 +476,6 @@ class SendspinHub final : public Component,
   bool pairing_window_supported_{false};
 
   bool task_stack_in_psram_{false};
-
- private:
-  // Records blob staged by save_blob() when it runs on the library's network thread, drained
-  // and persisted by loop(). Latest-wins: the blob is the whole record array, so a newer
-  // write supersedes an undrained older one outright.
-  //
-  // Private rather than protected: the buffer is only meaningful while the valid flag is set,
-  // and neither may be touched outside the mutex, so the three have to move together.
-  Mutex pending_records_mutex_;
-  std::vector<uint8_t> pending_records_;
-  bool pending_records_valid_{false};
 };
 
 /// @brief Base class for all sendspin subcomponents.
